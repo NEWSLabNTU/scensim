@@ -3,8 +3,9 @@
 Status: design exploration for phase 093, 2026-11-20. Built since, in phase 092: the knob
 binding and computed cells (section 3, 7), the sampling (section 5, as S1 and K1), the
 compilable subset (section 6, as S2) and the coverage report (section 7, as K7). Not built:
-the anchors (section 3), the behaviour models (section 4, a draft), and five of the rules of
-section 2a (gaps 2 and 4 to 7; roadmap 093 lists their state).
+the anchors (section 3), the behaviour models (section 4, a draft), and four of the rules of
+section 2a (gaps 2, 4, 5 and 7; gap 3 too, which neither review case needs; roadmap 093 lists
+their state).
 
 Inputs: phase 092's design ([ml-training-interface.md](ml-training-interface.md)) and its
 studies ([survey-risk-categories.md](survey-risk-categories.md),

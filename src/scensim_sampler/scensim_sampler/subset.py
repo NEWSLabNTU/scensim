@@ -213,6 +213,82 @@ def read(path):
     return root, path
 
 
+# an entity's class and model: a parameter there changes the entity's asset per sample (093 D7
+# gap 6), which a batch can vary only with an asset for each value in every slot
+CLASS_ATTRIBUTES = {
+    "Vehicle": ("vehicleCategory", "name", "model3d"),
+    "Pedestrian": ("pedestrianCategory", "model", "name", "model3d"),
+    "MiscObject": ("miscObjectCategory", "name", "model3d"),
+    "CatalogReference": ("catalogName", "entryName"),
+}
+PER_SLOT_ASSETS = ("per-slot assets: the entity's class and model for each value, in every slot "
+                   "(on seats, the simulator's model for the value, chosen per run)")
+
+
+def _parameter(value):
+    """The parameter a `$name` (or `${name}`) attribute names, else None."""
+    v = str(value or "").strip()
+    if not v.startswith("$") or len(v) < 2:
+        return None
+    return v[2:-1] if v.startswith("${") and v.endswith("}") else v[1:]
+
+
+def distribution_values(path):
+    """{parameter: [values]} that a distribution file gives each parameter it can list: a
+    DistributionSet's or a ProbabilityDistributionSet's elements, or a joint model's categorical
+    values and constants. {} for a
+    scenario file, or a parameter the distribution draws from a continuous base."""
+    path = Path(path)
+    try:
+        root = ET.parse(path).getroot() if path.suffix not in (".yaml", ".yml") else None
+    except (OSError, ET.ParseError):
+        return {}
+    pvd = None if root is None else root.find("ParameterValueDistribution")
+    if pvd is None:
+        return {}
+    out = {}
+    for tag, holder in (("DeterministicSingleParameterDistribution", "DistributionSet"),
+                        ("StochasticDistribution", "ProbabilityDistributionSet")):
+        for d in pvd.iter(tag):
+            vals = [e.get("value") for h in d.findall(holder) for e in h.findall("Element")]
+            if d.get("parameterName") and vals:
+                out[d.get("parameterName")] = vals
+    for u in pvd.iter("UserDefinedDistribution"):
+        if u.get("type") != "scensim.sampler:joint" or not (u.text or "").strip():
+            continue
+        try:
+            model = yaml.safe_load((path.parent / u.text.strip()).read_text()) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        for var in model.get("variables") or []:
+            if not isinstance(var, dict) or not var.get("name"):
+                continue
+            if isinstance(var.get("categorical"), dict):
+                out[var["name"]] = [str(k) for k in var["categorical"]]
+            elif "constant" in var:
+                out[var["name"]] = [str(var["constant"])]
+    return out
+
+
+def _entity_class(obj, where, v, declared, values):
+    """A parameter in the entity's class or model attributes: conditional on per-slot assets,
+    naming the parameter and its values (093 D7 gap 6)."""
+    for tag, attrs in CLASS_ATTRIBUTES.items():
+        for el in obj.iter(tag):
+            for attr in attrs:
+                name = _parameter(el.get(attr))
+                if name is None:
+                    continue
+                if name in values:
+                    vals = "values " + ", ".join(values[name])
+                elif name in declared:
+                    vals = f"drawn per sample, declared {declared[name]!r}"
+                else:
+                    vals = "not declared"
+                v.add(CONDITIONAL, f"{where}/{tag}/@{attr}",
+                      f"{tag} {attr} ${name} ({vals})", PER_SLOT_ASSETS)
+
+
 # --- checking -------------------------------------------------------------------------------
 
 class Verdict:
@@ -286,6 +362,9 @@ def check(path, ego="policy"):
                     for q in c.iter("Property")):
                 egos.add(pr.get("entityRef"))
     v.egos, v.ego_mode = egos, ego
+    declared = {pd.get("name"): pd.get("value")
+                for pd in root.findall("ParameterDeclarations/ParameterDeclaration")}
+    values = distribution_values(path)
     if len(egos) > 1 and ego == "policy":
         v.add(SEATS, "/OpenSCENARIO/Entities", f"{len(egos)} egos ({', '.join(sorted(egos))})",
               "a batch has one policy per slot; a scenario with two autopilots runs on seats")
@@ -308,6 +387,7 @@ def check(path, ego="policy"):
             v.add(cls, where, f"world knob {knob} (bound to {prop.get('value')})", reason)
     for obj in root.findall("Entities/ScenarioObject"):
         where = f"/OpenSCENARIO/Entities/{_step(obj)}"
+        _entity_class(obj, where, v, declared, values)
         if obj.get("name") in egos:
             if ego == "seats":
                 v.add(SEATS, where + "/ObjectController", "the ego's autopilot",
