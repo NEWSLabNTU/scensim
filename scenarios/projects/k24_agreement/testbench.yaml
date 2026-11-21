@@ -1,0 +1,20 @@
+# k24_agreement (roadmap 092 K2.4): seats runs on Isaac whose ego is a fixed command stream
+# (scensim_agent replay_pilot, the scenario's `commands` parameter), for the batch to replay
+# (src/scensim_batch/scripts/agreement_run.py) and the agreement table to compare.
+simulator: isaac
+assets:
+  - dataset: carla-town-autoware-maps
+    take: [Town01]
+  - dataset: carla-0.9.16-isaac-usd
+    take: [Town01, vehicles]
+pilots:
+  ego:
+    kind: command
+    vehicle: tesla_model3
+    vehicle_side: true
+    lifetime: run
+    run: [python3, -m, scensim_agent.adapters.replay_pilot, --config, "{param:commands}.pilot.json"]
+judges:
+  # nothing to judge: it makes the run record the storyboard log (context.jsonl) the table reads
+  - {name: context_log, run: ["true"], needs: [context]}
+logging: {capture: standard, gap_trace: true}

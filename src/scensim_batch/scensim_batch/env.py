@@ -41,6 +41,7 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     provides: tuple = ()             # the verdict's conditions this env meets
     vesc_mode: str = "speed"         # a vesc component's motor command mode
     allow_loop: bool = False         # accept a LoopBatch component (checks only, never a bench)
+    start_frames: int = 0            # a seats run's S, for its scenario time (K2.4's replay)
     decimation: int = 4
     episode_length_s: float = 30.0
     # backend A's PhysX vehicles need PhysX's CPU pipeline: the direct-GPU one refuses their
@@ -89,7 +90,8 @@ class ScensimEnv(DirectRLEnv):
                                            omni.physx.get_physx_interface(), cfg.rig, n,
                                            origins=self.scene.env_origins.cpu().numpy())
         self.run = core.BatchRun(self.compiled, world, self.backend, component,
-                                 allow_loop=cfg.allow_loop)
+                                 allow_loop=cfg.allow_loop, start_frames=cfg.start_frames,
+                                 step_time=self.step_dt if cfg.start_frames else None)
         self.commands = None
         self.stepped = False
         self.obs = None

@@ -1,0 +1,6 @@
+# made by scensim on each host
+assets/
+state/
+runs
+.scensim/
+play_log/
