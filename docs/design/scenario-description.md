@@ -1,7 +1,10 @@
 # Scenario description for risk studies, and the scenario-to-world compiler (design, in progress)
 
-Status: design exploration for phase 093, 2026-11-20. Case studies D1 and the world interface
-D2 are drafted here; D3 to D6 follow from them. Nothing here is built yet.
+Status: design exploration for phase 093, 2026-11-20. Built since, in phase 092: the knob
+binding and computed cells (section 3, 7), the sampling (section 5, as S1 and K1), the
+compilable subset (section 6, as S2) and the coverage report (section 7, as K7). Not built:
+the anchors (section 3), the behaviour models (section 4, a draft), and five of the rules of
+section 2a (gaps 2 and 4 to 7; roadmap 093 lists their state).
 
 Inputs: phase 092's design ([ml-training-interface.md](ml-training-interface.md)) and its
 studies ([survey-risk-categories.md](survey-risk-categories.md),
