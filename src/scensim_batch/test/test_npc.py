@@ -172,7 +172,7 @@ class Following(unittest.TestCase):
                 self.assertEqual(car.mode.item(), 1, k)
         self.assertLess(worst, 1e-3)
 
-
+    def test_a_stopped_lead_is_never_reached(self):
         routes = straight(1, 1)
         car = npc.DefaultVehicles(routes, t([[0.0]]), t([[12.0]]), t([[4.0]]), t([[1.8]]),
                                   t([[12.0]]))

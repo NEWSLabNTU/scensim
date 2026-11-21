@@ -199,7 +199,7 @@ class Core(unittest.TestCase):
         self.assertEqual([p[0] for p in seen], [xs[0], xs[0], xs[1], xs[2]])
         self.assertEqual([p[1] for p in seen], [vs[0], vs[0], vs[1], vs[2]])
 
-
+    def test_a_masked_reset_touches_only_its_slots(self):
         c, run = self.run_of([{"values": {}}, {"values": {}}])
         run.reset()
         for _ in range(20):
