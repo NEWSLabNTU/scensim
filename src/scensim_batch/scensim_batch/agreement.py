@@ -35,7 +35,7 @@ def replay_log(path):
         o = json.loads(line)
         if o.get("reset"):
             rows = []
-        else:
+        elif "frame" in o:          # not a speed_limit line
             rows.append(o)
     return rows
 

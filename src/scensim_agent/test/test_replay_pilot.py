@@ -86,9 +86,12 @@ def test_the_agent_publishes_and_logs_each_frame(tmp_path):
     a.on_frame(4, 1000.20, {"steering": 0.0, "velocity": 0.0})
     a.on_frame(4, 1000.20, {"steering": 0.0, "velocity": 0.0})
     a.on_frame(5, 1000.25, {"steering": 0.05, "velocity": 0.1})
+    a.on_speed_limit(13.9)
     a.close()
     assert v.sent == [{"accel": -3.0, "velocity": 0.0, "steer": 0.0}, CMDS[0], CMDS[1]]
     rows = [json.loads(line) for line in log.read_text().splitlines()]
+    assert rows[-1] == {"speed_limit": 13.9}
+    rows = rows[:-1]
     assert rows[0] == {"reset": True}
     assert [(r["frame"], r["k"]) for r in rows[1:]] == [(3, None), (4, 0), (5, 1)]
     assert rows[3]["status"] == {"steering": 0.05, "velocity": 0.1}

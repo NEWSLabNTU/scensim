@@ -222,6 +222,14 @@ class ReplayPilotAgent(scensim_agent.Agent):
             self.replay.arm()
         self.report(P.DRIVING, detail="")
 
+    def on_speed_limit(self, mps):
+        """Accepted and logged: the commands are fixed, so a limit changes none of them (an
+        Autoware-controlled ego's scenario sets one at its start; refusing it ends the run)."""
+        with self._lock:
+            if self._out is not None:
+                self._out.write(json.dumps({"speed_limit": mps}) + "\n")
+                self._out.flush()
+
     def on_stop(self):
         with self._lock:
             self.replay.disarm()
