@@ -148,6 +148,24 @@ class Compile(unittest.TestCase):
                                             catalogs={"vehicles": d / "cat" / "vehicles.xosc"})
             self.assertEqual(c.entities[c.index("npc")].width, 2.1)
 
+    def test_an_empty_controller_is_the_default_vehicle(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            p = self._catalog_case(d, "cat")
+            empty = p.read_text().replace(
+                '<CatalogReference catalogName="vehicles" entryName="car"/>\n    </ScenarioObject>',
+                '<CatalogReference catalogName="vehicles" entryName="car"/>\n    <ObjectController>'
+                '<Controller name=""><Properties/></Controller></ObjectController></ScenarioObject>')
+            self.assertNotEqual(empty, p.read_text())
+            p.write_text(empty)
+            c = self.C.compile_scenario(p, [rec()], StraightWorld())
+            self.assertEqual(c.entities[c.index("npc")].role, "default")
+            p.write_text(empty.replace("<Properties/>",
+                                       '<Properties><Property name="maxSpeed" value="5"/>'
+                                       '</Properties>'))
+            with self.assertRaisesRegex(self.C.CompileError, "with a controller"):
+                self.C.compile_scenario(p, [rec()], StraightWorld())
+
     def test_catalog_entry_missing_or_parameterised_is_refused(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)

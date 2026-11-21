@@ -276,7 +276,12 @@ before `startNpcLogic`. The fork's `clock_source:=simulator` moves ROS time onto
 integer `sim_time_ns` and leaves scenario time as it is, so a SimulationTimeCondition on seats
 reads the summed double. Which frame first passes a boundary depends on S (t > 1 at 0.05 s:
 frame 20 or 21), and S differs between seats runs; `BatchRun(start_frames=S, step_time=dt)`
-reproduces a given run's, and K2.4's seats comparison has to carry it from the run.
+reproduces a given run's, and K2.4's seats comparison has to carry it from the run: the
+truth's frame lines say `npc_logic_started` (from the status that staged each frame), and
+`scensim.truth.start_frames` counts S from their frame numbers. SSv2's tick S starts the clock
+and sends that status, and evaluates the storyboard first in tick S + 1, at scenario time dt;
+BatchRun.step advances the clock and then evaluates, so its first evaluation is at dt too
+(243).
 
 **The route goal.** Under `--ego policy` the ego's AcquirePositionAction and AssignRouteAction
 (Init or story) are the policy's task, not actions to execute (133): the slot's
