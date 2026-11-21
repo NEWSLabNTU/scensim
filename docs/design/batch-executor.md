@@ -405,7 +405,7 @@ The rows (Isaac, engine A, `allow_loop`, one slot; seats on newslab-server139):
 
 | scenario (Town01) | outcome | ego max / RMS | NPC max / RMS / yaw | element offsets | delivery | pre-roll |
 |---|---|---|---|---|---|---|
-| follow_to_goal (ego 3 m/s-ish behind a 4 m/s lead, the lead through a turn) | passed / passed | 0.9 mm / 0.9 mm | lead 2.8 cm / 1.4 cm / 0.035 rad | all 0 (goal at step 1262 both) | 1271 of 1271 at delay 0 | 10 steps |
+| follow_to_goal (the ego at 1.23 m/s behind a 4 m/s lead; the lead through a turn) | passed / passed | 0.9 mm / 0.9 mm | lead 2.8 cm / 1.4 cm / 0.035 rad | all 0 (goal at step 1262 both) | 1271 of 1271 at delay 0 | 10 steps |
 
 Open: a row where a default vehicle reacts to the ego (it sees the ego current, by SSv2's
 order; follow_to_goal cannot tell), and one with a Distance condition between ego and NPC
