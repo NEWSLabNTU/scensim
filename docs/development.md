@@ -34,6 +34,7 @@ recipes. The ones you will use most:
 | `just build` | colcon build of everything under `src/` (both workspaces' packages, see below) |
 | `just check` | `cargo +nightly fmt --check` and clippy with `-D warnings` |
 | `just test` | Rust tests (cargo-nextest), the Python tests, the pin check (`scripts/check_pins.py`) and the time check (`scripts/test_sim_time.py`) |
+| `just install-hooks` | the git hooks (`scripts/hooks/`, `just setup` runs it): `pre-push` refuses a push to `main` whose commit fails the pin check (`scripts/check_pins.py --rev <the pushed commit>`), a docs-only edit included, since a `git commit -a` in a checkout whose submodules lag its pins reverts them silently; linked into the clone's hooks, so every worktree has it |
 | `just ci` | build + check + test |
 | `just format` | format the Rust code |
 | `just carla-start` / `carla-status` / `carla-stop` / `carla-health` | CARLA as a background service, and whether it is fit to run a scenario |

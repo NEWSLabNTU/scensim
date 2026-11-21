@@ -121,9 +121,29 @@ setup:
     # pip may have pulled a newer setuptools into ~/.local, which shadows the apt one and
     # breaks `colcon build --symlink-install`.
     just _check-setuptools || true
+    just install-hooks
     echo "Setup done. Next: just build"
 
 alias install-deps := setup
+
+# The git hooks (scripts/hooks/): pre-push refuses a push to main whose pins do not match
+# (scripts/check_pins.py on the pushed commit). Linked, so a pull updates them; shared by every
+# worktree of this clone. An existing hook of another origin is left alone, and said so.
+install-hooks:
+    #!/usr/bin/env bash
+    set -e
+    cd "{{project}}"
+    hooks="$(git rev-parse --git-common-dir)/hooks"
+    mkdir -p "$hooks"
+    for h in scripts/hooks/*; do
+        name=$(basename "$h"); target="$PWD/$h"; link="$hooks/$name"
+        if [ -e "$link" ] && [ "$(readlink -f "$link")" != "$(readlink -f "$target")" ]; then
+            echo "install-hooks: $link exists and is not $target: left alone (remove it, then run this again)" >&2
+            continue
+        fi
+        ln -sfn "$target" "$link"
+        echo "install-hooks: $name -> $target"
+    done
 
 # Fail fast if a pip setuptools shadows the system one.
 #
@@ -290,7 +310,7 @@ test:
     # SSv2's protos in scensim_world_protocol are the fork's (roadmap 051)
     # no pytest plugins: ROS's launch_testing hook would import scripts/test_phase1.py, a
     # live ZMQ client (pyzmq, the runtime's protobuf), and fail where those differ (swb 139)
-    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q scripts/test_ssv2_protos.py scripts/test_sim_time.py scripts/test_t3.py scripts/test_ego_used.py scripts/test_coop_pilots_dir.py scripts/test_land_pin.py scripts/test_czp_rows_check.py scripts/test_crossing_aw_score.py scripts/test_world_keys.py scripts/sim_compare/test_scene.py
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q scripts/test_ssv2_protos.py scripts/test_sim_time.py scripts/test_t3.py scripts/test_ego_used.py scripts/test_coop_pilots_dir.py scripts/test_land_pin.py scripts/test_pre_push.py scripts/test_czp_rows_check.py scripts/test_crossing_aw_score.py scripts/test_world_keys.py scripts/sim_compare/test_scene.py
     # T1, world-server conformance (077 item 56): skipped unless SCENSIM_WORLD_CHECK=carla|isaac
     # names a running world server (SCENSIM_WORLD_ENDPOINT, SCENSIM_WORLD_MAP; scripts/test_world_conformance.py)
     PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q -rs scripts/test_world_conformance.py
