@@ -27,7 +27,16 @@ $mark: runs the pushing worktree's scripts/hooks/$name
 top=\$(git rev-parse --show-toplevel) || exit 1
 hook="\$top/scripts/hooks/$name"
 if [ -x "\$hook" ]; then exec "\$hook" "\$@"; fi
-echo "$name: \$hook is missing (a checkout from before it): not checked" >&2
+# a checkout from before the hook (or a branch without it): a push to main is refused, since
+# it could not be checked (243); any other ref goes
+while read -r lref lsha rref rsha; do
+    case "\$rref" in refs/heads/main)
+        case "\$lsha" in 0000000000000000000000000000000000000000) ;; *)
+            echo "$name: refusing to push to main: this checkout has no scripts/hooks/$name, so the pins cannot be checked (push from a checkout of main)" >&2
+            exit 1;;
+        esac;;
+    esac
+done
 exit 0
 STUB
     chmod +x "$dest"
