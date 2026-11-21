@@ -194,6 +194,20 @@ class Episodes(unittest.TestCase):
         # an ended slot's time stands
         self.assertAlmostEqual(float(run.ctx.t[0]), first_past(1.0))
 
+    def test_a_state_condition_on_a_repeating_groups_maneuver_is_refused(self):
+        # SSv2 restarts a ManeuverGroup's maneuvers on each execution; the port does not (243)
+        from scensim_batch import storyboard as sbmod
+        trig = ('<StartTrigger><ConditionGroup><Condition name="s" delay="0" '
+                'conditionEdge="none"><ByValueCondition><StoryboardElementStateCondition '
+                'storyboardElementType="maneuver" storyboardElementRef="m" '
+                'state="completeState"/></ByValueCondition></Condition></ConditionGroup>'
+                '</StartTrigger>')
+        p = case(story(event("e1", speed(7.0), time_trigger(0.5)), event("e2", speed(9.0), trig)))
+        p.write_text(p.read_text().replace('name="mg" maximumExecutionCount="1"',
+                                           'name="mg" maximumExecutionCount="2"'))
+        with self.assertRaisesRegex(Exception, "ManeuverGroup of more than one execution"):
+            self.build(p, [{"values": {}}])
+
     def test_a_state_condition_latches_and_an_event_reruns_its_actions(self):
         # e1 runs three times (edge none: each tick its trigger holds), stepping the lead's
         # speed; e2 starts on e1's action's startTransition (latched: seen once, true for good)

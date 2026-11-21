@@ -716,6 +716,11 @@ class _Compiler:
             x = sb.by_name(kind, name)
             if x is None:
                 raise StoryboardError(f"{where}: no {kind} named {name!r}")
+            if x.kind == "maneuver" and x.parent is not None and x.parent.max_exec > 1:
+                # SSv2's ManeuverGroup::start restarts its maneuvers on each execution; the port
+                # does not, so their states after the first differ (243)
+                raise _pending(where, f"a state condition on maneuver {name!r} of a "
+                               "ManeuverGroup of more than one execution")
             self.latches.setdefault((id(x), state), []).append(latch)
         return sb
 
