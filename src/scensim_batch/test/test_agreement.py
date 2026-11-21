@@ -94,7 +94,7 @@ class AgreementTest(unittest.TestCase):
                 {"ev": "state", "sim": 2.0, "element": "s/a", "from": "completeState",
                  "to": "runningState"}]))
             self.assertEqual(A.context_steps(p, 0.05),
-                             {"s/a": {"runningState": 1, "completeState": 20}})
+                             {"s/a": {"runningState": 0, "completeState": 19}})
 
     def test_taken_commands_and_their_delivery(self):
         """Frame i's step starts at the previous frame's clock; a command stamped there ran
@@ -115,6 +115,13 @@ class AgreementTest(unittest.TestCase):
         d = A.delivery(t, "ego", 0.05)
         self.assertEqual(d, {"frames": 5, "delay": {0: 3, 1: 1, 2: 1}, "superseded": 3,
                              "repeated": 1})
+
+    def test_a_command_stamped_after_its_step_began_is_refused(self):
+        """A stamp on another clock than the truth's (243): no delay can be read from it."""
+        t = trace(first=10, n=3, S=0)
+        t.frames[2].entities["ego"].command = Cmd(t.frames[2].sim_time_ns, 1.0, 1)
+        with self.assertRaisesRegex(ValueError, "not the truth's sim_time_ns"):
+            A.delivery(t, "ego", 0.05)
 
     def test_compare(self):
         seats = {"poses": {"ego": [(0, 0, 0), (1, 0, 0), None], "npc": [(10, 0, 0)]},

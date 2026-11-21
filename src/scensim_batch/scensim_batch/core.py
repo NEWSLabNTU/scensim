@@ -72,6 +72,10 @@ class BatchRun:
         self.job = torch.zeros(compiled.n, nd, dtype=torch.int8)    # SSv2's LINEAR_ACCELERATION
         self.job_target = torch.zeros(compiled.n, nd, dtype=torch.float64)
         self.obs = None
+        # the ego as SSv2 sees it: its status from the step before (SSv2 reads the ego back
+        # before the simulator steps it, so its pose at frame f is the world's at f - 1: the
+        # truth's ssv2 against sim_pose, 092 K2.4); what the storyboard and SSv2's vehicles read
+        self.seen = None
         self.route = sbmod.RouteGoal(self)
         # SSv2's scenario time is A(S + k) - A(S): A the frames' step summed in a double from
         # the node's start, S the frames before startNpcLogic (SimulationClock; the fork's
@@ -118,30 +122,35 @@ class BatchRun:
                                           self.ctx.standstill)
         if self.storyboard is not None:
             self.storyboard.reset(mask)
-        # the storyboard's first evaluation, at time 0, before the first update (SSv2's order)
+        # No storyboard evaluation here: SSv2's first is a step after startNpcLogic (its tick
+        # then has no time yet and starts the controllers), at scenario time dt, which the
+        # first step's after_physics makes (092 K2.4: the batch evaluated at 0 too, a step
+        # ahead of seats on every element's start)
         prev = self.obs
         self.obs = self._observe(self.backend.state(), None)
         self.ctx.obs = self.obs
         self.route.reset(mask)
         if self.c.goal_waypoints:
             self.route.set(mask, self.c.goal_waypoints)
-        self._tick(mask)
+        self._tick(mask, evaluate=False)
         if prev is not None:      # the other slots keep this step's observation (and events)
             self.obs = _merge(prev, self.obs, mask)
             self.ctx.obs = self.obs
+        seen = self._ego_view(self.obs)
+        self.seen = seen if self.seen is None or prev is None else _merge(self.seen, seen, mask)
         return self.obs
 
-    def _tick(self, mask=None):
+    def _tick(self, mask=None, evaluate=True):
         sb = self.storyboard
         if sb is None:
             self.obs["route"] = self.route.update(self.obs)
             return
-        if mask is not None:
+        if evaluate and mask is not None:
             keep = sb.outcome.clone()
             sb.outcome = torch.where(mask, sb.outcome, torch.full_like(sb.outcome, -1))
             sb.tick(self.ctx)
             sb.outcome = torch.where(mask, sb.outcome, keep)
-        else:
+        elif evaluate:
             sb.tick(self.ctx)
         self.obs["route"] = self.route.update(self.obs)
         self.obs["outcome"] = sb.outcome.clone()
@@ -253,18 +262,42 @@ class BatchRun:
         """After one physics step: the ego read back, SSv2's default vehicles moved, the
         storyboard evaluated at the new time. Returns the observation: the ego's state, every
         entity's pose [N, E] (x, y, yaw, v) and each slot's outcome."""
-        self.obs = self._observe(self.backend.state(), dt)
+        seen = self.seen
+        self.obs = self._observe(self.backend.state(), dt, seen)
+        self.seen = self._ego_view(self.obs)
+        view = self._as_ssv2_sees(self.obs, seen)
         self._post_update()
         live = (self.storyboard.outcome == 0 if self.storyboard is not None
                 else torch.ones(self.c.n, dtype=torch.bool))
         self.clock = torch.where(live, self.clock + dt, self.clock)
         self.ctx.t = self.clock - self.clock0
-        self.ctx.update(self.obs, dt)
+        self.ctx.update(view, dt)
         self._tick()
         return self.obs
 
-    def _observe(self, st, dt):
-        """Every entity's pose; with `dt`, SSv2's default vehicles moved by it first."""
+    def _ego_view(self, obs):
+        """The ego's columns of an observation (x, y, yaw, v [N]) and its state dict."""
+        e = self.ego
+        return {"x": obs["x"][:, e].clone(), "y": obs["y"][:, e].clone(),
+                "yaw": obs["yaw"][:, e].clone(), "v": obs["v"][:, e].clone(),
+                "ego": {k: v.clone() for k, v in obs["ego"].items()}}
+
+    def _as_ssv2_sees(self, obs, seen):
+        """`obs` with the ego's columns and state from the step before (`seen`)."""
+        if seen is None:
+            return obs
+        e = self.ego
+        view = dict(obs)
+        for k in ("x", "y", "yaw", "v"):
+            col = obs[k].clone()
+            col[:, e] = seen[k]
+            view[k] = col
+        view["ego"] = seen["ego"]
+        return view
+
+    def _observe(self, st, dt, seen=None):
+        """Every entity's pose; with `dt`, SSv2's default vehicles moved by it first, seeing
+        the ego as `seen` (SSv2's view of it: the step before) when given."""
         c = self.c
         x, y, yaw = c.x.clone(), c.y.clone(), c.yaw.clone()
         v = torch.zeros_like(x)
@@ -274,8 +307,12 @@ class BatchRun:
             others_idx = [self.ego] + self.props
             ego_len = torch.tensor([c.entities[i].length for i in others_idx], dtype=torch.float64)
             ego_wid = torch.tensor([c.entities[i].width for i in others_idx], dtype=torch.float64)
-            others = {"x": x[:, others_idx], "y": y[:, others_idx], "yaw": yaw[:, others_idx],
-                      "v": v[:, others_idx], "length": ego_len.expand(c.n, -1),
+            ox, oy, oyaw, ov = (t_[:, others_idx].clone() for t_ in (x, y, yaw, v))
+            if seen is not None:
+                ox[:, 0], oy[:, 0], oyaw[:, 0], ov[:, 0] = (seen["x"], seen["y"], seen["yaw"],
+                                                            seen["v"])
+            others = {"x": ox, "y": oy, "yaw": oyaw,
+                      "v": ov, "length": ego_len.expand(c.n, -1),
                       "width": ego_wid.expand(c.n, -1)}
             nx, ny, nyaw = (self.vehicles.step(dt, others) if dt is not None
                             else self.vehicles.poses())
