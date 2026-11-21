@@ -170,7 +170,36 @@ class Static(unittest.TestCase):
                 self.assertIn("SSv2's default controller: " + subset.DEFAULT_REASON, v.conditions)
                 self.assertFalse([c for c in v.conditions if "blind" in c])
 
+    def test_a_state_condition_on_a_repeating_groups_maneuver_is_executor_pending(self):
+        """SSv2's ManeuverGroup::start restarts its maneuvers on every execution; the batch does
+        not, so a state condition on such a maneuver is executor pending (as its compiler)."""
+        import re
+        cond = ('<StoryboardElementStateCondition storyboardElementType="maneuver" '
+                'storyboardElementRef="{m}" state="completeState"/>')
+        for count, pending in (("1", False), ("2", True), ("$reps", True)):
+            def edit(s, count=count):
+                s = s.replace('<ManeuverGroup name="cut_out" maximumExecutionCount="1">',
+                              f'<ManeuverGroup name="cut_out" maximumExecutionCount="{count}">')
+                name = re.search(r'<Maneuver name="([^"]+)"', s).group(1)
+                assert "<ParameterDeclarations>" in s and "<StopTrigger>" in s
+                s = s.replace("<ParameterDeclarations>",
+                              '<ParameterDeclarations><ParameterDeclaration name="reps" '
+                              'parameterType="unsignedInt" value="3"/>', 1)
+                # a condition on the maneuver, as a second group of the storyboard's StopTrigger
+                return s.replace("<StopTrigger>", "<StopTrigger><ConditionGroup><Condition "
+                                 'name="m_done" delay="0" conditionEdge="none"><ByValueCondition>'
+                                 + cond.format(m=name) + "</ByValueCondition></Condition>"
+                                 "</ConditionGroup>", 1)
+            with tempfile.TemporaryDirectory() as d:
+                v = subset.check(self.cs6(d, edit))
+                hit = [c for c in v.conditions if "a state condition on maneuver" in c]
+                self.assertEqual(bool(hit), pending, (count, v.conditions))
+                if pending:
+                    want = "3" if count == "$reps" else count
+                    self.assertIn(f"of a ManeuverGroup of {want} executions: "
+                                  + subset.EXECUTOR_PENDING_REASON, hit[0])
 
+    def test_a_static_entity_needs_maxspeed_0(self):
         with tempfile.TemporaryDirectory() as d:
             dist = self.cs6(d, lambda s: s.replace('<Property name="maxSpeed" value="0"/>', ""))
             with self.assertRaisesRegex(subset.SubsetError, "stopped is scensim.static but its "

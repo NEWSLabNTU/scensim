@@ -457,7 +457,35 @@ def check(path, ego="policy"):
     sb = root.find("Storyboard")
     if sb is not None:
         _walk(sb, "/OpenSCENARIO/Storyboard", v, in_init=False, entity=None)
+        _repeated_maneuver_states(sb, v, declared)
     return v
+
+
+def _repeated_maneuver_states(sb, v, declared):
+    """A StoryboardElementStateCondition on a maneuver whose ManeuverGroup executes more than
+    once: SSv2's ManeuverGroup::start puts its maneuvers back through startTransition on every
+    execution, scensim_batch does not, so such a condition fires on SSv2's second execution
+    and not in the batch (its compiler refuses it the same way)."""
+    groups = {}
+    for g in sb.iter("ManeuverGroup"):
+        text = g.get("maximumExecutionCount", "1")
+        if text.startswith("$"):
+            text = declared.get(text[1:], "1")
+        try:
+            count = int(float(text))
+        except (TypeError, ValueError):
+            count = 1
+        for m in g.findall("Maneuver"):
+            groups[m.get("name")] = count
+    for c in sb.iter("StoryboardElementStateCondition"):
+        name = c.get("storyboardElementRef")
+        if c.get("storyboardElementType") != "maneuver" or groups.get(name, 1) <= 1:
+            continue
+        v.add(CONDITIONAL,
+              f"/OpenSCENARIO/Storyboard//StoryboardElementStateCondition"
+              f"[@storyboardElementRef='{name}']",
+              f"a state condition on maneuver {name!r} of a ManeuverGroup of "
+              f"{groups[name]} executions", EXECUTOR_PENDING_REASON)
 
 
 def _init_controller(el, here, v, entity):

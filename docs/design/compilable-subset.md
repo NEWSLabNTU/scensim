@@ -44,6 +44,7 @@ executor refuses.
 | CollisionCondition | contact per slot |
 | UserDefinedValueCondition `RelativeHeadingCondition(<entity>)` or `(<entity>, <lane>, <s>)`, matched by the function-call form | SSv2 computes it from the entity's pose against its lane, nothing from outside: a heading per slot |
 | StoryboardElementStateCondition; any number of Stories, Acts, Events and ConditionGroups; `maximumExecutionCount`; StopTrigger | the storyboard's state machine per slot, as masks |
+| a StoryboardElementStateCondition on a maneuver whose ManeuverGroup has `maximumExecutionCount` > 1 | executor pending: SSv2's ManeuverGroup::start puts its maneuvers back through startTransition on every execution and scensim_batch does not, so the condition would fire on SSv2's second execution and not in the batch (the batch compiler refuses it; the checker names the maneuver and its group's count) |
 | ParameterCondition; a ParameterAction in Init | a parameter fixed for the slot |
 | TrafficSignalStateAction, TrafficSignalControllerAction | a per-slot signal state |
 | CustomCommandAction `exitSuccess`, `exitFailure`, `:` | the slot's end |
