@@ -1454,6 +1454,8 @@ fn the_truth_file_is_schema_2_from_the_servers_replies() {
     assert!(!frames.is_empty());
     for f in &frames {
         assert!(f["sim_time_ns"].as_i64().is_some(), "{f}");
+        // SSv2's npc_logic_started from the status that staged it (092 K2.4)
+        assert!(f["npc_logic_started"].is_boolean(), "{f}");
         for (name, s) in f["entities"].as_object().unwrap() {
             assert!(s.get("carla").is_none(), "{name}: {s}");
             if !s["sim_pose"].is_null() {
