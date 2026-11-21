@@ -181,7 +181,12 @@ class Bridge:
 def knob_stack(where, maps_hub, monkeypatch):
     d = knobbed_project(where)
     monkeypatch.setattr(run, "scenario_argv", fake(where))
-    monkeypatch.setattr(run, "pilot_argv", lambda *a: [sys.executable, "-c", "pass"])
+    # a run pilot that stays up until the run stops it, as a real one does: one that exited at
+    # once raced the run's readiness wait, which checks a pilot's exit before its readiness, and
+    # a loaded host (load 66, 2026-11-22) let it exit first ("its launch exited (code 0)
+    # before it was ready"); the run stops it with SIGINT at its end
+    monkeypatch.setattr(run, "pilot_argv", lambda *a: [
+        sys.executable, "-c", "import time\ntry:\n    time.sleep(600)\nexcept KeyboardInterrupt:\n    pass"])
     p, proc = start_stack(d)
     yield d, monkeypatch
     proc.send_signal(signal.SIGTERM)
