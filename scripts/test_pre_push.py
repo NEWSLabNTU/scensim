@@ -163,6 +163,16 @@ def test_the_installed_stub_runs_each_worktrees_hook_and_survives_a_removed_one(
     _git("commit", "-qam", "pin c2", cwd=sup)
     r = push(_git("rev-parse", "main", cwd=sup))
     assert r.returncode == 1 and "is not in its checkout" in r.stderr
+    # a checkout from before the hook: a push to main is refused, any other ref goes (243)
+    _git("checkout", "-q", "--detach", "main~2", cwd=wt)   # "pin": before "hooks"
+    assert not (wt / "scripts/hooks/pre-push").exists()
+    r = push(_git("rev-parse", "main", cwd=sup))
+    assert r.returncode == 1 and "cannot be checked" in r.stderr
+    env = {k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")}
+    r = subprocess.run([str(stub), "origin", "url"], cwd=wt, env=env, capture_output=True,
+                       text=True, input=f"refs/heads/x {'a' * 40} refs/heads/feature {Z}\n")
+    assert r.returncode == 0, r.stderr
+    _git("checkout", "-q", "--detach", "main", cwd=wt)
     # a foreign hook is left alone
     stub.write_text("#!/bin/sh\nexit 0\n")
     out = subprocess.run(["bash", str(wt / "scripts/install_hooks.sh")], capture_output=True,
