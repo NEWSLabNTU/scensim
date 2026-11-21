@@ -13,6 +13,7 @@ pilots:
     vehicle: tesla_model3
     args: {vehicle_side: "true"}
     lifetime: run
+    inputs: [ground_truth]   # the pose replay_pilot reports (SSv2 waits for the localization)
     run: [python3, -m, scensim_agent.adapters.replay_pilot, --config, "{param:commands}.pilot.json"]
 judges:
   # nothing to judge: it makes the run record the storyboard log (context.jsonl) the table reads

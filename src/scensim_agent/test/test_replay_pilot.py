@@ -99,6 +99,22 @@ def test_the_agent_publishes_and_logs_each_frame(tmp_path):
     assert rows[3]["clock_ns"] == 1_000_250_000_000 and rows[3]["skipped"] == 0
 
 
+def test_the_pose_is_reported_from_the_vehicles_odometry(tmp_path):
+    import time
+    cmds = write(tmp_path, {"step_time": 0.05, "commands": CMDS})
+
+    class Odom(FakeVehicle):
+        def last_pose(self):
+            return (1.0, 2.0, 0.0, 0.5)
+
+    a = R.ReplayPilotAgent({"commands": str(cmds)}, vehicle=Odom())
+    sent = []
+    a.report = lambda **kw: sent.append(kw)
+    time.sleep(R.POSE_PERIOD * 2.5)
+    a.close()
+    assert sent and sent[0]["pose"]["x"] == 1.0 and sent[0]["pose"]["y"] == 2.0
+
+
 def test_no_commands_file_is_refused():
     with pytest.raises(ValueError, match="give commands"):
         R.ReplayPilotAgent({}, vehicle=FakeVehicle())
