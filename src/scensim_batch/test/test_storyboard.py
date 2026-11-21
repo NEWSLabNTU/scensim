@@ -205,7 +205,8 @@ class Episodes(unittest.TestCase):
         p = case(story(event("e1", speed(7.0), time_trigger(0.5)), event("e2", speed(9.0), trig)))
         p.write_text(p.read_text().replace('name="mg" maximumExecutionCount="1"',
                                            'name="mg" maximumExecutionCount="2"'))
-        with self.assertRaisesRegex(Exception, "ManeuverGroup of more than one execution"):
+        # the subset check (243, K8) refuses it first, else the storyboard compiler
+        with self.assertRaisesRegex(Exception, "ManeuverGroup of (2|more than one) execution"):
             self.build(p, [{"values": {}}])
 
     def test_a_state_condition_latches_and_an_event_reruns_its_actions(self):
