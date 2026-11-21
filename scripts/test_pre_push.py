@@ -121,3 +121,50 @@ def test_a_push_from_a_worktree_is_checked_against_its_submodules(tmp_path):
     _git("commit", "-qam", "pin c2", cwd=sup)
     r = _push(wt, _git("rev-parse", "main", cwd=sup))
     assert r.returncode == 1 and "is not in its checkout" in r.stderr
+
+
+def test_the_installed_stub_runs_each_worktrees_hook_and_survives_a_removed_one(tmp_path):
+    """install_hooks.sh puts a stub in the clone's shared hooks: a push from any worktree runs
+    that worktree's scripts/hooks/pre-push, and removing the worktree it was installed from
+    leaves it working (133); a hook of another origin is left alone."""
+    import shutil
+    sup, wt, comp = _superproject(tmp_path)
+    for f in ("scripts/check_pins.py", "scripts/hooks/pre-push", "scripts/install_hooks.sh"):
+        (sup / f).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / f, sup / f)
+    _git("add", "scripts", cwd=sup)
+    _git("commit", "-qm", "hooks", cwd=sup)
+    for w in (wt, tmp_path / "wt2"):
+        if w.exists():
+            _git("checkout", "-q", "--detach", "main", cwd=w)
+        else:
+            _git("worktree", "add", "-q", "--detach", str(w), "main", cwd=sup)
+        _git("submodule", "update", "-q", "--init", cwd=w)
+    subprocess.run(["bash", str(tmp_path / "wt2/scripts/install_hooks.sh")], check=True,
+                   capture_output=True)
+    _git("worktree", "remove", "--force", str(tmp_path / "wt2"), cwd=sup)
+    stub = Path(_git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=wt)) / \
+        "hooks" / "pre-push"
+    assert "scensim install-hooks stub" in stub.read_text()
+
+    def push(sha):
+        env = {k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")}
+        env["GIT_DIR"] = _git("rev-parse", "--absolute-git-dir", cwd=wt)
+        env["GIT_INDEX_FILE"] = env["GIT_DIR"] + "/index"
+        return subprocess.run([str(stub), "origin", "url"], cwd=wt, env=env,
+                              input=f"refs/heads/x {sha} refs/heads/main {Z}\n",
+                              capture_output=True, text=True)
+
+    assert push(_git("rev-parse", "HEAD", cwd=wt)).returncode == 0
+    (comp / "f").write_text("y\n")
+    _git("commit", "-qam", "c2", cwd=comp)
+    _git("-C", "src/component", "fetch", "-q", "origin", cwd=sup)
+    _git("-C", "src/component", "checkout", "-q", "origin/main", cwd=sup)
+    _git("commit", "-qam", "pin c2", cwd=sup)
+    r = push(_git("rev-parse", "main", cwd=sup))
+    assert r.returncode == 1 and "is not in its checkout" in r.stderr
+    # a foreign hook is left alone
+    stub.write_text("#!/bin/sh\nexit 0\n")
+    out = subprocess.run(["bash", str(wt / "scripts/install_hooks.sh")], capture_output=True,
+                         text=True)
+    assert "left alone" in out.stderr and stub.read_text() == "#!/bin/sh\nexit 0\n"
