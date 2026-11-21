@@ -14,7 +14,6 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 
 try:
-    import numpy as np
     import torch
     from sim_vehicle_ecu import batch as ecu_batch
     from sim_vehicle_ecu import xp as xpmod
@@ -105,6 +104,109 @@ class DeviceResident(unittest.TestCase):
                                 (k, f, (a[f] - b[f]).abs().max().item()))
             self.assertEqual(sa, sb, k)
             self.assertEqual(oa, ob, k)
+
+
+ROBORACER = HERE.parents[2] / "scenarios" / "projects" / "roboracer"
+
+
+def _roboracer():
+    """roboracer_vesc and its test car, where this checkout has the project; else None."""
+    comp = ROBORACER / "component" / "roboracer_vesc"
+    if not comp.is_dir():
+        return None
+    sys.path[:0] = [str(comp), str(comp / "test")]
+    from roboracer_vesc.component import RoboRacerVesc
+    from test_batch import CAR
+    return RoboRacerVesc, CAR
+
+
+@unittest.skipUnless(CUDA, "no torch 2 with a usable GPU")
+class NoHostSync(unittest.TestCase):
+    """094 P2's configuration (an ego alone, a storyboard that ends it on time, the VESC
+    component on torch on the device): no host sync in a step between BatchRun's checks, every
+    `sync_every` steps (torch's sync debug mode raises on one); what the skipped checks guard is
+    raised at the next."""
+
+    def run_of(self, cls, vehicle, n=4, **kw):
+        from scensim_batch import compile as C, core
+        with torch.device("cuda"):
+            c = C.compile_scenario(HERE.parent / "scripts" / "check_resident.xosc", [{}] * n,
+                                   StraightWorld(), device="cuda")
+            backend = PointMass(n)
+        comp = ecu_batch.load_batch(cls, vehicle, {}, list(range(n)), array_api="torch",
+                                    device="cuda")
+        run = core.BatchRun(c, StraightWorld(), backend, comp, device="cuda", **kw)
+        run.route_length = 1000.0
+        run.reset()
+        return run
+
+    def vesc_commands(self, n):
+        from sim_vehicle_ecu.signals import MOTOR_MODES
+        d = "cuda"
+        return {"value": torch.full((n,), 3000.0, dtype=torch.float64, device=d),
+                "servo": torch.full((n,), 0.6, dtype=torch.float64, device=d),
+                "motor": torch.full((n,), MOTOR_MODES.index("speed"), dtype=torch.int64, device=d),
+                "age": torch.zeros(n, dtype=torch.float64, device=d),
+                "valid": torch.ones(n, dtype=torch.bool, device=d)}
+
+    def steps_without_sync(self, run, commands, steps):
+        checks, quiet = 0, 0
+        for _ in range(steps):
+            checking = run._ticks % run.sync_every == 0
+            if not checking:
+                torch.cuda.set_sync_debug_mode("error")
+            try:
+                run.step(commands, DT)
+            finally:
+                torch.cuda.set_sync_debug_mode(0)
+            checks += checking
+            quiet += not checking
+        return checks, quiet
+
+    def test_no_sync_between_checks_with_the_vesc(self):
+        rr = _roboracer()
+        if rr is None:
+            self.skipTest("no roboracer project in this checkout")
+        cls, car = rr
+        run = self.run_of(cls, car)
+        cm = self.vesc_commands(run.c.n)
+        for _ in range(2):          # the first steps build what later ones reuse
+            run.step(cm, DT)
+        checks, quiet = self.steps_without_sync(run, cm, 140)    # past the 6 s exit
+        self.assertGreater(quiet, 120)
+        self.assertGreaterEqual(checks, 8)
+        self.assertEqual(run.outcome(), ["success"] * run.c.n)
+
+    def test_no_sync_between_checks_with_a_torch_component(self):
+        run = self.run_of(AccelX, {})
+        cm = {f: torch.as_tensor(v, device="cuda") for f, v in cmds(run.c.n, 1.0).items()}
+        for _ in range(2):
+            run.step(cm, DT)
+        checks, quiet = self.steps_without_sync(run, cm, 140)
+        self.assertGreater(quiet, 120)
+        self.assertEqual(run.outcome(), ["success"] * run.c.n)
+
+    def test_a_bad_actuation_is_raised_at_the_next_check(self):
+        class Bad(AccelXBatch):
+            k = 0
+
+            def step_batch(self, c, s, dt):
+                out = super().step_batch(c, s, dt)
+                Bad.k += 1
+                if Bad.k == 20:
+                    out["brake"] = out["brake"] - 1.0
+                return out
+
+        class BadCls:
+            batch = Bad
+
+        run = self.run_of(BadCls, {})
+        cm = {f: torch.as_tensor(v, device="cuda") for f, v in cmds(run.c.n, 1.0).items()}
+        with self.assertRaisesRegex(Exception, "brake negative"):
+            for k in range(64):
+                run.step(cm, DT)
+        self.assertEqual(run._ticks % run.sync_every, 0)   # raised at a check, not before
+        self.assertGreater(k, 19)
 
 
 def _paths(sb):

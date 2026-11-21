@@ -383,6 +383,12 @@ class ArticulationBackend:
         self.sus_ids = [self.ids[f"{c}_suspension"] for c in CORNERS]
         self.steer_ids = [self.ids[f"{c}_steer"] for c in CORNERS[:2]]
         self.spin_ids = [self.ids[f"{c}_spin"] for c in CORNERS]
+        # the same as index tensors where the model computes, and the spin joints' on the
+        # asset's device: a list index is a host copy and a sync each step (092 K2.2c)
+        ix = lambda q, dev: torch.tensor(q, dtype=torch.int64, device=dev)   # noqa: E731
+        self._sus, self._steer, self._spin = (ix(q, self.home) for q in
+                                              (self.sus_ids, self.steer_ids, self.spin_ids))
+        self._spin_asset = ix(self.spin_ids, self.device)
         self.act = None
         self.joint_targets = None
         self.prev_vb = None
@@ -434,26 +440,26 @@ class ArticulationBackend:
         a, m = self.asset, self.model
         nj = a.num_joints
         pos_t = torch.zeros(self.n, nj, dtype=torch.float64, device=self.home)
-        pos_t[:, self.sus_ids] = m.suspension_targets()
+        pos_t[:, self._sus] = m.suspension_targets()
         if self.joint_targets is not None:
             steer, spin = (torch.as_tensor(t, dtype=torch.float64).to(self.home)
                            for t in self.joint_targets)
         else:
             steer = m.steer_targets(self.act["tire_angle"])
-            omega = a.data.joint_vel.torch[:, self.spin_ids].detach().to(self.home).double()
-            q = a.data.joint_pos.torch[:, self.sus_ids].detach().to(self.home).double()
+            omega = a.data.joint_vel.torch.detach().to(self.home)[:, self._spin].double()
+            q = a.data.joint_pos.torch.detach().to(self.home)[:, self._sus].double()
             st = self.state()
             # each hub's speed along the car's x: v - yaw_rate y (the steer's cosine ignored:
             # a steered wheel reads as sliding sooner, which only brakes it on its own inertia)
             hub = st["v"][:, None] - st["yaw_rate"][:, None] * m.hub_y
             spin = m.spin_efforts(self.act["drive"], self.act["brake"], omega, dt,
                                   grip=m.grip(q, omega, hub))
-        pos_t[:, self.steer_ids] = steer
+        pos_t[:, self._steer] = steer
         a.set_joint_position_target_index(target=self._dev(pos_t))
         if m.spin_type == "velocity":
-            a.set_joint_velocity_target_index(target=self._dev(spin), joint_ids=self.spin_ids)
+            a.set_joint_velocity_target_index(target=self._dev(spin), joint_ids=self._spin_asset)
         else:
-            a.set_joint_effort_target_index(target=self._dev(spin), joint_ids=self.spin_ids)
+            a.set_joint_effort_target_index(target=self._dev(spin), joint_ids=self._spin_asset)
         a.write_data_to_sim()
 
     def advance(self, dt):
@@ -485,7 +491,7 @@ class ArticulationBackend:
         t = lambda p: p.torch.detach().to(self.home)   # noqa: E731
         pose, vel = t(d.root_link_pose_w), t(d.root_link_vel_w)
         st, vb = self.model.state(pose[:, :3], pose[:, 3:7], vel[:, :3], vel[:, 3:6],
-                                  t(d.joint_vel)[:, self.spin_ids], self.prev_vb, self.dt,
+                                  t(d.joint_vel)[:, self._spin], self.prev_vb, self.dt,
                                   self.origins)
         self.prev_vb, self.dt, self._state = vb, None, st
         return st
