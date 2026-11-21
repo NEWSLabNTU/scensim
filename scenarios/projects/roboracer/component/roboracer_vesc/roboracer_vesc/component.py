@@ -46,6 +46,7 @@ import random
 import numpy as np
 
 from sim_vehicle_ecu import batch as ecu_batch
+from sim_vehicle_ecu import xp as xpmod
 from sim_vehicle_ecu.signals import MOTOR_MODES
 
 # The defaults: a 1/10 car on f1tenth_system's humble-devel `vesc.yaml` and a 3500 kV motor
@@ -73,20 +74,30 @@ NONE = -1
 
 
 class RoboRacerVescBatch:
+    """The batch, written once over an array namespace (`xp`, sim_vehicle_ecu.xp: numpy, the
+    reference, or torch on any device; scensim 092 K2.2c): the same elementwise arithmetic in
+    the same order in both, so a torch batch on a GPU equals the numpy one bit for bit, and its
+    per-step path brings nothing to the host (no `any`, no index lists): the pending commands
+    drain in one pass (`_due`), and a queue overflow, which numpy raises at once, is a flag on
+    a device (`check`, run at each reset). The latency jitter's draws are each car's own
+    `random.Random`, on the host, as the single car's; only a car with jitter draws."""
     commands = "vesc"
     driven = (True,) * 4  # the Slash 4x4: the centre gear drives both axles
     truth = ()
-    array_api, dtype = "numpy", np.float64
+    array_api, dtype = ("numpy", "torch"), np.float64
     per_slot_params = True   # every param an array [N]: a fit's candidates, a varied car
 
-    def __init__(self, vehicle: dict, params: dict, seeds):
+    def __init__(self, vehicle: dict, params: dict, seeds, xp=None):
         unknown = set(params) - set(DEFAULTS)
         if unknown:
             raise ValueError(f"unknown params {sorted(unknown)}; known: {sorted(DEFAULTS)}")
+        xp = self.xp = xp or xpmod.namespace("numpy")
         n = len(seeds)
         # each param per car, [N]: a number (one car's, or every car's) or an array [N]
-        self.p = {k: np.broadcast_to(np.asarray(params.get(k, d), dtype=np.float64), (n,)).copy()
-                  for k, d in DEFAULTS.items()}
+        host = {k: np.broadcast_to(np.asarray(params.get(k, d), dtype=np.float64), (n,)).copy()
+                for k, d in DEFAULTS.items()}
+        self.p = {k: xp.asarray(v, xp.float64) for k, v in host.items()}
+        self.jitter = host["latency_jitter"] > 0          # host: which cars draw
         g = vehicle["geometry"]
         self.r = float(g["wheel_radius"])
         self.max_steer = float(g["max_steer_angle"])
@@ -97,32 +108,42 @@ class RoboRacerVescBatch:
         n, q = len(self.seeds), QUEUE
         self.n = n
         self.rngs = [random.Random(s) for s in self.seeds]
+        self.rows = xp.arange(n)
+        self.ring = xp.arange(q)
         # the queue: (effective time, arrival, command) per car, as a ring buffer
-        self.q_eff, self.q_arr = np.zeros((n, q)), np.zeros((n, q))
-        self.q_motor = np.full((n, q), NONE, np.int64)
-        self.q_value, self.q_servo = np.zeros((n, q)), np.full((n, q), np.nan)
-        self.head, self.size = np.zeros(n, np.int64), np.zeros(n, np.int64)
-        self.motor, self.last_motor = np.full(n, NONE, np.int64), np.full(n, NONE, np.int64)
-        self.has_last = np.zeros(n, bool)
+        self.q_eff, self.q_arr = xp.zeros((n, q)), xp.zeros((n, q))
+        self.q_motor = xp.full((n, q), NONE, xp.int64)
+        self.q_value, self.q_servo = xp.zeros((n, q)), xp.full((n, q), xp.nan)
+        self.head, self.size = xp.zeros(n, xp.int64), xp.zeros(n, xp.int64)
+        self.motor, self.last_motor = xp.full(n, NONE, xp.int64), xp.full(n, NONE, xp.int64)
+        self.has_last = xp.zeros(n, xp.bool)
+        self.overflow = xp.zeros(n, xp.bool)
         for name in ("t", "integral", "tire_angle", "tachometer", "current", "value",
                      "last_value", "last_age"):
-            setattr(self, name, np.zeros(n))
+            setattr(self, name, xp.zeros(n))
         for name in ("servo", "arrived", "last_servo"):
-            setattr(self, name, np.full(n, np.nan))
+            setattr(self, name, xp.full(n, xp.nan))
         self.debug = {}
 
+    def check(self):
+        """Raise for a car whose queue overflowed (a torch batch keeps it as a flag)."""
+        if self.xp.any(self.overflow):
+            raise RuntimeError(f"roboracer_vesc: more than {QUEUE} commands pending in a car")
+
     def reset_batch(self, mask):
-        m = np.asarray(mask, bool)
+        xp = self.xp
+        self.check()
+        m = xp.asarray(mask, xp.bool)
         for name in ("t", "integral", "tire_angle", "tachometer", "current", "value",
                      "last_value", "last_age"):
-            setattr(self, name, np.where(m, 0.0, getattr(self, name)))
+            setattr(self, name, xp.where(m, 0.0, getattr(self, name)))
         for name in ("servo", "arrived", "last_servo"):
-            setattr(self, name, np.where(m, np.nan, getattr(self, name)))
-        self.motor = np.where(m, NONE, self.motor)
-        self.last_motor = np.where(m, NONE, self.last_motor)
-        self.has_last = np.where(m, False, self.has_last)
-        self.head, self.size = np.where(m, 0, self.head), np.where(m, 0, self.size)
-        for i in np.flatnonzero(m):
+            setattr(self, name, xp.where(m, xp.nan, getattr(self, name)))
+        self.motor = xp.where(m, NONE, self.motor)
+        self.last_motor = xp.where(m, NONE, self.last_motor)
+        self.has_last = xp.where(m, False, self.has_last)
+        self.head, self.size = xp.where(m, 0, self.head), xp.where(m, 0, self.size)
+        for i in np.flatnonzero(np.asarray(xp.to_host(m), bool)):
             self.rngs[i] = random.Random(self.seeds[i])
 
     # --- commands ------------------------------------------------------------------------
@@ -131,101 +152,125 @@ class RoboRacerVescBatch:
         """Commands the vehicle interface hands over, queued until their latency has passed. A
         command is a new one when its motor command or servo position changed, or its age fell
         (a new message with the same values)."""
-        valid = c.get("valid", np.ones(self.n, bool))
-        motor, value, servo, age = c["motor"], c["value"], c["servo"], c["age"]
-        same_servo = (servo == self.last_servo) | (np.isnan(servo) & np.isnan(self.last_servo))
+        xp = self.xp
+        valid = c.get("valid")
+        valid = xp.ones(self.n, xp.bool) if valid is None else xp.asarray(valid, xp.bool)
+        motor, value = xp.asarray(c["motor"], xp.int64), xp.asarray(c["value"], xp.float64)
+        servo, age = xp.asarray(c["servo"], xp.float64), xp.asarray(c["age"], xp.float64)
+        same_servo = (servo == self.last_servo) | (xp.isnan(servo) & xp.isnan(self.last_servo))
         same = (self.has_last & (motor == self.last_motor) & (value == self.last_value)
                 & same_servo & (age >= self.last_age))
-        self.last_motor = np.where(valid, motor, self.last_motor)
-        self.last_value = np.where(valid, value, self.last_value)
-        self.last_servo = np.where(valid, servo, self.last_servo)
-        self.last_age = np.where(valid, age, self.last_age)
+        self.last_motor = xp.where(valid, motor, self.last_motor)
+        self.last_value = xp.where(valid, value, self.last_value)
+        self.last_servo = xp.where(valid, servo, self.last_servo)
+        self.last_age = xp.where(valid, age, self.last_age)
         self.has_last = self.has_last | valid
         new = valid & ~same
-        if not new.any():
-            return
-        arrived = self.t - np.where(np.isinf(age), 0.0, age)
-        delay = self.p["latency"].copy()
-        lat, jit = self.p["latency"], self.p["latency_jitter"]
-        for i in np.flatnonzero(new & (jit > 0)):   # each car's own generator, in its order
-            delay[i] = max(0.0, float(lat[i]) + self.rngs[i].gauss(0.0, float(jit[i])))
-        idx = np.flatnonzero(new)
-        if np.any(self.size[idx] >= QUEUE):
-            raise RuntimeError(f"roboracer_vesc: more than {QUEUE} commands pending in a car")
-        slot = (self.head[idx] + self.size[idx]) % QUEUE
-        self.q_eff[idx, slot] = arrived[idx] + delay[idx]
-        self.q_arr[idx, slot] = arrived[idx]
-        self.q_motor[idx, slot] = motor[idx]
-        self.q_value[idx, slot] = value[idx]
-        self.q_servo[idx, slot] = servo[idx]
-        self.size[idx] += 1
+        arrived = self.t - xp.where(xp.isinf(age), 0.0, age)
+        delay = xp.copy(self.p["latency"])
+        if self.jitter.any():   # each car's own generator, in its order (host: its draws)
+            new_h = np.asarray(xp.to_host(new), bool)
+            lat = np.asarray(xp.to_host(self.p["latency"]))
+            jit = np.asarray(xp.to_host(self.p["latency_jitter"]))
+            d = np.asarray(xp.to_host(delay)).copy()
+            for i in np.flatnonzero(new_h & self.jitter):
+                d[i] = max(0.0, float(lat[i]) + self.rngs[i].gauss(0.0, float(jit[i])))
+            delay = xp.asarray(d, xp.float64)
+        over = new & (self.size >= QUEUE)
+        if xp.name == "numpy":
+            if xp.any(over):
+                raise RuntimeError(f"roboracer_vesc: more than {QUEUE} commands pending in a car")
+        else:
+            self.overflow = self.overflow | over
+        new = new & ~over
+        slot = (self.head + self.size) % QUEUE
+        rows = self.rows
+        for q, v in ((self.q_eff, arrived + delay), (self.q_arr, arrived),
+                     (self.q_motor, motor), (self.q_value, value), (self.q_servo, servo)):
+            q[rows, slot] = xp.where(new, v, q[rows, slot])
+        self.size = self.size + xp.astype(new, xp.int64)
 
     def _due(self):
-        rows = np.arange(self.n)
-        for _ in range(QUEUE):
-            h = self.head
-            due = (self.size > 0) & (self.q_eff[rows, h] <= self.t + 1e-12)
-            if not due.any():
-                return
-            self.arrived = np.where(due, self.q_arr[rows, h], self.arrived)
-            self.motor = np.where(due, self.q_motor[rows, h], self.motor)
-            self.value = np.where(due, self.q_value[rows, h], self.value)
-            self.servo = np.where(due, self.q_servo[rows, h], self.servo)
-            self.head = np.where(due, (h + 1) % QUEUE, h)
-            self.size = np.where(due, self.size - 1, self.size)
+        """The pending commands whose time has come, in arrival order: a car's ring from its
+        head, the prefix of due ones taken at once (each overrides the one before, so the last
+        due is the car's command), in one pass with no host round trip."""
+        xp = self.xp
+        order = (self.head[:, None] + self.ring[None, :]) % QUEUE              # [N, Q]
+        pending = self.ring[None, :] < self.size[:, None]
+        rows = self.rows[:, None]
+        due = pending & (self.q_eff[rows, order] <= self.t[:, None] + 1e-12)
+        k = _prefix_count(xp, due)                                             # [N]
+        some = k > 0
+        last = (self.head + xp.maximum(k - 1, 0)) % QUEUE
+        r = self.rows
+        self.arrived = xp.where(some, self.q_arr[r, last], self.arrived)
+        self.motor = xp.where(some, self.q_motor[r, last], self.motor)
+        self.value = xp.where(some, self.q_value[r, last], self.value)
+        self.servo = xp.where(some, self.q_servo[r, last], self.servo)
+        self.head = (self.head + k) % QUEUE
+        self.size = self.size - k
 
     # --- the step ------------------------------------------------------------------------
 
     def step_batch(self, commands, sensors, dt):
-        p = self.p
+        xp, p = self.xp, self.p
         self.t = self.t + dt
         self._arrive(commands)
         self._due()
-        w = np.where(sensors["valid"][:, None], sensors["wheel_speeds"], 0.0)
+        valid = xp.asarray(sensors["valid"], xp.bool)
+        w = xp.where(valid[:, None], xp.asarray(sensors["wheel_speeds"], xp.float64), 0.0)
         wheel = (((w[:, 0] + w[:, 1]) + w[:, 2]) + w[:, 3]) / 4.0  # rad/s, written out (2.6)
         motor = wheel * self.gear  # rad/s
         erpm = motor * p["erpm_per_motor_rad_s"]
         mode = self.motor
-        age = np.where(mode != NONE, self.t - self.arrived, np.inf)
+        age = xp.where(mode != NONE, self.t - self.arrived, xp.inf)
         released = (mode == NONE) | (age > p["timeout"])
-        zero = np.zeros(self.n)
+        zero = xp.zeros(self.n)
         # the speed loop
         err = self.value - erpm
         speed = ~released & (mode == SPEED)
-        integral = np.where(speed, self.integral + err * dt, self.integral)
+        integral = xp.where(speed, self.integral + err * dt, self.integral)
         # anti-windup: the integral holds what keeps the output within the limit
-        imax = p["current_max"] / np.maximum(p["speed_ki"], 1e-12)
-        integral = np.where(speed, np.maximum(-imax, np.minimum(imax, integral)), integral)
-        self.integral = np.where(released, 0.0, integral)
+        imax = p["current_max"] / xp.maximum(p["speed_ki"], 1e-12)
+        integral = xp.where(speed, xp.maximum(-imax, xp.minimum(imax, integral)), integral)
+        self.integral = xp.where(released, 0.0, integral)
         emf = motor * p["kt"]  # V: the back-EMF, kt w
-        current = np.where(speed, p["speed_kp"] * err + p["speed_ki"] * self.integral, zero)
-        current = np.where(~released & (mode == CURRENT), self.value, current)
-        current = np.where(~released & (mode == DUTY),
+        current = xp.where(speed, p["speed_kp"] * err + p["speed_ki"] * self.integral, zero)
+        current = xp.where(~released & (mode == CURRENT), self.value, current)
+        current = xp.where(~released & (mode == DUTY),
                            (self.value * p["battery"] - emf) / p["resistance"], current)
-        brake_current = np.where(~released & (mode == BRAKE),
-                                 np.minimum(np.abs(self.value), p["brake_max"]), zero)
-        current = np.maximum(-p["current_max"], np.minimum(p["current_max"], current))
+        brake_current = xp.where(~released & (mode == BRAKE),
+                                 xp.minimum(xp.abs(self.value), p["brake_max"]), zero)
+        current = xp.maximum(-p["current_max"], xp.minimum(p["current_max"], current))
         self.current = current
         torque = current * p["kt"] * self.gear  # N m at the wheels, all four
-        drive = np.repeat((torque / 4.0)[:, None], 4, axis=1)
-        brake = np.repeat((brake_current * p["kt"] * self.gear / 4.0)[:, None], 4, axis=1)
+        drive = xp.repeat_cols(torque / 4.0, 4)
+        brake = xp.repeat_cols(brake_current * p["kt"] * self.gear / 4.0, 4)
         # the servo
-        has = ~np.isnan(self.servo)
+        has = ~xp.isnan(self.servo)
         target = (self.servo - p["servo_offset"]) / p["servo_gain"]
-        target = np.maximum(-self.max_steer, np.minimum(self.max_steer, target))
+        target = xp.maximum(-self.max_steer, xp.minimum(self.max_steer, target))
         step = p["servo_rate"] * dt
-        move = np.maximum(-step, np.minimum(step, target - self.tire_angle))
-        self.tire_angle = np.where(has, self.tire_angle + move, self.tire_angle)
-        self.tachometer = self.tachometer + np.abs(erpm) * dt / 60.0
+        move = xp.maximum(-step, xp.minimum(step, target - self.tire_angle))
+        self.tire_angle = xp.where(has, self.tire_angle + move, self.tire_angle)
+        self.tachometer = self.tachometer + xp.abs(erpm) * dt / 60.0
         duty = (motor * p["kt"] + current * p["resistance"]) / p["battery"]
         telemetry = {"erpm": p["erpm_sign"] * erpm, "current_motor": current,
-                     "duty": np.maximum(-1.0, np.minimum(1.0, duty)),
-                     "voltage_input": p["battery"].copy(),
-                     "tachometer": np.floor(self.tachometer).astype(np.int64)}
+                     "duty": xp.maximum(-1.0, xp.minimum(1.0, duty)),
+                     "voltage_input": xp.copy(p["battery"]),
+                     "tachometer": xp.astype(xp.floor(self.tachometer), xp.int64)}
         self.debug = {"erpm": erpm, "current": current, "brake_current": brake_current,
                       "mode": mode}
-        return {"drive": drive, "brake": brake, "tire_angle": self.tire_angle.copy(),
+        return {"drive": drive, "brake": brake, "tire_angle": xp.copy(self.tire_angle),
                 "telemetry": telemetry}
+
+
+def _prefix_count(xp, due):
+    """Per row, how many leading entries are true: the cumulative product's sum, in integers
+    (exact)."""
+    if xp.name == "numpy":
+        return np.cumprod(due.astype(np.int64), axis=1).sum(axis=1)
+    return xp.torch.cumprod(due.to(xp.int64), dim=1).sum(dim=1)
 
 
 class RoboRacerVesc(ecu_batch.ScalarOf):
