@@ -83,6 +83,21 @@ def test_a_schema_1_trace_reads_the_same(tmp_path):
     assert math.isclose(c["gap"], 1.0, abs_tol=1e-9)
 
 
+def test_start_frames_counts_the_frames_before_npc_logic(tmp_path):
+    lines = [EP, entity("ego", "ego", 0)]
+    for k, started in enumerate([False, False, False, True, True]):
+        f = frame(k + 1, {"ego": (0, 0, 0)})
+        f["npc_logic_started"] = started
+        lines.append(f)
+    write(tmp_path, lines + [dict(END, frames=5)])
+    assert truth.start_frames(truth.load(tmp_path)[0]) == 3
+
+
+def test_start_frames_is_none_when_the_trace_does_not_say(tmp_path):
+    write(tmp_path, [EP, entity("ego", "ego", 0), frame(1, {"ego": (0, 0, 0)}), END])
+    assert truth.start_frames(truth.load(tmp_path)[0]) is None
+
+
 # --- the clock (roadmap 092 K4, time-and-ticking.md lockstep and paced) --------------------
 
 def timed(walls_ms):

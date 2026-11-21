@@ -409,6 +409,7 @@ def to_v2(records):
         elif r["type"] == "frame":
             r["sim_time_ns"] = 1_000_000_000_000 + round(r["sim_time"] * 1e9)
             r["wall_ns"] = round(r["sim_time"] * 1e9) + 2_000_000   # 2 ms behind
+            r["npc_logic_started"] = r["frame"] > 1
             for e in r["entities"].values():
                 e["sim_pose"] = e.pop("carla")
                 moving = e["sim_pose"] is not None
@@ -441,6 +442,8 @@ class SchemaTwo(unittest.TestCase):
         self.assertIsNone(barrier.velocity_source)
         self.assertEqual(trace.frames[1].sim_time_ns, 1_000_050_000_000)
         self.assertEqual(trace.frames[1].wall_ns, 52_000_000)
+        self.assertEqual([f.npc_logic_started for f in trace.frames],
+                         [f["frame"] > 1 for f in SAMPLE2 if f["type"] == "frame"])
         self.assertEqual(trace.contacts[0].sim_frame, 5021)
         self.assertEqual(trace.signals, [gt.Signal(1, 1_000_050_000_000, "12", "red")])
 
