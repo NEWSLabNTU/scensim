@@ -401,7 +401,8 @@ What it took, each read from a seats run:
 |---|---|---|
 | ego 9 m apart | the pilot's hold before command 0 had the seats brake pressed (sim_vehicle_ecu releases in ~0.3 s); a fresh batch component was not | the ego pre-roll |
 | lead turned the other way | map_export built the routing graph after moving the map's points, reordering 20 of Town01's 36 branches | map_export v2: the graph on the parsed map, checked against SSv2's own lanelet_wrapper (0 of 300 differ) |
-| elements started 2 steps early | the storyboard log's time is after the step, except an exit's (published before the update, at the evaluation's time); SSv2's first evaluation is at dt (the batch evaluated at 0 too); SSv2's storyboard sees the ego two frames before the frame its tick makes (`time-and-ticking.md`) | `context_steps` less a step, not on an exit's lines; no evaluation at reset; the storyboard reads the ego two steps back, SSv2's vehicles the current world (243) |
+| elements started 2 steps early | the storyboard log's time is after the step, except an exit's (published before the update, at the evaluation's time); SSv2's first evaluation is at dt (the batch evaluated at 0 too); SSv2's storyboard sees the ego two frames before the frame its tick makes (`time-and-ticking.md`) | `context_steps` less a step, not on an exit's lines; no evaluation at reset; the storyboard reads the ego two steps back (243) |
+| a following default vehicle 0.9 m off | SSv2's tree resumes FollowFrontEntity (a BT.CPP Fallback is not reactive), where the port re-tested the hand-off each step; SSv2's vehicles see the ego two frames back per world frame; SSv2's front distance is from each box's centre | following kept while a front entity is found; the vehicles read the ego two steps back; the boxes' centres (243) |
 | lead 0.36 m, 0.27 rad off in the turn | the route sampled every 5 m and followed chord by chord | a Catmull-Rom cubic on samples 2.5 m apart, arc length the spline's |
 
 The rows (Isaac, engine A, `allow_loop`, one slot; seats on newslab-server139):
@@ -409,8 +410,40 @@ The rows (Isaac, engine A, `allow_loop`, one slot; seats on newslab-server139):
 | scenario (Town01) | outcome | ego max / RMS | NPC max / RMS / yaw | element offsets | delivery | pre-roll |
 |---|---|---|---|---|---|---|
 | follow_to_goal (the ego at 1.23 m/s behind a 4 m/s lead; the lead through a turn) | passed / passed | 0.9 mm / 0.9 mm | lead 2.8 cm / 1.4 cm / 0.035 rad | all 0 (goal at step 1263 both) | 1271 of 1271 at delay 0 | 10 steps |
-| k24_npc_stops_for_ego (the ego to ~2.7 m/s, braking to a stop at 13 s; a default vehicle 20 m behind at 6 m/s) | passed / passed | 2.4 mm / 2.2 mm | follower 0.90 m / 0.54 m / 0 (open: K2.1's front-entity following, inputs being diffed by 243) | all 0 (time-up at step 600 both) | 608 of 608 at delay 0 | 10 steps |
+| k24_npc_stops_for_ego (the ego to ~2.7 m/s, braking to a stop at 13 s; a default vehicle 20 m behind at 6 m/s) | passed / passed | 2.4 mm / 2.2 mm | follower 2.6 cm / 2.3 cm / 0 | all 0 (time-up at step 600 both) | 608 of 608 at delay 0 | 10 steps |
 
-Open: the reacting follower's 0.9 m (its first second: seats loses 1.22 m/s, the batch
-0.57); k24_distance, whose 8 m never fired on seats (the follower stops 11.55 m off), once the
-follower agrees; engine B's column; the Hermite case on Town10HD (CARLA).
+A correction (2026-11-22): this section first said, as it landed in f9b0b95d,
+that follow_to_goal agreed on every column with its goal "at step 1262 both". The step was a
+log line read wrong, not an agreement: the batch took a step off every storyboard log line,
+an exit's too, whose time is the evaluation's own, so seats' goal (tick 1263) read as 1262;
+and the batch's storyboard then saw the ego one step too fresh (the previous step's, where
+SSv2's is two back), which fired its goal at 1262 as well. Both are fixed; the true first row
+is the one above, the goal at 1263 on both sides.
+
+The follower, as each fix came in (k24_npc_stops_for_ego, max / RMS): the port as it was,
+0.90 / 0.54 m; following kept (BT.CPP's Fallback), 0.199 / 0.126 m; with the vehicles seeing
+the ego one step back, 0.159 / 0.101 m; two steps back, 0.072 / 0.050 m; and the boxes'
+centres, 0.026 / 0.023 m (the step counts as 139 measured them on 2026-11-22, before the box
+centres but the last).
+
+Open: k24_distance, whose 8 m never fired on seats (the follower stops 11.55 m off: its
+threshold moves to 12 m); engine B's column; the Hermite case on Town10HD (CARLA).
+
+## 9. Device-resident (K2.2c)
+
+Engine B on a GPU sim with `ScensimEnvCfg(device_resident=True)` keeps the batch on the
+device: the scenario compiled there, BatchRun's tensors there (its methods run in torch's
+device context), the car model and its read-back there (`ArticulationBackend(resident=True)`),
+and the control component on torch there (sim_vehicle_ecu's `array_api`, its batch written
+once over `sim_vehicle_ecu.xp`). The CPU path is the reference and stays: a numpy component on
+a device run gets host arrays each step, the CPU contract. Checked against it:
+
+| check | where | agreement |
+|---|---|---|
+| the VESC component (roboracer_vesc) alone, 1500 random steps, 8 and 32 cars | numpy, torch CPU, torch CUDA | bit for bit |
+| BatchRun on cs2 (a default lead, a braking storyboard), 120 steps, a point-mass backend | CPU and numpy, cuda and torch | poses within 2.8e-14 m, speeds equal, storyboard states and outcomes equal |
+| engine B through ScensimEnv, the RoboRacer body and its VESC, 4 cars, 290 steps (`scripts/check_resident.py`) | the CPU path and resident, one GPU sim | x and y equal, yaw within 1.1e-16, v 2.2e-16, outcomes equal; 97 against 188 ms a step, contended |
+
+Engine A stays on the CPU path (PhysX's CPU pipeline). What still brings values to the host on
+the resident path: the storyboard's and SSv2's vehicles' branch tests (`bool(x.any())`), the
+world adapter's route on a lane change, and the actuation check (one value a step).
