@@ -148,6 +148,9 @@ class Frame:
     # the bridge's monotonic clock when the world's state arrived, ns since the episode
     # began (schema 2, from 092 K4's paced clock): absent in older traces
     wall_ns: object = None
+    # SSv2's npc_logic_started in the status that staged the frame (schema 2, from 092
+    # K2.4): absent in older traces
+    npc_logic_started: object = None
 
 
 @dataclass(frozen=True)
@@ -401,8 +404,11 @@ def _frame(ln, known):
     wall_ns = o.get("wall_ns") if ln.schema >= 2 else None
     if wall_ns is not None:
         wall_ns = ln.int_(o, "wall_ns", minimum=0)
+    npc = o.get("npc_logic_started") if ln.schema >= 2 else None
+    if npc is not None:
+        npc = ln.boolean(npc, "npc_logic_started")
     return Frame(frame=frame, sim_time=sim_time, entities=states, sim_frame=sim_frame,
-                 sim_time_ns=sim_time_ns, wall_ns=wall_ns)
+                 sim_time_ns=sim_time_ns, wall_ns=wall_ns, npc_logic_started=npc)
 
 
 def _contact(ln):
@@ -613,7 +619,9 @@ def to_json(record, schema=SCHEMA):
         } | ({"sim_time_ns": record.sim_time_ns}
              if two and record.sim_time_ns is not None else {}) | (
             {} if record.sim_frame is None else {k["sim_frame"]: record.sim_frame}) | (
-            {"wall_ns": record.wall_ns} if two and record.wall_ns is not None else {}) | {
+            {"wall_ns": record.wall_ns} if two and record.wall_ns is not None else {}) | (
+            {"npc_logic_started": record.npc_logic_started}
+            if two and record.npc_logic_started is not None else {}) | {
             "entities": entities,
         }
     if isinstance(record, Contact):

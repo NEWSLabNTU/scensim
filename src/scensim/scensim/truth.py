@@ -106,6 +106,20 @@ def closest(traces) -> dict:
     return best
 
 
+def start_frames(trace):
+    """S, the frames before SSv2's startNpcLogic (092 K2.4; batch-executor.md section 6,
+    scenario time): how many of the trace's frames come before the first whose
+    ``npc_logic_started`` is true. None when the trace does not say (written before the
+    field) or NPC logic never started."""
+    known = [f for f in trace.frames if f.npc_logic_started is not None]
+    if not known:
+        return None
+    for k, f in enumerate(known):
+        if f.npc_logic_started:
+            return k
+    return None
+
+
 CLOCK_MODES = ("lockstep", "paced")
 
 
