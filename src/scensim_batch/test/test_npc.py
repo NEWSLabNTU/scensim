@@ -158,14 +158,14 @@ class Following(unittest.TestCase):
                          "seats_follower_stops_for_ego.json").read_text())
         f = fx["follower"]
         car = npc.DefaultVehicles(straight(1, 1), t([[0.0]]), t([[f["v0"]]]), t([[f["length"]]]),
-                                  t([[f["width"]]]), t([[f["target"]]]))
-        # a centred box of twice the offset puts SSv2's distance in npc's terms (gap + own L/2)
-        lead_len = 2 * fx["ego_front_offset"]
+                                  t([[f["width"]]]), t([[f["target"]]]), cx=t([[f["cx"]]]))
+        ego = fx["ego"]
         worst = 0.0
         for k, (s_ego, v_ego) in enumerate(zip(fx["ego_s"], fx["ego_v"])):
             v_before = car.v.clone()
             car.step(DT, {"x": t([[s_ego]]), "y": t([[0.0]]), "yaw": t([[0.0]]),
-                          "length": t([[lead_len]]), "width": t([[2.163]]), "v": t([[v_ego]])})
+                          "length": t([[ego["length"]]]), "width": t([[ego["width"]]]),
+                          "cx": t([[ego["cx"]]]), "v": t([[v_ego]])})
             got = ((car.v + v_before) / 2).item()
             worst = max(worst, abs(got - fx["follower_v"][k]))
             if k >= 3:
@@ -216,6 +216,29 @@ class Following(unittest.TestCase):
                 self.assertIsNone(got, (x, y, length, width))
             else:
                 self.assertAlmostEqual(got, want, places=9, msg=(x, y, length, width))
+
+    def test_the_front_distance_takes_each_boxs_centre(self):
+        """SSv2's gap is from the own box's front edge to the other's rear edge, each at its
+        centre.x -+ length / 2 from the pose (k24's follower 1.5 m, its ego 1.416 m)."""
+        routes = straight(1, 1)
+        for cx_self, cx_other, x in ((1.5, 1.416, 30.0), (0.0, 1.416, 30.0), (1.5, 0.0, 30.0),
+                                     (-0.5, 2.0, 20.0), (1.5, 1.416, 14.8)):
+            car = npc.DefaultVehicles(routes, t([[10.0]]), t([[10.0]]), t([[4.5]]), t([[2.1]]),
+                                      t([[10.0]]), cx=t([[cx_self]]))
+            car.dt = DT
+            d, _, _ = car.front({"x": t([[x]]), "y": t([[0.0]]), "yaw": t([[0.0]]),
+                                 "length": t([[4.792]]), "width": t([[2.163]]),
+                                 "v": t([[0.0]]), "cx": t([[cx_other]])})
+            lat = [2.163 / 2, -2.163 / 2, -2.163 / 2, 2.163 / 2]
+            want = ref.front_distance(x - 10.0, 4.5, 4.792, lat, 2.1, cx_self, cx_other)
+            got = d.item() if math.isfinite(d.item()) else None
+            if want is None:
+                self.assertIsNone(got, (cx_self, cx_other, x))
+            else:
+                self.assertAlmostEqual(got, want, places=9, msg=(cx_self, cx_other, x))
+        # k24's boxes: SSv2's distance is the pose distance less 2.48
+        self.assertAlmostEqual(ref.front_distance(20.0, 4.5, 4.792, lat, 2.1, 1.5, 1.416),
+                               20.0 - 2.48, places=9)
 
     def test_an_inactive_vehicle_never_holds_the_stop_distance_loop(self):
         routes = straight(1, 2)

@@ -174,7 +174,32 @@ class Core(unittest.TestCase):
         self.assertLess(obs["v"][0, lead].item(), 0.05)
         self.assertLess(obs["x"][0, lead].item() + 4.7 / 2, 90.0 - 4.7 / 2)
 
-    def test_a_masked_reset_touches_only_its_slots(self):
+    def test_ssv2s_vehicles_see_the_ego_two_steps_back(self):
+        """092 K2.4: SSv2's update in tick k reads the ego read back that tick, w(k-1), and its
+        poses reach the world at k+1, so a default vehicle at frame f reacted to the ego at
+        f-2; the observation's ego is current."""
+        recs = [{"values": {"ego_speed": 0.0}}]
+        from scensim_batch import compile as C, core
+        c = C.compile_scenario(CASES / "cs2_lead_brakes_wet_night.xosc", recs, StraightWorld(),
+                               provides=("world knob illumination=night",))
+        run = core.BatchRun(c, StraightWorld(), PointMass(1), ecu_batch.load_batch(Accel, {}, {}, [1]))
+        run.reset()
+        e = run.ego
+        seen, step = [], run.vehicles.step
+        run.vehicles.step = lambda dt, others: (seen.append((others["x"][0, 0].item(),
+                                                             others["v"][0, 0].item())),
+                                                step(dt, others))[1]
+        xs = [run.obs["x"][0, e].item()]
+        vs = [run.obs["v"][0, e].item()]
+        for _ in range(4):
+            obs = run.step(cmds(1, 2.0), DT)
+            xs.append(obs["x"][0, e].item())
+            vs.append(obs["v"][0, e].item())
+        self.assertNotEqual(xs[2], xs[1])                   # the ego moved
+        self.assertEqual([p[0] for p in seen], [xs[0], xs[0], xs[1], xs[2]])
+        self.assertEqual([p[1] for p in seen], [vs[0], vs[0], vs[1], vs[2]])
+
+
         c, run = self.run_of([{"values": {}}, {"values": {}}])
         run.reset()
         for _ in range(20):
