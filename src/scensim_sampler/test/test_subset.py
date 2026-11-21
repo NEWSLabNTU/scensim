@@ -55,6 +55,31 @@ class CaseStudies(unittest.TestCase):
     def verdict(self, name, ego="policy"):
         return subset.check(CASES / f"{name}.xosc", ego=ego)
 
+    def test_cs6_conditions_its_per_sample_vehicle_class_on_per_slot_assets(self):
+        """093 D7 gap 6: CS6's stopped car is `vehicleCategory="$stopped_kind"`. A batch can
+        vary it only with an asset per value in every slot, so the checker names the parameter
+        and its values (the joint model's, read through the distribution) as a condition."""
+        import shutil
+        with tempfile.TemporaryDirectory() as d:
+            for f in ("cs6_cut_out_stopped_car.xosc", "cs6_cut_out_stopped_car_dist.xosc"):
+                shutil.copy(CASES / f, d)
+            shutil.copytree(CASES / "models", Path(d) / "models")
+            dist = subset.check(Path(d) / "cs6_cut_out_stopped_car_dist.xosc")
+            self.assertTrue(dist.compiles)
+            got = [c for c in dist.conditions if "$stopped_kind" in c]
+            self.assertEqual(got, [
+                "Vehicle vehicleCategory $stopped_kind (values car, truck, motorbike): "
+                + subset.PER_SLOT_ASSETS])
+            # the scenario alone knows only its declared default
+            alone = subset.check(Path(d) / "cs6_cut_out_stopped_car.xosc")
+            self.assertIn("Vehicle vehicleCategory $stopped_kind (drawn per sample, declared "
+                          "'car'): " + subset.PER_SLOT_ASSETS, alone.conditions)
+            # a literal class is no condition
+            p = Path(d) / "cs6_cut_out_stopped_car.xosc"
+            p.write_text(p.read_text().replace('vehicleCategory="$stopped_kind"',
+                                               'vehicleCategory="truck"'))
+            self.assertFalse([c for c in subset.check(p).conditions if "per-slot assets" in c])
+
     def test_cs1_compiles_with_its_trigger_derived_and_refuses_the_ttc_form(self):
         v = self.verdict("cs1_walker_dartout")
         self.assertTrue(v.compiles)
@@ -95,6 +120,41 @@ class CaseStudies(unittest.TestCase):
         self.assertTrue(v.compiles)
         self.assertTrue(any(c.startswith("Fog: a slot camera, and a renderer with fog")
                             for c in v.conditions))
+
+
+
+class EntityClass(unittest.TestCase):
+    """093 D7 gap 6 beyond CS6: every class and model attribute, `${p}`, and a catalog
+    entry, each a condition naming the parameter; a deterministic set's values listed."""
+
+    def test_every_class_attribute_with_a_parameter_is_a_condition(self):
+        entities = (
+            '<ScenarioObject name="w"><Pedestrian name="w" pedestrianCategory="pedestrian" '
+            'model="${walker}"/></ScenarioObject>'
+            '<ScenarioObject name="b"><MiscObject name="b" miscObjectCategory="$prop"/>'
+            '</ScenarioObject>'
+            '<ScenarioObject name="t"><CatalogReference catalogName="vehicles" '
+            'entryName="$kind"/></ScenarioObject>')
+        params = ('<ParameterDeclaration name="walker" parameterType="string" value="w1"/>'
+                  '<ParameterDeclaration name="prop" parameterType="string" value="barrier"/>'
+                  '<ParameterDeclaration name="kind" parameterType="string" value="sedan"/>')
+        with tempfile.TemporaryDirectory() as d:
+            sc = scenario(d, params=params, entities=entities)
+            v = subset.check(sc)
+            got = sorted(c.split(":")[0] for c in v.conditions if "per-slot assets" in c)
+            self.assertEqual(got, [
+                "CatalogReference entryName $kind (drawn per sample, declared 'sedan')",
+                "MiscObject miscObjectCategory $prop (drawn per sample, declared 'barrier')",
+                "Pedestrian model $walker (drawn per sample, declared 'w1')"])
+            dist = Path(d) / "d.xosc"
+            dist.write_text(
+                '<OpenSCENARIO><ParameterValueDistribution><ScenarioFile filepath="s.xosc"/>'
+                '<Deterministic><DeterministicSingleParameterDistribution parameterName="kind">'
+                '<DistributionSet><Element value="sedan"/><Element value="van"/>'
+                '</DistributionSet></DeterministicSingleParameterDistribution></Deterministic>'
+                '</ParameterValueDistribution></OpenSCENARIO>')
+            self.assertIn("CatalogReference entryName $kind (values sedan, van): "
+                          + subset.PER_SLOT_ASSETS, subset.check(dist).conditions)
 
 
 class Rows(unittest.TestCase):
