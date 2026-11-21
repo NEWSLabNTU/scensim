@@ -450,7 +450,11 @@ A device run checks every `sync_every` steps (BatchRun's, default 16); the steps
 nothing to the host. There the storyboard's branch tests (an element skipped when no slot is in
 its mask) run as masked work instead, which gives the same result; an element of one execution
 makes one pass, one of more makes all its passes, and one past its executions in a tick is a
-device flag. The actuation's check (finite, brakes not negative) is a device flag too; the
+device flag. Its children are evaluated once over its running and stopping slots together
+(disjoint, each step masked per slot), not once a branch: two would evaluate every level twice,
+2^depth evaluations of an action under a storyboard with a StopTrigger (243's review found the
+cost; 64 of the lane-change test's action a tick). `test_lazy.py` runs test_storyboard's and
+test_core's cases again with every run lazy on the CPU (`sync_every` given): all pass. The actuation's check (finite, brakes not negative) is a device flag too; the
 shapes are still checked on the host each step, which costs nothing. Both flags are raised at
 the next check, naming the steps since the last ("sync_every=1 names the slot"). A condition's
 history drops its unused entries at checks only. Measured with torch's sync debug mode
@@ -462,6 +466,12 @@ history drops its unused entries at checks only. Measured with torch's sync debu
 | engine B through ScensimEnv, the same, 4 cars, 269 steps | 0 of ours; 1 of Isaac Lab's (DirectRLEnv's `reset_buf.nonzero()`, which a task may override with a masked reset) |
 | cs2 (a default lead, a braking storyboard) | 2.5: SSv2's running distance, its planner looped until every vehicle has reached its target (asked every 8th iteration) |
 
-Still synced as before: a lane change's start and end, and a route goal's start (the world's
-route is computed on the host: a lazy step syncs only when a slot starts one), and a partial
-reset (its indices).
+An action that starts on the host (a lane change, a route goal in a story) costs a sync each
+time a lazy tick asks whether a slot starts it, twice a tick (from its event's start and its
+own evaluation), until a check finds it settled: in every slot its event or an ancestor
+complete, or the slot's outcome decided. Then none (`test_device`'s story lane change: 2 a tick
+before, 0 after). Still synced as before: a lane change's curve, its end and its route, a route
+goal's route (all on the host), and a partial reset (its indices).
+
+At 4 cars the resident path is no faster than the CPU path (184 against 65 ms a step, the GPU
+contended): every masked step is a kernel launch. Its case is a large N, which P2 measures.

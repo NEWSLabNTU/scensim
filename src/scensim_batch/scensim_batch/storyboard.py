@@ -234,6 +234,12 @@ class Storyboard:
         # its executions in one tick) is kept in `overflow` on the device, raised by `check`
         self.lazy = False
         self.overflow = None
+        # the host-action elements (Action.host) no slot can start again: each slot's outcome
+        # decided, or the element or an ancestor complete (an element leaves COMPLETE only by a
+        # reset). Found at checks (one sync each); a lazy tick starts no settled element and
+        # asks the host about the others (a sync a tick each, until they settle)
+        self.host_nodes = [x for x in self.nodes if x.action is not None and x.action.host]
+        self.settled = set()
 
     def _index(self, x):
         self.nodes.append(x)
@@ -257,6 +263,7 @@ class Storyboard:
     # --- per slot ---------------------------------------------------------------------------
 
     def reset(self, mask):
+        self.settled = set()      # a reset slot can start them again
         for x in self.nodes:
             self.state[id(x)] = torch.where(mask, torch.zeros_like(self.state[id(x)]),
                                             self.state[id(x)])
@@ -290,8 +297,18 @@ class Storyboard:
         """Raise what the lazy ticks since the last check would have (one host sync)."""
         if self.overflow is not None and bool(self.overflow):
             raise StoryboardError("an element ran more than its executions in one tick (a "
-                                  "lazy tick since the last check; rerun with sync_every=1 to "
-                                  "name it)")
+                                  "lazy tick since the last check; rerun from the same seed "
+                                  "with sync_every=1 to name it)")
+        for x in self.host_nodes:
+            if id(x) in self.settled:
+                continue
+            done = self.outcome != 0
+            a = x
+            while a is not None:
+                done = done | (self.state[id(a)] == COMPLETE)
+                a = a.parent
+            if bool(done.all()):
+                self.settled.add(id(x))
 
     @property
     def complete(self):
@@ -350,10 +367,22 @@ class Storyboard:
                     self._start(x, go)
             run = m & (self.state[id(x)] == RUNNING) & (self.outcome == 0)
             again = torch.zeros_like(m)
+            joint = self.lazy and x.action is None
+            if joint:
+                # a lazy tick takes both branches: the children once over the running slots and
+                # the stopping ones together (disjoint, and every step masked per slot, so the
+                # same as the two passes; two would evaluate the children twice a level). The
+                # stopping slots' children overridden first, each before it is evaluated, as
+                # the stopping branch does
+                stp0 = m & (self.state[id(x)] == STOPPING)
+                notacc0 = stp0 & ~self.accomplished(x, stp0)
+                for ch in x.children:
+                    self.override(ch, notacc0)
+                    self.evaluate(ch, run | notacc0)
             if self._some(run):
                 if x.action is not None:
                     x.action.run(self, run)
-                else:
+                elif not joint:
                     for ch in x.children:
                         self.evaluate(ch, run)
                 run = run & (self.outcome == 0)
@@ -367,7 +396,10 @@ class Storyboard:
                     self._emit(x, "completeState", acc & ~more)
                     again = more
             stp = m & (self.state[id(x)] == STOPPING)
-            if self._some(stp):
+            if joint:
+                self._set(x, COMPLETE, stp0)       # its children done above
+                self._emit(x, "completeState", stp0)
+            elif self._some(stp):
                 notacc = stp & ~self.accomplished(x, stp)
                 if self._some(notacc):
                     if x.action is not None:
@@ -400,8 +432,11 @@ class Storyboard:
                         self.override(sib, go)
             for ch in x.children:     # Event::start: its actions to startTransition, run again
                 self._start(ch, go)
-        if x.action is not None and not (x.action.host and self.lazy and not bool(go.any())):
-            x.action.start(self, go)
+        if x.action is not None:
+            if not (x.action.host and self.lazy):
+                x.action.start(self, go)
+            elif id(x) not in self.settled and bool(go.any()):   # settled: go is empty
+                x.action.start(self, go)
         self._set(x, RUNNING, go)
         self.count[id(x)] = torch.where(go, self.count[id(x)] + 1, self.count[id(x)])
         self._emit(x, "runningState", go)
