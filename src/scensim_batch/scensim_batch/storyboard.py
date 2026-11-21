@@ -142,7 +142,10 @@ class Condition:
         # SSv2 erases the entries before the oldest it used
         keep_from = torch.where(enough, count - (k - 1), torch.zeros_like(count))
         self.ok = list(O & ~(old & (rank < keep_from)))
-        while self.ok and not bool(self.ok[0].any()):
+        # the entries no slot keeps, dropped; a lazy tick (Storyboard.lazy) leaves them to the
+        # next checking one, as finding them is a host sync
+        lazy = getattr(getattr(ctx, "storyboard", None), "lazy", False)
+        while self.ok and not lazy and not bool(self.ok[0].any()):
             self.t.pop(0), self.val.pop(0), self.ok.pop(0)
         self.current = torch.where(mask, out, self.current)
         return self.current & mask
@@ -225,6 +228,12 @@ class Storyboard:
         self.outcome = torch.zeros(n, dtype=torch.int8)     # OUTCOMES index
         self.stopped = torch.zeros(n, dtype=torch.bool)     # the storyboard's StopTrigger fired
         self.ctx = None
+        # a lazy tick (092 K2.2c, a device-resident run between its checks): no branch is
+        # skipped for an empty mask, as testing one is a host sync; every branch is masked
+        # work, so the result is the same. What a check would have raised (an element past
+        # its executions in one tick) is kept in `overflow` on the device, raised by `check`
+        self.lazy = False
+        self.overflow = None
 
     def _index(self, x):
         self.nodes.append(x)
@@ -266,10 +275,23 @@ class Storyboard:
     def tick(self, ctx):
         """Evaluate the storyboard once for every live slot."""
         self.ctx = ctx
+        if self.overflow is None:
+            self.overflow = torch.zeros((), dtype=torch.bool, device=self.outcome.device)
         live = self.outcome == 0
-        if bool(live.any()):
+        if self._some(live):
             self.evaluate(self.root, live)
         return self.outcome
+
+    def _some(self, mask):
+        """Whether any slot is in `mask`; on a lazy tick, yes (no sync: the work is masked)."""
+        return True if self.lazy else bool(mask.any())
+
+    def check(self):
+        """Raise what the lazy ticks since the last check would have (one host sync)."""
+        if self.overflow is not None and bool(self.overflow):
+            raise StoryboardError("an element ran more than its executions in one tick (a "
+                                  "lazy tick since the last check; rerun with sync_every=1 to "
+                                  "name it)")
 
     @property
     def complete(self):
@@ -294,7 +316,7 @@ class Storyboard:
     def override(self, x, mask):
         st = self.state[id(x)]
         m = mask & (st != STANDBY) & (st != STOPPING)
-        if bool(m.any()):
+        if self._some(m):
             self._set(x, STOPPING, m)
             self._emit(x, "stopTransition", m)
             if x is self.root:
@@ -310,23 +332,25 @@ class Storyboard:
 
     def evaluate(self, x, mask):
         mask = mask & (self.outcome == 0)
-        if x.stop is not None and bool(mask.any()):
+        if x.stop is not None and self._some(mask):
             self.override(x, x.stop.evaluate(self.ctx, mask))
         m = mask
         # an end re-dispatches the slots that went back to standby: SSv2 loops as long as the
         # element accomplishes at once, at most its executions (243); one pass more ends it
+        # (an element of one execution never goes again: its count is 1 once it started, so a
+        # lazy tick makes the one pass)
         for _ in range(max(1, x.max_exec) + 1):
-            if not bool(m.any()):
+            if not self._some(m):
                 return
             st = self.state[id(x)]
             sb = m & (st == STANDBY)
-            if bool(sb.any()):
+            if self._some(sb):
                 go = sb if x.start is None else x.start.evaluate(self.ctx, sb)
-                if bool(go.any()):
+                if self._some(go):
                     self._start(x, go)
             run = m & (self.state[id(x)] == RUNNING) & (self.outcome == 0)
             again = torch.zeros_like(m)
-            if bool(run.any()):
+            if self._some(run):
                 if x.action is not None:
                     x.action.run(self, run)
                 else:
@@ -334,7 +358,7 @@ class Storyboard:
                         self.evaluate(ch, run)
                 run = run & (self.outcome == 0)
                 acc = self.accomplished(x, run)
-                if bool(acc.any()):
+                if self._some(acc):
                     self._emit(x, "endTransition", acc)
                     more = acc & (self.count[id(x)] < x.max_exec)
                     self._set(x, STANDBY, more)
@@ -343,9 +367,9 @@ class Storyboard:
                     self._emit(x, "completeState", acc & ~more)
                     again = more
             stp = m & (self.state[id(x)] == STOPPING)
-            if bool(stp.any()):
+            if self._some(stp):
                 notacc = stp & ~self.accomplished(x, stp)
-                if bool(notacc.any()):
+                if self._some(notacc):
                     if x.action is not None:
                         x.action.stop(self, notacc)
                     for ch in x.children:
@@ -354,6 +378,11 @@ class Storyboard:
                 self._set(x, COMPLETE, stp)
                 self._emit(x, "completeState", stp)
             m = again
+            if self.lazy and x.max_exec <= 1:
+                break
+        if self.lazy:
+            self.overflow = self.overflow | m.any()
+            return
         raise StoryboardError(f"{x.kind} {x.name!r}: more than its {x.max_exec} executions in "
                               "one tick")
 
@@ -371,7 +400,7 @@ class Storyboard:
                         self.override(sib, go)
             for ch in x.children:     # Event::start: its actions to startTransition, run again
                 self._start(ch, go)
-        if x.action is not None:
+        if x.action is not None and not (x.action.host and self.lazy and not bool(go.any())):
             x.action.start(self, go)
         self._set(x, RUNNING, go)
         self.count[id(x)] = torch.where(go, self.count[id(x)] + 1, self.count[id(x)])
@@ -391,6 +420,10 @@ class Latch:
 # --- actions --------------------------------------------------------------------------------
 
 class Action:
+    # an action whose start computes on the host (a lane change's curve, a route goal's
+    # route): a lazy tick starts it only when a slot does, at one sync (Storyboard._start)
+    host = False
+
     def __init__(self, n):
         self.done = torch.zeros(n, dtype=torch.bool)
 
@@ -428,6 +461,7 @@ class Exit(Instant):
 class GoalAction(Instant):
     """The ego's AcquirePositionAction or AssignRouteAction: the slot's route goal from now
     (BatchRun.route), for the policy; it ends as it starts."""
+    host = True
 
     def __init__(self, n, waypoints):
         super().__init__(n)
@@ -457,6 +491,7 @@ class LaneChangeAction(Action):
     lanelet's tangent; LINEAR: the chord), and the forced speed: length / T (time), length /
     (lateral offset / rate) (rate), the current speed (distance), clamped to [0, target speed]
     when a SpeedAction set one."""
+    host = True
 
     def __init__(self, n, actors, names, shape, dimension, value, target):
         super().__init__(n)
@@ -522,6 +557,7 @@ class LaneChangeAction(Action):
         if not math.isnan(tgt):
             v = min(max(v, 0.0), tgt)
         veh.lc[k, d] = True
+        veh.lc_started = True
         veh.lc_coef[k, d] = coef
         veh.lc_len[k, d], veh.lc_s[k, d], veh.lc_v[k, d] = length, 0.0, v
         veh.lc_to_s[k, d] = to_s
@@ -553,7 +589,7 @@ class SpeedAction(Action):
         transition = "step" if self.shape == "step" else "linear"
         for a in self.actors:
             m = go[:, None] & (torch.arange(veh.v.shape[1]) == a)[None, :]
-            if not bool(m.any()):
+            if not sb._some(m):
                 continue
             tgt = goal[:, None].expand_as(veh.v)
             v = veh.v
@@ -574,10 +610,10 @@ class SpeedAction(Action):
                 step = m & (transition == "step")
                 lin = m & ~step
                 rate = self.value[:, None].expand_as(v)
-            if bool(step.any()):
+            if sb._some(step):
                 veh.set_target_speed(tgt, step)
                 veh.v = torch.where(step, tgt, veh.v)
-            if bool(lin.any()):
+            if sb._some(lin):
                 veh.a = torch.where(lin, rate, veh.a)
                 up = lin & (v <= tgt)
                 down = lin & ~up & (v >= tgt)
@@ -591,7 +627,11 @@ class SpeedAction(Action):
             self.done = self.done | mask
             return
         veh = sb.ctx.run.vehicles
-        v = veh.v[:, self.actors]
+        idx = getattr(self, "_actors_t", None)
+        if idx is None or idx.device != veh.v.device:   # once: a list index is a host copy a step
+            idx = self._actors_t = torch.tensor(self.actors, dtype=torch.int64,
+                                                device=veh.v.device)
+        v = veh.v[:, idx]
         hit = (self.goal[:, None] - v).abs() < EPS
         self.reached = self.reached | (hit & mask[:, None])
         self.done = self.done | (mask & self.reached.all(-1))

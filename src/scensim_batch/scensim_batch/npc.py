@@ -87,8 +87,11 @@ def running_distance(target, c, v, a, jerk, dt, max_steps=100000, active=None):
     if active is not None:
         done = done | ~active
     out = torch.zeros_like(v)
-    for _ in range(max_steps):
-        if bool(done.all()):
+    # on a device, every 8th step asks whether all are done (a host sync): the steps between
+    # change nothing for a done vehicle, so the sum is the same
+    every = 8 if v.device.type != "cpu" else 1
+    for i in range(max_steps):
+        if i % every == 0 and bool(done.all()):
             return out
         v1, a1, j1 = dynamic_states(target, c, v, a, dt)
         step = v1 * dt + a1 * dt * dt / 2.0 + j1 * dt * dt * dt / 6.0
@@ -259,6 +262,8 @@ class DefaultVehicles:
         # and the target lanelet and s where it ends (lane_change.py builds it)
         z = torch.zeros_like(s0)
         self.lc = torch.zeros_like(self.active)
+        self.lc_started = False      # a LaneChangeAction ever began (the host knows it)
+        self.lazy = False            # BatchRun's: a step between its host checks
         self.lc_coef = torch.zeros(*s0.shape, 4, 2, dtype=s0.dtype, device=s0.device)
         self.lc_len, self.lc_s, self.lc_v, self.lc_to_s = z.clone(), z.clone(), z.clone(), z.clone()
         self.lc_to_lane = [[None] * s0.shape[1] for _ in range(s0.shape[0])]
@@ -270,7 +275,7 @@ class DefaultVehicles:
 
     def poses(self):
         x, y, yaw = self.routes.pose(self.s)
-        if bool(self.lc.any()):
+        if self.lc_started and (self.lazy or bool(self.lc.any())):
             cx, cy, cyaw = hermite_pose(self.lc_coef, self.lc_s / torch.where(
                 self.lc_len > 0, self.lc_len, torch.ones_like(self.lc_len)))
             x, y, yaw = (torch.where(self.lc, cx, x), torch.where(self.lc, cy, y),
@@ -281,6 +286,8 @@ class DefaultVehicles:
         """LaneChangeAction::doAction under FORCE: the speed is the forced one, the
         acceleration 0, the curve's arc advanced by it; past the curve's end the vehicle is put
         on the target lanelet at s = (overshoot) + target s, offset 0, with a route from there."""
+        if not self.lc_started:        # no lane change began: nothing to step, no sync
+            return
         m = self.lc & self.active
         if not bool(m.any()):
             return
@@ -328,8 +335,7 @@ class DefaultVehicles:
         dy = Y[:, None, :] - y[:, :, None]
         vy = torch.atan2(dy, dx) - yaw[:, :, None]
         in_cone = torch.atan2(torch.sin(vy), torch.cos(vy)).abs() <= math.pi / 2
-        self_mask = torch.zeros(n, e, k, dtype=torch.bool, device=x.device)
-        self_mask[:, torch.arange(e), torch.arange(e)] = True
+        self_mask = torch.eye(e, k, dtype=torch.bool, device=x.device).expand(n, e, k)
         # along own path: the other's centre, and its box's distance to the path
         centre = torch.stack([X, Y], -1)[:, None].expand(n, e, k, 2)
         s_other, _ = self.routes.project(centre)
