@@ -576,6 +576,52 @@ def test_compare_flags_a_pair_with_another_carla_launch(tmp_path, monkeypatch, c
     assert t3.main(["record", *w]) == 1
     assert "results from more than one CARLA launch" in capsys.readouterr().out
 
+def test_compare_judges_a_launch_by_quality_and_args(tmp_path, monkeypatch, capsys):
+    """Issue 097: a CARLA the stack did not start, observed at the reference's quality and
+    args, is the reference's launch; observed at others, a problem; not read, a note."""
+    import json
+    logs, m = _results(tmp_path, ["aaaaaaa", "aaaaaaa"])
+    runs = logs / "zz_t3test" / "runs"
+
+    def launch(quality, args, applied, only=None):
+        for r in sorted(runs.iterdir())[:only]:
+            d = json.loads((r / "result.json").read_text())
+            d["provenance"]["carla"] = {"owner": "started" if applied is True else "external",
+                                        "version": "1.0", "argv": None, "quality": quality,
+                                        "args": args, "applied": applied}
+            (r / "result.json").write_text(json.dumps(d))
+    _quiet(monkeypatch)
+    w = ["--manifest", str(m), "--logs", str(logs), "--work", str(logs.parent / "work")]
+    launch("epic", [], True)
+    assert t3.main(["record", *w]) == 0
+    capsys.readouterr()
+    # the s5 case: the script started CARLA at Epic with no arguments, as the reference ran
+    launch("epic", [], "observed")
+    assert t3.main(["compare", *w]) == 0
+    assert "not comparable" not in capsys.readouterr().out
+    launch("low", [], "observed")
+    assert t3.main(["compare", *w]) == 1
+    assert ("CARLA launch differs, not comparable: the results' quality low, args [] "
+            "(observed: an external CARLA), the reference's quality epic, args []"
+            ) in capsys.readouterr().out
+    # an external CARLA not read: whatever its requested values, a note, never a problem
+    launch("low", ["-x"], False)
+    assert t3.main(["compare", *w]) == 0
+    out = capsys.readouterr().out
+    assert "note: 2 runs' CARLA launch is unverified" in out
+    assert "CARLA launch not compared (unverified)" in out
+    # one run read, one not, at the same quality and args: one launch, the unread one noted
+    launch("epic", [], "observed")
+    launch("epic", [], False, only=1)
+    assert t3.main(["compare", *w]) == 0
+    out = capsys.readouterr().out
+    assert "more than one CARLA launch" not in out and "1 runs' CARLA launch is unverified" in out
+    # verified launches of two qualities: a mix, refused at record
+    launch("low", [], "observed", only=1)
+    assert t3.main(["record", *w]) == 1
+    assert "results from more than one CARLA launch" in capsys.readouterr().out
+
+
 def test_an_overloaded_parallel_run_is_named_in_the_problem(tmp_path):
     """scensim run --seats writes dispatch.json beside an overloaded run; runs.summarize (the
     real writer, not a copy of its columns) puts it in summary.csv, and compare says it."""

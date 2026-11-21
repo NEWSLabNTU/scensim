@@ -2,7 +2,7 @@
 
 **Severity**: low. The compare of every T3 suite run on a CARLA started outside the stack exits
 1 on a launch problem the runs do not have, so a real difference can hide among false ones.
-**Status**: open. **Found**: 2026-11-21, swb 243, comparing s5 on CARLA 1.0 (roadmap 083) with
+**Status**: fixed (this commit). **Found**: 2026-11-21, swb 243, comparing s5 on CARLA 1.0 (roadmap 083) with
 its 0.9.16 reference.
 
 ## What happens
@@ -35,7 +35,7 @@ The run's `provenance.carla` from the s5 run:
  'applied': False}
 ```
 
-## Fix (proposed)
+## Fix
 
 Compare the launch that ran, recorded.
 
@@ -45,5 +45,10 @@ Compare the launch that ran, recorded.
 2. `t3.launch_problem` compares `quality` and `args` only. An external launch it could not
    observe becomes a note ("unverified: an external CARLA"), not a problem.
 
-Until then the line can be read off by hand: equal quality and args with `not applied` on one
-side only is this issue, not a difference.
+Both are done. `simulator.observed_launch` finds the listener through `/proc/net/tcp` and
+`tcp6` and the process's socket links, and accepts only a CARLA program (the engine or its
+launcher script) as the listener; `decide` records the result for an external CARLA on this host,
+in `auto` and in `external` mode. A listener owned by another user cannot be read, and its
+launch stays not applied. `t3.launch_problem` compares quality and args; a launch of
+either side that is not verified is a note, and a mix of verified launches in the results is
+still refused at record.

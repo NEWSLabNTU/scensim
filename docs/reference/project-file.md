@@ -414,12 +414,16 @@ Low, 0.9.16 segfaults on any town change. It is allowed with CARLA 1.0, and on a
 CARLA whose version the stack cannot tell is read as 0.9.x.
 
 With a CARLA the stack does not start, quality and args do not apply. That is `carla.start:
-external`, an `auto` that finds one already serving, or a remote host. The stack then warns,
-and records them as not applied.
+external`, an `auto` that finds one already serving, or a remote host. The stack then warns.
+When that CARLA runs on this host under the same user, the stack reads the launch it actually
+runs from the command line of the process that listens on `carla.port`, and records that
+quality and those args as observed, keeping the testbench's as `requested`. Otherwise it
+records the testbench's as not applied.
 
 `stack.json` records the effective settings in `carla.launch`: `quality`, `args`, `from` (each
-key's source: `testbench`, `host` or `default`), `applied`, and `why` when not applied. It
-records the command line in `carla.argv`, and `VK_ICD_FILENAMES` in `carla.env` when the stack
+key's source: `testbench`, `host`, `default`, or `observed`), `applied` (`true`, `"observed"`
+or `false`), and `why` when the stack did not start CARLA. It records the command line in
+`carla.argv`, the observed one included, and `VK_ICD_FILENAMES` in `carla.env` when the stack
 pinned it. Every run's `result.json` records them as `provenance.carla` ([Results and
 logs](results-and-logs.md)). `carla:` is refused on an Isaac testbench.
 

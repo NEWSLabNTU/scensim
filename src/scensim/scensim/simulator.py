@@ -304,6 +304,70 @@ def carla_argv(root, port, quality=QUALITY, args=()) -> list:
     return [str(root / script), *flags]
 
 
+def listener_pid(port, proc="/proc"):
+    """The pid of this host's process that listens on TCP ``port`` (IPv4 or IPv6), or None:
+    nothing listens, or the socket belongs to a process whose fds this user cannot read
+    (another user's)."""
+    want = f"{int(port):04X}"
+    inodes = set()
+    for name in ("tcp", "tcp6"):
+        try:
+            lines = Path(proc, "net", name).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            f = line.split()
+            # sl local_address rem_address st ... inode (the 10th field); st 0A is LISTEN
+            if len(f) > 9 and f[3] == "0A" and f[1].rsplit(":", 1)[-1] == want:
+                inodes.add(f[9])
+    if not inodes:
+        return None
+    links = {f"socket:[{i}]" for i in inodes}
+    for d in Path(proc).iterdir():
+        if not d.name.isdigit():
+            continue
+        try:
+            for fd in (d / "fd").iterdir():
+                if os.readlink(fd) in links:
+                    return int(d.name)
+        except OSError:
+            continue
+    return None
+
+
+CARLA_PROGRAMS = {name for script, engine, project, _v in LAYOUTS
+                  for name in (script, engine.name)}
+
+
+def observed_launch(port, proc="/proc"):
+    """The launch of the CARLA that listens on this host's ``port``, read from its command
+    line (issue 097): ``{quality, args, argv, pid}`` in launch_settings' terms (quality
+    lowercase, args without scensim's own flags, the engine's project argument or the
+    program), or None when it cannot be read or the listener is not CARLA. A CARLA started
+    without -quality-level runs at its default, Epic."""
+    pid = listener_pid(port, proc)
+    if pid is None:
+        return None
+    try:
+        argv = [a for a in Path(proc, str(pid), "cmdline").read_bytes().decode(
+            "utf-8", "replace").split("\0") if a]
+    except OSError:
+        return None
+    if not argv or Path(argv[0]).name not in CARLA_PROGRAMS:
+        return None
+    quality, args = QUALITY.lower(), []
+    projects = {project for _s, _e, project, _v in LAYOUTS}
+    for i, a in enumerate(argv[1:]):
+        if i == 0 and a in projects:
+            continue
+        flag = a.lstrip("-").split("=", 1)[0].lower()
+        if a.startswith("-") and flag == "quality-level":
+            quality = a.split("=", 1)[1].lower() if "=" in a else quality
+        elif not (a.startswith("-") and flag in OWNED_FLAGS):
+            args.append(a)
+    return {"quality": quality, "args": args, "argv": argv, "pid": pid}
+
+
 def launch_problems(block, where="carla") -> list:
     """What is wrong with a carla block's quality and args (the testbench's or a host's): the
     shape, and the flags scensim owns (each named with the key that sets it)."""
@@ -400,12 +464,15 @@ def carla_env(base=None) -> dict:
     return env
 
 
-def decide(carla: dict, mode=None, probe_fn=probe, launch=None) -> dict:
+def decide(carla: dict, mode=None, probe_fn=probe, launch=None,
+           observe_fn=observed_launch) -> dict:
     """The stack's CARLA as stack.json records it (``carla``), or SimulatorRefused.
 
     ``owner`` is ``started`` (the stack starts it) or ``external``. ``launch``: the effective
     quality and args (launch_settings), applied only to a CARLA the stack starts; ``launch``
-    records them and whether they applied."""
+    records them and whether they applied: true (started with them), "observed" (an external
+    CARLA on this host, whose quality and args are read from its command line, issue 097;
+    ``requested`` keeps the settings') or false (an external one that cannot be read)."""
     carla = dict(carla or {})
     launch = dict(launch or {**LAUNCH_DEFAULTS, "from": {k: "default" for k in LAUNCH_KEYS}})
     mode = (mode or carla.get("start") or "auto")
@@ -434,6 +501,15 @@ def decide(carla: dict, mode=None, probe_fn=probe, launch=None) -> dict:
         state, version = probe_fn(host, port)
         if state == CARLA and version:
             out.update(version=version, version_from=f"the server on {where}")
+        if state == CARLA and is_local(host):
+            seen = observe_fn(port)
+            if seen is not None:
+                out["argv"] = seen["argv"]
+                out["launch"] = {"quality": seen["quality"], "args": seen["args"],
+                                 "from": {k: "observed" for k in LAUNCH_KEYS},
+                                 "applied": "observed", "requested": {
+                                     k: launch.get(k) for k in LAUNCH_KEYS},
+                                 "why": f"an external CARLA, read from pid {seen['pid']}"}
         return out
     state, version = probe_fn(host, port)
     if mode == "auto" and not root and state == FREE:
@@ -453,6 +529,15 @@ def decide(carla: dict, mode=None, probe_fn=probe, launch=None) -> dict:
                 f"CARLA {version or ''} already serves {where}; simulator_start:=external (or "
                 "auto) uses it, a second CARLA on a held port crashes".replace("  ", " "))
         out["version"] = version
+        if state == CARLA and is_local(host):
+            seen = observe_fn(port)
+            if seen is not None:
+                out["argv"] = seen["argv"]
+                out["launch"] = {"quality": seen["quality"], "args": seen["args"],
+                                 "from": {k: "observed" for k in LAUNCH_KEYS},
+                                 "applied": "observed", "requested": {
+                                     k: launch.get(k) for k in LAUNCH_KEYS},
+                                 "why": f"an external CARLA, read from pid {seen['pid']}"}
         return out
     if not is_local(host):
         raise SimulatorRefused(f"simulator_start:=start but carla.host {host} is not this "

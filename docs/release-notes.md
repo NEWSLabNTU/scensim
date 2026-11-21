@@ -4,6 +4,13 @@
 
 ### What is new
 
+- **An external CARLA's launch is read, not assumed.** When the CARLA the stack uses was
+  started by someone else on the same host, the stack reads its quality and arguments from
+  the command line of the process on `carla.port` and records them as observed
+  ([The testbench](reference/project-file.md#carla)). `scripts/t3.py compare` judges a
+  launch by its quality and arguments only, so a suite on a CARLA started by a script is
+  compared with a reference the stack started; a launch that could not be read is noted,
+  not failed (issue 097).
 - **`isaac.wheel_query: sweep`** in `testbench.yaml`: the Isaac ego's wheels find the ground
   with their cylinder instead of one ray, so the car climbs a curb, with a bump stop at the
   real suspension travel (issue 077). `isaac_verge` uses it. It is opt-in: on mud the sweep
