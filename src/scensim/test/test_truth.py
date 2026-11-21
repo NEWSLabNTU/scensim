@@ -93,6 +93,22 @@ def test_start_frames_counts_the_frames_before_npc_logic(tmp_path):
     assert truth.start_frames(truth.load(tmp_path)[0]) == 3
 
 
+def test_start_frames_counts_by_frame_number_and_refuses_a_gap(tmp_path):
+    def trace(numbers, started_from, mixed=False):
+        lines = [EP, entity("ego", "ego", 0)]
+        for k in numbers:
+            f = frame(k, {"ego": (0, 0, 0)})
+            if not (mixed and k == numbers[0]):
+                f["npc_logic_started"] = k >= started_from
+            lines.append(f)
+        write(tmp_path, lines + [dict(END, frames=len(numbers))])
+        return truth.load(tmp_path)[0]
+    assert truth.start_frames(trace([3, 4, 5, 6], 5)) == 2       # from the first line's number
+    assert truth.start_frames(trace([1, 2, 4, 5], 5)) is None    # frame 3 dropped before it
+    assert truth.start_frames(trace([1, 2, 3, 5], 3)) == 2       # a drop after it does not matter
+    assert truth.start_frames(trace([1, 2, 3, 4], 3, mixed=True)) is None
+
+
 def test_start_frames_is_none_when_the_trace_does_not_say(tmp_path):
     write(tmp_path, [EP, entity("ego", "ego", 0), frame(1, {"ego": (0, 0, 0)}), END])
     assert truth.start_frames(truth.load(tmp_path)[0]) is None

@@ -18,7 +18,10 @@ while holding), the clock, the command published, and what the car reported back
 vehicle interface that frame (`/vehicle/status/steering_status`, `velocity_status`), so the
 frame a command took effect is read from the log, not assumed. A batch replay takes f0 - S (S
 the trace's frames before startNpcLogic, scensim.truth.start_frames) as the steps the ego
-holds before command 0.
+holds before command 0, pairing the two by time, not by frame number (243): f0's line's
+`clock_ns` is the trace frame's `sim_time_ns`, and that frame's line number less the first's,
+less S, is the hold. A world frame the pilot never saw (/clock skipped it) is counted in its
+line's `skipped` and warned once, since its command was never sent.
 
     ros2 run scensim_agent replay_pilot --relay tcp://localhost:5560 --entity ego \\
         --config replay.yaml        # {commands: <file>, ...}
@@ -77,9 +80,10 @@ class Replay:
         self.armed = False      # the goal has arrived: start at the next frame
         self.f0 = None
         self.last = None
+        self.skipped = 0        # world frames between the last two seen, this frame
 
     def reset(self):
-        self.armed, self.f0, self.last = False, None, None
+        self.armed, self.f0, self.last, self.skipped = False, None, None, 0
 
     def arm(self):
         self.armed = True
@@ -91,6 +95,7 @@ class Replay:
         """(k, command) for world frame `f`, or None when `f` is not a new frame."""
         if self.last is not None and f <= self.last:
             return None
+        self.skipped = 0 if self.last is None else f - self.last - 1
         self.last = f
         if self.armed and self.f0 is None:
             self.f0 = f
@@ -181,6 +186,7 @@ class ReplayPilotAgent(scensim_agent.Agent):
                                   else None)
         self._out = open(log, "a") if log else None
         self._lock = threading.Lock()
+        self._warned_skip = False
         self.vehicle = vehicle if vehicle is not None else RosVehicle(
             self.cfg, self.entity, dt, self.on_frame, self.log)
         self.log.info(f"{len(cmds)} commands at {dt:g} s from {self.cfg['commands']}"
@@ -193,9 +199,15 @@ class ReplayPilotAgent(scensim_agent.Agent):
                 return
             k, cmd = got
             self.vehicle.publish(cmd)
+            skipped = self.replay.skipped
+            if skipped and not self._warned_skip:
+                self.log.warning(f"world frame {f}: {skipped} frame(s) before it never seen on "
+                                 "/clock: their commands were not sent")
+                self._warned_skip = True
             if self._out is not None:
-                self._out.write(json.dumps({"frame": f, "k": k, "clock": t, "cmd": cmd,
-                                            "status": status}) + "\n")
+                self._out.write(json.dumps({"frame": f, "k": k, "clock": t,
+                                            "clock_ns": round(t * 1e9), "skipped": skipped,
+                                            "cmd": cmd, "status": status}) + "\n")
                 self._out.flush()
 
     def on_reset(self, ep):

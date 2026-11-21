@@ -244,7 +244,10 @@ def compile_scenario(path, records, world, provides=(), device="cpu", catalogs=N
             role = "ego"
         elif kind == "misc":
             role = "prop"
-        elif kind == "vehicle" and not list(obj.iter("Controller")):
+        elif kind == "vehicle" and all(not c.findall(".//Property")
+                                        for c in obj.iter("Controller")):
+            # no controller, or one that sets nothing (an empty Properties): SSv2's default
+            # vehicle behaviour, as its interpreter gives such an entity (092 K2.4)
             role = "default"
         else:
             raise CompileError(f"{where}: a {kind} with a controller or behaviour model "

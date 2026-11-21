@@ -34,6 +34,7 @@ def test_holds_until_the_goal_then_one_command_per_frame():
     assert r.frame(10) is None                # nor an older one
     assert r.frame(12) == (1, CMDS[1])
     assert r.frame(14) == (3, CMDS[2])        # a skipped frame keeps the index by frame
+    assert r.skipped == 1
     assert r.frame(20) == (9, CMDS[2])        # past the last: held
     assert r.f0 == 11
 
@@ -92,6 +93,7 @@ def test_the_agent_publishes_and_logs_each_frame(tmp_path):
     assert [(r["frame"], r["k"]) for r in rows[1:]] == [(3, None), (4, 0), (5, 1)]
     assert rows[3]["status"] == {"steering": 0.05, "velocity": 0.1}
     assert rows[3]["cmd"] == CMDS[1]
+    assert rows[3]["clock_ns"] == 1_000_250_000_000 and rows[3]["skipped"] == 0
 
 
 def test_no_commands_file_is_refused():
