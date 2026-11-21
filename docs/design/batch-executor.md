@@ -483,7 +483,10 @@ A gap of the port, found here and not of the lazy ticks: SSv2's ManeuverGroup::s
 its maneuvers (startTransition) on each of the group's executions; the port restarts only an
 event's actions (Event::start), so a maneuver of a group of more than one execution stays
 COMPLETE. Its events are not restarted either way (an event is restarted only from its own
-STANDBY), so what runs is the same; the maneuvers' states in the storyboard log differ.
+STANDBY), so the vehicles run the same, but the maneuvers' states differ, and a
+StoryboardElementStateCondition on such a maneuver would fire on SSv2's second execution and
+not here (243): the compiler refuses one ("batch executor pending"). No study scenario repeats
+a group.
 
 At 4 cars the resident path is no faster than the CPU path (184 against 65 ms a step, the GPU
 contended): every masked step is a kernel launch. Its case is a large N, which P2 measures.
