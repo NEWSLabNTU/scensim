@@ -2391,6 +2391,9 @@ impl SimBackend for RemoteBackend {
         }
         if self.gap_trace.recording() {
             self.gap_trace.stage_frame(self.frame + 1, staged);
+            // S for a batch replay (092 K2.4): the frames before startNpcLogic
+            self.gap_trace
+                .npc_logic(self.frame + 1, batch.npc_logic_started);
         }
         let mut failure = (!unknown.is_empty()).then(|| {
             format!(
