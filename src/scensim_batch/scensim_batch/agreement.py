@@ -108,14 +108,20 @@ def delivery(trace, ego, step_time):
     step_ns = round(step_time * 1e9)
     delay, superseded, repeated, frames = {}, 0, 0, 0
     prev_ns = None
+    last_ns = None       # the previous frame's sim_time_ns: the step's start (243)
     for f in sorted(trace.frames, key=lambda f: f.frame):
         st = f.entities.get(ego)
         c = None if st is None else getattr(st, "command", None)
-        if c is None or f.sim_time_ns is None:
+        start_ns, last_ns = last_ns, f.sim_time_ns
+        if c is None or f.sim_time_ns is None or start_ns is None:
             continue
         frames += 1
-        start_ns = f.sim_time_ns - step_ns     # the step ran from the previous frame's clock
         d = round((start_ns - c.stamp_ns) / step_ns)
+        if d < 0:
+            raise ValueError(
+                f"frame {f.frame}: the command it ran is stamped {c.stamp_ns}, after its step "
+                f"began ({start_ns}): the sender's clock is not the truth's sim_time_ns (a run "
+                "on another clock_source?), so no delay can be read")
         delay[d] = delay.get(d, 0) + 1
         superseded += max(c.arrived - 1, 0)
         repeated += c.arrived == 0 and c.stamp_ns == prev_ns
@@ -126,7 +132,9 @@ def delivery(trace, ego, step_time):
 
 def context_steps(path, step_time):
     """{element path: {state: the first step k (at scenario time k dt) it entered}} from the
-    storyboard log's state changes (its `sim` is SSv2's scenario time)."""
+    storyboard log's state changes. Its `sim` is the time of the context SSv2 published, after
+    the frame's update (evaluate at T, update to T + dt, publish: the interpreter's
+    evaluate_storyboard), so the evaluation that made a change was a step before."""
     out = {}
     for line in Path(path).read_text().splitlines():
         if not line.strip():
@@ -134,7 +142,7 @@ def context_steps(path, step_time):
         o = json.loads(line)
         if o.get("ev") != "state" or o.get("sim") is None:
             continue
-        k = round(float(o["sim"]) / step_time)
+        k = round(float(o["sim"]) / step_time) - 1
         out.setdefault(o["element"], {}).setdefault(o["to"], k)
     return out
 

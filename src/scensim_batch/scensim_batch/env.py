@@ -45,7 +45,8 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     # the ego's actions before the scenario's time (each [N, len(ACTIONS[kind])], one env
     # step each, physics substeps and all), run at every reset of all slots before the first
     # observation, SSv2's vehicles held and the storyboard idle: a seats ego's frames before
-    # startNpcLogic (092 K2.4)
+    # startNpcLogic (092 K2.4). For agreement runs only: a partial reset (a training env's
+    # per-slot time-out or termination) cannot pre-roll, and is refused while this is set
     ego_preroll: list = None
     decimation: int = 4
     episode_length_s: float = 30.0
@@ -160,17 +161,29 @@ class ScensimEnv(DirectRLEnv):
         super()._reset_idx(env_ids)
         mask = torch.zeros(self.num_envs, dtype=torch.bool)
         mask[torch.as_tensor(env_ids, dtype=torch.long).cpu()] = True
-        pre = self._preroll if self.cfg.ego_preroll and bool(mask.all()) else None
+        pre = None
+        if self.cfg.ego_preroll:
+            if not bool(mask.all()):
+                raise RuntimeError(
+                    f"ego_preroll is set but slots {torch.nonzero(mask).flatten().tolist()} "
+                    "reset alone: a pre-roll steps every slot's physics, so only an agreement "
+                    "run (every slot reset together) takes one")
+            pre = self._preroll
         self.run.reset(mask, preroll=pre)   # merges: the other slots' observation stays this step's
 
     def _preroll(self, run):
         """cfg.ego_preroll, as env steps of the ego alone: each action's commands, then the
         decimation's physics substeps as _apply_action and the sim run them."""
+        # DirectRLEnv.step's physics loop (Isaac Lab 3.0), without its render and counters:
+        # the pre-roll is not an episode step (243)
+        steps_per_call = self.cfg.decimation if self._physics_handles_decimation else 1
         for a in self.cfg.ego_preroll:
             self._pre_physics_step(torch.as_tensor(a, dtype=torch.float64))
-            for _ in range(self.cfg.decimation):
+            for _ in range(self.cfg.decimation // steps_per_call):
                 self._apply_action()
+                self.scene.write_data_to_sim()
                 self.sim.step(render=False)
+                self.scene.update(dt=self.physics_dt * steps_per_call)
         if self.stepped:
             self.backend.sample(self.physics_dt)
             self.stepped = False
