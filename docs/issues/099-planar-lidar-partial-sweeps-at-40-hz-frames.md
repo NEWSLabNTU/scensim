@@ -2,8 +2,8 @@
 
 **Severity**: medium. The RoboRacer's 40 Hz planar lidar under 40 Hz frames published scans with a
 third of the beams missing. A missing beam reads `inf`, which means nothing in range, so a wall
-follower steered into the wall it could not see (W20's first runs). **Status**: open; the
-mechanism is found, and aib's fix is checked against the references before it lands. **Found**:
+follower steered into the wall it could not see (W20's first runs). **Status**: fixed (aib 79d68cd, scensim
+b1ec8d74). **Found**:
 2026-11-21, scensim 241, roadmap 091 W20, on Isaac Sim 6.2, with both of 241's GPUs held at 95 to
 100 % by another user's jobs.
 
@@ -35,25 +35,31 @@ within 2 m. The other runs at 20 Hz frames, both branches, had whole scans throu
 ## Why
 
 aib builds every profiled lidar on Isaac's stock OS1 variant (`OS1_REV7_128ch20hz1024res`) and
-sets its firing pattern from the profile, `omni:sensor:Core:scanRateBaseHz` among it, but not
-`omni:sensor:tickRate`. The variant authors a tick rate of 20 Hz, with
+sets its firing pattern from the profile, `omni:sensor:Core:scanRateBaseHz` among it, but did not
+set `omni:sensor:tickRate`. The variant authors a tick rate of 20 Hz, with
 `omni:sensor:Core:accumulateOutputs` on. Isaac 6.2's own RTX lidar wrapper warns when the tick
-rate does not match `scanRateBaseHz`. The sensor renders at its tick rate and accumulates a
-revolution across ticks. A profile turning slower than its tick (the shipped 10 Hz lidars on 20)
-comes whole, since each turn is assembled over two ticks. A profile turning faster (40 Hz on 20)
-handed the annotator tails of turns under 40 Hz frames.
+rate does not match `scanRateBaseHz`. The sensor renders at its tick rate. A 40 Hz scan on a 20 Hz
+tick handed the annotator tails of turns under 40 Hz frames.
 
 ## Fix
 
-In aib: every profiled lidar ticks at its profile's scan rate (`lidar_profile.tick_rate`, set
-with the firing pattern). This moves the shipped 10 Hz lidars from a 20 Hz tick to 10 Hz, so
-before it lands the Model 3's Autoware lane on Isaac and the T3 Isaac suites are run against
-their references; a reference that moves is reported, not adjusted. Then the RoboRacer's cases
-at 40 Hz and 20 Hz frames run again, several `humble-devel` starts among them, counting tail
-reads. A guard that drops and counts tails comes only if any remain.
+aib 79d68cd: every profiled lidar ticks at its profile's scan rate (`lidar_profile.tick_rate`, set
+with the firing pattern), and logs it when it changes the variant's.
 
-A first guard, which judged a read by its points' time span against their azimuth extent and
-phases, was not landed. The tails' times agree with their azimuths, so it caught none of them.
+With the fix, the RoboRacer ran three `humble-devel` starts at 40 Hz frames and three at 20 Hz,
+40 s each:
 
-Until the fix lands, W20 runs at 20 Hz frames, where `/scan` comes at 20 Hz, half the real
-scanner's rate. The guide's RoboRacer section says so.
+| frames | `/scan` | beams in range | tails |
+|---|---|---|---|
+| 40 Hz | 39.8, 39.95, 40.0 Hz | 91 %, 91 %, 91 % | none |
+| 20 Hz | 20.0 Hz each | 91 % each | none |
+
+So no guard for tails was added. A first guard, which judged a read by its points' time span
+against their azimuth extent and phases, was not landed. The tails' times agree with their
+azimuths, so it caught none of them.
+
+The shipped lidars are unchanged: the Model 3's and the Mustang's are profiled at 20 Hz, the
+variant's own tick, so `tick_rate` leaves them. The Isaac T3 suites ran under `ros2 launch`,
+as their references did, before and after the fix: isaac_t2 autoware (scan and NDT), isaac_basic
+towns and rear_contact, isaac_road_physics road, isaac_rough_road rough and courses haruna. Every
+one was as the reference both times (`/var/tmp/aeon/099-ref` on 241).

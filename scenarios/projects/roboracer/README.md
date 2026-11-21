@@ -365,9 +365,12 @@ Three settings were needed, and no change to f1tenth_system:
   -1 for `humble-devel`, +1 for `jazzy-devel`.
 - **20 Hz frames.** At 40 Hz frames the 40 Hz lidar handed tails of revolutions as scans,
   a third of their beams missing: aib left the stock lidar's 20 Hz tick in place (issue 099).
-  At 20 Hz frames the scans are whole, and `/scan` comes at 20 Hz, half the UST-10LX's rate.
+  At 20 Hz frames the scans were whole, and `/scan` came at 20 Hz, half the UST-10LX's rate.
   Of seven runs at 20 Hz frames, one (`humble-devel`) had sparse scans from its start, 44 %
-  of the beams in range, and drove into a wall within 2 m.
+  of the beams in range, and drove into a wall within 2 m. Since aib 79d68cd the lidar ticks
+  at its 40 Hz: six further starts, three at 40 Hz frames (`/scan` at 39.8 to 40.0 Hz) and
+  three at 20 Hz, all had whole scans. `FRAME_RATE=40 tools/w20_run.sh ...` runs the real
+  rate; the table below is at 20 Hz frames, before the fix.
 
 Measured on 241 (2026-11-21; RTX 5090, driver 610.57, both GPUs held at 95 to 100 % by another
 user; 240 Hz physics, 20 Hz frames), 120 s of sim time from 1.5 m off the right wall:

@@ -221,11 +221,9 @@ With f1tenth_system, check three settings before the laps:
   set by how its motor is wired. Give your component the same sign, so its `erpm` telemetry
   reports what your car's does, and log which it is with your runs. The example's stand-in
   drive unit takes it as `erpm_sign`.
-- **The lidar's frame rate.** The example car's scanner turns at 40 Hz. Run it at 20 Hz
-  frames, where every scan is a whole turn; `/scan` then comes at 20 Hz, half the real
-  scanner's rate. At 40 Hz frames the simulator can hand the tail of a turn as a scan, with a
-  third of the beams missing, and a stack that reads a missing beam as open space steers into
-  the wall it cannot see.
+- **The lidar's frame rate.** `/scan` comes at most once a frame. The example car's scanner
+  turns at 40 Hz, so run 40 Hz frames for its real rate; at 20 Hz frames every scan is still a
+  whole turn, at 20 Hz.
 
 ### A twin release
 

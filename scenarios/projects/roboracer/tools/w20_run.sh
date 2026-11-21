@@ -14,8 +14,9 @@
 #
 # The VESC's reported ERPM sign follows the branch: humble-devel's vesc_to_odom negates
 # state.speed, jazzy-devel's does not (scensim issue 098), so the component's erpm_sign is -1
-# for humble and +1 for jazzy. The frames are 20 Hz: at 40 Hz the 40 Hz lidar's reads are short
-# of a revolution and are dropped (issue 099). Physics runs at 240 Hz (README, W7).
+# for humble and +1 for jazzy. The frames are 20 Hz by default, as W20 was measured; since aib
+# 79d68cd (issue 099) FRAME_RATE=40 gives /scan at the lidar's 40 Hz. Physics runs at 240 Hz
+# (README, W7).
 #
 # Environment (host settings):
 #   ISAAC_ROOT          Isaac Sim's install
@@ -24,7 +25,7 @@
 #   JAZZY_IMAGE         a docker image with ROS 2 Jazzy (for jazzy)
 #   AIB                 an autoware_isaac_bridge checkout (default: this workspace's)
 #   ROS_DOMAIN_ID       default 47
-#   FRAME_RATE          default 20 (issue 099's repeat runs others)
+#   FRAME_RATE          default 20 (40: the lidar's own rate)
 #   ISAAC_KIT_ARGS      Kit settings, e.g. one GPU on a host whose other is busy:
 #                       "--/renderer/multiGpu/enabled=false --/renderer/activeGpu=0"
 set -u
