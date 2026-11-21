@@ -43,16 +43,23 @@ def running_distance(target, c, v, a, jerk, dt):
             return ret
 
 
-def local_target(target, v, a, jerk, length, d_front, v_front, dt, c=C, see_around=True):
-    """The speed the tree asks for this step: FollowLane's, or FollowFrontEntity's."""
+def local_target(target, v, a, jerk, length, d_front, v_front, dt, c=C, see_around=True,
+                 running=False):
+    """`(speed, following)`: the speed the tree asks for this step, FollowLane's or
+    FollowFrontEntity's, and whether FollowFrontEntity ran. `running`: it ran the step before
+    and returned RUNNING. BehaviorTree.CPP's Fallback is not reactive: it resumes a RUNNING
+    child and does not tick the ones before it, so FollowLane's hand-off test is not made again
+    while a front entity is found (FollowFrontEntity fails without one)."""
     stop = running_distance(0.0, c, v, a, jerk, dt)
-    if not see_around or d_front is None or d_front > stop + length + 5.0:
-        return target
+    if not see_around or d_front is None:
+        return target, False
+    if not running and d_front > stop + length + 5.0:
+        return target, False
     if target <= v_front:
-        return target
+        return target, True
     stable = stop + length + 5.0
     requested = 0.0 if d_front <= stop else (v_front + 2.0 if d_front >= stable else v_front)
-    return clamp(requested, 0.0, target)
+    return clamp(requested, 0.0, target), True
 
 
 def front_distance(ds, gap_len_self, len_other, corner_laterals, width_self):

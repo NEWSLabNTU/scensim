@@ -2,6 +2,7 @@
 vehicle (ssv2_ref.py): the planner and the stop distance equal per element; a follower on a
 straight road equals the scalar run slot by slot over N random slots; the front entity found
 only on the path, ahead, in the cone."""
+import json
 import math
 import random
 import sys
@@ -99,13 +100,15 @@ def straight(n, e, length=600.0):
 def scalar_follow(s, v, target, s_lead, v_lead, steps, L=4.0, L_lead=4.0):
     """One follower behind a lead at constant speed, the tree's speed logic per step."""
     a = j = 0.0
+    following = False
     out = []
     for _ in range(steps):
         horizon = max(min(max(v * 5.0, 20.0), 50.0), ref.running_distance(0.0, ref.C, v, a, j, DT))
         ds = s_lead - s
         gap = ds - L / 2 - L_lead / 2
         d = gap + L / 2 if (ds > 0 and gap >= 0 and ds <= horizon + L_lead) else None
-        local = ref.local_target(target, v, a, j, L, d, v_lead, DT)
+        local, following = ref.local_target(target, v, a, j, L, d, v_lead, DT,
+                                            running=following)
         v1, a1, j1 = ref.dynamic_states(local, ref.C, v, a, DT)
         s += (v1 + v) / 2.0 * DT
         v, a, j = v1, a1, j1
@@ -144,7 +147,32 @@ class Following(unittest.TestCase):
                 self.assertAlmostEqual(got[k][0][i, 0].item(), want[k][0], places=6, msg=(i, k))
                 self.assertAlmostEqual(got[k][1][i, 0].item(), want[k][1], places=6, msg=(i, k))
 
-    def test_a_stopped_lead_is_never_reached(self):
+    def test_a_follower_keeps_following_while_its_stop_distance_shrinks(self):
+        """092 K2.4: seats' k24_npc_stops_for_ego, the follower's first 300 steps (its brake
+        from 6 m/s behind an ego pulling away, then following at 2.74 m/s), to 1 mm/s. Braking
+        shrinks the stop distance, so FollowLane's hand-off test would pass again at step 11
+        and its target reset the deceleration; SSv2's tree resumes FollowFrontEntity instead.
+        The ego as the update reads it: its pose the tick's reply, its speed a frame earlier
+        (see the fixture's note)."""
+        fx = json.loads((Path(__file__).resolve().parent / "data" /
+                         "seats_follower_stops_for_ego.json").read_text())
+        f = fx["follower"]
+        car = npc.DefaultVehicles(straight(1, 1), t([[0.0]]), t([[f["v0"]]]), t([[f["length"]]]),
+                                  t([[f["width"]]]), t([[f["target"]]]))
+        # a centred box of twice the offset puts SSv2's distance in npc's terms (gap + own L/2)
+        lead_len = 2 * fx["ego_front_offset"]
+        worst = 0.0
+        for k, (s_ego, v_ego) in enumerate(zip(fx["ego_s"], fx["ego_v"])):
+            v_before = car.v.clone()
+            car.step(DT, {"x": t([[s_ego]]), "y": t([[0.0]]), "yaw": t([[0.0]]),
+                          "length": t([[lead_len]]), "width": t([[2.163]]), "v": t([[v_ego]])})
+            got = ((car.v + v_before) / 2).item()
+            worst = max(worst, abs(got - fx["follower_v"][k]))
+            if k >= 3:
+                self.assertEqual(car.mode.item(), 1, k)
+        self.assertLess(worst, 1e-3)
+
+
         routes = straight(1, 1)
         car = npc.DefaultVehicles(routes, t([[0.0]]), t([[12.0]]), t([[4.0]]), t([[1.8]]),
                                   t([[12.0]]))
