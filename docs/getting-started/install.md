@@ -206,12 +206,12 @@ scensim's own testbed adds. Your own Autoware needs neither.
 
 scensim starts its processes with a launcher. Without anything more that is `ros2
 launch`, which every ROS 2 installation has, and every page here works with it.
-[play_launch](https://pypi.org/project/play-launch/) 0.30.0 or newer is recommended: it
+[play_launch](https://pypi.org/project/play-launch/) 0.41.2 or newer is recommended: it
 keeps a log per node, shows the stack in a web interface, and restarts a crashed Autoware
 component alone.
 
 ```bash
-python3 -m pip install --user 'play_launch>=0.30.0'
+python3 -m pip install --user 'play_launch>=0.41.2'
 ```
 
 scensim uses it when it is on `PATH` (the host setting `launcher: auto`, the default).

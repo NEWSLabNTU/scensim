@@ -4,6 +4,12 @@
 
 ### What is new
 
+- **play_launch 0.41.2 or newer is the recommended launcher** (was 0.30.0). It is the first
+  release that fails a component whose load reply never comes, instead of waiting without
+  end ([Install](getting-started/install.md#recommended-play_launch)). play_launch stays
+  optional: `launcher: auto` uses it at 0.41.2 or later and otherwise starts the stack with
+  `ros2 launch`; only `launcher: play_launch` refuses an older one. Upgrade with
+  `python3 -m pip install --user 'play_launch>=0.41.2'`.
 - **An external CARLA's launch is read, not assumed.** When the CARLA the stack uses was
   started by someone else on the same host, the stack reads its quality and arguments from
   the command line of the process on `carla.port` and records them as observed

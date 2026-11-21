@@ -2,16 +2,19 @@
 play_launch's floor when it is the one asked for (roadmap 077, G26)."""
 from scensim import tools
 
-NEW = lambda: ((0, 35, 2), "/x/play_launch")  # noqa: E731
+NEW = lambda: ((0, 42, 0), "/x/play_launch")  # noqa: E731
 OLD = lambda: ((0, 18, 3), "/x/play_launch")  # noqa: E731
 NONE = lambda: (None, None)  # noqa: E731
 GARBLED = lambda: (None, "/x/play_launch")  # noqa: E731
 
 
 def test_auto_takes_play_launch_at_or_above_the_floor_else_ros2():
-    assert tools.launcher("auto", lambda: ((0, 30, 0), "/x/play_launch"))[0] == "play_launch"
-    assert tools.launcher("auto", NEW) == ("play_launch", "play_launch 0.35.2")
-    assert tools.launcher("auto", OLD) == ("ros2", "play_launch 0.18.3 is older than 0.30.0")
+    assert tools.launcher("auto", lambda: ((0, 41, 2), "/x/play_launch"))[0] == "play_launch"
+    assert tools.launcher("auto", NEW) == ("play_launch", "play_launch 0.42.0")
+    assert tools.launcher("auto", OLD) == ("ros2", "play_launch 0.18.3 is older than 0.41.2")
+    # 0.40 waits without end on a lost LoadNode reply (play_launch #0103): below the floor
+    assert tools.launcher("auto", lambda: ((0, 40, 0), "/x/play_launch")) == (
+        "ros2", "play_launch 0.40.0 is older than 0.41.2")
     assert tools.launcher("auto", NONE) == ("ros2", "play_launch not on PATH")
     assert tools.launcher("auto", GARBLED)[0] == "ros2"
     assert tools.launcher(None, NEW)[0] == "play_launch"  # unset: auto
@@ -20,10 +23,10 @@ def test_auto_takes_play_launch_at_or_above_the_floor_else_ros2():
 
 
 def test_the_line_project_check_and_seat_show_print():
-    assert tools.launcher_line("auto", NEW) == "launcher: auto -> play_launch 0.35.2"
+    assert tools.launcher_line("auto", NEW) == "launcher: auto -> play_launch 0.42.0"
     assert tools.launcher_line("auto", NONE) == "launcher: auto -> ros2 (play_launch not on PATH)"
     assert tools.launcher_line("ros2", NEW) == "launcher: ros2"
-    assert tools.launcher_line("play_launch", NEW) == "launcher: play_launch (play_launch 0.35.2)"
+    assert tools.launcher_line("play_launch", NEW) == "launcher: play_launch (play_launch 0.42.0)"
 
 
 def test_without_play_launch_auto_and_ros2_are_fine():
@@ -34,8 +37,8 @@ def test_without_play_launch_auto_and_ros2_are_fine():
 
 def test_an_explicit_play_launch_that_is_missing_or_old_is_refused():
     [f] = tools.findings("play_launch", OLD)
-    assert f.refused and "play_launch 0.18.3 (/x/play_launch) is older than 0.30.0" in f.what
-    assert "play_launch>=0.30.0" in f.fix and "launcher: auto" in f.fix
+    assert f.refused and "play_launch 0.18.3 (/x/play_launch) is older than 0.41.2" in f.what
+    assert "play_launch>=0.41.2" in f.fix and "launcher: auto" in f.fix
     [f] = tools.findings("play_launch", NONE)
     assert f.refused and "not on PATH" in f.what
     [f] = tools.findings("play_launch", GARBLED)

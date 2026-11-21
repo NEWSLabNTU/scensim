@@ -61,7 +61,7 @@ The commands for a project directory, the form before testbenches.
 |---|---|
 | `project new <dir>` | writes a starter project into a new (or empty) directory; `--template carla-first-drive` (default), `multi-pilot` or `isaac` |
 | `project new <dir> --from <project>` | copies a project (a directory or `pkg://<package>/<dir>`) without `assets/`, `state/`, `runs/`, `.scensim/` |
-| `project check [<dir>]` | validates `testbench.yaml`, the lock, every scenario and suite, the pilots against the scenarios' entities, the cars; prints the launcher it resolved (`launcher: auto -> play_launch 0.30.0`; under `ros2 launch` with an Autoware pilot, a note that a crashed component ends its container), then `project: ok` or one `problem: <file>: <what> (fix: ...)` per finding |
+| `project check [<dir>]` | validates `testbench.yaml`, the lock, every scenario and suite, the pilots against the scenarios' entities, the cars; prints the launcher it resolved (`launcher: auto -> play_launch 0.41.2`; under `ros2 launch` with an Autoware pilot, a note that a crashed component ends its container), then `project: ok` or one `problem: <file>: <what> (fix: ...)` per finding |
 
 ## `scensim assets`
 
@@ -120,13 +120,13 @@ Both launchers take the same arguments. play_launch binds its web UI and opens i
 directory (`./play_log/`) before the launch file is read, so `--web-addr` (the seat's web
 port, `seat show`) and `--log-dir` are its command line's. The stack runs its world server, its pilots and each run's SSv2 as launches of their own,
 each with the host setting `launcher` ([Host settings](host-settings.md)): play_launch
-when it is installed at 0.30 or later, else `ros2 launch`; `launcher:=` overrides it for
+when it is installed at 0.41.2 or later, else `ros2 launch`; `launcher:=` overrides it for
 one stack. Ctrl-C (SIGINT) stops the stack and everything it started.
 
 ### Launchers
 
 The stack runs under ROS 2's own `ros2 launch` or under
-[play_launch](https://pypi.org/project/play-launch/) 0.30 or later; the verdicts, the
+[play_launch](https://pypi.org/project/play-launch/) 0.41.2 or later; the verdicts, the
 results and the run's logs are the same under both, and each run's `result.json` names the
 launcher in its provenance. play_launch is recommended for the following:
 

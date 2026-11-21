@@ -48,7 +48,7 @@ never meet another seat's CARLA. `scensim seat show` prints each seat's CARLA po
 Each student, in their own account:
 
 ```bash
-python3 -m pip install --user 'play_launch>=0.30.0'   # Install, "Your tools"
+python3 -m pip install --user 'play_launch>=0.41.2'   # Install, "Your tools"
 cat > ~/scensim.bash <<'EOF'
 source /opt/autoware/1.5.0/setup.bash
 source /opt/scensim/install/setup.bash

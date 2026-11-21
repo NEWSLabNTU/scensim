@@ -48,7 +48,7 @@ DEFAULTS = {
     "carla": {"root": "", "host": "localhost", "port": 2000, "start": "auto",
               "ready_timeout": 300, "map_packages": []},
     "isaac": {"root": ""},
-    # the launcher of the stack, its pilots and SSv2's scenario: auto (play_launch 0.30 or
+    # the launcher of the stack, its pilots and SSv2's scenario: auto (play_launch 0.41.2 or
     # later when on PATH, else ros2 launch), play_launch or ros2 (roadmap 079)
     "launcher": "auto",
     # dds.profile: a Cyclone DDS XML for every process of the stack and every tool that talks

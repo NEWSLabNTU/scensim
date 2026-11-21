@@ -3,10 +3,12 @@ GPU's state when a stack starts (G27); a workspace checked out off its pins (G31
 Python modules CARLA's agents import (G38); the launcher (roadmap 079).
 
 The launcher is a host setting, ``launcher: auto | play_launch | ros2`` (``auto`` by
-default): play_launch when one at 0.30 or later is on PATH, else ``ros2 launch``. Only an
-explicit ``play_launch`` that is missing or older than 0.30 is refused: an older one parses
+default): play_launch when one at 0.41.2 or later is on PATH, else ``ros2 launch``. Only an
+explicit ``play_launch`` that is missing or older than 0.41.2 is refused: an older one parses
 the stack's launch differently and fails later, far from the cause (a host with 0.18.3
-needed another install before a run, 2026-11-15).
+needed another install before a run, 2026-11-15). 0.41.2 is the first that fails a
+composable whose LoadNode reply never comes, instead of waiting without end (play_launch
+#0103, scensim issue 088).
 """
 import os
 import re
@@ -16,8 +18,8 @@ from pathlib import Path
 
 from .findings import Finding
 
-PLAY_LAUNCH_MIN = (0, 30, 0)
-PLAY_LAUNCH_FIX = "python3 -m pip install --user 'play_launch>=0.30.0'"
+PLAY_LAUNCH_MIN = (0, 41, 2)
+PLAY_LAUNCH_FIX = "python3 -m pip install --user 'play_launch>=0.41.2'"
 
 
 def play_launch_version():
