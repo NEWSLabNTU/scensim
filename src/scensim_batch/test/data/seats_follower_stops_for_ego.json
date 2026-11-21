@@ -5,7 +5,8 @@
 "length": 4.5,
 "width": 2.1,
 "v0": 6.0,
-"target": 6.0
+"target": 6.0,
+"cx": 1.5
 },
 "ego_front_offset": 2.48,
 "ego_s": [
@@ -914,5 +915,10 @@
 0.017375,
 0.0
 ],
-"note": "ego_s: the ego's ssv2 pose (the reply of seats tick k, SSv2's view in that tick's update) as distance from the follower's pose at frame S; ego_v: the ego's speed one frame earlier (the twist read back with that pose); follower_v: the follower's speed from its ssv2 poses, frame S+k-1 to S+k, so the mean of two steps' speeds (SSv2 moves (v1 + v) / 2 * dt). ego_front_offset: SSv2's splineDistanceToBoundingBox for these boxes, pose to pose distance less the follower's front edge (center.x 1.5 + 2.25), the ego's rear edge (|1.416 - 2.396|), plus half the follower's length (2.25): 2.48."
+"note": "ego_s: the ego's ssv2 pose (the reply of seats tick k, SSv2's view in that tick's update) as distance from the follower's pose at frame S; ego_v: the ego's speed one frame earlier (the twist read back with that pose); follower_v: the follower's speed from its ssv2 poses, frame S+k-1 to S+k, so the mean of two steps' speeds (SSv2 moves (v1 + v) / 2 * dt). ego_front_offset (for reading the fixture): SSv2's splineDistanceToBoundingBox for these boxes, pose to pose distance less the follower's front edge (center.x 1.5 + 2.25), the ego's rear edge (|1.416 - 2.396|), plus half the follower's length (2.25): 2.48. The boxes are the trace's declared ones (follower, ego).",
+"ego": {
+"length": 4.792,
+"width": 2.163,
+"cx": 1.416
+}
 }

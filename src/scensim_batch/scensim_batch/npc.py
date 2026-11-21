@@ -216,9 +216,12 @@ def hermite_length(coef, num_points=100):
     return ret
 
 
-def box_corners(x, y, yaw, length, width):
-    """The four corners [..., 4, 2] of boxes centred at (x, y)."""
+def box_corners(x, y, yaw, length, width, cx=None):
+    """The four corners [..., 4, 2] of boxes centred at (x, y), or `cx` ahead of it along
+    `yaw` (BoundingBox/Center.x in the entity's frame)."""
     c, s = torch.cos(yaw), torch.sin(yaw)
+    if cx is not None:
+        x, y = x + c * cx, y + s * cx
     hl, hw = length / 2, width / 2
     out = []
     for sl, sw in ((1, 1), (1, -1), (-1, -1), (-1, 1)):
@@ -237,8 +240,11 @@ class DefaultVehicles:
     `active` [N, E] bool (padding off). `constraints`: Constraints, default SSv2's."""
 
     def __init__(self, routes, s0, v0, length, width, speed_limit, active=None,
-                 constraints=None, see_around=None):
+                 constraints=None, see_around=None, cx=None):
         self.routes = routes
+        # the box's centre ahead of the pose (BoundingBox/Center.x): SSv2 measures the gap
+        # between box edges, the pose its lanelet position
+        self.cx = torch.zeros_like(s0) if cx is None else cx
         self.s, self.v = s0.clone(), v0.clone()
         self.a, self.jerk = torch.zeros_like(s0), torch.zeros_like(s0)
         self.length, self.width, self.speed_limit = length, width, speed_limit
@@ -303,17 +309,19 @@ class DefaultVehicles:
         getDistanceToFrontEntity (the cone, the horizon, splineDistanceToBoundingBox)."""
         x, y, yaw = self.poses()
         n, e = x.shape
-        ents = [(x, y, yaw, self.length, self.width, self.active)]
+        ents = [(x, y, yaw, self.length, self.width, self.active, self.cx)]
         if others is not None:
             ents.append((others["x"], others["y"], others["yaw"], others["length"],
                          others["width"], others.get("active",
-                                                     torch.ones_like(others["x"], dtype=torch.bool))))
+                                                     torch.ones_like(others["x"], dtype=torch.bool)),
+                         others.get("cx", torch.zeros_like(others["x"]))))
         X = torch.cat([t[0] for t in ents], 1)           # [N, K]
         Y = torch.cat([t[1] for t in ents], 1)
         YAW = torch.cat([t[2] for t in ents], 1)
         LEN = torch.cat([t[3] for t in ents], 1)
         WID = torch.cat([t[4] for t in ents], 1)
         ACT = torch.cat([t[5] for t in ents], 1)
+        CX = torch.cat([t[6] for t in ents], 1)
         k = X.shape[1]
         # the cone: |angle of (other - self) against self's yaw| <= pi/2
         dx = X[:, None, :] - x[:, :, None]
@@ -325,7 +333,7 @@ class DefaultVehicles:
         # along own path: the other's centre, and its box's distance to the path
         centre = torch.stack([X, Y], -1)[:, None].expand(n, e, k, 2)
         s_other, _ = self.routes.project(centre)
-        corners = box_corners(X, Y, YAW, LEN, WID)               # [N, K, 4, 2]
+        corners = box_corners(X, Y, YAW, LEN, WID, CX)           # [N, K, 4, 2]
         _, cd = self.routes.project(corners[:, None].expand(n, e, k, 4, 2).reshape(n, e, k * 4, 2))
         cd = cd.reshape(n, e, k, 4)
         # SSv2 sees the other when a corner is within half its own width of the path
@@ -338,7 +346,10 @@ class DefaultVehicles:
                                 self.dt, active=self.active)
         horizon = torch.maximum(horizon, stop)
         ds = s_other - self.s[:, :, None]
-        gap = ds - self.length[:, :, None] / 2 - LEN[:, None, :] / 2
+        # boundingBoxLaneLongitudinalDistance: less |own front edge| and |the other's rear
+        # edge|, each from its pose (getDistancesFromCenterToEdge: centre.x -+ length / 2)
+        gap = (ds - (self.cx + self.length / 2).abs()[:, :, None]
+               - (CX - LEN / 2).abs()[:, None, :])
         dist = gap + self.length[:, :, None] / 2     # SSv2 adds half its own length back
         ok = (ACT[:, None, :] & self.active[:, :, None] & ~self_mask & in_cone & (ds > 0)
               # a negative gap (already overlapping) is no front entity in SSv2 either

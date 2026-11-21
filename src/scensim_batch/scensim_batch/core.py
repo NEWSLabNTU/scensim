@@ -80,6 +80,7 @@ class BatchRun:
         # step's world is that frame, so the storyboard reads the ego of two steps before
         # (`seen_before`); `seen` is the step before, kept to move into it. The NPCs it reads
         # are this step's (SSv2's canonical status, which the world shows this frame).
+        # SSv2's default vehicles read that same ego (seen_before; see _observe).
         self.seen = None
         self.seen_before = None
         self.route = sbmod.RouteGoal(self)
@@ -212,8 +213,10 @@ class BatchRun:
                              dtype=torch.float64).expand(c.n, len(d)).clone()
         limit = (self.speed_limit if self.speed_limit is not None
                  else self.world.speed_limit(x, y)) * torch.ones_like(x)
+        cx = torch.tensor([c.entities[i].cx for i in d],
+                          dtype=torch.float64).expand(c.n, len(d)).clone()
         fresh = npc.DefaultVehicles(routes, torch.zeros_like(x), c.speed[:, d].clone(), length,
-                                    width, limit)
+                                    width, limit, cx=cx)
         # an Init SpeedAction is the target too (a step to it, held); without one SSv2 drives
         # at the route's speed limit
         fresh.set_target_speed(c.speed[:, d], c.speed_set[:, d])
@@ -276,7 +279,7 @@ class BatchRun:
         entity's pose [N, E] (x, y, yaw, v) and each slot's outcome."""
         before = self.seen_before
         self.seen_before = self.seen
-        self.obs = self._observe(self.backend.state(), dt)
+        self.obs = self._observe(self.backend.state(), dt, npc_ego=before)
         self.seen = self._ego_view(self.obs)
         view = self._as_ssv2_sees(self.obs, before)
         self._post_update()
@@ -308,8 +311,14 @@ class BatchRun:
         view["ego"] = seen["ego"]
         return view
 
-    def _observe(self, st, dt):
-        """Every entity's pose; with `dt`, SSv2's default vehicles moved by it first."""
+    def _observe(self, st, dt, npc_ego=None):
+        """Every entity's pose; with `dt`, SSv2's default vehicles moved by it first.
+        `npc_ego` (an _ego_view): the ego as those vehicles see it, else as it is now. SSv2's
+        update in tick k reads the ego that tick read back, w(k-1), and the poses it makes
+        reach the world at frame k+1 (sent with tick k+1's status): the vehicle at frame f
+        reacted to the ego at f-2, so after_physics hands them the ego of two steps before
+        (092 K2.4: k24_npc_stops_for_ego's follower 0.072 m max off, against 0.199 m on the
+        current ego and 0.159 m on the step before). The observation's ego stays current."""
         c = self.c
         x, y, yaw = c.x.clone(), c.y.clone(), c.yaw.clone()
         v = torch.zeros_like(x)
@@ -319,9 +328,14 @@ class BatchRun:
             others_idx = [self.ego] + self.props
             ego_len = torch.tensor([c.entities[i].length for i in others_idx], dtype=torch.float64)
             ego_wid = torch.tensor([c.entities[i].width for i in others_idx], dtype=torch.float64)
-            others = {"x": x[:, others_idx], "y": y[:, others_idx], "yaw": yaw[:, others_idx],
-                      "v": v[:, others_idx], "length": ego_len.expand(c.n, -1),
-                      "width": ego_wid.expand(c.n, -1)}
+            others = {"x": x[:, others_idx].clone(), "y": y[:, others_idx].clone(),
+                      "yaw": yaw[:, others_idx].clone(), "v": v[:, others_idx].clone(),
+                      "length": ego_len.expand(c.n, -1), "width": ego_wid.expand(c.n, -1),
+                      "cx": torch.tensor([c.entities[i].cx for i in others_idx],
+                                         dtype=torch.float64).expand(c.n, -1)}
+            if npc_ego is not None:         # column 0 is the ego
+                for k in ("x", "y", "yaw", "v"):
+                    others[k][:, 0] = npc_ego[k]
             nx, ny, nyaw = (self.vehicles.step(dt, others) if dt is not None
                             else self.vehicles.poses())
             d = self.defaults

@@ -138,7 +138,10 @@ So in tick t the storyboard sees the ego at w(t-2), a frame behind the latest wo
 truth, the ego's `ssv2` pose at frame f is its `sim_pose` at f - 1, exactly. A condition on
 the ego (ReachPosition, Speed, ...) fires a frame after the world got there. The storyboard
 sees the NPCs at their canonical poses, the ones the world reaches a frame later, and SSv2's
-default vehicles see the ego just read back, w(t-1). This is SSv2's order, not the bridge's: no
+default vehicles see the ego just read back, w(t-1); the poses they make go out with tick
+t+1's status and are in the world at w(t+1), so per world frame a default vehicle at frame f
+reacted to the ego at f - 2 (k24_npc_stops_for_ego, 2026-11-22, before the batch took box centres: its follower agreed
+to 0.072 m with that view, against 0.159 m a frame later and 0.199 m on the current ego). This is SSv2's order, not the bridge's: no
 reply of the world's reaches the tick's evaluate, and a predicted ego would be invented state.
 The fork does not change it (it stays close to upstream; AWSIM's pattern is the same). A storyboard log line's `sim` is the time after the step, a step after the evaluation
 that made the change, except an exit's: `exitSuccess` and `exitFailure` throw in the evaluate,
@@ -148,7 +151,8 @@ after 600 ticks of 0.05 s it is 30.0000000000003 and `SimulationTime > 30` is al
 tick 600. SSv2's first evaluation is a tick after `startNpcLogic` (that tick has no time yet
 and starts the controllers), at scenario time dt. The batch executor reproduces all of it
 (`batch-executor.md` section 8): its step k evaluates after the step's physics, on the world of
-frame S + k, so its storyboard reads the ego of two steps before and the NPCs of this one.
+frame S + k, so its storyboard and SSv2's default vehicles read the ego of two steps before, the
+storyboard the NPCs of this one.
 
 ## Lockstep and paced (roadmap 092 K4)
 
