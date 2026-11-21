@@ -72,12 +72,16 @@ class BatchRun:
         self.job = torch.zeros(compiled.n, nd, dtype=torch.int8)    # SSv2's LINEAR_ACCELERATION
         self.job_target = torch.zeros(compiled.n, nd, dtype=torch.float64)
         self.obs = None
-        # the ego as SSv2 sees it: its status from the step before (SSv2 reads the ego back
-        # before the simulator steps it, so its pose at frame f is the world's at f - 1: the
-        # truth's ssv2 against sim_pose, 092 K2.4); what the storyboard reads. SSv2's default
-        # vehicles read the ego after that readback (API::updateFrame: the status exchange,
-        # then entity_manager's update), so they see it current (243)
+        # the ego as SSv2's storyboard sees it (092 K2.4, API::updateFrame's order). Seats
+        # tick k evaluates the storyboard at k * dt before anything else, on the ego the
+        # previous tick read back; a tick reads the ego back before the world steps, so that
+        # status is the world two frames before the one tick k's UpdateFrame makes (the
+        # truth's ssv2 at frame f is its sim_pose at f - 1, read at f + 1's evaluation). This
+        # step's world is that frame, so the storyboard reads the ego of two steps before
+        # (`seen_before`); `seen` is the step before, kept to move into it. The NPCs it reads
+        # are this step's (SSv2's canonical status, which the world shows this frame).
         self.seen = None
+        self.seen_before = None
         self.route = sbmod.RouteGoal(self)
         # SSv2's scenario time is A(S + k) - A(S): A the frames' step summed in a double from
         # the node's start, S the frames before startNpcLogic (SimulationClock; the fork's
@@ -138,8 +142,12 @@ class BatchRun:
         if prev is not None:      # the other slots keep this step's observation (and events)
             self.obs = _merge(prev, self.obs, mask)
             self.ctx.obs = self.obs
+        # a reset slot's history is its reset pose, twice (seats: the ego held still before
+        # startNpcLogic, by the pilot's hold or a pre-roll ending on it)
         seen = self._ego_view(self.obs)
-        self.seen = seen if self.seen is None or prev is None else _merge(self.seen, seen, mask)
+        fresh = self.seen is None or prev is None
+        self.seen = seen if fresh else _merge(self.seen, seen, mask)
+        self.seen_before = seen if fresh else _merge(self.seen_before, seen, mask)
         return self.obs
 
     def _tick(self, mask=None, evaluate=True):
@@ -266,10 +274,11 @@ class BatchRun:
         """After one physics step: the ego read back, SSv2's default vehicles moved, the
         storyboard evaluated at the new time. Returns the observation: the ego's state, every
         entity's pose [N, E] (x, y, yaw, v) and each slot's outcome."""
-        seen = self.seen
+        before = self.seen_before
+        self.seen_before = self.seen
         self.obs = self._observe(self.backend.state(), dt)
         self.seen = self._ego_view(self.obs)
-        view = self._as_ssv2_sees(self.obs, seen)
+        view = self._as_ssv2_sees(self.obs, before)
         self._post_update()
         live = (self.storyboard.outcome == 0 if self.storyboard is not None
                 else torch.ones(self.c.n, dtype=torch.bool))
@@ -287,7 +296,7 @@ class BatchRun:
                 "ego": {k: v.clone() for k, v in obs["ego"].items()}}
 
     def _as_ssv2_sees(self, obs, seen):
-        """`obs` with the ego's columns and state from the step before (`seen`)."""
+        """`obs` with the ego's columns and state from `seen` (two steps before)."""
         if seen is None:
             return obs
         e = self.ego
