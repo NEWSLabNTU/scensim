@@ -63,6 +63,7 @@ executor refuses.
 | Wind | a wind force model per slot |
 | an ObjectController with `model = scensim.behaviour:<name>` | the model has a batched form |
 | a vehicle or pedestrian with no controller (SSv2's default) | a batched model of SSv2's default behaviour: its behaviour tree follows the lane at the target speed its SpeedActions set, and stops for an entity ahead |
+| a parameter in an entity's class or model (`vehicleCategory`, `pedestrianCategory`, `miscObjectCategory`, `name`, `model`, `model3d`, a CatalogReference's `catalogName` or `entryName`; 093 D7 gap 6) | the batch has the entity's class and model for each value in every slot; the verdict names the parameter and its values, read from the distribution when the input is one (a DistributionSet, a ProbabilityDistributionSet, a joint model's categorical values), else the declared default. On seats it is the simulator's model for the value, chosen per run |
 | any other `world.<knob>` | the world supports the knob per slot |
 
 **unimplemented** (SSv2's support table says so; refused by name)
@@ -136,6 +137,7 @@ values:
 | CS3, a stale map | compiles with the ego as the batch's policy, the map variant an observation input. Refused with `--ego seats` |
 | CS4, a lidar drops out during a cut-in | compiles, with the fault as a mask, if SSv2's default behaviour has a batched model (the cutter) |
 | CS5, fog mid-route | compiles if the slot has a camera and a renderer with fog per slot (and TimeOfDay). The fog's ramp over `fog_ramp` is a profile (gap below) |
+| CS6, a cut-out reveals a stopped car (093 D7) | compiles if the slot has a camera (the bound `illumination`), SSv2's default behaviour has a batched model (the lead and the stopped car), and the batch has an asset for each `$stopped_kind` (car, truck, motorbike, from its joint model) |
 
 ## 6. Measured on SSv2's examples
 

@@ -87,13 +87,13 @@ The rules' state on main:
 | 3 | `scensim.present` on an optional entity | not implemented | not needed by CS6 or CS7 |
 | 4 | `scensim.static` on a stopped vehicle | not implemented | CS6 holds the stopped car at 0 by its Init SpeedAction under the default controller, so the checker conditions it on the batched traffic model |
 | 5 | `isBlind` in the subset, with lane following alone as the condition | not implemented: the checker gives the whole default traffic behaviour as the condition | CS6's lead is blind; its condition is the wider one |
-| 6 | a parameter in an entity's category or model conditional on per-slot assets | not implemented: the checker passes `vehicleCategory="$stopped_kind"` without a condition | CS6's stopped car; the batch condition goes unstated |
+| 6 | a parameter in an entity's category or model conditional on per-slot assets | implemented after the re-check (092 K8, swb 243): the checker names the parameter and its values as a condition | CS6's stopped car: `$stopped_kind` (car, truck, motorbike) is now a condition |
 | 7 | anchor attributes in derived values (`anchor.<name>.<attribute>`) | not implemented: no anchors on main (D2) | CS7 declares `exit_heading`, a constant, as the exit lane's heading |
 | 8 | SSv2's unimplemented constructs refused by name | implemented (092 S2) | CS7 swerves by a lane change |
 | 9 | small points | fixed or covered by the rules above | |
 
-So the exit holds as a design statement and not yet in the tools. Gap 6 is the one that matters
-before a batch run: the checker says nothing where a condition is due.
+So the exit holds as a design statement and not yet in the tools. Gap 6 mattered most before a
+batch run, since the checker said nothing where a condition was due; it was implemented first.
 
 ## Exit
 
