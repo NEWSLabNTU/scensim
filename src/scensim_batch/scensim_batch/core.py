@@ -55,6 +55,7 @@ class _OnDevice:
 
 
 SYNC_EVERY = 16     # a device run's steps per host check (BatchRun's sync_every)
+CPU_SYNC_EVERY = 1  # a CPU run's: every step checked, the reference
 
 
 def request_motion(kind, commands):
@@ -90,7 +91,7 @@ def request_motion(kind, commands):
 class BatchRun:
     def __init__(self, compiled, world, backend, component, route_length=300.0,
                  points=121, speed_limit=None, allow_loop=False, start_frames=0,
-                 step_time=None, device=None, sync_every=SYNC_EVERY):
+                 step_time=None, device=None, sync_every=None):
         """`allow_loop`: accept a LoopBatch component (one Python step per slot), for checking
         a component before it has a batched form; never for a throughput number, and the run
         says so (`self.looped`)."""
@@ -103,7 +104,11 @@ class BatchRun:
         # a device run checks every `sync_every` steps (092 K2.2c): between, no host sync -- the
         # storyboard's and the vehicles' branches run as masked work, the actuation's check
         # and an element's overflow are kept as device flags, raised at the next check
-        self.sync_every = 1 if self.device is None else max(1, int(sync_every))
+        # (None: SYNC_EVERY on a device, CPU_SYNC_EVERY on the CPU; a value given runs lazy
+        # on the CPU too, which is how the tests check the lazy ticks against the eager ones)
+        if sync_every is None:
+            sync_every = SYNC_EVERY if self.device is not None else CPU_SYNC_EVERY
+        self.sync_every = max(1, int(sync_every))
         self._ticks = 0
         self._act_bad = None
         with self.on_device:
@@ -411,9 +416,13 @@ class BatchRun:
             if bool(bad):
                 raise self._ecu.BatchError(
                     "ego component: actuation not finite, or a brake negative, in a step since "
-                    f"step {self._ticks - self.sync_every + 1} (sync_every=1 names the slot)")
+                    f"step {self._ticks - self.sync_every + 1} (rerun from the same seed with sync_every=1 "
+                    "to name the slot)")
         if self.storyboard is not None:
             self.storyboard.check()
+        veh = self.vehicles
+        if veh is not None and veh.lc_started and not bool(veh.lc.any()):
+            veh.lc_started = False     # no lane change left: its steps skipped again
 
     def _ego_view(self, obs):
         """The ego's columns of an observation (x, y, yaw, v [N]) and its state dict."""
