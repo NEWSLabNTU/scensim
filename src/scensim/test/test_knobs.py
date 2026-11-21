@@ -301,3 +301,18 @@ def test_an_unverified_surface_is_its_own_cell_in_the_coverage(tmp_path):
             "value": "wet", "ok": True, "surface_map": {"sent": "wet", "read": "unverified"}}}}}))
     [(r, o)] = coverage.outcomes_from_runs([tmp_path])
     assert r["cell"] == {"surface": "wet (unverified)"}
+
+
+def test_world_anchors_are_checked():
+    from scensim import world as W
+    assert W.anchor_problems({"exit_n": {"kind": "lane", "heading": 1.57, "length": 40},
+                              "conflict": {"kind": "point", "x": 1.0, "y": -2.0}}) == []
+    bad = W.anchor_problems({"a": {"kind": "ramp", "heading": 1.0},
+                             "b": {"kind": "lane", "x": 1.0},
+                             "c": {"kind": "lane", "heading": "north"},
+                             "d": {"kind": "point"}, "e-f": {"kind": "lane", "heading": 0}})
+    text = " ".join(m for _, m in bad)
+    for want in ("kind: one of lane, point", "x: a lane anchor has heading, length, speed_limit",
+                 "a number, not 'north'", "no attributes", "an anchor's name is an identifier"):
+        assert want in text, want
+    assert W.anchor_problems([1]) and W.anchor_problems("x")

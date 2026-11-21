@@ -110,6 +110,18 @@
         ]
       }
     },
+    "anchors": {
+      "description": "the world's anchor attributes the derived values read (scenario-description.md 2a, gap 7), as the world declared them: {anchor: {attribute: value}}",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": {
+          "type": "number"
+        }
+      }
+    },
     "seeds": {
       "type": "object",
       "required": [

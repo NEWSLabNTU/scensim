@@ -1,6 +1,7 @@
 """A restricted expression: arithmetic, comparisons, `and`/`or`/`not`, `a if c else b`, `in`
 over a literal list, a few math functions, and names bound to the values drawn so far (and the
-world's knobs). Parsed with `ast` and walked; nothing is passed to `eval`.
+world's knobs), and the world's anchor attributes as `anchor.<name>.<attribute>` (093 gap 7),
+read under that dotted name. Parsed with `ast` and walked; nothing is passed to `eval`.
 
     Expr("ego_speed * ttc_entry")({"ego_speed": 8.0, "ttc_entry": 2.0})   # 16.0
     Expr("'night' if hour < 6 else 'day'")({"hour": 3})                   # 'night'
@@ -16,6 +17,15 @@ FUNCTIONS = {
     "int": int, "float": float, "str": str,
 }
 CONSTANTS = {"pi": math.pi, "g": 9.80665, "true": True, "false": False}
+ANCHOR = "anchor"   # anchor.<name>.<attribute>: a world anchor's read-only attribute
+
+
+def anchor_name(n):
+    """`anchor.<name>.<attribute>` for an ast.Attribute of exactly that shape, else None."""
+    if (isinstance(n, ast.Attribute) and isinstance(n.value, ast.Attribute)
+            and isinstance(n.value.value, ast.Name) and n.value.value.id == ANCHOR):
+        return f"{ANCHOR}.{n.value.attr}.{n.attr}"
+    return None
 
 BINARY = {
     ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: lambda a, b: _mul(a, b),
@@ -71,8 +81,13 @@ class Expr:
             if not isinstance(n.value, (int, float, str, bool)):
                 raise ExprError(f"{self.where}: {self.text!r}: constant {n.value!r} not allowed")
         elif isinstance(n, ast.Name):
+            if n.id == ANCHOR:
+                raise ExprError(f"{self.where}: {self.text!r}: {ANCHOR} alone; an anchor's "
+                                f"attribute is {ANCHOR}.<name>.<attribute>")
             if n.id not in CONSTANTS:
                 self.names.add(n.id)
+        elif anchor_name(n) is not None:
+            self.names.add(anchor_name(n))
         elif isinstance(n, ast.BinOp) and type(n.op) in BINARY:
             self._check(n.left), self._check(n.right)
         elif isinstance(n, ast.UnaryOp) and type(n.op) in UNARY:
@@ -95,8 +110,8 @@ class Expr:
                 self._check(a)
         else:
             raise ExprError(f"{self.where}: {self.text!r}: {type(n).__name__} is not allowed "
-                            f"(arithmetic, comparisons, and/or/not, if-else, in, and "
-                            f"{', '.join(sorted(FUNCTIONS))})")
+                            f"(arithmetic, comparisons, and/or/not, if-else, in, "
+                            f"{ANCHOR}.<name>.<attribute>, and {', '.join(sorted(FUNCTIONS))})")
 
     def __call__(self, env):
         try:
@@ -116,6 +131,12 @@ class Expr:
                 return CONSTANTS[n.id]
             raise ExprError(f"{self.where}: {self.text!r}: {n.id} is not known here "
                             f"(known: {', '.join(sorted(env)) or 'nothing'})")
+        dotted = anchor_name(n)
+        if dotted is not None:
+            if dotted in env:
+                return env[dotted]
+            raise ExprError(f"{self.where}: {self.text!r}: {dotted}: the world declares no such "
+                            f"anchor attribute (testbench.yaml world.anchors)")
         if isinstance(n, ast.BinOp):
             return BINARY[type(n.op)](self._eval(n.left, env), self._eval(n.right, env))
         if isinstance(n, ast.UnaryOp):

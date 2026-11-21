@@ -35,7 +35,7 @@ from pathlib import Path
 from scensim import config, own_world
 
 WORLD_KEYS = ("weather", "npc_motion", "contact_report_dir", "config_file", "world_config_file",
-              own_world.KEY, "knobs")
+              own_world.KEY, "knobs", "anchors")
 ISAAC_KEYS = ("ego", "render", "follow", "physics_hz", "preload", "wheels_topic", "wheel_query")
 WHEEL_QUERIES = ("raycast", "sweep")
 NPC_MOTIONS = ("tracked", "kinematic")
@@ -66,6 +66,37 @@ SIM_OWNED = {
               "world": "maps: in testbench.yaml and map:= (preload: in isaac:)"},
 }
 
+
+
+# a world anchor's kinds and the attributes a derived expression may read from each (093 gap 7;
+# the rest of anchors, their derivation from the map and their binding, is 092 K9)
+ANCHOR_KINDS = {"lane": ("heading", "length", "speed_limit"), "point": ("x", "y")}
+
+
+def anchor_problems(anchors, where="world.anchors"):
+    """`world.anchors`, checked: {name: {kind: lane|point, <attribute>: number, ...}}."""
+    if not isinstance(anchors, dict):
+        return [(where, "is {anchor: {kind: lane|point, <attribute>: number}}")]
+    out = []
+    for name, d in anchors.items():
+        at = f"{where}.{name}"
+        if not isinstance(name, str) or not name.isidentifier():
+            out.append((where, f"{name!r}: an anchor's name is an identifier"))
+            continue
+        if not isinstance(d, dict) or d.get("kind") not in ANCHOR_KINDS:
+            out.append((at, f"kind: one of {', '.join(ANCHOR_KINDS)}"))
+            continue
+        allowed = ANCHOR_KINDS[d["kind"]]
+        for a, v in d.items():
+            if a == "kind":
+                continue
+            if a not in allowed:
+                out.append((at, f"{a}: a {d['kind']} anchor has {', '.join(allowed)}"))
+            elif isinstance(v, bool) or not isinstance(v, (int, float)):
+                out.append((f"{at}.{a}", f"a number, not {v!r}"))
+        if len(d) == 1:
+            out.append((at, f"no attributes (a {d['kind']} anchor has {', '.join(allowed)})"))
+    return out
 
 def _number(v) -> bool:
     return not isinstance(v, bool) and isinstance(v, (int, float))
@@ -115,6 +146,8 @@ def problems(settings: dict, simulator: str, project: Path = None) -> list:
         elif k == "knobs":
             from scensim import knobs as knobsmod   # noqa: PLC0415
             out += knobsmod.problems(v, "world.knobs")
+        elif k == "anchors":
+            out += anchor_problems(v)
         elif k == "npc_motion" and v not in NPC_MOTIONS:
             out.append(("world.npc_motion", f"{v!r} is not one of {', '.join(NPC_MOTIONS)}"))
         elif k == "contact_report_dir":

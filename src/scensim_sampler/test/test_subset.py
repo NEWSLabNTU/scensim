@@ -151,7 +151,26 @@ class Static(unittest.TestCase):
             self.assertIn("behaviour model scensim.behaviour:lead: a batched form of the model",
                           v.conditions)
 
-    def test_a_static_entity_needs_maxspeed_0(self):
+    def test_cs6s_blind_lead_needs_lane_following_alone(self):
+        """093 gap 5: SSv2's isBlind turns see_around off, so FollowLane reads no other entity;
+        the condition is lane following alone, executor pending until scensim_batch passes it
+        to its vehicles."""
+        with tempfile.TemporaryDirectory() as d:
+            v = subset.check(self.cs6(d))
+            self.assertTrue(v.compiles)
+            self.assertIn("SSv2's default controller, blind: " + subset.BLIND_REASON, v.conditions)
+            self.assertIn("isBlind: " + subset.EXECUTOR_PENDING_REASON, v.conditions)
+            # the lead is CS6's only default-controlled entity: no whole-traffic condition
+            self.assertNotIn("SSv2's default controller: " + subset.DEFAULT_REASON, v.conditions)
+        for value in ("false", "0"):
+            with tempfile.TemporaryDirectory() as d:
+                v = subset.check(self.cs6(d, lambda s: s.replace(
+                    '<Property name="isBlind" value="true"/>',
+                    f'<Property name="isBlind" value="{value}"/>')))
+                self.assertIn("SSv2's default controller: " + subset.DEFAULT_REASON, v.conditions)
+                self.assertFalse([c for c in v.conditions if "blind" in c])
+
+
         with tempfile.TemporaryDirectory() as d:
             dist = self.cs6(d, lambda s: s.replace('<Property name="maxSpeed" value="0"/>', ""))
             with self.assertRaisesRegex(subset.SubsetError, "stopped is scensim.static but its "

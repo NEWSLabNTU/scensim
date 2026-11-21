@@ -26,9 +26,9 @@ FAMILIES = {
 CATEGORY = re.compile(r"^(R[1-8])\.[a-z0-9_]+\.[a-z0-9_]+$")
 HEX = re.compile(r"^[0-9a-f]{64}$")
 KEYS = ("record", "id", "scenario", "distribution", "category", "cell", "values", "derived",
-        "latent", "seeds", "base", "proposal", "weight", "log_weight", "search", "world", "car",
-        "sampler")
-REQUIRED = tuple(k for k in KEYS if k not in ("world", "car", "latent"))
+        "latent", "anchors", "seeds", "base", "proposal", "weight", "log_weight", "search",
+        "world", "car", "sampler")
+REQUIRED = tuple(k for k in KEYS if k not in ("world", "car", "latent", "anchors"))
 UINT32 = 2 ** 32
 SCHEMA = Path(__file__).parent / "schema" / "sample-record-1.json"
 
@@ -151,6 +151,15 @@ def check(rec, scenario=None, bound=False):
             out.append("latent: {name: value}, each a string, number or boolean")
         elif isinstance(rec.get("values"), dict) and set(lat) & set(rec["values"]):
             out.append(f"latent: {sorted(set(lat) & set(rec['values']))} also in values")
+    if "anchors" in rec:
+        an = rec["anchors"]
+        if not isinstance(an, dict) or not an or not all(
+                isinstance(k, str) and isinstance(a, dict) and a and all(
+                    isinstance(x, str) and isinstance(v, (int, float))
+                    and not isinstance(v, bool) for x, v in a.items())
+                for k, a in an.items()):
+            out.append("anchors: {name: {attribute: number}}, the world's anchor attributes "
+                       "the derived values read")
     if "derived" in rec:
         d = rec["derived"]
         if not isinstance(d, list) or not all(isinstance(x, str) for x in d):

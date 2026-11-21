@@ -1,0 +1,4 @@
+# CS7's world anchors, as a testbench.yaml's world.anchors declares them (scenario-description.md
+# 2a, gap 7): the exit lane's heading, rad in the world frame. INVENTED FOR ILLUSTRATION: the
+# world CS7 would run on states its own. Read with scensim-sample draw --anchors.
+exit_n: {kind: lane, heading: 1.5708}

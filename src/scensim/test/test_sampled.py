@@ -305,3 +305,26 @@ def test_the_result_validator_takes_sample_and_replay():
                                      "digits)"]
     # a run without a sample has neither key
     assert "sample" not in results.RunResult("x", "passed").to_dict()
+
+
+def test_a_suites_sample_reads_the_projects_world_anchors(tmp_path):
+    """093 gap 7: testbench.yaml's world.anchors reach the sampler; CS7's cell reads its exit
+    lane's heading from them, and the record keeps the values read."""
+    import shutil
+    cases = Path(scensim_sampler.__file__).resolve().parents[1] / "examples" / "cases"
+    for f in ("cs7_cyclist_low_sun.xosc", "cs7_cyclist_low_sun_dist.xosc"):
+        shutil.copy(cases / f, tmp_path)
+    shutil.copytree(cases / "models", tmp_path / "models")
+    (tmp_path / "testbench.yaml").write_text(
+        "simulator: carla\nworld:\n  anchors:\n    exit_n: {kind: lane, heading: 0.5}\n")
+    anchors = run._world_anchors(tmp_path)
+    assert anchors == {"exit_n": {"kind": "lane", "heading": 0.5}}
+    drawn = sampled.draw([{"distribution": "cs7_cyclist_low_sun_dist.xosc", "n": 3, "seed": 2}],
+                         lambda x: tmp_path / x, "suite", anchors=anchors)
+    assert len(drawn) == 3
+    for rec, _ in drawn:
+        assert rec["anchors"] == {"exit_n": {"heading": 0.5}}
+    with pytest.raises(sampled.SampleRefused, match="anchor.exit_n.heading"):
+        sampled.draw([{"distribution": "cs7_cyclist_low_sun_dist.xosc", "n": 1, "seed": 2}],
+                     lambda x: tmp_path / x, "suite")
+    assert run._world_anchors(tmp_path / "nowhere") is None

@@ -285,6 +285,19 @@ world:
                wet_look: {weather: {wetness: 80}, physics: none}}
 ```
 
+`world.anchors` states the world's anchors that a scenario's derived values read, as
+`anchor.<name>.<attribute>` (scenario-description.md section 2a, gap 7): a lane's `heading`
+(rad, world frame), `length` and `speed_limit`, a point's `x` and `y`, numbers the project gives
+for the world it runs on. `testbench check` refuses another kind or attribute, and the sampler
+refuses a distribution whose derived values read an anchor attribute the testbench does not
+declare. A sample record keeps the values it read (`anchors`).
+
+```yaml
+world:
+  anchors:
+    exit_n: {kind: lane, heading: 1.5708}   # CS7: the exit lane its glare is measured against
+```
+
 `isaac.preload` names maps the world server loads at start beside the stack's first
 (`world:=<first>,<preload...>`); they join the stack's maps, and a run on one moves the
 pilots there as a CARLA switch does, where a map not loaded is refused.

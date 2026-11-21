@@ -39,6 +39,7 @@ executor refuses.
 | RoadCondition; the world knob `world.surface` | friction as a per-slot material |
 | the world knob `world.zone_layout`; a MiscObject | a prop set, instanced per slot |
 | an entity whose controller has `scensim.static = true` and SSv2's `maxSpeed = 0` (093 D7 gap 4) | a prop per slot with the entity's class and box, no behaviour model (executor pending). Without `maxSpeed = 0`, and for any motion action on it (SpeedAction, SpeedProfileAction, LaneChangeAction, LaneOffsetAction, FollowTrajectoryAction, AssignRouteAction, AcquirePositionAction, Lateral- or LongitudinalDistanceAction), the checker refuses the scenario by name |
+| a default-controlled entity with SSv2's `isBlind = true` (093 D7 gap 5) | SSv2's lane following alone, nothing that reads other entities (npc's `see_around` off), instead of the whole default traffic behaviour (executor pending: scensim_batch does not pass it to its vehicles yet) |
 | Distance, RelativeDistance, RelativeClearance, ReachPosition, SimulationTime, TimeHeadway, Speed, RelativeSpeed, Acceleration, and StandStill conditions | vectorised per slot |
 | CollisionCondition | contact per slot |
 | UserDefinedValueCondition `RelativeHeadingCondition(<entity>)` or `(<entity>, <lane>, <s>)`, matched by the function-call form | SSv2 computes it from the entity's pose against its lane, nothing from outside: a heading per slot |

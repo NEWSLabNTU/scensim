@@ -260,7 +260,7 @@ def expand(target: Path, project: Path, repeat: int = None, params: dict = None,
         # roadmap 092 K3: one run per sample record, its values and seeds the record's
         try:
             drawn = sampledmod.draw(suite["sample"], lambda x: _resolve(x, project, base),
-                                    str(target))
+                                    str(target), anchors=_world_anchors(project))
         except sampledmod.SampleRefused as e:
             raise Refused(str(e)) from None
         for record, scenario in drawn:
@@ -269,6 +269,15 @@ def expand(target: Path, project: Path, repeat: int = None, params: dict = None,
                                      pilot_args=pilot_args, logging=logging,
                                      ssv2=ssv2mod.merge(suite.get("ssv2"))))
     return specs, suite
+
+
+def _world_anchors(project: Path):
+    """The project's world anchors (testbench.yaml world.anchors; 093 gap 7), or None."""
+    p = Path(project) / config.PROJECT_FILE
+    if not p.is_file():
+        return None
+    world = (config.read_yaml(p) or {}).get("world") or {}
+    return world.get("anchors") if isinstance(world, dict) else None
 
 
 def sample_spec(record, scenario: Path, replay_of=None, **kw) -> "RunSpec":
