@@ -55,7 +55,15 @@ An entity's state in a frame: `ssv2` (SSv2's pose), `sim_pose` (the simulator's 
 truth), `velocity [vx, vy, vz]`, `angular_velocity [wx, wy, wz]`, `velocity_source`
 (`measured` when the world server sent it, `derived` when the bridge differenced two poses,
 for a kinematic body on a server that does not measure it), and `flags` (`spawn`,
-`contact_hold`, `kinematic`).
+`contact_hold`, `kinematic`). An ego whose vehicle interface the world server runs (Isaac:
+aib's) also has `command`, the vehicle command it ran in the step that ended at this frame
+(roadmap 092 K2.4; absent elsewhere and before the first command): `stamp_ns` (the command's
+header stamp), `acceleration`, `velocity`, `tire_angle`, `gear`, and `arrived`, how many
+commands arrived by the step's start. The latest wins, as on a car's vehicle interface:
+`arrived` above 1 means the others were superseded unrun, 0 that an older one ran again. A
+frame's delivery delay is the frames between the step's start (the previous frame's
+`sim_time_ns`) and `stamp_ns`, for a sender that stamps a command with the clock it answers
+(scensim_agent's replay_pilot does). `scensim_batch.agreement.delivery` counts them.
 
 Schema 2 names the simulator's values neutrally. Schema 1 (CARLA only) named them `carla`
 (`sim_pose`), `carla_frame` (`sim_frame`), `actor_id` (`sim_id`), `blueprint` (`asset`) and

@@ -114,6 +114,22 @@ class Pose6:
 
 
 @dataclass(frozen=True)
+class TakenCommand:
+    """The vehicle command an ego ran in a frame (092 K2.4): the command's header stamp, its
+    values, and how many arrived by the frame's start (above 1: the others were superseded
+    unrun; 0: an older one ran again)."""
+    stamp_ns: int
+    acceleration: float
+    velocity: float
+    tire_angle: float
+    gear: int
+    arrived: int
+
+
+COMMAND_KEYS = ("stamp_ns", "acceleration", "velocity", "tire_angle", "gear", "arrived")
+
+
+@dataclass(frozen=True)
 class EntityState:
     ssv2: Pose6
     sim_pose: object  # Pose6, or None when the body was not in the simulator's snapshot
@@ -121,6 +137,7 @@ class EntityState:
     flags: tuple = ()
     angular_velocity: object = None  # schema 2: (wx, wy, wz) rad/s, or None with `sim_pose`
     velocity_source: object = None  # schema 2: one of VELOCITY_SOURCES, or None
+    command: object = None  # schema 2, optional: the ego's TakenCommand this frame, or None
 
     @property
     def spawn(self):
@@ -378,8 +395,20 @@ def _state(ln, name, s):
     for f in flags:
         if f not in FLAGS:
             raise ln.error(f"{path}.flags", f"unknown flag {f!r} (known: {', '.join(FLAGS)})")
+    command = None
+    if two and s.get("command") is not None:
+        c, cp = s["command"], f"{path}.command"
+        if not isinstance(c, dict) or set(c) != set(COMMAND_KEYS):
+            raise ln.error(cp, f"expected an object of {', '.join(COMMAND_KEYS)}, got {c!r}")
+        command = TakenCommand(
+            stamp_ns=ln.integer(c["stamp_ns"], f"{cp}.stamp_ns", minimum=0),
+            acceleration=ln.number_(c["acceleration"], f"{cp}.acceleration"),
+            velocity=ln.number_(c["velocity"], f"{cp}.velocity"),
+            tire_angle=ln.number_(c["tire_angle"], f"{cp}.tire_angle"),
+            gear=ln.integer(c["gear"], f"{cp}.gear"),
+            arrived=ln.integer(c["arrived"], f"{cp}.arrived", minimum=0))
     return EntityState(ssv2=ssv2, sim_pose=sim_pose, velocity=velocity, flags=tuple(flags),
-                       angular_velocity=angular, velocity_source=source)
+                       angular_velocity=angular, velocity_source=source, command=command)
 
 
 def _frame(ln, known):
@@ -609,6 +638,8 @@ def to_json(record, schema=SCHEMA):
                 e["angular_velocity"] = (None if s.angular_velocity is None
                                          else list(s.angular_velocity))
                 e["velocity_source"] = s.velocity_source
+                if s.command is not None:
+                    e["command"] = {k: getattr(s.command, k) for k in COMMAND_KEYS}
             if s.flags:
                 e["flags"] = list(s.flags)
             entities[name] = e
