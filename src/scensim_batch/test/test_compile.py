@@ -96,6 +96,68 @@ class Compile(unittest.TestCase):
             self.assertAlmostEqual(c.y[i, cone].item(), 1.0 + g, places=9)
         self.assertAlmostEqual(c.yaw[0, cone].item(), math.pi / 2, places=12)
 
+    CATALOG_XOSC = """<?xml version="1.0"?><OpenSCENARIO>
+  <CatalogLocations><VehicleCatalog><Directory path="DIR"/></VehicleCatalog></CatalogLocations>
+  <Entities>
+    <ScenarioObject name="ego"><CatalogReference catalogName="vehicles" entryName="ENTRY"/>
+      <ObjectController><Controller name="e"><Properties><Property name="isEgo" value="true"/>
+      </Properties></Controller></ObjectController></ScenarioObject>
+    <ScenarioObject name="npc"><CatalogReference catalogName="vehicles" entryName="ENTRY"/>
+    </ScenarioObject>
+  </Entities>
+  <Storyboard><Init><Actions>
+    <Private entityRef="ego"><PrivateAction><TeleportAction><Position>
+      <WorldPosition x="0" y="0" h="0"/></Position></TeleportAction></PrivateAction></Private>
+    <Private entityRef="npc"><PrivateAction><TeleportAction><Position>
+      <WorldPosition x="20" y="0" h="0"/></Position></TeleportAction></PrivateAction></Private>
+  </Actions></Init><StopTrigger/></Storyboard></OpenSCENARIO>"""
+    CATALOG = """<?xml version="1.0"?><OpenSCENARIO><Catalog name="vehicles">
+  <Vehicle name="car" vehicleCategory="car"><BoundingBox><Center x="1.4" y="0" z="0.7"/>
+    <Dimensions length="4.8" width="2.1" height="1.5"/></BoundingBox></Vehicle>
+  <Vehicle name="param" vehicleCategory="car"><BoundingBox><Center x="1.4" y="0" z="0.7"/>
+    <Dimensions length="$len" width="2.1" height="1.5"/></BoundingBox></Vehicle>
+</Catalog></OpenSCENARIO>"""
+
+    def _catalog_case(self, d, directory, entry="car"):
+        (d / "cat").mkdir(exist_ok=True)
+        (d / "cat" / "vehicles.xosc").write_text(self.CATALOG)
+        p = d / "s.xosc"
+        p.write_text(self.CATALOG_XOSC.replace("DIR", directory).replace("ENTRY", entry))
+        return p
+
+    def test_catalog_entities_from_the_scenarios_locations(self):
+        import os
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            c = self.C.compile_scenario(self._catalog_case(d, "cat"), [rec()], StraightWorld())
+            npc = c.entities[c.index("npc")]
+            self.assertEqual((npc.role, npc.length, npc.width, npc.cx), ("default", 4.8, 2.1, 1.4))
+            self.assertEqual(c.entities[c.index("ego")].role, "ego")
+            p = self._catalog_case(d, "$(env TEST_SCENSIM_VEHICLES)")
+            with mock.patch.dict(os.environ, {"TEST_SCENSIM_VEHICLES": str(d / "cat")}):
+                c = self.C.compile_scenario(p, [rec()], StraightWorld())
+            self.assertEqual(c.entities[c.index("npc")].length, 4.8)
+            with mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("TEST_SCENSIM_VEHICLES", None)
+                with self.assertRaisesRegex(self.C.CompileError,
+                                            "TEST_SCENSIM_VEHICLES not in the environment"):
+                    self.C.compile_scenario(p, [rec()], StraightWorld())
+                # given by name, the catalog needs no environment
+                c = self.C.compile_scenario(p, [rec()], StraightWorld(),
+                                            catalogs={"vehicles": d / "cat" / "vehicles.xosc"})
+            self.assertEqual(c.entities[c.index("npc")].width, 2.1)
+
+    def test_catalog_entry_missing_or_parameterised_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            with self.assertRaisesRegex(self.C.CompileError, "has no 'nope'"):
+                self.C.compile_scenario(self._catalog_case(d, "cat", "nope"), [rec()],
+                                        StraightWorld())
+            with self.assertRaisesRegex(self.C.CompileError, "Dimensions@length is a parameter"):
+                self.C.compile_scenario(self._catalog_case(d, "cat", "param"), [rec()],
+                                        StraightWorld())
+
     def test_no_records_is_refused(self):
         with self.assertRaisesRegex(self.C.CompileError, "no records"):
             self.C.compile_scenario(CASES / "cs4_lidar_dropout_cutin.xosc", [], StraightWorld())
