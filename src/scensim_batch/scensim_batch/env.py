@@ -48,6 +48,8 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     # startNpcLogic (092 K2.4). For agreement runs only: a partial reset (a training env's
     # per-slot time-out or termination) cannot pre-roll, and is refused while this is set
     ego_preroll: list = None
+    # samples of SSv2's spline per default vehicle's 300 m route (BatchRun's `points`)
+    route_points: int = 121           # 2.5 m apart: K2.4's lead within 3 cm (61: 9 cm, 301: no better)
     decimation: int = 4
     episode_length_s: float = 30.0
     # backend A's PhysX vehicles need PhysX's CPU pipeline: the direct-GPU one refuses their
@@ -96,6 +98,7 @@ class ScensimEnv(DirectRLEnv):
                                            omni.physx.get_physx_interface(), cfg.rig, n,
                                            origins=self.scene.env_origins.cpu().numpy())
         self.run = core.BatchRun(self.compiled, world, self.backend, component,
+                                 points=cfg.route_points,
                                  allow_loop=cfg.allow_loop, start_frames=cfg.start_frames,
                                  step_time=self.step_dt if cfg.start_frames else None)
         self.commands = None
