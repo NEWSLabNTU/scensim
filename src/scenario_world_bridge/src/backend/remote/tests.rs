@@ -195,12 +195,20 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
                     episode_id: 1,
                     states: bodies
                         .iter()
-                        .map(|(h, (p, _))| wire::EntityState {
+                        .map(|(h, (p, ego))| wire::EntityState {
                             handle: *h,
                             pose: Some(*p),
                             twist: velocity.get(h).map(|v| wire::Twist {
                                 linear: v3(*v),
                                 angular: v3([0.0; 3]),
+                            }),
+                            // the ego's vehicle interface ran the frame's command (092 K2.4)
+                            command: ego.then(|| wire::TakenCommand {
+                                stamp_ns: 1_000_000_000_000 + frame as i64,
+                                acceleration: 1.0,
+                                velocity: 3.0,
+                                arrived: 1,
+                                ..Default::default()
                             }),
                         })
                         .collect(),
@@ -1461,6 +1469,13 @@ fn the_truth_file_is_schema_2_from_the_servers_replies() {
             if !s["sim_pose"].is_null() {
                 assert!(["measured", "derived"].contains(&s["velocity_source"].as_str().unwrap()));
                 assert_eq!(s["angular_velocity"].as_array().unwrap().len(), 3);
+            }
+            // the command the world server says the ego ran; none for the NPC
+            if name == "ego" && !s["sim_pose"].is_null() {
+                assert_eq!(s["command"]["arrived"], 1, "{s}");
+                assert!(s["command"]["stamp_ns"].as_i64().unwrap() > 1_000_000_000_000);
+            } else {
+                assert!(s.get("command").is_none(), "{name}: {s}");
             }
         }
     }

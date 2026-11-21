@@ -174,8 +174,12 @@ class RosVehicle:
             status = dict(self.status)
         self.on_frame(world_frame(t, self.dt), t, status)
 
-    def publish(self, cmd):
-        stamp = self.node.get_clock().now().to_msg()
+    def publish(self, cmd, stamp_ns):
+        """The command, stamped at the clock of the frame it answers: the stamp the world's
+        truth reports back as the command the car ran (092 K2.4), so a frame's delay is the
+        frames between the two."""
+        from builtin_interfaces.msg import Time
+        stamp = Time(sec=stamp_ns // 1_000_000_000, nanosec=stamp_ns % 1_000_000_000)
         c = self.Control()
         c.stamp = c.control_time = stamp
         c.lateral.stamp = c.lateral.control_time = stamp
@@ -233,7 +237,7 @@ class ReplayPilotAgent(scensim_agent.Agent):
             if got is None:
                 return
             k, cmd = got
-            self.vehicle.publish(cmd)
+            self.vehicle.publish(cmd, round(t * 1e9))
             skipped = self.replay.skipped
             if skipped and not self._warned_skip:
                 self.log.warning(f"world frame {f}: {skipped} frame(s) before it never seen on "

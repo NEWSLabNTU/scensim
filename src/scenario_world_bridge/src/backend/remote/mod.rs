@@ -1697,7 +1697,10 @@ impl SimBackend for RemoteBackend {
         let origin = self.map_origin;
         // Per handle: the pose, and the world server's velocity (linear, angular) when it sent it.
         type Measured = Option<([f64; 3], [f64; 3])>;
-        let mut trace_states: BTreeMap<u32, (gap_trace::Pose6, Measured)> = BTreeMap::new();
+        // And the command an ego ran, where the server reports it (092 K2.4).
+        type Taken = Option<gap_trace::TakenCommand>;
+        let mut trace_states: BTreeMap<u32, (gap_trace::Pose6, Measured, Taken)> =
+            BTreeMap::new();
         for state in &step.states {
             let Some(pose) = state.pose.as_ref() else {
                 continue;
@@ -1708,7 +1711,15 @@ impl SimBackend for RemoteBackend {
                 let a = t.angular.unwrap_or_default();
                 Some(([l.x, l.y, l.z], [a.x, a.y, a.z]))
             });
-            trace_states.insert(state.handle, (now, velocity));
+            let taken = state.command.as_ref().map(|c| gap_trace::TakenCommand {
+                stamp_ns: c.stamp_ns,
+                acceleration: c.acceleration,
+                velocity: c.velocity,
+                tire_angle: c.tire_angle,
+                gear: c.gear,
+                arrived: c.arrived,
+            });
+            trace_states.insert(state.handle, (now, velocity, taken));
             let Some(name) = self.names.get(&state.handle) else {
                 continue;
             };
@@ -1739,7 +1750,7 @@ impl SimBackend for RemoteBackend {
                 .entities
                 .values()
                 .filter_map(|e| {
-                    let (pose, measured) = trace_states.get(&e.handle)?;
+                    let (pose, measured, command) = trace_states.get(&e.handle)?;
                     let (velocity, angular_velocity) =
                         measured.unwrap_or((e.motion.velocity, [0.0, 0.0, e.motion.yaw_rate]));
                     Some((
@@ -1749,6 +1760,7 @@ impl SimBackend for RemoteBackend {
                             velocity,
                             angular_velocity,
                             measured: measured.is_some(),
+                            command: *command,
                         },
                     ))
                 })

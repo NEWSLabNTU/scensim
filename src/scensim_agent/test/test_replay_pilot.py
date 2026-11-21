@@ -68,8 +68,9 @@ class FakeVehicle:
     def __init__(self):
         self.sent = []
 
-    def publish(self, cmd):
+    def publish(self, cmd, stamp_ns):
         self.sent.append(cmd)
+        self.stamps = getattr(self, "stamps", []) + [stamp_ns]
 
     def close(self):
         pass
@@ -89,6 +90,7 @@ def test_the_agent_publishes_and_logs_each_frame(tmp_path):
     a.on_speed_limit(13.9)
     a.close()
     assert v.sent == [{"accel": -3.0, "velocity": 0.0, "steer": 0.0}, CMDS[0], CMDS[1]]
+    assert v.stamps[-1] == 1000_250_000_000   # the frame's clock, not the node's
     rows = [json.loads(line) for line in log.read_text().splitlines()]
     assert rows[-1] == {"speed_limit": 13.9}
     rows = rows[:-1]
