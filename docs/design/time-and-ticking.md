@@ -123,6 +123,29 @@ SSv2 frame   step_time = realtime_factor / global_frame_rate   (0.05 s at 20 Hz)
 - **Control** from Autoware is applied by acb when it arrives and takes effect at the next
   tick, so a command waits at most one CARLA tick (50 ms).
 
+## What SSv2 sees in a frame (roadmap 092 K2.4)
+
+SSv2's tick t runs, in order (the interpreter's `evaluate_storyboard`, `API::updateFrame`):
+
+1. the storyboard's evaluate;
+2. the status exchange (`updateEntitiesStatusInSim`): every entity's canonical status out, the
+   ego read back from the world as it is now, w(t-1), the frame tick t-1 stepped to;
+3. `entity_manager`'s update: SSv2's default vehicles, their next poses;
+4. `UpdateFrame`: the world steps to w(t); the clock advances;
+5. the context (`/simulation/context`) is published, at the time after the step.
+
+So in tick t the storyboard sees the ego at w(t-2), a frame behind the latest world: in the
+truth, the ego's `ssv2` pose at frame f is its `sim_pose` at f - 1, exactly. A condition on
+the ego (ReachPosition, Speed, ...) fires a frame after the world got there. The storyboard
+sees the NPCs at their canonical poses, the ones the world reaches a frame later, and SSv2's
+default vehicles see the ego just read back, w(t-1). This is SSv2's order, not the bridge's: no
+reply of the world's reaches the tick's evaluate, and a predicted ego would be invented state.
+The fork does not change it (it stays close to upstream; AWSIM's pattern is the same). A
+storyboard log line's `sim` is the time after the step, a step after the evaluation that made
+the change. SSv2's first evaluation is a tick after `startNpcLogic` (that tick has no time yet
+and starts the controllers), at scenario time dt. The batch executor reproduces all of it
+(`batch-executor.md` section 8).
+
 ## Lockstep and paced (roadmap 092 K4)
 
 SSv2 already paces itself. Its interpreter steps the storyboard on a wall timer of
