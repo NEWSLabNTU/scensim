@@ -23,12 +23,57 @@ import torch
 from . import npc
 
 
+def _on_device(method):
+    """A BatchRun method run in its device's context (`_OnDevice`)."""
+    import functools
+
+    @functools.wraps(method)
+    def run(self, *a, **k):
+        with self.on_device:
+            return method(self, *a, **k)
+    return run
+
+
+class _OnDevice:
+    """Every tensor a BatchRun method makes, on the run's device (092 K2.2c): torch's device
+    context, so factories inside the run (zeros, full, tensor, arange) land there; nothing on a
+    CPU run (torch 1.8 has no such context, and needs none)."""
+
+    def __init__(self, device):
+        self.device = device
+
+    def __enter__(self):
+        if self.device is not None:
+            self.ctx = torch.device(self.device)
+            self.ctx.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        if self.device is not None:
+            return self.ctx.__exit__(*exc)
+        return False
+
+
 def request_motion(kind, commands):
     """`(velocity [N], gear [N])` of the requests, as aib's Vehicle.apply takes them for the
     sticky-tire release: Autoware's velocity and gear; Ackermann's speed (0 when stale) and its
     sign's gear; a VESC's 0 and drive (what moves it is the component's alone)."""
     from sim_vehicle_ecu.signals import GEAR_DRIVE, GEAR_REVERSE
     n = len(next(iter(commands.values())))
+    first = next(iter(commands.values()))
+    if torch.is_tensor(first):          # a device-resident run: the same, in torch
+        dev = first.device
+        z = torch.zeros(n, dtype=torch.float64, device=dev)
+        drive = torch.full((n,), GEAR_DRIVE, dtype=torch.int64, device=dev)
+        if kind == "autoware":
+            valid = commands.get("valid")
+            valid = torch.ones(n, dtype=torch.bool, device=dev) if valid is None else valid
+            return (torch.where(valid, commands["velocity"].to(torch.float64), z),
+                    torch.where(valid, commands["gear"].to(torch.int64), drive))
+        if kind == "ackermann":
+            v = torch.where(torch.isinf(commands["age"]), z, commands["speed"].to(torch.float64))
+            return v, torch.where(v < 0, torch.full_like(drive, GEAR_REVERSE), drive)
+        return z, drive
     if kind == "autoware":
         valid = commands.get("valid", np.ones(n, bool))
         return (np.where(valid, commands["velocity"], 0.0),
@@ -42,11 +87,22 @@ def request_motion(kind, commands):
 class BatchRun:
     def __init__(self, compiled, world, backend, component, route_length=300.0,
                  points=121, speed_limit=None, allow_loop=False, start_frames=0,
-                 step_time=None):
+                 step_time=None, device=None):
         """`allow_loop`: accept a LoopBatch component (one Python step per slot), for checking
         a component before it has a batched form; never for a throughput number, and the run
         says so (`self.looped`)."""
         from sim_vehicle_ecu import batch as ecu_batch
+        # `device` (092 K2.2c): the run's tensors live there (the compiled scenario must be
+        # compiled there too), and a component on array_api "torch" gets its commands and
+        # sensors there; a numpy component gets them on the host (the CPU contract), each step
+        self.device = None if device in (None, "cpu") else torch.device(device)
+        self.on_device = _OnDevice(self.device)
+        with self.on_device:
+            self._init(compiled, world, backend, component, route_length, points, speed_limit,
+                       allow_loop, start_frames, step_time, ecu_batch)
+
+    def _init(self, compiled, world, backend, component, route_length, points, speed_limit,
+              allow_loop, start_frames, step_time, ecu_batch):
         self.c, self.world, self.backend = compiled, world, backend
         self.looped = not getattr(component, "vectorised", False)
         self.component = component if allow_loop else ecu_batch.require_vectorised(component)
@@ -98,6 +154,7 @@ class BatchRun:
 
     # --- reset ----------------------------------------------------------------------------
 
+    @_on_device
     def reset(self, mask=None, preroll=None):
         """`preroll`: a callable the host runs once the ego and its component are reset and
         before the first observation and storyboard evaluation, to step the ego's physics
@@ -109,12 +166,15 @@ class BatchRun:
         c = self.c
         n = c.n
         mask = torch.ones(n, dtype=torch.bool) if mask is None else torch.as_tensor(mask)
+        if self.device is not None:
+            mask = mask.to(self.device)
         if preroll is not None and not bool(mask.all()):
             raise ValueError("an ego pre-roll steps every slot's physics: a reset of every "
                              "slot only")
         e = self.ego
         self.backend.reset(mask, c.x[:, e], c.y[:, e], c.yaw[:, e], c.speed[:, e])
-        self.component.reset_batch(mask.numpy())
+        torch_component = getattr(self.component, "array_api_in_use", "numpy") == "torch"
+        self.component.reset_batch(mask if torch_component else mask.cpu().numpy())
         self.first = mask.clone() if self.first is None else (self.first | mask)
         if preroll is not None:
             preroll(self)     # its first step clears `first`: the sensors have read by then
@@ -235,9 +295,13 @@ class BatchRun:
     # --- step -----------------------------------------------------------------------------
 
     def _sensors(self, st):
-        valid = ~self.first.numpy()
-        out = {"wheel_speeds": st["wheel_speeds"].numpy(), "yaw_rate": st["yaw_rate"].numpy(),
-               "accel_x": st["accel_x"].numpy(), "accel_y": st["accel_y"].numpy(),
+        # a torch component takes the backend's tensors where they are (092 K2.2c); a numpy
+        # one, host arrays: the CPU contract, a copy each step
+        torch_component = getattr(self.component, "array_api_in_use", "numpy") == "torch"
+        conv = (lambda t: t) if torch_component else (lambda t: t.detach().cpu().numpy())  # noqa
+        valid = ~self.first if torch_component else ~self.first.cpu().numpy()
+        out = {"wheel_speeds": conv(st["wheel_speeds"]), "yaw_rate": conv(st["yaw_rate"]),
+               "accel_x": conv(st["accel_x"]), "accel_y": conv(st["accel_y"]),
                "valid": valid}
         truth = tuple(getattr(self.component, "truth", ()))
         if truth:
@@ -247,10 +311,12 @@ class BatchRun:
             if missing:
                 raise ValueError(f"the component declares truth {missing}, which the batch "
                                  "does not provide yet")
-            out["truth"] = {t: avail[t].numpy() for t in truth}
-            out["truth_valid"] = {t: valid.copy() for t in truth}
+            out["truth"] = {t: conv(avail[t]) for t in truth}
+            out["truth_valid"] = {t: (valid.clone() if torch_component else valid.copy())
+                                  for t in truth}
         return out
 
+    @_on_device
     def step(self, commands, dt):
         """One step of every slot, the engine stepped here: before_physics, the backend's
         advance, after_physics. Returns after_physics' observation."""
@@ -258,6 +324,7 @@ class BatchRun:
         self.backend.advance(dt)
         return self.after_physics(dt)
 
+    @_on_device
     def before_physics(self, commands, dt):
         """The ego's component on what its sensors read, its actuation handed to the backend:
         what a host that owns the physics loop (Isaac Lab's DirectRLEnv) calls before each
@@ -267,9 +334,14 @@ class BatchRun:
             self.component.step_batch(commands, self._sensors(st), dt), self.c.n, "ego component")
         self.first = torch.zeros_like(self.first)
         velocity, gear = request_motion(self.component.commands, commands)
+        if self.device is not None and not torch.is_tensor(act["drive"]):
+            # a numpy component on a device run: its actuation back to the device
+            act = {k: (torch.as_tensor(v, device=self.device) if k != "telemetry" else v)
+                   for k, v in act.items()}
         self.backend.apply(act, velocity=velocity, gear=gear)
         return act
 
+    @_on_device
     def after_physics(self, dt):
         """After one physics step: the ego read back, SSv2's default vehicles moved, the
         storyboard evaluated at the new time. Returns the observation: the ego's state, every

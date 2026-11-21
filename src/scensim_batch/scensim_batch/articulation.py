@@ -365,15 +365,19 @@ class ArticulationBackend:
     """core.BatchRun's backend on an Isaac Lab `Articulation` of N cars (articulation_cfg's,
     spawned by the host's scene): reset(mask, x, y, yaw, speed), apply(actuation), advance(dt),
     state(). `sim`: what advance steps (None for a host that owns the physics loop: it calls
-    actuate, its own step, then sample); `origins` [N, 2 or 3]: each slot's place."""
+    actuate, its own step, then sample); `origins` [N, 2 or 3]: each slot's place.
+
+    `resident` (092 K2.2c): the car model, its read-back and the state it gives in float64 on
+    the asset's device, no copy to the host per step; otherwise on the CPU (the reference)."""
     vectorised = True
 
-    def __init__(self, asset, doc, origins, sim=None, z=0.0):
+    def __init__(self, asset, doc, origins, sim=None, z=0.0, resident=False):
         self.asset, self.doc, self.sim, self.z = asset, doc, sim, z
         self.n = asset.num_instances
         self.device = asset.device
-        self.model = ArticulationModel(doc, self.n, "cpu")
-        self.origins = torch.as_tensor(origins, dtype=torch.float64)[:, :2].cpu()
+        self.home = torch.device(self.device) if resident else torch.device("cpu")
+        self.model = ArticulationModel(doc, self.n, self.home)
+        self.origins = torch.as_tensor(origins, dtype=torch.float64)[:, :2].to(self.home)
         ids, names = asset.find_joints(joint_order(doc), preserve_order=True)
         self.ids = dict(zip(names, ids))
         self.sus_ids = [self.ids[f"{c}_suspension"] for c in CORNERS]
@@ -390,10 +394,11 @@ class ArticulationBackend:
         return torch.as_tensor(t, dtype=torch.float32).to(self.device)
 
     def reset(self, mask, x, y, yaw, speed):
-        ids = torch.nonzero(torch.as_tensor(mask, dtype=torch.bool)).flatten()
+        mask = torch.as_tensor(mask, dtype=torch.bool).to(self.home)
+        ids = torch.nonzero(mask).flatten()
         if len(ids) == 0:
             return
-        f = lambda a: torch.as_tensor(a, dtype=torch.float64)[ids]   # noqa: E731
+        f = lambda a: torch.as_tensor(a, dtype=torch.float64).to(self.home)[ids]   # noqa: E731
         h, v = f(yaw), f(speed)
         ox, oy = self.origins[ids, 0], self.origins[ids, 1]
         zeros = torch.zeros_like(h)
@@ -405,12 +410,12 @@ class ArticulationBackend:
         a.write_root_pose_to_sim_index(root_pose=self._dev(pose), env_ids=env_ids)
         a.write_root_velocity_to_sim_index(root_velocity=self._dev(vel), env_ids=env_ids)
         nj = a.num_joints
-        jpos = torch.zeros(len(ids), nj)
-        jvel = torch.zeros(len(ids), nj)
+        jpos = torch.zeros(len(ids), nj, device=self.home)
+        jvel = torch.zeros(len(ids), nj, device=self.home)
         jvel[:, self.spin_ids] = (v / self.model.r)[:, None].float()   # the wheels rolling
         a.write_joint_position_to_sim_index(position=self._dev(jpos), env_ids=env_ids)
         a.write_joint_velocity_to_sim_index(velocity=self._dev(jvel), env_ids=env_ids)
-        self.model.reset(torch.as_tensor(mask, dtype=torch.bool))
+        self.model.reset(mask)
         if self.prev_vb is not None:     # a reset slot starts with no acceleration
             self.prev_vb[ids] = torch.stack([v, zeros], -1)
         self._state = None
@@ -428,14 +433,15 @@ class ArticulationBackend:
     def actuate(self, dt):
         a, m = self.asset, self.model
         nj = a.num_joints
-        pos_t = torch.zeros(self.n, nj, dtype=torch.float64)
+        pos_t = torch.zeros(self.n, nj, dtype=torch.float64, device=self.home)
         pos_t[:, self.sus_ids] = m.suspension_targets()
         if self.joint_targets is not None:
-            steer, spin = (torch.as_tensor(t, dtype=torch.float64) for t in self.joint_targets)
+            steer, spin = (torch.as_tensor(t, dtype=torch.float64).to(self.home)
+                           for t in self.joint_targets)
         else:
             steer = m.steer_targets(self.act["tire_angle"])
-            omega = a.data.joint_vel.torch[:, self.spin_ids].detach().cpu().double()
-            q = a.data.joint_pos.torch[:, self.sus_ids].detach().cpu().double()
+            omega = a.data.joint_vel.torch[:, self.spin_ids].detach().to(self.home).double()
+            q = a.data.joint_pos.torch[:, self.sus_ids].detach().to(self.home).double()
             st = self.state()
             # each hub's speed along the car's x: v - yaw_rate y (the steer's cosine ignored:
             # a steered wheel reads as sliding sooner, which only brakes it on its own inertia)
@@ -476,7 +482,7 @@ class ArticulationBackend:
         if self._state is not None:
             return self._state
         d = self.asset.data
-        t = lambda p: p.torch.detach().cpu()   # noqa: E731
+        t = lambda p: p.torch.detach().to(self.home)   # noqa: E731
         pose, vel = t(d.root_link_pose_w), t(d.root_link_vel_w)
         st, vb = self.model.state(pose[:, :3], pose[:, 3:7], vel[:, :3], vel[:, 3:6],
                                   t(d.joint_vel)[:, self.spin_ids], self.prev_vb, self.dt,

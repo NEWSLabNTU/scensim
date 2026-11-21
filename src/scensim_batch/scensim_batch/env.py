@@ -23,6 +23,7 @@ from isaaclab.utils import configclass
 from . import compile as compilemod
 from . import core
 
+B_SPAWN_Z = 0.02    # m: engine B's cars spawn this far up and settle on their springs
 # the action, per command type, as the component reads it (S3's batch commands)
 ACTIONS = {"autoware": ("acceleration", "velocity", "tire_angle"),
            "ackermann": ("speed", "acceleration", "steering_angle"),
@@ -50,6 +51,14 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     ego_preroll: list = None
     # samples of SSv2's spline per default vehicle's 300 m route (BatchRun's `points`)
     route_points: int = 121           # 2.5 m apart: K2.4's lead within 3 cm (61: 9 cm, 301: no better)
+    # the engine (batch-executor.md section 5): "A", aib's PhysX vehicle (PhysX's CPU pipeline,
+    # the sim device "cpu"); "B", the articulation car from `body` (sim_vehicle_spec's
+    # articulation_<body>.yaml), which runs on either pipeline
+    engine: str = "A"
+    body: str = ""
+    # B on a GPU sim: BatchRun, the car model and the component on that device, nothing copied
+    # to the host per step (092 K2.2c); the component must have a torch form (array_api)
+    device_resident: bool = False
     decimation: int = 4
     episode_length_s: float = 30.0
     # backend A's PhysX vehicles need PhysX's CPU pipeline: the direct-GPU one refuses their
@@ -73,6 +82,18 @@ class ScensimEnv(DirectRLEnv):
         n = len(cfg.records)
         if n != cfg.scene.num_envs:
             raise ValueError(f"{n} records for {cfg.scene.num_envs} environments: one per slot")
+        if cfg.engine == "B":
+            # Isaac Lab 3.0 builds and clones a scene's assets from its config: the body's
+            # articulation is declared there before the scene exists
+            import os
+            import tempfile
+
+            from . import articulation as art
+            self._body_doc = art.load_body(cfg.body)
+            usd = os.path.join(tempfile.mkdtemp(prefix="scensim_body_"),
+                               f"{self._body_doc['name']}.usda")
+            art.write_usd(self._body_doc, usd)
+            cfg.scene.ego = art.articulation_cfg(self._body_doc, usd, z=B_SPAWN_Z)
         super().__init__(cfg, render_mode, **kwargs)
 
     # --- the scene ----------------------------------------------------------------------------
@@ -88,27 +109,57 @@ class ScensimEnv(DirectRLEnv):
         cfg = self.cfg
         spawn_ground_plane("/World/ground", GroundPlaneCfg())
         world = cfg.world_factory()
-        self.compiled = compilemod.compile_scenario(cfg.scenario, cfg.records, world,
-                                                    provides=cfg.provides)
+        if cfg.engine not in ("A", "B"):
+            raise ValueError(f"engine {cfg.engine!r}: A or B")
+        dev = None
+        if cfg.device_resident:
+            if cfg.engine != "B" or str(cfg.sim.device) == "cpu":
+                raise ValueError("device_resident needs engine B on a GPU sim (sim.device "
+                                 "cuda): engine A runs on PhysX's CPU pipeline")
+            dev = torch.device(cfg.sim.device)
+        with core._OnDevice(dev):
+            self.compiled = compilemod.compile_scenario(cfg.scenario, cfg.records, world,
+                                                        provides=cfg.provides,
+                                                        device=dev or "cpu")
         n = self.compiled.n
         seeds = [int(s or 0) for s in self.compiled.seeds]
-        component = ecu_batch.load_batch(cfg.component, cfg.vehicle, cfg.component_params, seeds)
+        component = ecu_batch.load_batch(cfg.component, cfg.vehicle, cfg.component_params, seeds,
+                                         array_api="torch" if dev is not None else "numpy",
+                                         device=dev)
         self.kind = component.commands
-        self.backend = PhysxVehicleBackend(None, omni.usd.get_context().get_stage(),
-                                           omni.physx.get_physx_interface(), cfg.rig, n,
-                                           origins=self.scene.env_origins.cpu().numpy())
+        self.resident = dev
+        if cfg.engine == "A":
+            self.backend = PhysxVehicleBackend(None, omni.usd.get_context().get_stage(),
+                                               omni.physx.get_physx_interface(), cfg.rig, n,
+                                               origins=self.scene.env_origins.cpu().numpy())
+        else:
+            self.backend = self._engine_b(n, dev is not None)
         self.run = core.BatchRun(self.compiled, world, self.backend, component,
                                  points=cfg.route_points,
                                  allow_loop=cfg.allow_loop, start_frames=cfg.start_frames,
-                                 step_time=self.step_dt if cfg.start_frames else None)
+                                 step_time=self.step_dt if cfg.start_frames else None,
+                                 device=dev)
         self.commands = None
         self.stepped = False
         self.obs = None
 
+    def _engine_b(self, n, resident):
+        """Engine B: the body's articulation (the scene's `ego`, one per env); its backend
+        built on first use, once the sim has started and the joints exist."""
+        from . import articulation as art
+        asset = self.scene.articulations["ego"]
+        doc = self._body_doc
+        return _LazyB(lambda: art.ArticulationBackend(asset, doc, self.scene.env_origins,
+                                                      sim=None, z=B_SPAWN_Z, resident=resident))
+
     # --- the step -----------------------------------------------------------------------------
 
     def _pre_physics_step(self, actions: torch.Tensor):
-        """The policy's actions as the component's commands (ACTIONS[kind], in order)."""
+        """The policy's actions as the component's commands (ACTIONS[kind], in order): host
+        arrays, or on a device-resident env tensors on its device."""
+        if self.resident is not None:
+            self.commands = self._commands_on_device(actions)
+            return
         a = actions.detach().to("cpu", torch.float64).numpy()
         n = a.shape[0]
         import numpy as np
@@ -125,6 +176,24 @@ class ScensimEnv(DirectRLEnv):
             c["motor"] = np.full(n, MOTOR_MODES.index(self.cfg.vesc_mode), dtype=np.int64)
             c["age"] = np.zeros(n)
         self.commands = c
+
+    def _commands_on_device(self, actions):
+        dev = self.resident
+        a = actions.detach().to(dev, torch.float64)
+        n = a.shape[0]
+        c = {f: a[:, i].clone() for i, f in enumerate(ACTIONS[self.kind])}
+        c["valid"] = torch.ones(n, dtype=torch.bool, device=dev)
+        if self.kind == "autoware":
+            c["gear"] = torch.full((n,), 2, dtype=torch.int64, device=dev)   # drive
+        elif self.kind == "ackermann":
+            for f in ("jerk", "steering_angle_velocity", "age"):
+                c[f] = torch.zeros(n, dtype=torch.float64, device=dev)
+        elif self.kind == "vesc":
+            from sim_vehicle_ecu.signals import MOTOR_MODES
+            c["motor"] = torch.full((n,), MOTOR_MODES.index(self.cfg.vesc_mode),
+                                    dtype=torch.int64, device=dev)
+            c["age"] = torch.zeros(n, dtype=torch.float64, device=dev)
+        return c
 
     def _apply_action(self):
         dt = self.physics_dt
@@ -162,8 +231,9 @@ class ScensimEnv(DirectRLEnv):
 
     def _reset_idx(self, env_ids):
         super()._reset_idx(env_ids)
-        mask = torch.zeros(self.num_envs, dtype=torch.bool)
-        mask[torch.as_tensor(env_ids, dtype=torch.long).cpu()] = True
+        home = self.resident if self.resident is not None else torch.device("cpu")
+        mask = torch.zeros(self.num_envs, dtype=torch.bool, device=home)
+        mask[torch.as_tensor(env_ids, dtype=torch.long).to(home)] = True
         pre = None
         if self.cfg.ego_preroll:
             if not bool(mask.all()):
@@ -205,3 +275,18 @@ class ScensimEnv(DirectRLEnv):
         out = self.obs.get("outcome") if self.obs is not None else None
         term = (out != 0).to(timeout.device) if out is not None else torch.zeros_like(timeout)
         return term, timeout
+
+
+class _LazyB:
+    """Engine B's backend, built at its first use: the articulation's joints exist only once
+    the sim has started (Isaac Lab's reset), after _setup_scene."""
+
+    def __init__(self, make):
+        self._make, self._b = make, None
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if self._b is None:
+            self._b = self._make()
+        return getattr(self._b, name)

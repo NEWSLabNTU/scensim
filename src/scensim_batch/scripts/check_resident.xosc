@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!--
+	092 K2.2c's check (check_resident.py): the RoboRacer alone on a straight 200 m track (a
+	polyline world), engine B, its VESC component on the policy's speed and servo commands;
+	6 s pass. The same run on the CPU path and device-resident must agree.
+-->
+<OpenSCENARIO>
+	<FileHeader author="scensim" date="2026-11-22T00:00:00+00:00" description="K2.2c device-resident check" revMajor="1" revMinor="2" />
+	<ParameterDeclarations />
+	<RoadNetwork><LogicFile filepath="track" /></RoadNetwork>
+	<Entities>
+		<ScenarioObject name="ego">
+			<Vehicle name="roboracer" vehicleCategory="car">
+				<BoundingBox><Center x="0.12" y="0.0" z="0.1" /><Dimensions width="0.31" height="0.2" length="0.58" /></BoundingBox>
+				<Performance maxSpeed="15" maxAcceleration="8.0" maxDeceleration="8.0" />
+				<Axles>
+					<FrontAxle maxSteering="0.36" wheelDiameter="0.11" trackWidth="0.265" positionX="0.33" positionZ="0.055" />
+					<RearAxle maxSteering="0.0" wheelDiameter="0.11" trackWidth="0.265" positionX="0.0" positionZ="0.055" />
+				</Axles>
+				<Properties />
+			</Vehicle>
+			<ObjectController><Controller name="Autoware"><Properties><Property name="maxJerk" value="1.5" /></Properties></Controller></ObjectController>
+		</ScenarioObject>
+	</Entities>
+	<Storyboard>
+		<Init><Actions><Private entityRef="ego"><PrivateAction><TeleportAction><Position>
+			<WorldPosition x="5.0" y="0.0" z="0.0" h="0.0" p="0" r="0" />
+		</Position></TeleportAction></PrivateAction></Private></Actions></Init>
+		<Story name="drive"><Act name="drive_act"><ManeuverGroup maximumExecutionCount="1" name="g">
+			<Actors selectTriggeringEntities="false"><EntityRef entityRef="ego" /></Actors>
+			<Maneuver name="m"><Event name="time_up" priority="parallel">
+				<Action name="done"><UserDefinedAction><CustomCommandAction type="exitSuccess" /></UserDefinedAction></Action>
+				<StartTrigger><ConditionGroup><Condition name="t" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="6" rule="greaterThan" /></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+			</Event></Maneuver>
+		</ManeuverGroup></Act></Story>
+		<StopTrigger />
+	</Storyboard>
+</OpenSCENARIO>
