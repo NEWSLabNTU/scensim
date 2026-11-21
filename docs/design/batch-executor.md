@@ -13,6 +13,7 @@ and 5a). It lives in `src/scensim_batch`. This note grows with its milestones:
 | K2.3 | The compiled storyboard (conditions, actions) and the truth export (truth-stream.md, schema 2) (section 6) | in progress: the state machine, 10 conditions, SpeedAction and the exits, truth per slot; the rest executor pending |
 | K2.4 | Agreement: each "batch" row of the subset on seats and in batch, on the same sample (Town01); each seats run records S, its frames before startNpcLogic, and the batch replays with `start_frames=S` (section 6, scenario time) | open |
 | K2.5 | `scensim bench`: throughput at N = 256 and 1024 against a hand-written Isaac Lab environment (the RoboRacer indoor field) | open |
+| K2.6 | The world adapter on a Lanelet2 map (section 7): any map exported once (`map_export`), its queries answered as SSv2's (`world_lanelet`); a polyline world with the same interface | in progress |
 
 ## 1. Shape
 
@@ -276,4 +277,47 @@ Measured on CS2 at two samples (onset 60 m at 6.5 m/s^2, 90 m at 3 m/s^2, point-
 each lead brakes in the tick after it is within 1 m of its own onset, never beyond its rate,
 stops at exactly 0 m/s, and gets SSv2's default deceleration limit back; the stop trigger
 completes both storyboards at 30 s.
+
+## 7. The world adapter on a Lanelet2 map (K2.6)
+
+Every map query the batch makes (compile's lane positions, SSv2's default vehicles' routes and
+speed limits, the storyboard's lane changes) goes to a world adapter. On a real map it is
+`scensim_batch.world_lanelet.LaneletWorld`, answering as SSv2's traffic simulator does, from an
+export of the map, since lanelet2 is not in Isaac's Python:
+
+    python3 -m scensim_batch.map_export <map dir> -o town01_map.json      # system Python, lanelet2
+    world = LaneletWorld.load("town01_map.json", map_dir=<the map in use>)
+
+The export (`map_export.py`'s docstring is its specification; format
+`scensim-batch-lanelet-map` v1) holds what the map says: per lanelet its centre points
+(lanelet2's `centerline()`, a two-point one given its midpoint, as SSv2's cache does), bounds,
+subtype, turn direction, the vehicle routing graph's followers, predecessors, lane-change
+neighbours and adjacent lanelets (Germany's vehicle rules, SSv2's VEHICLE graph), and the
+speed limit; and `map_sha256`, over the map's `lanelet2_map.osm` and `map_projector_info.yaml`.
+`load` refuses an export whose digest is not the map's in use, so a stale export is never
+used silently.
+
+The geometry is SSv2's, ported line for line: each lanelet's Catmull-Rom spline of Hermite
+curves (its length the 100-step sum, s mapped to the curve's parameter linearly), its
+polynomial solver (tolerance 1e-7, the real roots of the monic cubic), the curve-segment
+crossing (and its rule that accepts a crossing when either axis' parameter is in range),
+`getSValue` along the pose's own y axis, `toLaneletPose` (the five nearest lanelets within
+0.1 m, crosswalks and untagged lanelets dropped, the first whose spline the pose's ±1 m axis
+crosses within 45 degrees of its heading either way), `followingLanelets` (the straight
+follower first, else the first) and a route's spline through the lanelets' centre points
+joined. The tests check it against SSv2's own spline tests' values (`getSValue` to 1e-11 of
+SSv2's `EXPECT_DOUBLE_EQ`, the trajectory and its offset to 1e-6) and the solver against
+numpy.
+
+Named differences: the lanelet pose ignores an entity's bounding box (SSv2's `matchToLane`
+runs first for one) and the altitude check (the batch is 2D); lanelets equally near a point
+(two overlapping at 0 m) are taken in the export's order, where lanelet2's R-tree's may differ.
+
+`LaneletWorld.from_polylines` is a world of polylines with the same interface (094 P2's oval
+track: one lanelet that follows itself).
+
+On Town01 (CARLA's Autoware map, 300 lanelets, 169 roads): no lanelet has a lane-change
+neighbour (each road has one lane each way), and some curved lanelets have a two-point
+centreline in lanelet2 itself (36200: 26-point bounds round a corner, a straight centre line),
+which SSv2 reads the same, so its vehicles cut that corner on seats as they do here.
 
