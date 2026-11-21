@@ -136,6 +136,7 @@ install-hooks:
     hooks="$(git rev-parse --git-common-dir)/hooks"
     mkdir -p "$hooks"
     for h in scripts/hooks/*; do
+        [ -f "$h" ] && [ -x "$h" ] || continue      # the hooks only, not a __pycache__
         name=$(basename "$h"); target="$PWD/$h"; link="$hooks/$name"
         if [ -e "$link" ] && [ "$(readlink -f "$link")" != "$(readlink -f "$target")" ]; then
             echo "install-hooks: $link exists and is not $target: left alone (remove it, then run this again)" >&2

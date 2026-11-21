@@ -11,6 +11,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.dont_write_bytecode = True     # no __pycache__ beside the hook (install-hooks links files)
 loader = importlib.machinery.SourceFileLoader("pre_push", str(ROOT / "scripts/hooks/pre-push"))
 spec = importlib.util.spec_from_loader("pre_push", loader)
 hook = importlib.util.module_from_spec(spec)
