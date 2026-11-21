@@ -11,12 +11,19 @@ yaw, length)` -> centreline points), so this module reads no map format itself.
 
 Compiled today: Init TeleportActions to WorldPosition, LanePosition, RelativeWorldPosition and
 RelativeObjectPosition (relative to an entity already placed); Init SpeedActions to an absolute
-target; inline BoundingBoxes; parameters as `$name` (each slot's record value, else the
-declared default) or literals. Anything else in Init, an expression `${...}`, and an entity
-from a catalog are refused here by name (K2.3 and later).
+target; inline BoundingBoxes, and an entity's from its catalog (a CatalogReference: the
+scenario's CatalogLocations directory, `$(env NAME)` from the environment, or `catalogs`
+{catalog name: file or directory}; 092 K2.4); parameters as `$name` (each slot's record value,
+else the declared default) or literals. Anything else in Init and an expression `${...}` are
+refused here by name (K2.3 and later).
 """
+import copy
 import math
+import os
+import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import torch
 
@@ -115,11 +122,79 @@ class _Params:
         return torch.tensor(out, dtype=torch.float64)
 
 
+CATALOG_KINDS = ("Vehicle", "Pedestrian", "MiscObject")
+_ENV = re.compile(r"\$\(env ([A-Za-z_][A-Za-z0-9_]*)\)")
+
+
+def _catalog_dirs(root, spath, catalogs):
+    """{catalog kind (VehicleCatalog, ...): directory} of the scenario's CatalogLocations,
+    `$(env NAME)` substituted, relative paths from the scenario's directory."""
+    out = {}
+    for loc in root.findall("CatalogLocations/*"):
+        d = loc.find("Directory")
+        if d is None or not d.get("path"):
+            continue
+        raw = d.get("path")
+        missing = [m for m in _ENV.findall(raw) if m not in os.environ]
+        if missing:
+            out[loc.tag] = (None, f"{raw}: {', '.join(missing)} not in the environment")
+            continue
+        path = Path(_ENV.sub(lambda m: os.environ[m.group(1)], raw))
+        out[loc.tag] = (path if path.is_absolute() else Path(spath).parent / path, None)
+    return out
+
+
+def _catalog_entry(ref, where, dirs, catalogs, cache):
+    """The catalog's element (Vehicle, Pedestrian or MiscObject) a CatalogReference names."""
+    name, entry = ref.get("catalogName"), ref.get("entryName")
+    places = []
+    if catalogs and name in catalogs:
+        places.append(Path(catalogs[name]))
+    places += [d for d, _ in dirs.values() if d is not None]
+    for place in places:
+        files = sorted(place.glob("*.xosc")) if place.is_dir() else [place]
+        for f in files:
+            if f not in cache:
+                try:
+                    cache[f] = ET.parse(f).getroot()
+                except (ET.ParseError, OSError):
+                    cache[f] = None
+            croot = cache[f]
+            if croot is None:
+                continue
+            for cat in croot.iter("Catalog"):
+                if cat.get("name") != name:
+                    continue
+                for el in cat:
+                    if el.tag in CATALOG_KINDS and el.get("name") == entry:
+                        return el
+    why = "; ".join(w for _, w in dirs.values() if w)
+    raise CompileError(f"{where}: catalog {name!r} has no {entry!r} in "
+                       f"{', '.join(map(str, places)) or 'no catalog location'}"
+                       + (f" ({why})" if why else ""))
+
+
+def _resolved(obj, where, dirs, catalogs, cache):
+    """The ScenarioObject with its CatalogReference replaced by the entry it names. A
+    parameterised bounding box is refused (the catalog's parameters are not compiled)."""
+    ref = obj.find("CatalogReference")
+    if ref is None:
+        return obj
+    el = copy.deepcopy(_catalog_entry(ref, where, dirs, catalogs, cache))
+    for node in el.iter("BoundingBox"):
+        for sub in node.iter():
+            bad = [k for k, v in sub.attrib.items() if v.strip().startswith("$")]
+            if bad:
+                raise CompileError(f"{where}: catalog entry {el.get('name')!r}'s BoundingBox "
+                                   f"{sub.tag}@{bad[0]} is a parameter (not compiled)")
+    out = copy.copy(obj)
+    out[:] = [el if c is ref else c for c in obj]
+    return out
+
+
 def _box(obj, where):
     dims = obj.find(".//BoundingBox/Dimensions")
     if dims is None:
-        if obj.find("CatalogReference") is not None:
-            raise CompileError(f"{where}: an entity from a catalog (not compiled yet)")
         raise CompileError(f"{where}: no BoundingBox")
     centre = obj.find(".//BoundingBox/Center")
     cx, cy = ((float(centre.get("x", 0)), float(centre.get("y", 0))) if centre is not None
@@ -135,8 +210,10 @@ def _kind(obj):
     return None
 
 
-def compile_scenario(path, records, world, provides=(), device="cpu"):
-    """The batch for `records` (N sample records, slot i = records[i]) of scenario `path`."""
+def compile_scenario(path, records, world, provides=(), device="cpu", catalogs=None):
+    """The batch for `records` (N sample records, slot i = records[i]) of scenario `path`.
+    `catalogs`: {catalog name: file or directory}, searched before the scenario's
+    CatalogLocations."""
     if not records:
         raise CompileError(f"{path}: no records (a batch of no slots)")
     v = subset.check(path)
@@ -154,9 +231,11 @@ def compile_scenario(path, records, world, provides=(), device="cpu"):
     n = len(records)
 
     entities = []
+    dirs, cache = _catalog_dirs(root, spath, catalogs), {}
     for obj in root.findall("Entities/ScenarioObject"):
         name = obj.get("name")
         where = f"Entities/ScenarioObject[@name='{name}']"
+        obj = _resolved(obj, where, dirs, catalogs, cache)
         kind = _kind(obj)
         if kind is None:
             raise CompileError(f"{where}: neither Vehicle, Pedestrian nor MiscObject")
