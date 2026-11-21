@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+END_SLACK = 5     # batch steps allowed past the seats truth's last frame
 
 
 def _gap_trace():
@@ -165,10 +166,14 @@ def main(argv=None):
     # column; else the commands as sent, from the hold on
     taken = A.taken_commands(trace, S, steps, ego_name)
     replay = "taken" if any(c is not None for c in taken) else "sent"
-    for k in range(steps - 1):
+    # a few steps past the truth's last frame: SSv2 ends the run in the tick that evaluates
+    # the end, before that tick's step reaches the world (a `> 30 s` time-up is evaluated a
+    # step after the last frame), and the batch decides at its own step; the last command runs
+    # on meanwhile, as it would on seats
+    for k in range(steps - 1 + END_SLACK):
         if replay == "taken":
             # the step to frame S + k + 1 ran that frame's command (the record at k + 1)
-            t = taken[k + 1]
+            t = taken[min(k + 1, len(taken) - 1)]
             c = hold_cmd if t is None else {"accel": t.acceleration, "velocity": t.velocity,
                                              "steer": t.tire_angle}
         else:
