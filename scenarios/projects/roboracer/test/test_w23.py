@@ -107,6 +107,43 @@ def test_the_replay_recovers_the_components_latency_and_gains():
     assert any("current_max: not excited" in n for n in notes)
 
 
+def test_the_erpm_sign_is_the_cars_and_the_tools_read_the_logs_with_it():
+    """Issue 098: a car whose VESC reports forward as negative ERPM (f1tenth humble-devel's) is
+    read the same as one that reports it positive, once the conversion says so."""
+    conv = dict(DOC["conversion"])
+    assert qmod.erpm_sign(conv) == 1.0
+    st = {"core_t": np.array([0.0, 0.02]), "core_erpm": np.array([4614.0, 9228.0])}
+    flipped = {**st, "core_erpm": -st["core_erpm"]}
+    neg = {**conv, "erpm_sign": -1.0}
+    assert np.allclose(qmod.speed(st, conv)[1], [1.0, 2.0])
+    assert np.allclose(qmod.speed(flipped, neg)[1], [1.0, 2.0])
+    with pytest.raises(ValueError, match="erpm_sign"):
+        qmod.erpm_sign({**conv, "erpm_sign": 0.5})
+    # the replay: the same run logged with either sign gives the same currents
+    from sim_vehicle_ecu.signals import Sensors, VescCommand
+    run = protomod.runs(DOC, only=["M1"], repetitions=1)[0]
+    c = RoboRacerVesc(CAR, {}, 0)
+    rows, cmds, v, dt = [], [], 0.0, fit.REPLAY_DT
+    for i in range(int(2.0 / dt)):
+        t = i * dt
+        if i % 12 == 0:
+            last, cmd_t = protomod.command(run, t, 0.36), t
+            cmds.append((t, protomod.MOTORS.index(last[0]), last[1], last[2]))
+        a = c.step(VescCommand(last[0], last[1], last[2], t - cmd_t),
+                   Sensors(wheel_speeds=(v / 0.055,) * 4), dt)
+        v += (sum(a.drive) / 0.055 / 4.0 - 0.5 * v) * dt
+        if i % 12 == 11:
+            rows.append(((i + 1) * dt, a.telemetry["erpm"]))
+    cm, rw = np.array(cmds), np.array(rows)
+    logs = {"cmd_t": cm[:, 0], "cmd_mode": cm[:, 1], "cmd_value": cm[:, 2],
+            "cmd_servo": cm[:, 3], "core_t": rw[:, 0], "core_erpm": rw[:, 1]}
+    pos = fit.replay(RoboRacerVesc, CAR, {}, logs, protomod.MOTORS)
+    neg_logs = {**logs, "core_erpm": -logs["core_erpm"]}
+    assert np.array_equal(fit.replay(RoboRacerVesc, CAR, {}, neg_logs, protomod.MOTORS,
+                                     erpm_sign=-1.0), pos)
+    assert not np.array_equal(fit.replay(RoboRacerVesc, CAR, {}, neg_logs, protomod.MOTORS), pos)
+
+
 def test_the_mass_from_steady_holds():
     k, m, c = 1.3, 4.0, (0.2, 0.05, 0.01)
     holds = [(v, (m + 0.2) * (c[0] + c[1] * v + c[2] * v * v) / k) for v in (1.0, 2.0, 4.0)]

@@ -35,7 +35,11 @@ i of a batch is the single car with seed i.
 
 The motor's speed is the wheels' mean, as a sensored VESC sees it through the differentials.
 The telemetry is what `sensors/core` carries: `erpm`, `current_motor`, `duty`, `voltage_input`
-and `tachometer`.
+and `tachometer`. The reported `erpm` is the motor's times `erpm_sign`: how the motor is wired
+to the VESC, which decides the sign the VESC reports while commanded positive ERPM drives the
+car forward. f1tenth_system's `humble-devel` reads a VESC that reports forward as negative (its
+vesc_to_odom negates `state.speed`), `jazzy-devel` one that reports it as positive (scensim
+issue 098); the commands' sign never changes.
 """
 import random
 
@@ -58,6 +62,7 @@ DEFAULTS = {
     "servo_gain": -1.2135,          # servo position per rad of tire angle
     "servo_offset": 0.5304,         # servo position at a straight tire
     "servo_rate": 5.0,              # rad/s at the wheels
+    "erpm_sign": 1.0,               # the reported ERPM's sign: the motor's wiring (+1 or -1)
     "latency": 0.02,                # s, from the command's arrival to its effect
     "latency_jitter": 0.0,          # s, standard deviation of each command's extra delay
     "timeout": 0.5,                 # s, a motor command older than this releases the motor
@@ -213,7 +218,7 @@ class RoboRacerVescBatch:
         self.tire_angle = np.where(has, self.tire_angle + move, self.tire_angle)
         self.tachometer = self.tachometer + np.abs(erpm) * dt / 60.0
         duty = (motor * p["kt"] + current * p["resistance"]) / p["battery"]
-        telemetry = {"erpm": erpm, "current_motor": current,
+        telemetry = {"erpm": p["erpm_sign"] * erpm, "current_motor": current,
                      "duty": np.maximum(-1.0, np.minimum(1.0, duty)),
                      "voltage_input": p["battery"].copy(),
                      "tachometer": np.floor(self.tachometer).astype(np.int64)}

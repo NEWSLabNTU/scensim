@@ -121,6 +121,9 @@ def main():
     comp_params.update(changes.get("component") or {})
 
     doc = protomod.load(args.protocol)
+    # the twin's VESC reports ERPM with the car's sign, as the protocol's conversion states it
+    # (the motor's wiring, issue 098), unless the ego config or a perturbation sets it
+    comp_params.setdefault("erpm_sign", float(doc["conversion"].get("erpm_sign", 1.0)))
     only = [m for m in args.only.split(",") if m]
     runs = protomod.runs(doc, only=only or None, repetitions=args.repetitions)
     cmd_period = 1.0 / float(doc.get("command_rate_hz", 50))

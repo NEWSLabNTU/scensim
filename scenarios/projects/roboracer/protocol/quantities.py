@@ -20,10 +20,19 @@ CORE_HZ = 50.0
 IMU_HZ = 50.0
 
 
+def erpm_sign(conversion):
+    """The sign the car's VESC reports its ERPM with, against the commands' (+1 or -1; the
+    conversion's `erpm_sign`, +1 when absent): its motor's wiring (scensim issue 098)."""
+    s = float(conversion.get("erpm_sign", 1.0))
+    if s not in (1.0, -1.0):
+        raise ValueError(f"conversion: erpm_sign is {s!r}, not +1 or -1")
+    return s
+
+
 def speed(streams, conversion):
-    """(t, m/s) from the VESC's ERPM."""
+    """(t, m/s) from the VESC's ERPM, in the commands' sign."""
     g, o = conversion["speed_to_erpm_gain"], conversion["speed_to_erpm_offset"]
-    return streams["core_t"], (streams["core_erpm"] - o) / g
+    return streams["core_t"], (erpm_sign(conversion) * streams["core_erpm"] - o) / g
 
 
 def _segment_starts(session, protocol_doc):

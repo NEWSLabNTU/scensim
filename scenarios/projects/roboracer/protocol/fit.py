@@ -37,10 +37,11 @@ def _runs(runs, manoeuvres):
 
 # --- 1. the component, by replay --------------------------------------------------------------
 
-def replay(component_cls, car, params, streams, motor_modes, dt=REPLAY_DT):
+def replay(component_cls, car, params, streams, motor_modes, dt=REPLAY_DT, erpm_sign=1.0):
     """The component's motor current at each `core_t`, driven by the logged commands and the
-    logged ERPM (the car's speed as the VESC measured it)."""
-    return replay_batch(component_cls, car, [params], [streams], motor_modes, dt)[0][0]
+    logged ERPM (the car's speed as the VESC measured it, reported with `erpm_sign`)."""
+    return replay_batch(component_cls, car, [params], [streams], motor_modes, dt,
+                        erpm_sign)[0][0]
 
 
 def _run_inputs(streams, motor_modes, dt):
@@ -68,10 +69,12 @@ def _run_inputs(streams, motor_modes, dt):
     return t, motor, value, servo, age, erpm, read
 
 
-def replay_batch(component_cls, car, params_list, streams_list, motor_modes, dt=REPLAY_DT):
+def replay_batch(component_cls, car, params_list, streams_list, motor_modes, dt=REPLAY_DT,
+                 erpm_sign=1.0):
     """`replay` for every (params, run) pair at once, one slot each in the component's batched
     form (sim_vehicle_ecu.batch; per-slot params): [[current per core_t] per run] per params.
-    Slot by slot it is the scalar replay, bit for bit."""
+    Slot by slot it is the scalar replay, bit for bit. The logged ERPM is turned into the
+    commands' sign by `erpm_sign` (the protocol's conversion: the car's wiring, issue 098)."""
     from sim_vehicle_ecu import batch as ecu_batch
     runs = [_run_inputs(st, motor_modes, dt) for st in streams_list]
     P, R = len(params_list), len(runs)
@@ -93,7 +96,7 @@ def replay_batch(component_cls, car, params_list, streams_list, motor_modes, dt=
     ones, zeros = np.ones(n, bool), np.zeros(n)
     cur = np.zeros((n, T))
     for i in range(T):
-        w = erpm[ri, i] / epw
+        w = erpm_sign * erpm[ri, i] / epw
         out = b.step_batch(
             {"motor": motor[ri, i].astype(np.int64), "value": value[ri, i],
              "servo": servo[ri, i], "age": age[ri, i], "valid": ones},
@@ -121,8 +124,9 @@ def fit_current_max(runs, protocol_doc):
     return float(np.median(vals)) if vals else None
 
 
-def _replay_cost(component_cls, car, params, sel, motor_modes):
-    preds = replay_batch(component_cls, car, [params], [st for _, st in sel], motor_modes)[0]
+def _replay_cost(component_cls, car, params, sel, motor_modes, erpm_sign=1.0):
+    preds = replay_batch(component_cls, car, [params], [st for _, st in sel], motor_modes,
+                         erpm_sign=erpm_sign)[0]
     err = [pred - st["core_current_motor"] for pred, (_, st) in zip(preds, sel)]
     return float(np.mean(np.concatenate(err) ** 2))
 
@@ -144,6 +148,7 @@ def fit_component(runs, component_cls, car, motor_modes, protocol_doc,
         cmax = float(DEFAULTS["current_max"])
         notes.append("current_max: not excited (no M1c); the default kept")
     k0 = np.array([DEFAULTS["speed_kp"], DEFAULTS["speed_ki"]])
+    sign = qmod.erpm_sign(protocol_doc["conversion"])
 
     def gains_at(latency, x0, iters):
         def cost(z):
@@ -152,7 +157,7 @@ def fit_component(runs, component_cls, car, motor_modes, protocol_doc,
             return _replay_cost(component_cls, car, {"speed_kp": z[0] * k0[0],
                                                      "speed_ki": z[1] * k0[1],
                                                      "current_max": cmax, "latency": latency},
-                                sel, motor_modes)
+                                sel, motor_modes, sign)
         r = minimize(cost, x0, method="Nelder-Mead",
                      options={"xatol": 1e-3, "fatol": 1e-7, "maxiter": iters})
         return r.fun, r.x

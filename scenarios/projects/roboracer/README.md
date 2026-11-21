@@ -23,6 +23,12 @@ stack (W18 to W20) join it as their work items land.
   - `tools/`: `twin_runs.py` (the generator), `bags.py` (the real car's rosbag2),
     `compare_runs.py` (the harness), `fit_twin.py` and `refine_twin.py` (the fit),
     `check_recovery.py` (the blind check), and `w23_regression.sh` (all of it, end to end).
+- f1tenth_system against the twin (W20):
+  - `stack/roboracer_f1tenth`: f1tenth_stack's own nodes and config files, a launch without
+    the two hardware drivers the twin replaces, and a stand-in wall follower on `drive`;
+  - `fields/walled_room.usda`: a 12 m x 8 m room with 3 m walls;
+  - `tools/w20_run.sh` (a run, humble-devel or jazzy-devel) and `tools/w20_watch.py` (its
+    verdict, from outside the stack).
 
 ## The refit of the full-size settings (W6)
 
@@ -333,3 +339,58 @@ so a pass with drifted tyres is not read as a good fit.
 The runs, the bags, the fits and the checks are on the NAS under
 `2026 SSv2 on CARLA/2026-11-21 091 W23 synthetic stand-in (118)`. `tools/w23_regression.sh`
 makes them again.
+
+## f1tenth_system drives the twin (W20)
+
+f1tenth_system as shipped (`humble-devel` and `jazzy-devel`) drives the example car on Isaac
+Sim 6.2, at the `vesc` level, as it drives a real car. Its own `ackermann_to_vesc`,
+`vesc_to_odom` and `ackermann_mux` run with its own `vesc.yaml` and `mux.yaml`. The twin takes
+the two hardware drivers' places: aib's `vesc` vehicle interface for `vesc_driver_node`, with
+the stand-in drive unit behind it, and the car's planar lidar on `/scan` for `urg_node`.
+f1tenth_system ships no autonomous driver, so a wall follower
+(`stack/roboracer_f1tenth/roboracer_f1tenth/wall_follow.py`) stands in for a user's on `drive`,
+the mux's navigation input. It keeps the right wall 1.5 m away at 1.5 m/s.
+
+    ISAAC_ROOT=... F1TENTH_HUMBLE=<install> tools/w20_run.sh humble OUT
+    ... F1TENTH_JAZZY=<install> JAZZY_IMAGE=<ROS 2 Jazzy image> tools/w20_run.sh jazzy OUT
+
+Three settings were needed, and no change to f1tenth_system:
+
+- **The wheel base.** `vesc.yaml` sets `wheelbase: .25` under `vesc_to_odom_node:`, which
+  outranks a launch file's parameters and `-p` (both are `/**`). With it in effect, `/odom`
+  turned 1.32 times faster than the car (0.33 m / 0.25 m). The launch passes the car's 0.33 in a
+  file under the node's name, after `vesc.yaml`.
+- **The ERPM's sign.** `humble-devel`'s `vesc_to_odom` negates the VESC's reported speed and
+  `jazzy-devel`'s does not (scensim issue 098). The stand-in's `erpm_sign` is the car's wiring:
+  -1 for `humble-devel`, +1 for `jazzy-devel`.
+- **20 Hz frames.** At 40 Hz frames the 40 Hz lidar handed tails of revolutions as scans,
+  a third of their beams missing: aib left the stock lidar's 20 Hz tick in place (issue 099).
+  At 20 Hz frames the scans are whole, and `/scan` comes at 20 Hz, half the UST-10LX's rate.
+  Of seven runs at 20 Hz frames, one (`humble-devel`) had sparse scans from its start, 44 %
+  of the beams in range, and drove into a wall within 2 m.
+
+Measured on 241 (2026-11-21; RTX 5090, driver 610.57, both GPUs held at 95 to 100 % by another
+user; 240 Hz physics, 20 Hz frames), 120 s of sim time from 1.5 m off the right wall:
+
+| | humble-devel | jazzy-devel |
+|---|---|---|
+| distance, mean speed (truth) | 151.3 m, 1.26 m/s | 151.3 m, 1.26 m/s |
+| closest approach of the body to a wall | 0.64 m | 0.64 m |
+| `/odom` speed minus the truth's: mean, RMS | +0.012, 0.024 m/s | +0.012, 0.024 m/s |
+| `/odom` yaw rate over the truth's, turning (median) | 1.025 | 1.025 |
+| `/odom` position error after 30, 60, 120 s | 1.6, 1.7, 5.1 m | 1.7, 1.9, 5.1 m |
+| `/scan`: rate, beams in range | 20.0 Hz, 90 % | 20.0 Hz, 90 % |
+| the stack's five nodes at the end | each finished cleanly | each finished cleanly |
+
+`/odom` matches the twin within the stand-in's calibration. Its speed reads 1.2 % high; the
+ERPM gain assumes the tyres' 0.055 m radius, and whether the car rolls on a smaller one under
+load or slips is not separated.
+In a steady turn at 1 m/s and 0.30 rad its yaw rate is 0.937 rad/s, exactly
+v tan(delta) / L at the odometry's speed, against the truth's 0.914. Its heading drifts by
+about 20 deg every 30 s of lapping, as dead reckoning from the servo command does, so its
+position error grows to a few metres over 150 m. The two branches drive the same laps: their distances
+differ by less than 0.01 m, since both stacks send the deterministic twin the same commands.
+
+The runs are on the NAS under `2026 SSv2 on CARLA/2026-11-21 091 W20 f1tenth_system on the
+twin (241)`. `tools/w20_run.sh` makes them again.
+

@@ -12,7 +12,10 @@
 # - `angle`: the bicycle tire angle, rad, + left, a number or a condition's name.
 #   `full` is the car's max_steer_angle, and `side` (+1 or -1) multiplies it.
 # `conversion` turns these into VESC commands (f1tenth's vesc.yaml): ERPM = gain x m/s + offset;
-# servo = gain x angle + offset.
+# servo = gain x angle + offset. `erpm_sign` is the sign the car's VESC reports its ERPM with
+# while commanded positive ERPM drives it forward: its motor's wiring. f1tenth_system's
+# humble-devel is written for -1 (its vesc_to_odom negates state.speed), jazzy-devel for +1
+# (scensim issue 098). The tools read the logs' ERPM with it, and the twin reports with it.
 version: 1
 repetitions: 5
 command_rate_hz: 50
@@ -21,6 +24,7 @@ conversion:
   speed_to_erpm_offset: 0.0
   steering_angle_to_servo_gain: -1.2135
   steering_angle_to_servo_offset: 0.5304
+  erpm_sign: 1.0
 manoeuvres:
   M1:   # speed step from rest, straight
     conditions: {speed: [1.0, 2.0, 4.0]}

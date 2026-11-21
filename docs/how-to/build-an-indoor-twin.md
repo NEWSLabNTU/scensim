@@ -205,6 +205,28 @@ pilot's `vehicle_interface: vesc` (or `ackermann`, for a stack that publishes `/
 ([The project file](../reference/project-file.md#the-vehicle-interface)). Then drive the five
 laps of M7. The laps are compared with the real laps by the same bands.
 
+With f1tenth_system, check three settings before the laps:
+
+- **The wheel base.** `vesc_to_odom` computes the yaw rate from the servo command and
+  `wheelbase`. `f1tenth_stack/config/vesc.yaml` sets it to 0.25 m under the node's own name,
+  `vesc_to_odom_node:`. A parameter under a node's name outranks one under `/**`, and a launch
+  file's `parameters` dict and `-p` on the command line both count as `/**`. So setting your
+  car's value from a launch file or the command line leaves 0.25 in effect, silently. Edit
+  `vesc.yaml`, or pass a second file after it with your value under `vesc_to_odom_node:`. With a
+  0.33 m car and 0.25 in effect, `/odom` turns 1.32 times faster than the car.
+- **The ERPM's sign.** `ackermann_to_vesc` commands positive ERPM to drive forward on every
+  branch, but the branches read the VESC's reported speed with opposite signs.
+  `humble-devel`'s `vesc_to_odom` negates `state.speed`, so it expects a VESC that reports
+  forward as negative; `jazzy-devel`'s does not. Your real car's VESC reports one of the two,
+  set by how its motor is wired. Give your component the same sign, so its `erpm` telemetry
+  reports what your car's does, and log which it is with your runs. The example's stand-in
+  drive unit takes it as `erpm_sign`.
+- **The lidar's frame rate.** The example car's scanner turns at 40 Hz. Run it at 20 Hz
+  frames, where every scan is a whole turn; `/scan` then comes at 20 Hz, half the real
+  scanner's rate. At 40 Hz frames the simulator can hand the tail of a turn as a scan, with a
+  third of the beams missing, and a stack that reads a missing beam as open space steers into
+  the wall it cannot see.
+
 ### A twin release
 
 When the twin passes, commit the testbench as a release. It names the spec (each run records

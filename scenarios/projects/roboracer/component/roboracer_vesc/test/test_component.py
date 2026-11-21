@@ -37,6 +37,17 @@ def test_it_is_a_component():
         make(gain=1.0)
 
 
+def test_the_reported_erpm_has_the_wirings_sign_and_the_commands_do_not():
+    """Issue 098: `erpm_sign` flips only what the VESC reports, never what drives the car."""
+    cmd = VescCommand("speed", 4614.0, 0.5304, 0.0)
+    pos = run(make(), cmd, 1.0, 0.5)
+    neg = run(make(erpm_sign=-1.0), cmd, 1.0, 0.5)
+    assert pos.telemetry["erpm"] > 0
+    assert neg.telemetry["erpm"] == -pos.telemetry["erpm"]
+    assert neg.drive == pos.drive and neg.tire_angle == pos.tire_angle
+    assert DEFAULTS["erpm_sign"] == 1.0
+
+
 def test_speed_mode_pushes_toward_the_commanded_erpm_within_the_current_limit():
     c = make()
     a = run(c, VescCommand("speed", 2.0 * DEFAULTS["erpm_per_mps"]), 0.0, 0.2)
