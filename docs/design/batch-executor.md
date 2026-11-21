@@ -454,7 +454,10 @@ device flag. Its children are evaluated once over its running and stopping slots
 (disjoint, each step masked per slot), not once a branch: two would evaluate every level twice,
 2^depth evaluations of an action under a storyboard with a StopTrigger (243's review found the
 cost; 64 of the lane-change test's action a tick). `test_lazy.py` runs test_storyboard's and
-test_core's cases again with every run lazy on the CPU (`sync_every` given): all pass. The actuation's check (finite, brakes not negative) is a device flag too; the
+test_core's cases again with every run lazy on the CPU (`sync_every` given): all pass. An
+element of k executions still makes its k + 1 passes on a lazy tick, each over its children,
+so nested repeating elements cost (k + 1)^depth evaluations a lazy tick (all of one execution,
+the common case, cost one each). The actuation's check (finite, brakes not negative) is a device flag too; the
 shapes are still checked on the host each step, which costs nothing. Both flags are raised at
 the next check, naming the steps since the last ("sync_every=1 names the slot"). A condition's
 history drops its unused entries at checks only. Measured with torch's sync debug mode
@@ -468,10 +471,19 @@ history drops its unused entries at checks only. Measured with torch's sync debu
 
 An action that starts on the host (a lane change, a route goal in a story) costs a sync each
 time a lazy tick asks whether a slot starts it, twice a tick (from its event's start and its
-own evaluation), until a check finds it settled: in every slot its event or an ancestor
-complete, or the slot's outcome decided. Then none (`test_device`'s story lane change: 2 a tick
+own evaluation), until a check finds it settled: in every slot its event complete (an event
+leaves COMPLETE only by a reset), or an element above it complete with nothing above that
+executing more than once, or the slot's outcome decided. Not the action's own COMPLETE:
+Event::start restarts its actions (243; `test_lazy`'s event of two lane changes, the second
+after a check, starts both on the lazy run as on the eager). Then none (`test_device`'s story lane change: 2 a tick
 before, 0 after). Still synced as before: a lane change's curve, its end and its route, a route
 goal's route (all on the host), and a partial reset (its indices).
+
+A gap of the port, found here and not of the lazy ticks: SSv2's ManeuverGroup::start restarts
+its maneuvers (startTransition) on each of the group's executions; the port restarts only an
+event's actions (Event::start), so a maneuver of a group of more than one execution stays
+COMPLETE. Its events are not restarted either way (an event is restarted only from its own
+STANDBY), so what runs is the same; the maneuvers' states in the storyboard log differ.
 
 At 4 cars the resident path is no faster than the CPU path (184 against 65 ms a step, the GPU
 contended): every masked step is a kernel launch. Its case is a large N, which P2 measures.
