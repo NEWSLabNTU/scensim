@@ -289,8 +289,17 @@ world:
 `anchor.<name>.<attribute>` (scenario-description.md section 2a, gap 7): a lane's `heading`
 (rad, world frame), `length` and `speed_limit`, a point's `x` and `y`, numbers the project gives
 for the world it runs on. `testbench check` refuses another kind or attribute, and the sampler
-refuses a distribution whose derived values read an anchor attribute the testbench does not
+refuses a distribution whose derived values read an anchor attribute the world does not
 declare. A sample record keeps the values it read (`anchors`).
+
+A map's own anchors come with the map: `assets/maps/<map>/anchors.resolved.json`, which its
+author makes from the map's `anchors.yaml` ([Maps and assets](../reference/maps-and-assets.md)).
+A distribution on that map reads them beside `world.anchors`, a name in both refused. A resolved
+lane's heading is read at an arc position, `anchor.<lane>.heading(s)`, and the record names the
+file it came from (`anchor_source`: the map, its digest, the file's digest). The published maps
+dataset does not carry anchors files yet; a host that has them keeps its own copy of the dataset
+(`datasets:` in its `host.yaml`), which `scensim assets fetch` links instead of the Hub's, the
+lock still naming the Hub's revision and its files only.
 
 ```yaml
 world:

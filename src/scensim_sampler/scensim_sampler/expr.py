@@ -88,6 +88,11 @@ class Expr:
                 self.names.add(n.id)
         elif anchor_name(n) is not None:
             self.names.add(anchor_name(n))
+        elif (isinstance(n, ast.Call) and anchor_name(n.func) is not None
+              and len(n.args) == 1 and not n.keywords):
+            # anchor.<name>.<attribute>(s): a resolved lane's heading at s (092 K9a)
+            self.names.add(anchor_name(n.func))
+            self._check(n.args[0])
         elif isinstance(n, ast.BinOp) and type(n.op) in BINARY:
             self._check(n.left), self._check(n.right)
         elif isinstance(n, ast.UnaryOp) and type(n.op) in UNARY:
@@ -131,10 +136,23 @@ class Expr:
                 return CONSTANTS[n.id]
             raise ExprError(f"{self.where}: {self.text!r}: {n.id} is not known here "
                             f"(known: {', '.join(sorted(env)) or 'nothing'})")
+        if isinstance(n, ast.Call) and anchor_name(n.func) is not None:
+            dotted = anchor_name(n.func)
+            fn = env.get(dotted + "()")
+            if fn is None:
+                raise ExprError(f"{self.where}: {self.text!r}: {dotted}(...): no such function "
+                                f"of the world's anchors (a resolved lane's heading(s))")
+            try:
+                return fn(self._eval(n.args[0], env))
+            except ValueError as e:
+                raise ExprError(f"{self.where}: {self.text!r}: {e}") from None
         dotted = anchor_name(n)
         if dotted is not None:
             if dotted in env:
                 return env[dotted]
+            if dotted + "()" in env:
+                raise ExprError(f"{self.where}: {self.text!r}: {dotted}: a resolved lane's "
+                                f"heading is read at an arc position, {dotted}(s), not bare")
             raise ExprError(f"{self.where}: {self.text!r}: {dotted}: the world declares no such "
                             f"anchor attribute (testbench.yaml world.anchors)")
         if isinstance(n, ast.BinOp):

@@ -328,3 +328,60 @@ def test_a_suites_sample_reads_the_projects_world_anchors(tmp_path):
         sampled.draw([{"distribution": "cs7_cyclist_low_sun_dist.xosc", "n": 1, "seed": 2}],
                      lambda x: tmp_path / x, "suite")
     assert run._world_anchors(tmp_path / "nowhere") is None
+
+
+def test_a_maps_resolved_anchors_reach_the_sampler(tmp_path):
+    """092 K9a: the map's anchors.resolved.json (beside lanelet2_map.osm in the project's
+    assets) is merged with testbench.yaml's world.anchors for a distribution on that map; one
+    resolved on another map is refused, and so is a name in both."""
+    import shutil
+    from scensim_sampler import anchors as A
+    cases = Path(scensim_sampler.__file__).resolve().parents[1] / "examples" / "cases"
+    for f in ("cs7_cyclist_low_sun.xosc", "cs7_cyclist_low_sun_dist.xosc"):
+        shutil.copy(cases / f, tmp_path)
+    shutil.copytree(cases / "models", tmp_path / "models")
+    sc = tmp_path / "cs7_cyclist_low_sun.xosc"              # a project scenario names its map so
+    sc.write_text(sc.read_text().replace('filepath="maps/town_street"',
+                                         'filepath="$(env SCENSIM_MAPS)/town_street"'))
+    assert "$(env SCENSIM_MAPS)/town_street" in sc.read_text()
+    md = tmp_path / "assets" / "maps" / "town_street"
+    md.mkdir(parents=True)
+    (md / "lanelet2_map.osm").write_text("<osm/>")
+    doc = {"format": A.FORMAT, "version": A.VERSION, "map": "town_street",
+           "map_sha256": A.map_digest(md), "heading_step": 0.5, "heading_max_error": 0.0,
+           "anchors": {"exit_n": {"kind": "lane", "lanelets": [{"id": 7, "from_s": 0.0,
+                                                                "to_s": 30.0}],
+                                  "length": 30.0, "speed_limit": 13.9, "start_x": 0.0,
+                                  "start_y": 0.0, "end_x": 0.0, "end_y": 30.0,
+                                  "heading_s": [0.0, 30.0], "heading": [0.25, 0.25],
+                                  "heading_max_error": 0.0}}}
+    (md / A.RESOLVED).write_text(json.dumps(doc))
+    (tmp_path / "testbench.yaml").write_text("simulator: carla\n")
+    dist = tmp_path / "cs7_cyclist_low_sun_dist.xosc"
+    got = run._anchors_for(tmp_path, dist)
+    assert got["exit_n"]["length"] == 30.0 and got["exit_n"]["source"]["map"] == "town_street"
+    # CS7 reads the bare heading, a stated anchor's number; a resolved lane has heading(s)
+    with pytest.raises(sampled.SampleRefused, match=r"anchor.exit_n.heading\(s\), not bare"):
+        sampled.draw([{"distribution": dist.name, "n": 1, "seed": 2}], lambda x: tmp_path / x,
+                     "suite", anchors=lambda d: run._anchors_for(tmp_path, d))
+    model = tmp_path / "models" / "cs7_cyclist.yaml"
+    model.write_text(model.read_text().replace("anchor.exit_n.heading", "anchor.exit_n.heading(12.0)"))
+    drawn = sampled.draw([{"distribution": dist.name, "n": 4, "seed": 2}],
+                         lambda x: tmp_path / x, "suite",
+                         anchors=lambda d: run._anchors_for(tmp_path, d))
+    for rec, _ in drawn:
+        assert "anchors" not in rec                      # no value of its own: its file
+        assert rec["anchor_source"] == [got["exit_n"]["source"]]
+        assert scensim_sampler.check(rec) == []
+        assert abs(rec["values"]["sun_azimuth"] - (0.25 + rec["values"]["rel_azimuth"])) < 1e-9
+    # a name in both
+    (tmp_path / "testbench.yaml").write_text(
+        "simulator: carla\nworld:\n  anchors:\n    exit_n: {kind: lane, heading: 1.0}\n")
+    with pytest.raises(A.AnchorError, match="exit_n: declared by the map"):
+        run._anchors_for(tmp_path, dist)
+    # resolved on another map's bytes
+    (tmp_path / "testbench.yaml").write_text("simulator: carla\n")
+    (md / "lanelet2_map.osm").write_text("<osm><!-- edited --></osm>")
+    with pytest.raises(sampled.SampleRefused, match="not the map in use"):
+        sampled.draw([{"distribution": dist.name, "n": 1, "seed": 2}], lambda x: tmp_path / x,
+                     "suite", anchors=lambda d: run._anchors_for(tmp_path, d))
