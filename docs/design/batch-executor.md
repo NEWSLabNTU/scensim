@@ -377,3 +377,37 @@ neighbour (each road has one lane each way), and some curved lanelets have a two
 centreline in lanelet2 itself (36200: 26-point bounds round a corner, a straight centre line),
 which SSv2 reads the same, so its vehicles cut that corner on seats as they do here.
 
+## 8. Agreement with seats (K2.4)
+
+A seats run and a batch replay of it, compared frame by frame (`scensim_batch.agreement`,
+`scripts/agreement_run.py`; the project `scenarios/projects/k24_agreement`). The seats ego is
+`replay_pilot` on a fixed command file, each Control stamped with the clock of the frame it
+answers; the truth records, per frame, the command the ego's vehicle ran (`command`,
+`truth-stream.md`). The batch replays exactly that: what ran, not what was sent. It pre-rolls
+its ego through what ran in the trace's lines 0..S, NPCs held and the storyboard idle
+(`BatchRun.reset`'s `preroll`), as seats drives its ego before `startNpcLogic`; then step k
+runs line S + k + 1's command. Frames pair on scenario time (seats frame S + k is batch step
+k). Per entity: max and RMS position error (the simulator's pose for the ego, SSv2's for the
+NPCs) and the max yaw error; per storyboard element: the step it first ran on each side;
+the two outcomes; the delivery (frames between a command's stamp and the step it ran in,
+commands superseded or run again).
+
+What it took, each read from a seats run:
+
+| | cause | fix |
+|---|---|---|
+| ego 9 m apart | the pilot's hold before command 0 had the seats brake pressed (sim_vehicle_ecu releases in ~0.3 s); a fresh batch component was not | the ego pre-roll |
+| lead turned the other way | map_export built the routing graph after moving the map's points, reordering 20 of Town01's 36 branches | map_export v2: the graph on the parsed map, checked against SSv2's own lanelet_wrapper (0 of 300 differ) |
+| elements started 2 steps early | the storyboard log's time is after the step; SSv2's first evaluation is at dt (the batch evaluated at 0 too); SSv2 sees the ego a frame late (`time-and-ticking.md`) | `context_steps` less a step; no evaluation at reset; the storyboard reads the ego's previous step (its vehicles the current one) |
+| lead 0.36 m, 0.27 rad off in the turn | the route sampled every 5 m and followed chord by chord | a Catmull-Rom cubic on samples 2.5 m apart, arc length the spline's |
+
+The rows (Isaac, engine A, `allow_loop`, one slot; seats on newslab-server139):
+
+| scenario (Town01) | outcome | ego max / RMS | NPC max / RMS / yaw | element offsets | delivery | pre-roll |
+|---|---|---|---|---|---|---|
+| follow_to_goal (ego 3 m/s-ish behind a 4 m/s lead, the lead through a turn) | passed / passed | 0.9 mm / 0.9 mm | lead 2.8 cm / 1.4 cm / 0.035 rad | all 0 (goal at step 1262 both) | 1271 of 1271 at delay 0 | 10 steps |
+
+Open: a row where a default vehicle reacts to the ego (it sees the ego current, by SSv2's
+order; follow_to_goal cannot tell), and one with a Distance condition between ego and NPC
+(the storyboard reads the NPC's canonical pose); engine B's column; the Hermite case on
+Town10HD (CARLA).
