@@ -86,9 +86,9 @@ The rules' state on main:
 | 2 | `latent: true` on a model variable | implemented after the re-check (092 K8, swb 243): recorded under the record's `latent` | CS6's `time_headway` and `reveal_time` are latent; the scenario no longer declares them |
 | 3 | `scensim.present` on an optional entity | not implemented | not needed by CS6 or CS7 |
 | 4 | `scensim.static` on a stopped vehicle | implemented after the re-check (092 K8, swb 243), with SSv2's `maxSpeed = 0`; executor pending in the batch | CS6's stopped car is static; its Init SpeedAction of 0 and its default-behaviour condition are gone |
-| 5 | `isBlind` in the subset, with lane following alone as the condition | not implemented: the checker gives the whole default traffic behaviour as the condition | CS6's lead is blind; its condition is the wider one |
+| 5 | `isBlind` in the subset, with lane following alone as the condition | implemented after the re-check (092 K8, swb 243): lane following alone as the condition, executor pending in the batch | CS6's lead is blind; its condition is the narrow one |
 | 6 | a parameter in an entity's category or model conditional on per-slot assets | implemented after the re-check (092 K8, swb 243): the checker names the parameter and its values as a condition | CS6's stopped car: `$stopped_kind` (car, truck, motorbike) is now a condition |
-| 7 | anchor attributes in derived values (`anchor.<name>.<attribute>`) | not implemented: no anchors on main (D2) | CS7 declares `exit_heading`, a constant, as the exit lane's heading |
+| 7 | anchor attributes in derived values (`anchor.<name>.<attribute>`) | implemented after the re-check (092 K8, swb 243), as the minimal declaration (`testbench.yaml` `world.anchors`); the rest of anchors is 092 K9 | CS7 reads `anchor.exit_n.heading`; `exit_heading` is gone |
 | 8 | SSv2's unimplemented constructs refused by name | implemented (092 S2) | CS7 swerves by a lane change |
 | 9 | small points | fixed or covered by the rules above | |
 

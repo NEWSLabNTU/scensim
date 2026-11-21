@@ -365,7 +365,11 @@ with the rule this note now proposes:
    makes a scripted cut-out keep its speed. *Rule:* the subset lists `isBlind`. A vehicle that is
    blind and has only lane-following and scripted motion needs the lane-following part of the
    default behaviour and nothing that reads other entities (092 K2.1's `see_around` off), which
-   the checker states as its condition instead of the whole traffic model.
+   the checker states as its condition instead of the whole traffic model. *Built* (092 K8):
+   SSv2's interpreter sends `see_around = not isBlind`, and FollowLane without it skips the
+   right of way, the front entity, traffic lights, stop lines and conflicting entities; the
+   checker's condition for a blind default controller is lane following alone, executor
+   pending until scensim_batch passes `isBlind` to its vehicles. CS6's lead is blind.
 6. **A per-sample entity class.** `vehicleCategory="$stopped_kind"` works in the sampler and in
    SSv2, but the subset did not classify it. *Rule:* a parameter in an entity's category or model
    is conditional in a batch on per-slot assets, and the checker names the parameter and its
@@ -376,7 +380,17 @@ with the rule this note now proposes:
    read-only attributes to derived expressions and constraints, as `anchor.<name>.<attribute>`:
    a lane's `heading` (at a given `s`, `anchor.exit_n.heading(s)`), `length` and `speed_limit`,
    a conflict point's `x` and `y`. The sampler reads them from the world's `world.yaml`, and the
-   record names the world it read them from.
+   record names the world it read them from. *Built* (092 K8), as the minimal declaration K9
+   extends: `testbench.yaml`'s `world.anchors` states each anchor's kind (`lane`: `heading`,
+   `length`, `speed_limit`; `point`: `x`, `y`) and its attributes as numbers; an expression reads
+   `anchor.<name>.<attribute>`; a derived value reading only those, parameters and such values
+   may feed the cell; the sampler refuses a read the world does not declare; and the record keeps
+   the values read (`anchors`). CS7's `sun_azimuth` and `glare` read `anchor.exit_n.heading`;
+   `exit_heading` is gone. K9 adds the rest: anchors a world declares itself, beside its map,
+   with attributes computed from the map (`heading(s)` along a lane, `length` and
+   `speed_limit` from its lanelets, conflict points from crossing routes), regions and curves,
+   binding a scenario's entities and positions to anchors, the check that a world provides what
+   a scenario reads, and the record naming the world's map revision it read them from.
 
 Two smaller points have their place elsewhere:
 

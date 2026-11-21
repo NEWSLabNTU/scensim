@@ -6,12 +6,11 @@ header:
   dataset: "none: invented for illustration, not fitted from data"
   version: "0"
   licence: CC0-1.0
-# exit_heading stands in for the exit lane's heading (rad, world frame), a property of the world's
-# lane anchor (anchor.exit_n.heading, not yet readable): a declared parameter, held constant, so
-# the cell may read it (section 7); speed_limit is a knob
+# the exit lane's heading (rad, world frame) is the world's lane anchor exit_n, read as
+# anchor.exit_n.heading (scenario-description.md 2a, gap 7; cs7_anchors.yaml declares it, as a
+# testbench.yaml's world.anchors does); speed_limit is a knob
 knobs: {speed_limit: 13.9}
 variables:
-  - {name: exit_heading, constant: 1.5708}
   - name: ego_speed
     normal: {mean: 10.5, sd: 1.5}
     range: [5.0, 16.0]
@@ -37,12 +36,12 @@ variables:
     normal: {mean: 1.2, sd: 0.3}
     range: [0.5, 2.5]
 derived:
-  sun_azimuth: "exit_heading + rel_azimuth"
+  sun_azimuth: "anchor.exit_n.heading + rel_azimuth"
   swerve_offset: "(kerb_offset + 0.8) if swerve_p < 0.3 else kerb_offset"   # 30 % swerve 0.8 m out
   # the cell, from what the world applied (scenario-description.md section 7): the sun's applied
-  # angles against the exit's heading (exit_heading stands in for anchor.exit_n.heading), and the
-  # applied swerve offset against the kerb offset; never from the drawn rel_azimuth or swerve_p
-  glare: "'into_sun' if abs(sun_azimuth - exit_heading) < 0.35 and sun_elevation < 0.2 else 'low_sun'"
+  # angles against the exit lane's heading, and the applied swerve offset against the kerb
+  # offset; never from the drawn rel_azimuth or swerve_p
+  glare: "'into_sun' if abs(sun_azimuth - anchor.exit_n.heading) < 0.35 and sun_elevation < 0.2 else 'low_sun'"
   swerve: "'yes' if abs(swerve_offset - kerb_offset) > 0.01 else 'no'"
   # the swerve's peak lateral acceleration (a sinusoidal move of d metres in T seconds peaks at
   # 2 pi d / T^2), an intermediate the constraint reads

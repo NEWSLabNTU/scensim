@@ -49,6 +49,25 @@ class Expressions(unittest.TestCase):
             Expr("speed * 2")({"a": 1, "b": 2})
 
 
+class AnchorAttributes(unittest.TestCase):
+    def test_an_anchor_attribute_is_read_by_its_dotted_name(self):
+        from scensim_sampler.expr import Expr
+        e = Expr("anchor.exit_n.heading + rel")
+        self.assertEqual(e.names, {"anchor.exit_n.heading", "rel"})
+        self.assertEqual(e({"anchor.exit_n.heading": 1.5, "rel": 0.25}), 1.75)
+
+    def test_other_attribute_forms_are_refused(self):
+        from scensim_sampler.expr import Expr, ExprError
+        for text in ("anchor + 1", "anchor.exit_n", "x.y.z", "anchor.a.b.c", "anchor.a.b()"):
+            with self.assertRaises(ExprError, msg=text):
+                Expr(text)
+
+    def test_an_undeclared_anchor_attribute_names_the_testbench(self):
+        from scensim_sampler.expr import Expr, ExprError
+        with self.assertRaisesRegex(ExprError, "world.anchors"):
+            Expr("anchor.exit_n.length")({})
+
+
 class Moments(unittest.TestCase):
     def test_normal(self):
         x = draws(dist.Normal(3.0, 0.5, "t"))

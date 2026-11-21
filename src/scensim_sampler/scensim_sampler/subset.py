@@ -296,6 +296,14 @@ STATIC = "scensim.static"
 MOTION = {"SpeedAction", "SpeedProfileAction", "LaneChangeAction", "LaneOffsetAction",
           "FollowTrajectoryAction", "AssignRouteAction", "AcquirePositionAction",
           "LateralDistanceAction", "LongitudinalDistanceAction"}
+# SSv2's isBlind (the interpreter sends see_around = not isBlind): FollowLane then skips every
+# check that reads another entity (right of way, the front entity, traffic-light and stop lines,
+# conflicting entities), so a blind vehicle needs lane following alone (093 gap 5)
+BLIND = "isBlind"
+DEFAULT_REASON = ("a batched model of SSv2's default traffic behaviour (lane following, "
+                  "stopping for obstacles)")
+BLIND_REASON = ("a batched model of SSv2's lane following alone (isBlind: see_around off, "
+                "nothing that reads other entities)")
 STATIC_REASON = ("a static prop per slot, with the entity's class and box; no behaviour model "
                  "(on seats SSv2 holds it at maxSpeed 0)")
 
@@ -440,16 +448,12 @@ def check(path, ego="policy"):
                 v.add(SEATS, where + "/ObjectController", f"controller {name or 'agent'}",
                       "an external pilot on a non-ego entity does not run in a batch")
             else:
-                v.add(CONDITIONAL, where, "SSv2's default controller",
-                      "a batched model of SSv2's default traffic behaviour (lane following, "
-                      "stopping for obstacles)")
+                _default_controller(v, where, props)
         if not list(obj.iter("Controller")):
             if obj.find("MiscObject") is not None:
                 v.add(BATCH, where, "MiscObject", "a static prop, instanced per slot")
             else:   # a vehicle or pedestrian with no controller named: SSv2's default
-                v.add(CONDITIONAL, where, "SSv2's default controller",
-                      "a batched model of SSv2's default traffic behaviour (lane following, "
-                      "stopping for obstacles)")
+                _default_controller(v, where, {})
     sb = root.find("Storyboard")
     if sb is not None:
         _walk(sb, "/OpenSCENARIO/Storyboard", v, in_init=False, entity=None)
@@ -470,9 +474,19 @@ def _init_controller(el, here, v, entity):
         v.add(SEATS, here, "ControllerAction", "an external pilot on a non-ego entity does not "
                                                "run in a batch")
     else:
-        v.add(CONDITIONAL, here, "SSv2's default controller",
-              "a batched model of SSv2's default traffic behaviour (lane following, stopping "
-              "for obstacles)")
+        props = {p.get("name"): p.get("value") for p in el.iter("Property")}
+        _default_controller(v, here, props)
+
+
+def _default_controller(v, where, props):
+    """SSv2's default controller: its whole traffic behaviour, or with isBlind lane following
+    alone, which scensim_batch's compiler does not pass to its vehicles yet (npc's
+    see_around)."""
+    if _true(props.get(BLIND)):
+        v.add(CONDITIONAL, where, "SSv2's default controller, blind", BLIND_REASON)
+        v.add(CONDITIONAL, where, BLIND, EXECUTOR_PENDING_REASON)
+    else:
+        v.add(CONDITIONAL, where, "SSv2's default controller", DEFAULT_REASON)
 
 
 def _walk(el, where, v, in_init, entity):

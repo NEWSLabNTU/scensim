@@ -244,6 +244,55 @@ class Latent(Base):
         self.assertTrue(any("latent.ego_speed: a parameter of" in p for p in check(bad, sc)))
 
 
+class Anchors(Base):
+    """093 gap 7: a world anchor's attributes in derived values, anchor.<name>.<attribute>;
+    CS7's exit lane heading, which a constant parameter stood in for."""
+
+    def anchors(self):
+        import yaml
+        return yaml.safe_load((CASES / "cs7_anchors.yaml").read_text())
+
+    def test_cs7_computes_its_glare_from_the_exit_lanes_heading(self):
+        b = Sampler.from_file(CASES / "cs7_cyclist_low_sun_dist.xosc",
+                              anchors=self.anchors()).draw(n=200, seed=4)
+        for r in b.records:
+            self.assertEqual(r["anchors"], {"exit_n": {"heading": 1.5708}})
+            self.assertNotIn("exit_heading", r["values"])
+            az, el = r["values"]["sun_azimuth"], r["values"]["sun_elevation"]
+            want = "into_sun" if abs(az - 1.5708) < 0.35 and el < 0.2 else "low_sun"
+            self.assertEqual(r["cell"]["glare"], want)
+            self.assertEqual(check(r), [])
+        self.assertEqual({r["cell"]["glare"] for r in b.records}, {"into_sun", "low_sun"})
+
+    def test_the_suns_azimuth_follows_the_worlds_heading(self):
+        for heading in (1.5708, 0.0):
+            an = self.anchors()
+            an["exit_n"]["heading"] = heading
+            for r in Sampler.from_file(CASES / "cs7_cyclist_low_sun_dist.xosc",
+                                       anchors=an).draw(n=20, seed=4).records:
+                self.assertEqual(r["anchors"], {"exit_n": {"heading": heading}})
+                self.assertAlmostEqual(r["values"]["sun_azimuth"],
+                                       heading + r["values"]["rel_azimuth"], places=9)
+
+    def test_a_world_without_the_anchor_is_refused(self):
+        for an in (None, {"exit_s": {"kind": "lane", "heading": 0.0}}):
+            with self.assertRaisesRegex(SpecError, "anchor.exit_n.heading: read by a derived "
+                                        "value, but the world declares no such anchor"):
+                Sampler.from_file(CASES / "cs7_cyclist_low_sun_dist.xosc", anchors=an)
+
+    def test_an_anchor_attribute_is_a_number(self):
+        with self.assertRaisesRegex(SpecError, "anchor exit_n.heading: a number"):
+            Sampler.from_file(CASES / "cs7_cyclist_low_sun_dist.xosc",
+                              anchors={"exit_n": {"kind": "lane", "heading": "north"}})
+
+    def test_the_record_check_takes_anchors(self):
+        r = Sampler.from_file(CASES / "cs7_cyclist_low_sun_dist.xosc",
+                              anchors=self.anchors()).draw(n=1, seed=4).records[0]
+        for bad in ({}, {"exit_n": {}}, {"exit_n": {"heading": "1"}}, {"exit_n": 1.0}):
+            self.assertTrue(any(p.startswith("anchors:") for p in check(dict(r, anchors=bad))),
+                            bad)
+
+
 class Importance(Base):
     def setUp(self):
         super().setUp()

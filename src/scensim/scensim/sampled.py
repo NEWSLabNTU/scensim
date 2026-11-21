@@ -64,9 +64,9 @@ def entries(value, where):
     return out
 
 
-def draw(value, resolve, where):
+def draw(value, resolve, where, anchors=None):
     """`[(record, scenario path)]` for a suite's `sample:`. `resolve(str) -> Path` resolves a
-    suite-relative path."""
+    suite-relative path. `anchors`: the world's (testbench.yaml world.anchors)."""
     ss, xosc = _sampler()
     out = []
     for at, s in entries(value, where):
@@ -75,7 +75,8 @@ def draw(value, resolve, where):
             raise SampleRefused(f"{at}: distribution {s['distribution']}: no such file")
         proposal = resolve(s["proposal"]) if s.get("proposal") else None
         try:
-            sampler = ss.Sampler.from_file(dist, proposal=proposal, knobs=s.get("knobs"))
+            sampler = ss.Sampler.from_file(dist, proposal=proposal, knobs=s.get("knobs"),
+                                           anchors=anchors)
             batch = sampler.draw(n=s.get("n"), seed=s.get("seed"))
         except (ss.SpecError, ss.SamplingError, ValueError) as e:
             raise SampleRefused(f"{at}: {e}") from None
@@ -198,8 +199,8 @@ def bind(record, rec, prov, pilots):
         notes.append("car: the stack names no spec_hash for the ego (or there is no ego)")
     out["id"] = ss.record_id(out)
     keys = ("record", "id", "scenario", "distribution", "category", "cell", "values", "derived",
-            "latent", "seeds", "base", "proposal", "weight", "log_weight", "search", "world", "car",
-            "sampler")
+            "latent", "anchors", "seeds", "base", "proposal", "weight", "log_weight", "search",
+            "world", "car", "sampler")
     return {k: out[k] for k in keys if k in out}, notes
 
 

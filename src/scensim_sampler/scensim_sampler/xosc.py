@@ -156,16 +156,18 @@ class Scenario:
             return ("derived", attribute)
         return None
 
-    def derived_ok(self, expressions):
+    def derived_ok(self, expressions, fixed=()):
         """Of `expressions` {derived name: the names its expression reads}, those whose names
         are all declared parameters (a bound knob is one) or such derived values, transitively:
         what a cell may be computed from (section 7). A derived value that reads a latent
-        variable (drawn but not a parameter), or one that does, is not."""
+        variable (drawn but not a parameter), or one that does, is not. `fixed`: other names
+        a cell may read, the world's anchor attributes (anchor.<name>.<attribute>)."""
         ok, changed = set(), True
         while changed:
             changed = False
             for name, reads in expressions.items():
-                if name not in ok and all(r in self.parameters or r in ok for r in reads):
+                if name not in ok and all(r in self.parameters or r in ok or r in fixed
+                                          for r in reads):
                     ok.add(name)
                     changed = True
         return ok

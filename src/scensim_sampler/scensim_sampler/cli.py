@@ -32,8 +32,22 @@ def _knob(text):
     return name, v
 
 
+def _anchors(path):
+    """The world's anchors from a YAML file: a testbench.yaml (its world.anchors) or the
+    {name: {attribute: value}} mapping itself."""
+    if path is None:
+        return None
+    d = yaml.safe_load(open(path)) or {}
+    if isinstance(d, dict) and isinstance(d.get("world"), dict):
+        d = d["world"].get("anchors") or {}
+    if not isinstance(d, dict):
+        raise SystemExit(f"{path}: anchors are {{name: {{attribute: value}}}}")
+    return d
+
+
 def draw(a):
-    s = Sampler.from_file(a.file, model=a.model, proposal=a.proposal, knobs=dict(a.knob))
+    s = Sampler.from_file(a.file, model=a.model, proposal=a.proposal, knobs=dict(a.knob),
+                          anchors=_anchors(a.anchors))
     batch = s.draw(n=a.n, seed=a.seed)
     out = sys.stdout if a.output == "-" else open(a.output, "w")
     try:
@@ -131,6 +145,9 @@ def main(argv=None):
     d.add_argument("--proposal", help="a proposal file: draw from it, weighted against its base")
     d.add_argument("--knob", type=_knob, action="append", default=[],
                    help="name=value: a world knob the constraints and the cell may read")
+    d.add_argument("--anchors", help="a testbench.yaml (its world.anchors), or a YAML file of "
+                   "{anchor: {attribute: value}}: the world's anchor attributes, read as "
+                   "anchor.<name>.<attribute>")
     d.add_argument("-o", "--output", default="-", help="the records (default: stdout)")
     d.add_argument("--format", choices=("jsonl", "yaml"), default="jsonl")
     d.set_defaults(func=draw)
