@@ -410,11 +410,15 @@ def to_v2(records):
             r["sim_time_ns"] = 1_000_000_000_000 + round(r["sim_time"] * 1e9)
             r["wall_ns"] = round(r["sim_time"] * 1e9) + 2_000_000   # 2 ms behind
             r["npc_logic_started"] = r["frame"] > 1
-            for e in r["entities"].values():
+            for name, e in r["entities"].items():
                 e["sim_pose"] = e.pop("carla")
                 moving = e["sim_pose"] is not None
                 e["angular_velocity"] = [0.0, 0.0, 0.1] if moving else None
                 e["velocity_source"] = "measured" if moving else None
+                if name == "ego" and moving:   # 092 K2.4: the command it ran, a frame old
+                    e["command"] = {"stamp_ns": r["sim_time_ns"] - 50_000_000,
+                                    "acceleration": 1.0, "velocity": 3.0, "tire_angle": 0.0,
+                                    "gear": 2, "arrived": 1}
         out.append(r)
     return out
 
@@ -437,6 +441,9 @@ class SchemaTwo(unittest.TestCase):
         self.assertEqual(ego0.sim_pose.x, 1.5)
         self.assertEqual(ego0.angular_velocity, (0.0, 0.0, 0.1))
         self.assertEqual(ego0.velocity_source, "measured")
+        self.assertEqual((ego0.command.arrived, ego0.command.acceleration), (1, 1.0))
+        self.assertEqual(trace.frames[0].sim_time_ns - ego0.command.stamp_ns, 50_000_000)
+        self.assertIsNone(trace.frames[0].entities["truck"].command)
         barrier = trace.frames[1].entities["barrier"]
         self.assertIsNone(barrier.sim_pose)
         self.assertIsNone(barrier.velocity_source)
@@ -446,6 +453,13 @@ class SchemaTwo(unittest.TestCase):
                          [f["frame"] > 1 for f in SAMPLE2 if f["type"] == "frame"])
         self.assertEqual(trace.contacts[0].sim_frame, 5021)
         self.assertEqual(trace.signals, [gt.Signal(1, 1_000_050_000_000, "12", "red")])
+
+    def test_a_malformed_command_is_refused(self):
+        bad = copy.deepcopy(SAMPLE2)
+        f = next(r for r in bad if r["type"] == "frame")
+        del f["entities"]["ego"]["command"]["arrived"]
+        with self.assertRaisesRegex(gt.TraceError, "entities.ego.command"):
+            gt.load_trace(lines(bad))
 
     def test_round_trips(self):
         trace = gt.load_trace(lines(SAMPLE2))

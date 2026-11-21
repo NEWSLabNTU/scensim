@@ -24,6 +24,14 @@ class P6:
 class St:
     ssv2: object
     sim_pose: object
+    command: object = None
+
+
+@dataclass
+class Cmd:
+    stamp_ns: int
+    acceleration: float
+    arrived: int
 
 
 @dataclass
@@ -87,6 +95,24 @@ class AgreementTest(unittest.TestCase):
                  "to": "runningState"}]))
             self.assertEqual(A.context_steps(p, 0.05),
                              {"s/a": {"runningState": 1, "completeState": 20}})
+
+    def test_taken_commands_and_their_delivery(self):
+        """Frame i's step starts at the previous frame's clock; a command stamped there ran
+        with no delay (0), one a frame older with 1. Two arriving together: one superseded;
+        none arriving: the same one again."""
+        t = trace(first=10, n=6, S=1)
+        ns = [f.sim_time_ns for f in t.frames]
+        dt = 50_000_000
+        plan = [None, Cmd(ns[0], 1.0, 1), Cmd(ns[1] - dt, 1.0, 2), Cmd(ns[1] - dt, 1.0, 0),
+                Cmd(ns[3], 0.5, 3), Cmd(ns[4], 0.0, 1)]
+        for f, c in zip(t.frames, plan):
+            f.entities["ego"].command = c
+        taken = A.taken_commands(t, 1, 5, "ego")
+        self.assertEqual([None if c is None else c.acceleration for c in taken],
+                         [1.0, 1.0, 1.0, 0.5, 0.0])
+        d = A.delivery(t, "ego", 0.05)
+        self.assertEqual(d, {"frames": 5, "delay": {0: 3, 1: 1, 2: 1}, "superseded": 3,
+                             "repeated": 1})
 
     def test_compare(self):
         seats = {"poses": {"ego": [(0, 0, 0), (1, 0, 0), None], "npc": [(10, 0, 0)]},

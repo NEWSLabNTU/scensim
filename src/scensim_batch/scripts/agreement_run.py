@@ -142,19 +142,30 @@ def main(argv=None):
         return term, trunc
 
     env.dones = recording_dones
+    ego_name = env.compiled.entities[env.run.ego].name
+    # what the seats ego ran, frame by frame, where the truth has it (092 K2.4): the batch
+    # replays that, and the delivery (delays, superseded and repeated commands) is its own
+    # column; else the commands as sent, from the hold on
+    taken = A.taken_commands(trace, S, steps, ego_name)
+    replay = "taken" if any(c is not None for c in taken) else "sent"
     hold_cmd = {"accel": -3.0, "velocity": 0.0, "steer": 0.0}
     for k in range(steps - 1):
-        # command k - hold at step k: a negative hold (the pilot started before startNpcLogic,
-        # as the goal reaches it when SSv2 engages the ego) starts the batch -hold commands in
-        i = k - hold
-        c = hold_cmd if i < 0 else commands[min(i, len(commands) - 1)]
+        if replay == "taken":
+            # the step to frame S + k + 1 ran that frame's command (the record at k + 1)
+            t = taken[k + 1]
+            c = hold_cmd if t is None else {"accel": t.acceleration, "velocity": t.velocity,
+                                             "steer": t.tire_angle}
+        else:
+            # command k - hold at step k: a negative hold (the pilot started before
+            # startNpcLogic) starts the batch -hold commands in
+            i = k - hold
+            c = hold_cmd if i < 0 else commands[min(i, len(commands) - 1)]
         act = torch.tensor([[c["accel"], c["velocity"], c["steer"]]])
         env.step(act)
         if end:
             break
     outcome = end.get("outcome", env.run.outcome()[0])
     entities = [e.name for e in env.compiled.entities]
-    ego_name = env.compiled.entities[env.run.ego].name
     seats = {"poses": A.seats_poses(trace, S, steps, entities,
                                     pose={n: ("sim" if n == ego_name else "ssv2")
                                           for n in entities}),
@@ -167,6 +178,8 @@ def main(argv=None):
         Path(a.dump).write_text(json.dumps({"seats": seats["poses"], "batch": batch["poses"]}))
     row = {"scenario": Path(a.scenario).name, "engine": a.engine, "S": S, "hold_steps": hold,
            "skipped_frames": skipped, "steps": steps, "batch_end_step": end.get("step"),
+           "replay": replay,
+           "delivery": A.delivery(trace, ego_name, step_time) if replay == "taken" else None,
            **A.compare(seats, batch)}
     text = json.dumps(row, indent=1)
     if a.out:

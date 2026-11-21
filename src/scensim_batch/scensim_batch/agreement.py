@@ -74,6 +74,46 @@ def seats_poses(trace, start_frames, steps, entities, pose="ssv2"):
     return out
 
 
+def taken_commands(trace, start_frames, steps, ego):
+    """[TakenCommand | None for k in 0..steps-1]: the command the seats ego ran in the step
+    that ended at frame S + k (the truth's `command`, 092 K2.4); None where the frame has none
+    (no command yet, or a world server that does not report it)."""
+    frames = sorted(trace.frames, key=lambda f: f.frame)
+    first = frames[0].frame
+    by = {f.frame: f for f in frames}
+    out = []
+    for k in range(steps):
+        f = by.get(first + start_frames + k)
+        st = None if f is None else f.entities.get(ego)
+        out.append(None if st is None else getattr(st, "command", None))
+    return out
+
+
+def delivery(trace, ego, step_time):
+    """How the seats ego's commands reached its vehicle, over the frames that ran one:
+    `delay` {frames: count}, the frames between the frame a command answered (its stamp) and
+    the step it ran in, less one (0: the next step, as the batch has it); `superseded`, the
+    commands that arrived with a later one and never ran (arrived above 1); `repeated`, the
+    frames that ran an older command again (arrived 0)."""
+    step_ns = round(step_time * 1e9)
+    delay, superseded, repeated, frames = {}, 0, 0, 0
+    prev_ns = None
+    for f in sorted(trace.frames, key=lambda f: f.frame):
+        st = f.entities.get(ego)
+        c = None if st is None else getattr(st, "command", None)
+        if c is None or f.sim_time_ns is None:
+            continue
+        frames += 1
+        start_ns = f.sim_time_ns - step_ns     # the step ran from the previous frame's clock
+        d = round((start_ns - c.stamp_ns) / step_ns)
+        delay[d] = delay.get(d, 0) + 1
+        superseded += max(c.arrived - 1, 0)
+        repeated += c.arrived == 0 and c.stamp_ns == prev_ns
+        prev_ns = c.stamp_ns
+    return {"frames": frames, "delay": dict(sorted(delay.items())),
+            "superseded": superseded, "repeated": int(repeated)}
+
+
 def context_steps(path, step_time):
     """{element path: {state: the first step k (at scenario time k dt) it entered}} from the
     storyboard log's state changes (its `sim` is SSv2's scenario time)."""
