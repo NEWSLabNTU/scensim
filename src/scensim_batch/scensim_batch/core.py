@@ -223,7 +223,7 @@ class BatchRun:
             return
         m = mask[:, None].expand_as(x)
         old = self.vehicles
-        for name in ("s", "v", "a", "jerk", "target", "length", "width", "speed_limit"):
+        for name in ("s", "v", "a", "jerk", "target", "length", "width", "speed_limit", "mode"):
             setattr(old, name, torch.where(m, getattr(fresh, name), getattr(old, name)))
         self._reset_constraints(m)
         old.routes.points = torch.where(m[..., None, None], fresh.routes.points, old.routes.points)

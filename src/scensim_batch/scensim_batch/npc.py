@@ -358,8 +358,15 @@ class DefaultVehicles:
         d, v_front, stop = self.front(others)
         L = self.length
         # FollowLane fails, and FollowFrontEntity takes over, when the front entity is within
-        # the stop distance plus its length plus 5 m (see_around only)
-        follow = self.see_around & (d <= stop + L + FRONT_ENTITY_STOP_MARGIN)
+        # the stop distance plus its length plus 5 m (see_around only). Once FollowFrontEntity
+        # runs it keeps running while it finds a front entity: BehaviorTree.CPP's Fallback is
+        # not reactive, it resumes its RUNNING child without ticking FollowLane again, so the
+        # hand-off is not re-tested while the stop distance shrinks under braking (seats'
+        # k24_npc_stops_for_ego: re-testing it dropped the follower out for a step at step 11
+        # and reset its deceleration, 0.90 m off)
+        running = (self.mode == 1) & torch.isfinite(d)
+        follow = self.see_around & torch.isfinite(d) & (
+            running | (d <= stop + L + FRONT_ENTITY_STOP_MARGIN))
         stable = stop + L + FRONT_ENTITY_MARGIN
         requested = torch.where(d <= stop, torch.zeros_like(d),
                                 torch.where(d >= stable, v_front + SPEED_STEP, v_front))
@@ -373,5 +380,6 @@ class DefaultVehicles:
         self.s = torch.where(on, self.s + ds, self.s)
         self.v, self.a, self.jerk = (torch.where(on, v1, self.v), torch.where(on, a1, self.a),
                                      torch.where(on, j1, self.jerk))
-        self.mode = follow.to(torch.int8)
+        # a lane change is the root's other branch: the tree starts over after it
+        self.mode = (follow & on).to(torch.int8)
         return self.poses()
