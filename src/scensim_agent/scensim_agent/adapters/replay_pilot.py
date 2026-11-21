@@ -26,8 +26,13 @@ line's `skipped` and warned once, since its command was never sent.
     ros2 run scensim_agent replay_pilot --relay tcp://localhost:5560 --entity ego \\
         --config replay.yaml        # {commands: <file>, ...}
 
+The pilot reports the car's true pose to the relay (`odom_topic`, nav_msgs/Odometry; on Isaac
+the ego config's ground truth, `/ground_truth/odom`, which the stack turns on for a pilot with
+`inputs: [ground_truth]`), as simple_pilot does: SSv2 initialises an Autoware-controlled ego's
+localization and waits for its kinematic state to reach the spawn pose.
+
 Config: `commands` (the file; required), `log` (default `<run dir>/replay_pilot.jsonl`),
-`hold_accel` (-3.0 m/s^2), `use_sim_time` (true).
+`hold_accel` (-3.0 m/s^2), `use_sim_time` (true), `odom_topic` ("": by `sim`), `sim` (isaac).
 """
 
 import json
@@ -39,7 +44,9 @@ import scensim_agent
 from scensim_agent import protocol as P
 
 BASE_S = 1000.0     # every clock's origin (time-and-ticking.md)
-DEFAULTS = {"commands": "", "log": "", "hold_accel": -3.0, "use_sim_time": True}
+DEFAULTS = {"commands": "", "log": "", "hold_accel": -3.0, "use_sim_time": True,
+            "odom_topic": "", "sim": "isaac"}
+POSE_PERIOD = 0.2   # s (wall) between pose reports, as simple_pilot
 FIELDS = ("accel", "velocity", "steer")
 
 
@@ -116,7 +123,10 @@ class RosVehicle:
         from rclpy.qos import QoSProfile, ReliabilityPolicy
         from autoware_control_msgs.msg import Control
         from autoware_vehicle_msgs.msg import GearCommand, SteeringReport, VelocityReport
+        from nav_msgs.msg import Odometry
         from rosgraph_msgs.msg import Clock
+
+        from .simple_pilot import ODOM_TOPICS
 
         self.Control, self.GearCommand = Control, GearCommand
         if not rclpy.ok():
@@ -128,6 +138,9 @@ class RosVehicle:
         self.dt, self.on_frame, self.log = step_time, on_frame, log
         self._lock = threading.Lock()
         self.status = {"steering": None, "velocity": None}
+        self.pose = None    # (x, y, z, yaw) of the last odometry
+        self.odom_topic = cfg["odom_topic"] or ODOM_TOPICS.get(cfg["sim"], ODOM_TOPICS["isaac"])
+        n.create_subscription(Odometry, self.odom_topic, self._on_odom, reliable)
         n.create_subscription(Clock, "/clock", self._on_clock, 10)
         n.create_subscription(SteeringReport, "/vehicle/status/steering_status",
                               lambda m: self._set("steering", float(m.steering_tire_angle)),
@@ -140,6 +153,16 @@ class RosVehicle:
         self._executor = SingleThreadedExecutor()
         self._executor.add_node(n)
         threading.Thread(target=self._executor.spin, daemon=True).start()
+
+    def _on_odom(self, msg):
+        from .simple_pilot import yaw_of
+        p, q = msg.pose.pose.position, msg.pose.pose.orientation
+        with self._lock:
+            self.pose = (p.x, p.y, p.z, yaw_of((q.x, q.y, q.z, q.w)))
+
+    def last_pose(self):
+        with self._lock:
+            return self.pose
 
     def _set(self, k, v):
         with self._lock:
@@ -191,6 +214,18 @@ class ReplayPilotAgent(scensim_agent.Agent):
             self.cfg, self.entity, dt, self.on_frame, self.log)
         self.log.info(f"{len(cmds)} commands at {dt:g} s from {self.cfg['commands']}"
                       + (f"; log {log}" if log else ""))
+        self._stop_pose = threading.Event()
+        if hasattr(self.vehicle, "last_pose"):
+            threading.Thread(target=self._report_pose, daemon=True).start()
+
+    def _report_pose(self):
+        """The car's true pose to the relay, every POSE_PERIOD (the localization SSv2 waits
+        for)."""
+        from .simple_pilot import pose_dict
+        while not self._stop_pose.wait(POSE_PERIOD):
+            p = self.vehicle.last_pose()
+            if p is not None:
+                self.report(pose=pose_dict(*p))
 
     def on_frame(self, f, t, status):
         with self._lock:
@@ -239,6 +274,7 @@ class ReplayPilotAgent(scensim_agent.Agent):
         self.report(P.IDLE)
 
     def close(self):
+        self._stop_pose.set()
         if self._out is not None:
             self._out.close()
         self.vehicle.close()

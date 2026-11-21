@@ -40,6 +40,15 @@ def start_frames(trace):
     return sf(trace)
 
 
+def _seats_outcome(run_dir):
+    """The seats run's verdict (result.json), in the batch's words: passed, failed, or
+    running (SSv2's timeout)."""
+    p = run_dir / "result.json"
+    if not p.exists():
+        return None
+    return json.loads(p.read_text()).get("verdict")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", required=True)
@@ -54,6 +63,7 @@ def main(argv=None):
                     help="the seats world server's physics step (scensim_isaac_world's "
                          "max_physics_dt, 1/60: the bridge steps a frame in substeps of it)")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--dump", default=None, help="both sides' poses per step, as JSON")
     a = ap.parse_args(argv)
 
     run_dir = Path(a.run)
@@ -119,13 +129,30 @@ def main(argv=None):
     env.reset()
     rec = A.BatchRecorder(env.run)
     rec.record(env.run.obs)
+    # each step's world is recorded where the env decides its dones, before Isaac Lab resets a
+    # finished slot (after env.step the slot already shows its next episode's spawn)
+    end = {}
+    dones = env.dones
+
+    def recording_dones():
+        term, trunc = dones()
+        rec.record(env.obs)
+        if bool(term[0]) and "outcome" not in end:
+            end["outcome"], end["step"] = env.run.outcome()[0], rec.k - 1
+        return term, trunc
+
+    env.dones = recording_dones
     hold_cmd = {"accel": -3.0, "velocity": 0.0, "steer": 0.0}
     for k in range(steps - 1):
-        c = hold_cmd if k < hold else commands[min(k - hold, len(commands) - 1)]
+        # command k - hold at step k: a negative hold (the pilot started before startNpcLogic,
+        # as the goal reaches it when SSv2 engages the ego) starts the batch -hold commands in
+        i = k - hold
+        c = hold_cmd if i < 0 else commands[min(i, len(commands) - 1)]
         act = torch.tensor([[c["accel"], c["velocity"], c["steer"]]])
         env.step(act)
-        rec.record(env.run.obs)
-    outcome = env.run.outcome()[0]
+        if end:
+            break
+    outcome = end.get("outcome", env.run.outcome()[0])
     entities = [e.name for e in env.compiled.entities]
     ego_name = env.compiled.entities[env.run.ego].name
     seats = {"poses": A.seats_poses(trace, S, steps, entities,
@@ -133,11 +160,14 @@ def main(argv=None):
                                           for n in entities}),
              "steps": A.context_steps(run_dir / "context.jsonl", step_time)
              if (run_dir / "context.jsonl").exists() else {},
-             "outcome": json.loads((run_dir / "result.json").read_text()).get("outcome")
-             if (run_dir / "result.json").exists() else None}
-    batch = {"poses": rec.poses, "steps": rec.steps, "outcome": outcome}
+             "outcome": _seats_outcome(run_dir)}
+    batch = {"poses": rec.poses, "steps": rec.steps,
+             "outcome": {"success": "passed", "failure": "failed"}.get(outcome, outcome)}
+    if a.dump:
+        Path(a.dump).write_text(json.dumps({"seats": seats["poses"], "batch": batch["poses"]}))
     row = {"scenario": Path(a.scenario).name, "engine": a.engine, "S": S, "hold_steps": hold,
-           "skipped_frames": skipped, "steps": steps, **A.compare(seats, batch)}
+           "skipped_frames": skipped, "steps": steps, "batch_end_step": end.get("step"),
+           **A.compare(seats, batch)}
     text = json.dumps(row, indent=1)
     if a.out:
         Path(a.out).write_text(text + "\n")

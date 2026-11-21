@@ -73,7 +73,10 @@ class PhysxVehicleBackend:
                         self.physx.set_wheel_rotation_speed(wp, spin)
                     except Exception:   # noqa: BLE001 - not simulated yet
                         pass
-            self.states[i].__init__()
+            # the reset's observation reads the spawn, not State's origin (K2.4: step 0's ego
+            # was at (0, 0) until the first physics step's read-back)
+            self.states[i].__init__(position=pose[0], quat=pose[1],
+                                    velocity=(v if self.velocity_set else 0.0, 0.0, 0.0))
 
     def apply(self, act, velocity=None, gear=None):
         """The coming step's actuation, with each request's velocity and gear for aib's

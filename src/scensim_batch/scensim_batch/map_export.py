@@ -17,7 +17,7 @@ The file (`FORMAT`, version `VERSION`) is JSON:
          "subtype": "road",                # the lanelet's subtype tag, null without one (SSv2's
                                            # nearby search drops those and crosswalks)
          "turn_direction": "straight",     # its turn_direction tag, "else" without one
-         "following": [<id>, ...],         # the vehicle routing graph's following(), in order
+         "following": [<id>, ...],         # the vehicle routing graph's following(), in SSv2's order
          "previous": [<id>, ...],
          "left": <id> | null,              # the graph's left(): a lane change may go there
          "right": <id> | null,
@@ -39,7 +39,7 @@ import sys
 from pathlib import Path
 
 FORMAT = "scensim-batch-lanelet-map"
-VERSION = 1
+VERSION = 2     # 2: `following`/`previous` in SSv2's order (a graph on the map as parsed)
 DIGEST_FILES = ("lanelet2_map.osm", "map_projector_info.yaml")
 
 
@@ -69,12 +69,34 @@ def _id(ll):
     return None if ll is None else int(ll.id)
 
 
+def topology_graph(map_dir):
+    """(map, routing graph) on the map as lanelet2 parses it, for the order of `following()`
+    and `previous()`: SSv2 takes a route-less NPC's turn as the first of them, and lanelet2's
+    order is the one its graph builder finds on the parsed map. simple_route's map has its
+    points moved to the map frame before its graph is built, which reorders 20 of Town01's 36
+    branches (checked against SSv2's own lanelet_wrapper); a graph on any fresh parse orders
+    all 36 as SSv2 does. The projector does not matter (UTM, local cartesian and Mercator
+    agree); local cartesian accepts any origin."""
+    import lanelet2
+    from lanelet2.io import Origin
+    from lanelet2.projection import LocalCartesianProjector
+    from scensim_agent.adapters.simple_route import _osm_nodes, parse_origin, read_projector_info
+
+    osm = Path(map_dir) / "lanelet2_map.osm"
+    lat, lon = parse_origin(read_projector_info(osm.parent), _osm_nodes(osm))
+    m = lanelet2.io.load(str(osm), LocalCartesianProjector(Origin(lat, lon)))
+    rules = lanelet2.traffic_rules.create(lanelet2.traffic_rules.Locations.Germany,
+                                          lanelet2.traffic_rules.Participants.Vehicle)
+    return m, lanelet2.routing.RoutingGraph(m, rules)
+
+
 def export(map_dir):
     """The export of `map_dir` (a dict, FORMAT version VERSION)."""
     from scensim_agent.adapters.simple_route import load_map
 
     d = Path(map_dir)
     lmap, rules, graph = load_map(d)
+    tmap, tgraph = topology_graph(d)
     out = {}
     for ll in sorted(lmap.laneletLayer, key=lambda x: x.id):
         attrs = ll.attributes
@@ -89,8 +111,8 @@ def export(map_dir):
             "right_bound": [[float(p.x), float(p.y)] for p in ll.rightBound],
             "subtype": attrs["subtype"] if "subtype" in attrs else None,
             "turn_direction": attrs["turn_direction"] if "turn_direction" in attrs else "else",
-            "following": [int(x.id) for x in graph.following(ll)],
-            "previous": [int(x.id) for x in graph.previous(ll)],
+            "following": [int(x.id) for x in tgraph.following(tmap.laneletLayer[ll.id])],
+            "previous": [int(x.id) for x in tgraph.previous(tmap.laneletLayer[ll.id])],
             "left": _id(graph.left(ll)),
             "right": _id(graph.right(ll)),
             "adjacent_left": _id(graph.adjacentLeft(ll)),

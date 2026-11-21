@@ -212,7 +212,8 @@ class ExportFileTest(unittest.TestCase):
                 W.LaneletWorld.load(f, map_dir=d / "map")
             W.LaneletWorld.load(f)                                       # no map: no check
             f.write_text(json.dumps(dict(doc, version=99)))
-            with self.assertRaisesRegex(ValueError, "not a scensim-batch-lanelet-map v1"):
+            with self.assertRaisesRegex(ValueError,
+                                        f"not a scensim-batch-lanelet-map v{map_export.VERSION}"):
                 W.LaneletWorld.load(f)
 
 
@@ -239,6 +240,27 @@ class Town01Test(unittest.TestCase):
             lp = w.lanelet_pose(x, y, sp.yaw(sp.length / 2), lanes=[k])
             ok += lp is not None and abs(lp[1] - sp.length / 2) < 1e-6 and abs(lp[2]) < 1e-6
         self.assertEqual(ok, 40)
+        # SSv2's own following() order at Town01's 36 branches (traffic_simulator's
+        # lanelet_wrapper, VEHICLE_WITH_ROAD_SHOULDER): a route-less NPC takes the first, and
+        # v1's order (a graph on the moved map) differed at 20 of them (K2.4's follow_to_goal)
+        for k, v in SSV2_TOWN01_BRANCHES.items():
+            self.assertEqual(w.lanelets[int(k)]["following"], v, k)
+
+
+SSV2_TOWN01_BRANCHES = {
+    "31300": [38791, 39254], "27898": [35308, 35798], "20475": [39868, 39641],
+    "18715": [43549, 43381], "6583": [42664, 42451], "5230": [42219, 41795],
+    "16676": [43149, 43640], "7768": [36945, 36717], "34721": [43302, 43074],
+    "29825": [38704, 38203], "149": [35397, 35653], "12008": [38477, 38053],
+    "21828": [41040, 41443], "32582": [41581, 41199], "16946": [39406, 39114],
+    "10732": [37162, 36630], "3183": [36464, 35887], "32189": [39041, 38966],
+    "4051": [37322, 37903], "1159": [35976, 36149], "2922": [37664, 37411],
+    "2113": [35161, 35576], "28257": [42063, 41654], "27676": [40892, 40484],
+    "17761": [40738, 40314], "9379": [38294, 38556], "29216": [42296, 41884],
+    "32855": [42737, 42824], "34940": [36305, 36543], "30482": [39485, 40054],
+    "28958": [39793, 39961], "33476": [37014, 37233], "34136": [41370, 40967],
+    "31871": [42526, 42911], "28575": [40395, 40573], "31516": [37743, 37980],
+}
 
 
 if __name__ == "__main__":
