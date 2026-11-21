@@ -200,6 +200,50 @@ class Joint(Base):
             Sampler.from_file(p)
 
 
+CASES = Path(__file__).resolve().parents[1] / "examples" / "cases"
+
+
+class Latent(Base):
+    """scenario-description.md 2a, gap 2: a model variable marked latent is drawn and recorded
+    (the record's `latent`), feeds derived values and constraints, and never reaches the
+    scenario; CS6's time_headway and reveal_time are latent."""
+
+    def test_cs6_records_its_latent_variables_and_binds_only_its_parameters(self):
+        b = Sampler.from_file(CASES / "cs6_cut_out_stopped_car_dist.xosc").draw(n=50, seed=3)
+        sc = Scenario(CASES / "cs6_cut_out_stopped_car.xosc")
+        for r in b.records:
+            self.assertEqual(set(r["latent"]), {"time_headway", "reveal_time"})
+            self.assertFalse(set(r["latent"]) & set(r["values"]))
+            self.assertTrue(set(r["values"]) <= set(sc.parameters))
+            v, lat = r["values"], r["latent"]
+            # the derived values read the latent ones (models/cs6_cut_out.yaml)
+            self.assertAlmostEqual(v["reveal_m"], v["ego_speed"] * lat["reveal_time"], places=9)
+            self.assertAlmostEqual(v["lead_s"], 5 + v["ego_speed"] * lat["time_headway"],
+                                   places=9)
+            self.assertLess(v["reveal_m"], 600 - v["lead_s"])   # a constraint on them
+            self.assertEqual(check(r, sc), [])
+
+    def test_a_latent_variable_named_like_a_parameter_is_refused(self):
+        self.d.write("m.yaml", MODEL.replace("  - {name: gap, lognormal",
+                                             "  - {name: gap, latent: true, lognormal"))
+        with self.assertRaisesRegex(SpecError, "gap is latent, but s.xosc declares a parameter"):
+            Sampler.from_file(self.d.path / "s.xosc", model=self.d.path / "m.yaml")
+
+    def test_latent_is_a_boolean(self):
+        self.d.write("m.yaml", MODEL.replace("  - {name: gap, lognormal",
+                                             "  - {name: gap, latent: yes please, lognormal"))
+        with self.assertRaisesRegex(SpecError, "latent is true or false"):
+            Sampler.from_file(self.d.path / "s.xosc", model=self.d.path / "m.yaml")
+
+    def test_the_record_check_keeps_latent_out_of_values_and_the_scenario(self):
+        r = Sampler.from_file(CASES / "cs6_cut_out_stopped_car_dist.xosc").draw(
+            n=1, seed=3).records[0]
+        sc = Scenario(CASES / "cs6_cut_out_stopped_car.xosc")
+        bad = dict(r, latent={**r["latent"], "ego_speed": r["values"]["ego_speed"]})
+        self.assertTrue(any("also in values" in p for p in check(bad)))
+        self.assertTrue(any("latent.ego_speed: a parameter of" in p for p in check(bad, sc)))
+
+
 class Importance(Base):
     def setUp(self):
         super().setUp()

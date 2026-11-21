@@ -21,6 +21,7 @@ class ModelPlugin(Plugin):
                             f"(the parameterName it is given under)")
         self.model = model
         self.names = tuple(model.names) + tuple(model.derived)
+        self.latent = tuple(model.latent)
         self.knobs = dict(model.knobs)
 
     def draw(self, rng, index, values):

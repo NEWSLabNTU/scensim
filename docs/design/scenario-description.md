@@ -3,9 +3,8 @@
 Status: design exploration for phase 093, 2026-11-20. Built since, in phase 092: the knob
 binding and computed cells (section 3, 7), the sampling (section 5, as S1 and K1), the
 compilable subset (section 6, as S2) and the coverage report (section 7, as K7). Not built:
-the anchors (section 3), the behaviour models (section 4, a draft), and four of the rules of
-section 2a (gaps 2, 4, 5 and 7; gap 3 too, which neither review case needs; roadmap 093 lists
-their state).
+the anchors (section 3), the behaviour models (section 4, a draft), and the rules of section 2a
+for gaps 5 and 7 (gap 3 too, which neither review case needs; roadmap 093 lists their state).
 
 Inputs: phase 092's design ([ml-training-interface.md](ml-training-interface.md)) and its
 studies ([survey-risk-categories.md](survey-risk-categories.md),
@@ -338,9 +337,12 @@ with the rule this note now proposes:
    not use directly (a time headway, a reveal time), which only derived values read. The sampler
    refused a drawn variable that is not a scenario parameter, so both scenarios declare such
    variables as parameters their storyboard never reads. *Rule:* a model variable may be marked
-   `latent: true`. It is drawn and recorded in the record's `values` (so a replay draws nothing),
-   it may feed derived values, constraints and the cell, and it is never bound to the scenario;
-   a latent variable with the name of a scenario parameter is refused.
+   `latent: true`. It is drawn and recorded in the record's `latent` (so a replay draws nothing),
+   it may feed derived values and constraints, and it is never bound to the scenario; a latent
+   variable with the name of a scenario parameter is refused. A cell may not read it, directly
+   or through a derived value (section 7). *Built* (092 K8): the record keeps latent values in
+   their own field, not in `values` as first proposed, so `values` stays what the runner passes
+   to the scenario; CS6's `time_headway` and `reveal_time` are latent.
 3. **Optional entities.** "The lane the lead moves into is occupied in 20 % of runs" needs an
    entity that exists in some samples only. OpenSCENARIO's entity set is fixed, and
    `AddEntityAction` is seats only. *Rule:* an entity may carry the property `scensim.present` =
@@ -354,7 +356,11 @@ with the rule this note now proposes:
    car would drive off. *Rule:* a vehicle whose controller has the property `scensim.static =
    true` stands where it was placed for the whole run (speed 0, no behaviour), and is a static
    prop in a batch, with a vehicle's class and box. The checker classifies it batch; any motion
-   action on it is refused.
+   action on it is refused. *Built* (092 K8): the same controller must carry SSv2's own
+   `maxSpeed = 0`, which SSv2 applies at spawn as the entity's speed limit, so seats holds it
+   at rest with nothing of ours (a static entity without it is refused, naming the fix); the
+   batch side is executor pending until scensim_batch compiles it as a prop. CS6's stopped car
+   is static.
 5. **A blind entity.** SSv2's `isBlind` controller property (the entity ignores others) is what
    makes a scripted cut-out keep its speed. *Rule:* the subset lists `isBlind`. A vehicle that is
    blind and has only lane-following and scripted motion needs the lane-following part of the

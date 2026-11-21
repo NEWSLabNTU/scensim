@@ -35,6 +35,7 @@ class Plugin:
     base = None            # {"id", "sha256"}: the fitted model it draws from, if any
     proposal = None        # {"id", "sha256"}: the proposal it draws from instead, if any
     knobs = {}             # world knobs' defaults it brings (the sampler's override them)
+    latent = ()            # of names, those drawn and recorded but never bound to the scenario
 
     def derived_reads(self):
         """{derived name: the names its expression reads}: what a cell computed from a derived

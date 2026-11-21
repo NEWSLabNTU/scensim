@@ -38,6 +38,7 @@ executor refuses.
 | FollowTrajectoryAction, AssignRouteAction, AcquirePositionAction | precomputed per slot on the world's map |
 | RoadCondition; the world knob `world.surface` | friction as a per-slot material |
 | the world knob `world.zone_layout`; a MiscObject | a prop set, instanced per slot |
+| an entity whose controller has `scensim.static = true` and SSv2's `maxSpeed = 0` (093 D7 gap 4) | a prop per slot with the entity's class and box, no behaviour model (executor pending). Without `maxSpeed = 0`, and for any motion action on it (SpeedAction, SpeedProfileAction, LaneChangeAction, LaneOffsetAction, FollowTrajectoryAction, AssignRouteAction, AcquirePositionAction, Lateral- or LongitudinalDistanceAction), the checker refuses the scenario by name |
 | Distance, RelativeDistance, RelativeClearance, ReachPosition, SimulationTime, TimeHeadway, Speed, RelativeSpeed, Acceleration, and StandStill conditions | vectorised per slot |
 | CollisionCondition | contact per slot |
 | UserDefinedValueCondition `RelativeHeadingCondition(<entity>)` or `(<entity>, <lane>, <s>)`, matched by the function-call form | SSv2 computes it from the entity's pose against its lane, nothing from outside: a heading per slot |
@@ -137,7 +138,7 @@ values:
 | CS3, a stale map | compiles with the ego as the batch's policy, the map variant an observation input. Refused with `--ego seats` |
 | CS4, a lidar drops out during a cut-in | compiles, with the fault as a mask, if SSv2's default behaviour has a batched model (the cutter) |
 | CS5, fog mid-route | compiles if the slot has a camera and a renderer with fog per slot (and TimeOfDay). The fog's ramp over `fog_ramp` is a profile (gap below) |
-| CS6, a cut-out reveals a stopped car (093 D7) | compiles if the slot has a camera (the bound `illumination`), SSv2's default behaviour has a batched model (the lead and the stopped car), and the batch has an asset for each `$stopped_kind` (car, truck, motorbike, from its joint model) |
+| CS6, a cut-out reveals a stopped car (093 D7) | compiles if the slot has a camera (the bound `illumination`), SSv2's default behaviour has a batched model (the lead), the batch runs a static entity (the stopped car, `scensim.static`), and the batch has an asset for each `$stopped_kind` (car, truck, motorbike, from its joint model) |
 
 ## 6. Measured on SSv2's examples
 

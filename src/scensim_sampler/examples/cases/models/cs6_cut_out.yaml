@@ -14,10 +14,12 @@ variables:
   - name: ego_speed
     normal: {mean: 28.0, sd: 3.0}
     range: [16.0, 40.0]
-  - name: time_headway          # the ego's gap to the lead, s
+  - name: time_headway          # the ego's gap to the lead, s; latent: only derived values read it
+    latent: true
     lognormal: {mean: 1.6, sd: 0.5}
     range: [0.6, 4.0]
-  - name: reveal_time           # how far ahead of the stopped car the lead leaves, s at its speed
+  - name: reveal_time           # how far ahead of the stopped car the lead leaves, s at its speed; latent
+    latent: true
     lognormal: {mean: 2.0, sd: 0.7}
     range: [0.5, 6.0]
   - name: lc_time

@@ -289,12 +289,28 @@ def _entity_class(obj, where, v, declared, values):
                       f"{tag} {attr} ${name} ({vals})", PER_SLOT_ASSETS)
 
 
+# a vehicle that never moves (scenario-description.md 2a, gap 4): its controller says
+# scensim.static = true and SSv2's own maxSpeed = 0, so SSv2 keeps it at rest on seats and a batch
+# makes it a prop; no motion action may name it
+STATIC = "scensim.static"
+MOTION = {"SpeedAction", "SpeedProfileAction", "LaneChangeAction", "LaneOffsetAction",
+          "FollowTrajectoryAction", "AssignRouteAction", "AcquirePositionAction",
+          "LateralDistanceAction", "LongitudinalDistanceAction"}
+STATIC_REASON = ("a static prop per slot, with the entity's class and box; no behaviour model "
+                 "(on seats SSv2 holds it at maxSpeed 0)")
+
+
+def _true(value):
+    return str(value).strip().lower() == "true"
+
+
 # --- checking -------------------------------------------------------------------------------
 
 class Verdict:
     def __init__(self, path):
         self.path = str(path)
         self.refusals, self.conditions, self.notes, self.counts = [], [], [], {}
+        self.static = set()
 
     def add(self, cls, where, what, reason, fix=None):
         self.counts[cls] = self.counts.get(cls, 0) + 1
@@ -395,6 +411,25 @@ def check(path, ego="policy"):
             elif EGO_POLICY not in v.notes:
                 v.notes.append(EGO_POLICY)
             continue
+        static = [c for c in obj.iter("Controller")
+                  if any(p.get("name") == STATIC and _true(p.get("value"))
+                         for p in c.iter("Property"))]
+        if static:
+            props = {p.get("name"): p.get("value") for p in static[0].iter("Property")}
+            try:
+                still = float(props.get("maxSpeed")) == 0.0
+            except (TypeError, ValueError):
+                still = False
+            if not still:
+                raise SubsetError(
+                    f"{spath}: {obj.get('name')} is {STATIC} but its controller's maxSpeed is "
+                    f"{props.get('maxSpeed')!r}: SSv2 holds an entity at rest only by "
+                    f"<Property name=\"maxSpeed\" value=\"0\"/>, so add it beside {STATIC}")
+            v.static.add(obj.get("name"))
+            v.add(BATCH, where + "/ObjectController", f"a static entity ({STATIC})",
+                  STATIC_REASON)
+            v.add(CONDITIONAL, where + "/ObjectController", STATIC, EXECUTOR_PENDING_REASON)
+            continue
         for c in obj.iter("Controller"):
             props = {p.get("name"): p.get("value") for p in c.iter("Property")}
             name = (c.get("name") or "")
@@ -449,6 +484,13 @@ def _walk(el, where, v, in_init, entity):
     on_ego = (bool(entity) and v.ego_mode == "policy"
               and all(e in v.egos for e in ((entity,) if isinstance(entity, str) else entity)))
     tag = el.tag
+    if tag in MOTION and entity:
+        names = (entity,) if isinstance(entity, str) else entity
+        moved = sorted(n for n in names if n in v.static)
+        if moved:
+            raise SubsetError(f"{v.path}: {tag} at {here} moves {', '.join(moved)}, which is "
+                              f"{STATIC}: a static entity has no motion action (drop the action, "
+                              f"or {STATIC})")
     if init and tag == "ControllerAction":
         _init_controller(el, here, v, entity)
         return

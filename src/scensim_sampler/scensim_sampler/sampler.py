@@ -58,6 +58,14 @@ class Sampler:
         for p in self.plugins:
             self.knobs.update(p.knobs)
         self.knobs.update(knobs or {})
+        # latent variables (scenario-description.md 2a, gap 2): drawn, recorded under `latent`,
+        # read by derived values and constraints, never passed to the scenario
+        self.latent = [n for p in self.plugins for n in getattr(p, "latent", ())]
+        clash = [n for n in self.latent if n in scenario.parameters]
+        if clash:
+            raise SpecError(f"{', '.join(clash)} is latent, but {scenario.path.name} declares a "
+                            f"parameter of that name: a latent variable never reaches the "
+                            f"scenario; rename it, or drop latent to bind it")
         # a factor drawn first (twise rows, set by index) may condition what follows
         self.plugins.sort(key=lambda p: not p.deterministic)
         bases = [p.base for p in self.plugins if p.base is not None]
@@ -133,9 +141,11 @@ class Sampler:
 
     def _record(self, run_seed, index, drawn, derived, cell, log_w, streams):
         sc = self.scenario
-        params, cell = {}, dict(cell)
+        params, cell, latent = {}, dict(cell), {}
         for k, v in drawn.items():
-            if k in sc.parameters:
+            if k in self.latent:
+                latent[k] = _plain(v)
+            elif k in sc.parameters:
                 params[k] = sc.cast(k, v)
             elif k in derived:
                 continue  # an intermediate the constraints or the cell read; not recorded
@@ -165,6 +175,7 @@ class Sampler:
             "cell": cell,
             "values": params,
             "derived": [k for k in derived if k in params],
+            **({"latent": latent} if latent else {}),
             "seeds": {"scenario": int(scen_ss.generate_state(1)[0]),
                       "world": int(world_ss.generate_state(1)[0]),
                       "pilots": {e: int(s) for e, s in zip(sc.entities, pilots)}},
