@@ -88,8 +88,13 @@ too early gets a bind error from LibCarla trying to start a server of its own, s
 
 **The tick gate** (`tick_gate`, or `SCENSIM_TICK_GATE=host:port`, see `tick_gate.rs`). A
 follower whose round takes longer than a frame skips frames. A follower that joins the gate
-(`HELLO`, then `DONE <frame>` after each frame, `BYE`) is waited for before every tick, at
-most `tick_gate_timeout_ms` (1 s), after which the tick goes ahead and the miss is counted.
+(`HELLO`, then `DONE <frame>` after each frame, `BYE`) is waited for once per step, before the
+step's first tick, for the CARLA frame the previous step ended on, at most
+`tick_gate_timeout_ms` (1 s), after which the tick goes ahead and the miss is counted. The
+frame waited for is the one the truth stream reports (`TruthFrame.sim_frame`); a step's
+substeps and the settling tick after each spawn are not waited for, since no truth frame names
+them and no follower could finish them (until 2026-11-21 each cost a timeout: about 4 s at the
+spawn of 20 NPCs, 092 K4's exit runs).
 A follower silent for 5 s has left. The wait is in scensim's request path before
 `world.tick()`, never inside a callback, and is bounded well inside SSv2's reply timeout.
 Several followers can join: the gate knows each by the address its datagrams come from, a
@@ -164,6 +169,15 @@ clock: {mode: paced, max_lag_s: 0.05, frames: 400,
 `ok` is false, and a paced run an error run, when any frame's lag exceeds `max_lag_s`; a
 lockstep run's `ok` is always true. A run with no truth file (`logging.gap_trace: false`)
 cannot be paced, and `testbench check` refuses that combination.
+
+**What bounds a run's speed on seats: SSv2.** Measured 2026-11-21 on host 243 (092 K4's exit
+runs: bench's `town01_npc_20`, 20 NPCs on Town01, CARLA 0.9.16, a loaded host): the median
+wall time between frames was 232 ms, about 4 frames a second, while the bridge processed a
+frame in 0.7 ms (p50) and the world server's tick took about 5 ms. So 60 s of simulation took
+about 5 minutes, and both paced runs were error runs, their lag growing to 240 and 250 s.
+SSv2's interpreter and its traffic simulator, not the bridge or the world server, set the
+throughput of a seat with that many NPCs. A paced study (the board in the loop) and any seats
+evaluation counted in runs per hour (094) are bounded there.
 
 ## Episodes and vehicle stacks
 

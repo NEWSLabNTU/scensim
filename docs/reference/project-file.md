@@ -324,7 +324,8 @@ judges, as one process group. It runs in the project directory, in the scenario 
 
 Any attachment turns the stack's truth topic on. `lockstep: true` also turns on the CARLA world
 server's tick gate, on the seat's SSv2 port + 6 (UDP); the attachment joins it as a follower
-(`HELLO`, then `DONE <frame>` after each frame, `BYE`) and each tick waits for it, at most 1 s.
+(`HELLO`, then `DONE <sim_frame>` after each truth frame, `BYE`) and each step waits for it,
+at most 1 s, before its first tick.
 Isaac's world server has no gate yet, so `testbench check` refuses `lockstep` there. The only
 lifetime is the run's.
 
