@@ -16,8 +16,10 @@ judged, from host ``gpu``, the seat's ``seats.gpus``, CUDA_VISIBLE_DEVICES, else
 ``compare`` fails on a run whose verdict or a judge's verdict differs from the reference, or
 that is missing, and on results whose CARLA launch (the effective quality and args, scensim's
 ``provenance.carla``; the reference's ``carla_launch``) is not the reference's, naming both: the
-quality changes what sensors see, so such a pair is not like for like (roadmap 077, item 54); a
-reference recorded before launches were is noted. A duration more than 1.5 times the
+quality changes what sensors see, so such a pair is not like for like (roadmap 077, item 54).
+Launches compare by quality and args, whether the stack started CARLA or observed an external
+one on the host (issue 097); one that could not be verified, and a reference recorded before
+launches were, is noted. A duration more than 1.5 times the
 reference's is reported, not failed (hosts differ). Record only on the release commit, so each reference names one commit. The busy check
 and ``gpu_at_record`` are the host's state when ``record`` runs, not while the suite ran.
 
@@ -330,41 +332,74 @@ def results_provenance(rows: list, runs: Path) -> dict:
 
 def carla_launch(prov: dict):
     """A run's effective CARLA quality and args (scensim's ``provenance.carla``, roadmap 077 item
-    54), and whether they applied (a CARLA the stack did not start ran as it was); None for a
-    run before that, or on Isaac. The effective quality changes what sensors see (LODs,
-    foliage), so results at different ones are not compared as like for like."""
+    54), and how they are known: ``applied`` true (the stack started CARLA with them),
+    "observed" (an external CARLA on the host, read from its command line, issue 097) or false
+    (an external one that was not read: what it ran is unknown); None for a run before that,
+    or on Isaac. The effective quality changes what sensors see (LODs, foliage), so results at
+    different ones are not compared as like for like."""
     c = prov.get("carla")
     if not isinstance(c, dict):
         return None
+    applied = c.get("applied")
     return {"quality": c.get("quality"), "args": list(c.get("args") or []),
-            "applied": bool(c.get("applied"))}
+            "applied": "observed" if applied == "observed" else bool(applied)}
+
+
+def _verified(launch) -> bool:
+    return isinstance(launch, dict) and launch.get("applied") in (True, "observed")
+
+
+def _quality_args(launch):
+    return None if launch is None else (launch["quality"], tuple(launch["args"]))
 
 
 def launch_text(launch) -> str:
     if launch is None:
         return "no CARLA launch recorded"
     t = f"quality {launch['quality']}, args {launch['args'] or '[]'}"
-    return t if launch["applied"] else t + " (not applied: an external CARLA)"
+    if launch["applied"] == "observed":
+        return t + " (observed: an external CARLA)"
+    return t if launch["applied"] else t + " (unverified: an external CARLA, not read)"
+
+
+def results_launch(prov: dict):
+    """The results' launch to record or compare: a verified one when any run has it (their
+    quality and args are one, else launch_problem names the mix), else the first."""
+    got = [json.loads(k) for k in prov.get("launches") or {}]
+    ver = [g for g in got if _verified(g)]
+    return ver[0] if ver else (got[0] if got else None)
 
 
 def launch_problem(ref_launch, prov: dict):
-    """``(problem, note)`` comparing the results' CARLA launch with the reference's: a mix in the
-    results, or a launch other than the reference's, is a problem naming both; a reference
-    recorded before launches were (``carla_launch`` absent) is a note."""
-    got = [json.loads(k) for k in prov.get("launches") or {}]
-    if len(got) > 1:
+    """``(problem, note)`` comparing the results' CARLA launch with the reference's, by
+    quality and args only (issue 097: how a launch is known is not what it is). Verified
+    launches of more than one quality and args in the results, or a verified one other than
+    the reference's, is a problem naming both. A launch that cannot be verified (an external
+    CARLA not read, on either side) is a note, not compared; so is a reference recorded before
+    launches were (``carla_launch`` absent)."""
+    launches = prov.get("launches") or {}
+    got = [(json.loads(k), ids) for k, ids in launches.items()]
+    kinds = {_quality_args(g) for g, _ids in got if g is None or _verified(g)}
+    if len(kinds) > 1:
         return ("results from more than one CARLA launch: " +
-                "; ".join(f"{launch_text(json.loads(k))} ({len(ids)} runs)"
-                          for k, ids in prov["launches"].items())), None
-    got = got[0] if got else None
+                "; ".join(f"{launch_text(g)} ({len(ids)} runs)" for g, ids in got)), None
+    notes = [f"{len(ids)} runs' CARLA launch is unverified: {launch_text(g)}"
+             for g, ids in got if g is not None and not _verified(g)]
+    rep = results_launch(prov)
     if ref_launch in ("unrecorded", None):
         # a reference recorded before launches were, or from results that named none
-        return None, (f"the reference names no CARLA launch (its results predate 077 item 54); "
-                      f"the results' is {launch_text(got)}")
-    if got != ref_launch:
-        return (f"CARLA launch differs, not comparable: the results' {launch_text(got)}, the "
+        notes.insert(0, f"the reference names no CARLA launch (its results predate 077 item "
+                        f"54); the results' is {launch_text(rep)}")
+    elif rep is None:
+        return (f"CARLA launch differs, not comparable: the results' {launch_text(rep)}, the "
                 f"reference's {launch_text(ref_launch)}"), None
-    return None, None
+    elif not (_verified(rep) and _verified(ref_launch)):
+        notes.append(f"CARLA launch not compared (unverified): the results' {launch_text(rep)}, "
+                     f"the reference's {launch_text(ref_launch)}")
+    elif _quality_args(rep) != _quality_args(ref_launch):
+        return (f"CARLA launch differs, not comparable: the results' {launch_text(rep)}, the "
+                f"reference's {launch_text(ref_launch)}"), "; ".join(notes) or None
+    return None, "; ".join(notes) or None
 
 
 def off_pin(submodules: dict) -> str:
@@ -839,13 +874,13 @@ def _main(argv=None) -> int:
                       f"from {source}: {cards}); record on a quiet host, or give --busy-ok")
                 failed += 1
                 continue
-            launches = [json.loads(k) for k in prov["launches"]]
-            if len(launches) > 1:
-                print(f"{e['key']}: not recorded, {launch_problem(None, prov)[0]}")
+            mix, _ = launch_problem(None, prov)
+            if mix:
+                print(f"{e['key']}: not recorded, {mix}")
                 failed += 1
                 continue
             write_reference(rows, ref, {"commit": at, "submodules": prov["submodules"][at],
-                                        "carla_launch": launches[0] if launches else None,
+                                        "carla_launch": results_launch(prov),
                                         "recorded_with": commit(),
                                         "host": socket.gethostname(),
                                         "summary": host_relative(summ, logs), "runs": len(rows),

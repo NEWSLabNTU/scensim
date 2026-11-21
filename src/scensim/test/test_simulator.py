@@ -169,6 +169,83 @@ def test_decide(tmp_path, carla_rpc):
                     "start": "start"})
 
 
+TCP_HEADER = ("  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt"
+              "   uid  timeout inode\n")
+
+
+def fake_proc(tmp_path, port, argv, inode="424242", table="tcp", state="0A", pid="4321"):
+    """A /proc with one socket on ``port`` (state ``state``) owned by ``pid`` running ``argv``,
+    plus an unrelated process and an unreadable one."""
+    proc = tmp_path / "proc"
+    (proc / "net").mkdir(parents=True)
+    line = (f"   0: 00000000:{port:04X} 00000000:0000 {state} 00000000:00000000 00:00000000 "
+            f"00000000  1000        0 {inode} 1 0000000000000000 100 0 0 10 0\n")
+    other = ("   1: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  "
+             "1000        0 999 1 0000000000000000 100 0 0 10 0\n")
+    (proc / "net" / table).write_text(TCP_HEADER + other + line)
+    (proc / "net" / ("tcp6" if table == "tcp" else "tcp")).write_text(TCP_HEADER)
+    for p_, target, cmd in (("17", "socket:[999]", ["python3", "x.py"]),
+                            (pid, f"socket:[{inode}]", argv)):
+        fd = proc / p_ / "fd"
+        fd.mkdir(parents=True)
+        (fd / "3").symlink_to("pipe:[1]")
+        (fd / "7").symlink_to(target)
+        (proc / p_ / "cmdline").write_bytes(b"\0".join(a.encode() for a in cmd) + b"\0")
+    (proc / "self").mkdir()     # not a pid
+    return proc
+
+
+def test_observed_launch_reads_the_listeners_command_line(tmp_path):
+    """Issue 097: a CARLA the stack did not start, on this host, is read from the process that
+    listens on its port: quality and args in launch_settings' terms."""
+    engine = "/opt/carla/CarlaUnreal/Binaries/Linux/CarlaUnreal-Linux-Shipping"
+    proc = fake_proc(tmp_path, 2400, [engine, "CarlaUnreal", "-carla-rpc-port=2400", "-nosound",
+                                      "-RenderOffScreen", "-quality-level=Epic", "-benchmark"])
+    assert sim.listener_pid(2400, proc) == 4321
+    assert sim.listener_pid(2401, proc) is None
+    seen = sim.observed_launch(2400, proc)
+    assert seen == {"quality": "epic", "args": ["-benchmark"], "pid": 4321,
+                    "argv": [engine, "CarlaUnreal", "-carla-rpc-port=2400", "-nosound",
+                             "-RenderOffScreen", "-quality-level=Epic", "-benchmark"]}
+    # the launcher script, IPv6, no -quality-level: CARLA's default, Epic
+    proc = fake_proc(tmp_path / "b", 2000, ["/c/CarlaUE4.sh", "-carla-rpc-port=2000",
+                                            "-quality-level=Low"], table="tcp6")
+    assert sim.observed_launch(2000, proc)["quality"] == "low"
+    proc = fake_proc(tmp_path / "c", 2000, ["/c/CarlaUE4.sh"])
+    assert sim.observed_launch(2000, proc) == {
+        "quality": "epic", "args": [], "pid": 4321, "argv": ["/c/CarlaUE4.sh"]}
+    # not CARLA (a test's fake server, a proxy), not listening, or nothing there: unknown
+    proc = fake_proc(tmp_path / "d", 2000, ["python3", "-m", "fake_carla"])
+    assert sim.observed_launch(2000, proc) is None
+    proc = fake_proc(tmp_path / "e", 2000, ["/c/CarlaUE4.sh"], state="01")   # ESTABLISHED
+    assert sim.observed_launch(2000, proc) is None
+    assert sim.observed_launch(2000, tmp_path / "nowhere") is None
+
+
+def test_decide_records_an_observed_external_launch(tmp_path):
+    """Issue 097: an external CARLA on this host records the launch it runs (applied
+    "observed", the settings' kept as requested); a remote one, or one not read, as before."""
+    carla_up = lambda *a: (sim.CARLA, "1.0")  # noqa: E731
+    seen = {"quality": "epic", "args": [], "argv": ["/c/CarlaUnreal.sh"], "pid": 7}
+    launch = {"quality": "low", "args": ["-x"], "from": {"quality": "testbench",
+                                                        "args": "testbench"}}
+    for mode in ("external", "auto"):
+        d = sim.decide({"root": "", "host": "localhost", "port": 2400}, mode, carla_up,
+                       launch, observe_fn=lambda port: seen)
+        assert d["owner"] == sim.EXTERNAL and d["argv"] == ["/c/CarlaUnreal.sh"]
+        assert d["launch"]["applied"] == "observed"
+        assert (d["launch"]["quality"], d["launch"]["args"]) == ("epic", [])
+        assert d["launch"]["requested"] == {"quality": "low", "args": ["-x"]}
+        assert "pid 7" in d["launch"]["why"]
+        assert sim.launch_provenance({"carla": d})["applied"] == "observed"
+    d = sim.decide({"root": "", "host": "localhost", "port": 2400}, "external", carla_up,
+                   launch, observe_fn=lambda port: None)
+    assert d["launch"]["applied"] is False and d["argv"] is None
+    remote = sim.decide({"root": "", "host": "carla.example.invalid", "port": 1}, "external",
+                        carla_up, launch, observe_fn=lambda port: seen)
+    assert remote["launch"]["applied"] is False
+
+
 # CARLA 1.0's packaged VERSION file, as the release ships it: git hashes, no version (issue:
 # the stack took the whole text for one, and the cars fell back to the 0.9.16 body)
 CARLA_1_0_VERSION = (
