@@ -15,7 +15,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scensim import api, assets, project, record as recordmod, results, run, ssv2, stack, timeline
+from scensim import (api, assets, project, record as recordmod, results, run, seat, ssv2,
+                     stack, timeline)
 
 SCENSIM_ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,6 +29,16 @@ FAKE_SSV2 = textwrap.dedent('''\
     err = proc / "bridge" / "2026-11-15_00-00-00" / "node" / "scenario_world_bridge" / "err"
     with open(err, "a") as f:
         f.write(f"[ERROR] [{t:.6f}] [scenario_world_bridge]: tick late\\n")
+    # FAKE_SSV2_AFTER=<name>: end only after the run's attachment <name> wrote its seen.json
+    # and has had a second to end (a test of an attachment that dies first)
+    import os
+    after = os.environ.get("FAKE_SSV2_AFTER")
+    if after:
+        seen = run_dir / "attachments" / after / "seen.json"
+        deadline = time.time() + 20
+        while not seen.exists() and time.time() < deadline:
+            time.sleep(0.05)
+        time.sleep(1.0)
     if outcome == "error":
         sys.exit(1)
     j = run_dir / "logs" / "ssv2" / "scenario_test_runner" / "result.junit.xml"
@@ -57,16 +68,50 @@ FAKE_PILOT = textwrap.dedent('''\
 ''')
 
 
+def _free_block(n, lo=20000, hi=32000, tries=200):
+    """The first port of n consecutive TCP ports nothing on this host listens on, below
+    the kernel's ephemeral range (32768-), where any outgoing connection may take one."""
+    import random
+    for _ in range(tries):
+        base = random.randrange(lo, hi - n)
+        socks = []
+        try:
+            for port in range(base, base + n):
+                s_ = socket.socket()
+                socks.append(s_)
+                s_.bind(("127.0.0.1", port))
+            return base
+        except OSError:
+            continue
+        finally:
+            for s_ in socks:
+                s_.close()
+    raise RuntimeError(f"no {n} free consecutive ports")
+
+
 @pytest.fixture
 def where(host):
+    """Seat 1 of a seat table of this test's own, on ports free when it starts: the host's
+    real seats (5655, ...) may be any stack's, and a test that probes them fails whenever one
+    runs there (133)."""
     tmp = host["tmp"]
+    # seat 1's ports, then its web UI's, in one free block; both strides 100, so seat 0's
+    # (unused) blocks, 100 below, meet neither
+    p1 = _free_block(seat.PORT_BLOCK + seat.WEB_BLOCK)
+    ports, web = p1 - 100, p1 + seat.PORT_BLOCK - 100
     (tmp / "system" / "host.yaml").write_text(yaml.safe_dump(
         {"seat_locks": str(tmp / "locks"), "logs": str(tmp / "logs"), "seat": 1,
+         "seats": {"domains": {"base": 1, "stride": 8}, "count": 2,
+                   "ports": {"base": ports, "stride": 100},
+                   "web": {"base": web, "stride": 100}},
          # no CARLA here: the stack uses whatever serves its port and is not refused for
          # the lack of one (G39)
          "carla": {"start": "external"}}))
     (tmp / "fake_ssv2.py").write_text(FAKE_SSV2)
     (tmp / "fake_pilot.py").write_text(FAKE_PILOT)
+    # seat 1's ports, for the tests that check them
+    host["seat1"] = {"ssv2": ports + 100, "relay": ports + 100 + seat.RELAY_OFFSET,
+                     "web": web + 100}
     return host
 
 
@@ -94,6 +139,20 @@ def fake_bridge(rec):
     return sock
 
 
+_BRIDGES = []   # the fake bridges' listeners, closed after each test (close_bridges)
+
+
+@pytest.fixture(autouse=True)
+def close_bridges():
+    """A fake bridge's socket lives in this process: closed here, it cannot hold its port
+    into the next test."""
+    yield
+    while _BRIDGES:
+        b = _BRIDGES.pop()
+        if b is not None:
+            b.close()
+
+
 def start_stack(d, ready=("true",), map_name="Town01"):
     p = stack.plan(project_arg=str(d), map_name=map_name)
     for x in p.record["pilots"]:
@@ -108,6 +167,7 @@ def start_stack(d, ready=("true",), map_name="Town01"):
     proc = subprocess.Popen([sys.executable, "-m", "scensim.stack", "keep", str(p.stack_dir),
                              "--poll", "0.05", "--pilot-wrap", wrap], env=env)
     proc.bridge = fake_bridge(p.record)
+    _BRIDGES.append(proc.bridge)
     deadline = time.time() + 20
     while time.time() < deadline:
         rec = json.loads(p.stack_json.read_text())
@@ -670,7 +730,7 @@ def test_run_pilot_started_and_stopped(where, maps_hub):
     words = dict(w.split(":=", 1) for w in argv if ":=" in w)
     assert words["entity"] == "follower" and words["seed"] == "11"
     assert words["run"].endswith("pilots/follower.py --policy push")
-    assert words["relay"] == "tcp://localhost:5660"
+    assert words["relay"] == f"tcp://localhost:{where['seat1']['relay']}"
     assert words["run_dir"].endswith(r.run_id)
     assert r.pilots["follower"]["lifetime"] == "run"
 
@@ -855,7 +915,8 @@ def test_stop_stack_starts_runs_and_stops(where, maps_hub, launcher):
     assert "stack    proj on seat 1: starting (pid" in text and text.splitlines()[1].startswith("passed")
     assert "stopping the stack this run started" in text
     # the stack as the user starts it: play_launch of scensim.launch.xml, web UI on the seat's port
-    assert calls[0][:4] == ["play_launch", "launch", "--web-addr", "127.0.0.1:8090"]
+    assert calls[0][:4] == ["play_launch", "launch", "--web-addr",
+                            f"127.0.0.1:{where['seat1']['web']}"]
     assert calls[0][6:9] == ["scensim_launch", "scensim.launch.xml", f"project:={d}"]
     assert "seat:=1" in calls[0] and f"logs:={where['tmp'] / 'logs'}" in calls[0]
     rec = _stack_json(where)
@@ -1638,6 +1699,9 @@ def test_an_attachment_runs_with_the_run_and_is_recorded(where, maps_hub, monkey
 def test_a_required_attachment_that_dies_makes_the_run_an_error(where, maps_hub, monkeypatch):
     monkeypatch.setattr(run, "scenario_argv", fake(where))
     monkeypatch.setenv("NETSIM_DIE", "1")
+    # SSv2 ends after the attachment did, whatever the host's load: the order this test is
+    # about, not a race (it once passed the run, SSv2 first, on a loaded host)
+    monkeypatch.setenv("FAKE_SSV2_AFTER", "netsim")
     d = make(where, ATTACHED.replace("run: [python3, netsim.py]}",
                                      "run: [python3, netsim.py], required: true}"))
     (d / "netsim.py").write_text(NETSIM)
