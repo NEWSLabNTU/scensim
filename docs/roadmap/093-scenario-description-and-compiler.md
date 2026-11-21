@@ -83,9 +83,9 @@ The rules' state on main:
 | Gap | Rule | On main | What CS6 or CS7 does instead |
 |---|---|---|---|
 | 1 | knobs bound by `scensim.knob.<name>`, applied and read back; cells computed | implemented | CS6 binds `illumination` |
-| 2 | `latent: true` on a model variable | not implemented: the sampler refuses the key (`variables[3] (time_headway): unknown ['latent']`) | CS6 declares `time_headway` and `reveal_time` as scenario parameters its storyboard never reads |
+| 2 | `latent: true` on a model variable | implemented after the re-check (092 K8, swb 243): recorded under the record's `latent` | CS6's `time_headway` and `reveal_time` are latent; the scenario no longer declares them |
 | 3 | `scensim.present` on an optional entity | not implemented | not needed by CS6 or CS7 |
-| 4 | `scensim.static` on a stopped vehicle | not implemented | CS6 holds the stopped car at 0 by its Init SpeedAction under the default controller, so the checker conditions it on the batched traffic model |
+| 4 | `scensim.static` on a stopped vehicle | implemented after the re-check (092 K8, swb 243), with SSv2's `maxSpeed = 0`; executor pending in the batch | CS6's stopped car is static; its Init SpeedAction of 0 and its default-behaviour condition are gone |
 | 5 | `isBlind` in the subset, with lane following alone as the condition | not implemented: the checker gives the whole default traffic behaviour as the condition | CS6's lead is blind; its condition is the wider one |
 | 6 | a parameter in an entity's category or model conditional on per-slot assets | implemented after the re-check (092 K8, swb 243): the checker names the parameter and its values as a condition | CS6's stopped car: `$stopped_kind` (car, truck, motorbike) is now a condition |
 | 7 | anchor attributes in derived values (`anchor.<name>.<attribute>`) | not implemented: no anchors on main (D2) | CS7 declares `exit_heading`, a constant, as the exit lane's heading |

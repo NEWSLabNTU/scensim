@@ -99,6 +99,17 @@
         "type": "string"
       }
     },
+    "latent": {
+      "description": "the model's latent variables (scenario-description.md 2a, gap 2): drawn and recorded, never scenario parameters",
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    },
     "seeds": {
       "type": "object",
       "required": [

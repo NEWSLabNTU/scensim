@@ -17,10 +17,6 @@
     <ParameterDeclaration name="ego_headway_m" parameterType="double" value="40"/>
     <ParameterDeclaration name="reveal_m" parameterType="double" value="55"/>
     <ParameterDeclaration name="lc_time" parameterType="double" value="2.5"/>
-    <!-- the base's own variables, which only derived values read (time_headway gives
-         ego_headway_m and lead_s, reveal_time gives reveal_m): declared so a record keeps them -->
-    <ParameterDeclaration name="time_headway" parameterType="double" value="1.5"/>
-    <ParameterDeclaration name="reveal_time" parameterType="double" value="2.0"/>
     <ParameterDeclaration name="stopped_s" parameterType="double" value="600"/>
     <ParameterDeclaration name="ego_s" parameterType="double" value="5"/>
     <ParameterDeclaration name="lead_s" parameterType="double" value="45"/>
@@ -42,10 +38,14 @@
       <ObjectController><Controller name="lead"><Properties>
         <Property name="isBlind" value="true"/></Properties></Controller></ObjectController>
     </ScenarioObject>
-    <!-- stopped: held at 0 by its Init SpeedAction; OpenSCENARIO has no "parked vehicle".
-         Its category is the sample's (car, truck, motorbike) -->
+    <!-- stopped: never moves (scensim.static, scenario-description.md 2a gap 4; SSv2's maxSpeed 0
+         holds it on seats, a batch makes it a prop). Its category is the sample's (car, truck,
+         motorbike) -->
     <ScenarioObject name="stopped">
       <Vehicle name="stopped_vehicle" vehicleCategory="$stopped_kind"><Properties/></Vehicle>
+      <ObjectController><Controller name="stopped"><Properties>
+        <Property name="scensim.static" value="true"/>
+        <Property name="maxSpeed" value="0"/></Properties></Controller></ObjectController>
     </ScenarioObject>
   </Entities>
   <Storyboard>
@@ -63,11 +63,7 @@
           <SpeedActionTarget><AbsoluteTargetSpeed value="$ego_speed"/></SpeedActionTarget>
         </SpeedAction></LongitudinalAction></PrivateAction></Private>
       <Private entityRef="stopped"><PrivateAction><TeleportAction><Position>
-        <LanePosition roadId="" laneId="hwy_right" s="$stopped_s" offset="0"/></Position></TeleportAction></PrivateAction>
-        <PrivateAction><LongitudinalAction><SpeedAction>
-          <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
-          <SpeedActionTarget><AbsoluteTargetSpeed value="0"/></SpeedActionTarget>
-        </SpeedAction></LongitudinalAction></PrivateAction></Private>
+        <LanePosition roadId="" laneId="hwy_right" s="$stopped_s" offset="0"/></Position></TeleportAction></PrivateAction></Private>
     </Actions></Init>
     <Story name="main"><Act name="act">
       <ManeuverGroup name="cut_out" maximumExecutionCount="1">

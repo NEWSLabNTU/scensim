@@ -55,9 +55,10 @@ def _expr(text, where):
 
 
 class Var:
-    def __init__(self, name, d, where):
+    def __init__(self, name, d, where, latent=False):
         self.names = (name,)
         self.name, self.dist, self.discrete = name, d, d.discrete
+        self.latent = latent
 
     def sample(self, rng, env):
         return {self.name: self.dist.sample(rng, env)}
@@ -127,16 +128,23 @@ def entry(e, where):
     if not isinstance(name, str) or not name.isidentifier():
         raise SpecError(f"{where}: name is a parameter name, not {name!r}")
     where = f"{where} ({name})"
+    # latent: drawn and recorded (the record's `latent`), read by derived values and
+    # constraints, never a scenario parameter (scenario-description.md 2a, gap 2)
+    latent = e.get("latent", False)
+    if not isinstance(latent, bool):
+        raise SpecError(f"{where}: latent is true or false, not {latent!r}")
     if "given" in e:
-        extra = set(e) - {"name", "given", "cases"}
+        extra = set(e) - {"name", "given", "cases", "latent"}
         if extra:
             raise SpecError(f"{where}: unknown {sorted(extra)} (a conditional is "
-                            f"{{name, given, cases}})")
-        return Given(name, e["given"], e.get("cases"), where)
-    extra = set(e) - {"name", "range"} - set(dist.KINDS)
+                            f"{{name, given, cases}}, optionally latent)")
+        g = Given(name, e["given"], e.get("cases"), where)
+        g.latent = latent
+        return g
+    extra = set(e) - {"name", "range", "latent"} - set(dist.KINDS)
     if extra:
         raise SpecError(f"{where}: unknown {sorted(extra)}")
-    return Var(name, dist.spec(e, where), where)
+    return Var(name, dist.spec(e, where), where, latent)
 
 
 class Model:
@@ -172,6 +180,7 @@ class Model:
             raise SpecError(f"{where}: variables is a non-empty list")
         self.entries = [entry(e, f"{where}: variables[{i}]") for i, e in enumerate(variables)]
         self._index()
+        self.latent = [n for e in self.entries if getattr(e, "latent", False) for n in e.names]
         self.derived = self._derived(doc.get("derived") or {})
         cons = doc.get("constraints") or []
         if not isinstance(cons, list):

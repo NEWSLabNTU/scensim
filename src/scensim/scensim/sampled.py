@@ -198,7 +198,7 @@ def bind(record, rec, prov, pilots):
         notes.append("car: the stack names no spec_hash for the ego (or there is no ego)")
     out["id"] = ss.record_id(out)
     keys = ("record", "id", "scenario", "distribution", "category", "cell", "values", "derived",
-            "seeds", "base", "proposal", "weight", "log_weight", "search", "world", "car",
+            "latent", "seeds", "base", "proposal", "weight", "log_weight", "search", "world", "car",
             "sampler")
     return {k: out[k] for k in keys if k in out}, notes
 

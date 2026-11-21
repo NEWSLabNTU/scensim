@@ -123,6 +123,60 @@ class CaseStudies(unittest.TestCase):
 
 
 
+class Static(unittest.TestCase):
+    """scenario-description.md 2a, gap 4: a vehicle that never moves (scensim.static with SSv2's
+    maxSpeed 0) is a batch prop with no behaviour condition; a motion action on it, or a static
+    one SSv2 would not hold at rest, is refused by name."""
+
+    def cs6(self, d, edit=lambda s: s):
+        import shutil
+        for f in ("cs6_cut_out_stopped_car.xosc", "cs6_cut_out_stopped_car_dist.xosc"):
+            shutil.copy(CASES / f, d)
+        shutil.copytree(CASES / "models", Path(d) / "models")
+        p = Path(d) / "cs6_cut_out_stopped_car.xosc"
+        p.write_text(edit(p.read_text()))
+        return Path(d) / "cs6_cut_out_stopped_car_dist.xosc"
+
+    def test_cs6s_stopped_car_is_a_prop_with_no_behaviour_condition(self):
+        # the lead given a behaviour model, so a default-controller condition could only be
+        # the stopped car's
+        lead = '<Property name="isBlind" value="true"/>'
+        with tempfile.TemporaryDirectory() as d:
+            v = subset.check(self.cs6(d, lambda s: s.replace(
+                lead, lead + '<Property name="model" value="scensim.behaviour:lead"/>')))
+            self.assertTrue(v.compiles)
+            self.assertEqual(v.static, {"stopped"})
+            self.assertFalse([c for c in v.conditions if c.startswith("SSv2's default")])
+            self.assertIn("scensim.static: " + subset.EXECUTOR_PENDING_REASON, v.conditions)
+            self.assertIn("behaviour model scensim.behaviour:lead: a batched form of the model",
+                          v.conditions)
+
+    def test_a_static_entity_needs_maxspeed_0(self):
+        with tempfile.TemporaryDirectory() as d:
+            dist = self.cs6(d, lambda s: s.replace('<Property name="maxSpeed" value="0"/>', ""))
+            with self.assertRaisesRegex(subset.SubsetError, "stopped is scensim.static but its "
+                                        "controller's maxSpeed is None"):
+                subset.check(dist)
+
+    def test_a_motion_action_on_a_static_entity_is_refused(self):
+        speed = ('<Private entityRef="stopped"><PrivateAction><TeleportAction>')
+        move = ('<Private entityRef="stopped"><PrivateAction><LongitudinalAction><SpeedAction>'
+                '<SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>'
+                '<SpeedActionTarget><AbsoluteTargetSpeed value="3"/></SpeedActionTarget>'
+                '</SpeedAction></LongitudinalAction></PrivateAction></Private>' + speed)
+        with tempfile.TemporaryDirectory() as d:
+            dist = self.cs6(d, lambda s: s.replace(speed, move))
+            with self.assertRaisesRegex(subset.SubsetError, "SpeedAction at .* moves stopped, "
+                                        "which is scensim.static"):
+                subset.check(dist)
+        # in a story, as an actor of the maneuver group
+        actor = '<EntityRef entityRef="lead"/>'
+        with tempfile.TemporaryDirectory() as d:
+            dist = self.cs6(d, lambda s: s.replace(actor, actor + '<EntityRef entityRef="stopped"/>'))
+            with self.assertRaisesRegex(subset.SubsetError, "LaneChangeAction at .* moves stopped"):
+                subset.check(dist)
+
+
 class EntityClass(unittest.TestCase):
     """093 D7 gap 6 beyond CS6: every class and model attribute, `${p}`, and a catalog
     entry, each a condition naming the parameter; a deterministic set's values listed."""

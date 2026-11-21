@@ -26,9 +26,9 @@ FAMILIES = {
 CATEGORY = re.compile(r"^(R[1-8])\.[a-z0-9_]+\.[a-z0-9_]+$")
 HEX = re.compile(r"^[0-9a-f]{64}$")
 KEYS = ("record", "id", "scenario", "distribution", "category", "cell", "values", "derived",
-        "seeds", "base", "proposal", "weight", "log_weight", "search", "world", "car",
+        "latent", "seeds", "base", "proposal", "weight", "log_weight", "search", "world", "car",
         "sampler")
-REQUIRED = tuple(k for k in KEYS if k not in ("world", "car"))
+REQUIRED = tuple(k for k in KEYS if k not in ("world", "car", "latent"))
 UINT32 = 2 ** 32
 SCHEMA = Path(__file__).parent / "schema" / "sample-record-1.json"
 
@@ -143,6 +143,14 @@ def check(rec, scenario=None, bound=False):
                     elif not _scalar(x):
                         out.append(f"{key}.{k}: a string, number or boolean, not {x!r}")
     values = rec.get("values") if isinstance(rec.get("values"), dict) else {}
+    if "latent" in rec:
+        lat = rec["latent"]
+        if not isinstance(lat, dict) or not all(
+                isinstance(k, str) and isinstance(v, (str, int, float, bool))
+                for k, v in lat.items()):
+            out.append("latent: {name: value}, each a string, number or boolean")
+        elif isinstance(rec.get("values"), dict) and set(lat) & set(rec["values"]):
+            out.append(f"latent: {sorted(set(lat) & set(rec['values']))} also in values")
     if "derived" in rec:
         d = rec["derived"]
         if not isinstance(d, list) or not all(isinstance(x, str) for x in d):
@@ -256,6 +264,10 @@ def against(rec, scenario):
                                f"({'the knob it binds' if src[0] == 'knob' else 'its value'})")
             elif src[0] == "fixed" and a in cell and str(cell[a]) != str(src[1]):
                 out.append(f"cell.{a}: {cell[a]!r}, the scenario fixes {src[1]!r}")
+    for k in (rec.get("latent") or {}) if isinstance(rec.get("latent"), dict) else ():
+        if k in scenario.parameters:
+            out.append(f"latent.{k}: a parameter of {scenario.path.name}; a latent value never "
+                       f"reaches the scenario")
     values = rec.get("values")
     if isinstance(values, dict):
         from .xosc import cast  # noqa: PLC0415 - xosc imports plug-ins; the record does not
