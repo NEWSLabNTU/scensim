@@ -7,9 +7,12 @@ builds on its own (decision 4). Here, where the same repositories are direct sub
 component is built and tested against other code than its neighbours. Repositories are
 matched by URL. Reads the pins from git (the committed tree), not from checkouts.
 
-    scripts/check_pins.py        exit 1 on a mismatch, naming component, dependency and both commits
+    scripts/check_pins.py              exit 1 on a mismatch, naming component, dependency and both commits
+    scripts/check_pins.py --rev <sha>  the same for another commit of this repository (the pre-push
+                                       hook's: the commit a push to main would make main)
 """
 
+import argparse
 import configparser
 import subprocess
 import sys
@@ -37,11 +40,12 @@ def submodules(repo, rev="HEAD"):
     return out
 
 
-def main():
-    ours = submodules(ROOT)
+def check(rev="HEAD", root=ROOT):
+    """(dependencies checked, [mismatch lines]) of `root` at commit `rev`."""
+    ours = submodules(root, rev)
     bad, checked = [], 0
     for url, (path, commit) in sorted(ours.items()):
-        component = ROOT / path
+        component = root / path
         if not (component / ".git").exists():
             continue
         known = subprocess.run(["git", "-C", str(component), "cat-file", "-e", f"{commit}^{{commit}}"],
@@ -62,6 +66,14 @@ def main():
             elif mine[1] != dep_commit:
                 bad.append(f"{path}/{dep_path} is {dep_commit[:10]}, but {mine[0]} here is "
                            f"{mine[1][:10]}: move one pin to the other")
+    return checked, bad
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="every component's deps/ pins are this workspace's")
+    ap.add_argument("--rev", default="HEAD", help="the commit of this repository to check")
+    a = ap.parse_args(argv)
+    checked, bad = check(a.rev)
     for line in bad:
         print(f"FAIL: {line}")
     print(f"pins: {checked} component dependencies checked, {len(bad)} mismatch(es)")
