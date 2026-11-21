@@ -212,10 +212,12 @@ class Core(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "a reset of every slot only"):
             run.reset(torch.tensor([True, False]), preroll=preroll)
 
-    def test_the_storyboard_sees_the_ego_a_step_late(self):
-        """092 K2.4: SSv2 reads the ego's status back before the world steps it, so its
-        conditions see the ego's previous step (its vehicles see it current); the observation is
-        current."""
+    def test_the_storyboard_sees_the_ego_two_steps_late(self):
+        """092 K2.4: seats tick k evaluates the storyboard first, on the ego the tick before
+        read back, which is the world two frames before the one tick k makes (API::updateFrame:
+        evaluate, then the readback, then UpdateFrame). Seats' follow_to_goal: the ego's ssv2
+        pose first within 3 m at S + 1262, its exit at tick 1263. A reset seeds both steps
+        with its pose; the observation is current."""
         c, run = self.run_of([{"values": {}}])
         run.reset()
         e = run.ego
@@ -223,9 +225,25 @@ class Core(unittest.TestCase):
         run.step(cmds(1, 2.0), DT)
         x1 = run.obs["x"][:, e].clone()
         self.assertTrue(bool((x1 != x0).all()))
-        self.assertEqual(run.ctx.col("x", e).tolist(), x0.tolist())
+        self.assertEqual(run.ctx.col("x", e).tolist(), x0.tolist())   # the reset, seeded
         run.step(cmds(1, 2.0), DT)
-        self.assertEqual(run.ctx.col("x", e).tolist(), x1.tolist())
+        x2 = run.obs["x"][:, e].clone()
+        self.assertTrue(bool((x2 != x1).all()))
+        self.assertEqual(run.ctx.col("x", e).tolist(), x0.tolist())   # step 0
+        run.step(cmds(1, 2.0), DT)
+        self.assertEqual(run.ctx.col("x", e).tolist(), x1.tolist())   # step 1
+
+    def test_a_masked_reset_reseeds_only_its_slots_storyboard_ego(self):
+        c, run = self.run_of([{"values": {}}, {"values": {}}])
+        run.reset()
+        e = run.ego
+        for _ in range(3):
+            run.step(cmds(2, 2.0), DT)
+        before = run.seen_before["x"].clone()
+        run.reset(torch.tensor([True, False]))
+        self.assertEqual(run.seen_before["x"][1].item(), before[1].item())
+        self.assertEqual(run.seen_before["x"][0].item(), run.obs["x"][0, e].item())
+        self.assertEqual(run.seen["x"][0].item(), run.obs["x"][0, e].item())
 
     def test_a_reset_does_not_evaluate_the_storyboard(self):
         """SSv2's first evaluation is a step after startNpcLogic: the reset does none."""
