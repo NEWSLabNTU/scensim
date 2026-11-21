@@ -214,7 +214,7 @@ class Core(unittest.TestCase):
 
     def test_the_storyboard_sees_the_ego_a_step_late(self):
         """092 K2.4: SSv2 reads the ego's status back before the world steps it, so its
-        conditions (and its vehicles) see the ego's previous step; the observation is
+        conditions see the ego's previous step (its vehicles see it current); the observation is
         current."""
         c, run = self.run_of([{"values": {}}])
         run.reset()

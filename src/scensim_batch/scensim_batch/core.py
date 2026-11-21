@@ -74,7 +74,9 @@ class BatchRun:
         self.obs = None
         # the ego as SSv2 sees it: its status from the step before (SSv2 reads the ego back
         # before the simulator steps it, so its pose at frame f is the world's at f - 1: the
-        # truth's ssv2 against sim_pose, 092 K2.4); what the storyboard and SSv2's vehicles read
+        # truth's ssv2 against sim_pose, 092 K2.4); what the storyboard reads. SSv2's default
+        # vehicles read the ego after that readback (API::updateFrame: the status exchange,
+        # then entity_manager's update), so they see it current (243)
         self.seen = None
         self.route = sbmod.RouteGoal(self)
         # SSv2's scenario time is A(S + k) - A(S): A the frames' step summed in a double from
@@ -263,7 +265,7 @@ class BatchRun:
         storyboard evaluated at the new time. Returns the observation: the ego's state, every
         entity's pose [N, E] (x, y, yaw, v) and each slot's outcome."""
         seen = self.seen
-        self.obs = self._observe(self.backend.state(), dt, seen)
+        self.obs = self._observe(self.backend.state(), dt)
         self.seen = self._ego_view(self.obs)
         view = self._as_ssv2_sees(self.obs, seen)
         self._post_update()
@@ -295,9 +297,8 @@ class BatchRun:
         view["ego"] = seen["ego"]
         return view
 
-    def _observe(self, st, dt, seen=None):
-        """Every entity's pose; with `dt`, SSv2's default vehicles moved by it first, seeing
-        the ego as `seen` (SSv2's view of it: the step before) when given."""
+    def _observe(self, st, dt):
+        """Every entity's pose; with `dt`, SSv2's default vehicles moved by it first."""
         c = self.c
         x, y, yaw = c.x.clone(), c.y.clone(), c.yaw.clone()
         v = torch.zeros_like(x)
@@ -307,12 +308,8 @@ class BatchRun:
             others_idx = [self.ego] + self.props
             ego_len = torch.tensor([c.entities[i].length for i in others_idx], dtype=torch.float64)
             ego_wid = torch.tensor([c.entities[i].width for i in others_idx], dtype=torch.float64)
-            ox, oy, oyaw, ov = (t_[:, others_idx].clone() for t_ in (x, y, yaw, v))
-            if seen is not None:
-                ox[:, 0], oy[:, 0], oyaw[:, 0], ov[:, 0] = (seen["x"], seen["y"], seen["yaw"],
-                                                            seen["v"])
-            others = {"x": ox, "y": oy, "yaw": oyaw,
-                      "v": ov, "length": ego_len.expand(c.n, -1),
+            others = {"x": x[:, others_idx], "y": y[:, others_idx], "yaw": yaw[:, others_idx],
+                      "v": v[:, others_idx], "length": ego_len.expand(c.n, -1),
                       "width": ego_wid.expand(c.n, -1)}
             nx, ny, nyaw = (self.vehicles.step(dt, others) if dt is not None
                             else self.vehicles.poses())
