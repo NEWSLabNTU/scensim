@@ -14,6 +14,7 @@ matched by URL. Reads the pins from git (the committed tree), not from checkouts
 
 import argparse
 import configparser
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,11 +22,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def _git(*args, **kw):
+    """git, without the environment of a hook that runs this: git sets GIT_DIR (and
+    GIT_INDEX_FILE, in a worktree more) for its hooks, and a `git -C <submodule>` that inherits
+    them reads the superproject's repository instead (5619e864's pre-push hook refused every
+    push from a worktree)."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    return subprocess.run(["git", *args], env=env, capture_output=True, text=True, **kw)
+
+
 def submodules(repo, rev="HEAD"):
     """{url: (path, commit)} of `repo`'s submodules at `rev`."""
     try:
-        text = subprocess.run(["git", "-C", str(repo), "show", f"{rev}:.gitmodules"],
-                              capture_output=True, text=True, check=True).stdout
+        text = _git("-C", str(repo), "show", f"{rev}:.gitmodules", check=True).stdout
     except subprocess.CalledProcessError:
         return {}
     cfg = configparser.ConfigParser()
@@ -33,8 +42,7 @@ def submodules(repo, rev="HEAD"):
     out = {}
     for section in cfg.sections():
         path, url = cfg[section]["path"], cfg[section]["url"]
-        tree = subprocess.run(["git", "-C", str(repo), "ls-tree", rev, path],
-                              capture_output=True, text=True, check=True).stdout.split()
+        tree = _git("-C", str(repo), "ls-tree", rev, path, check=True).stdout.split()
         if len(tree) >= 3 and tree[1] == "commit":
             out[url.removesuffix(".git").rstrip("/")] = (path, tree[2])
     return out
@@ -48,8 +56,8 @@ def check(rev="HEAD", root=ROOT):
         component = root / path
         if not (component / ".git").exists():
             continue
-        known = subprocess.run(["git", "-C", str(component), "cat-file", "-e", f"{commit}^{{commit}}"],
-                               capture_output=True).returncode == 0
+        known = _git("-C", str(component), "cat-file", "-e",
+                     f"{commit}^{{commit}}").returncode == 0
         if not known:
             # Without the commit its deps/ pins cannot be read; skipping it silently once
             # reported "0 checked, 0 mismatches" over three real mismatches (roadmap 070).
