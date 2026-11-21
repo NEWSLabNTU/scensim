@@ -212,6 +212,34 @@ class Core(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "a reset of every slot only"):
             run.reset(torch.tensor([True, False]), preroll=preroll)
 
+    def test_the_storyboard_sees_the_ego_a_step_late(self):
+        """092 K2.4: SSv2 reads the ego's status back before the world steps it, so its
+        conditions (and its vehicles) see the ego's previous step; the observation is
+        current."""
+        c, run = self.run_of([{"values": {}}])
+        run.reset()
+        e = run.ego
+        x0 = run.obs["x"][:, e].clone()
+        run.step(cmds(1, 2.0), DT)
+        x1 = run.obs["x"][:, e].clone()
+        self.assertTrue(bool((x1 != x0).all()))
+        self.assertEqual(run.ctx.col("x", e).tolist(), x0.tolist())
+        run.step(cmds(1, 2.0), DT)
+        self.assertEqual(run.ctx.col("x", e).tolist(), x1.tolist())
+
+    def test_a_reset_does_not_evaluate_the_storyboard(self):
+        """SSv2's first evaluation is a step after startNpcLogic: the reset does none."""
+        c, run = self.run_of([{"values": {}}])
+        if run.storyboard is None:
+            self.skipTest("no storyboard")
+        calls = []
+        tick = run.storyboard.tick
+        run.storyboard.tick = lambda ctx: (calls.append(1), tick(ctx))[1]
+        run.reset()
+        self.assertEqual(calls, [])
+        run.step(cmds(1, 2.0), DT)
+        self.assertEqual(calls, [1])
+
     def test_a_loop_batch_is_refused(self):
         from scensim_batch import compile as C, core
 
