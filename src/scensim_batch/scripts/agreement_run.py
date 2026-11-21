@@ -64,6 +64,8 @@ def main(argv=None):
                          "max_physics_dt, 1/60: the bridge steps a frame in substeps of it)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--dump", default=None, help="both sides' poses per step, as JSON")
+    ap.add_argument("--route-points", type=int, default=121,
+                    help="samples per default vehicle's 300 m route (ScensimEnvCfg.route_points)")
     a = ap.parse_args(argv)
 
     run_dir = Path(a.run)
@@ -125,6 +127,7 @@ def main(argv=None):
     cfg.sim.dt = step_time / cfg.decimation
     cfg.episode_length_s = (steps + 1) * step_time
     cfg.start_frames = S
+    cfg.route_points = a.route_points
     # the seats ego's steps up to scenario time 0, as a pre-roll of the batch ego, where the
     # truth has them (092 K2.4: its brake was held by the pilot's hold before command 0)
     hold_cmd = {"accel": -3.0, "velocity": 0.0, "steer": 0.0}
@@ -191,7 +194,7 @@ def main(argv=None):
         Path(a.dump).write_text(json.dumps({"seats": seats["poses"], "batch": batch["poses"]}))
     row = {"scenario": Path(a.scenario).name, "engine": a.engine, "S": S, "hold_steps": hold,
            "skipped_frames": skipped, "steps": steps, "batch_end_step": end.get("step"),
-           "replay": replay, "preroll_steps": len(preroll),
+           "replay": replay, "preroll_steps": len(preroll), "route_points": a.route_points,
            "delivery": A.delivery(trace, ego_name, step_time) if replay == "taken" else None,
            **A.compare(seats, batch)}
     text = json.dumps(row, indent=1)

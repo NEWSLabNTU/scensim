@@ -548,7 +548,7 @@ class LaneChange(unittest.TestCase):
         want = ssv2_hermite_length(p0, goal, (size, 0.0), (size, 0.0))
         self.assertAlmostEqual(float(veh.lc_len[0, 0]), want, places=12)
         self.assertAlmostEqual(float(veh.lc_v[0, 0]), want / 4.0, places=12)
-        self.assertEqual(p0[1], 3.5)
+        self.assertAlmostEqual(p0[1], 3.5, places=12)   # the route's cubic: rounding only
         _ = lead
 
     def test_a_linear_change_by_distance_keeps_the_speed_on_the_chord(self):

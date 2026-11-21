@@ -41,7 +41,7 @@ def request_motion(kind, commands):
 
 class BatchRun:
     def __init__(self, compiled, world, backend, component, route_length=300.0,
-                 points=61, speed_limit=None, allow_loop=False, start_frames=0,
+                 points=121, speed_limit=None, allow_loop=False, start_frames=0,
                  step_time=None):
         """`allow_loop`: accept a LoopBatch component (one Python step per slot), for checking
         a component before it has a batched form; never for a throughput number, and the run
@@ -195,7 +195,9 @@ class BatchRun:
         c, d = self.c, self.defaults
         x, y, yaw = c.x[:, d], c.y[:, d], c.yaw[:, d]
         pts = self.world.route(x, y, yaw, self.route_length, self.points)   # [N, D, P, 2]
-        routes = npc.Routes(pts.to(torch.float64))
+        # world.route samples SSv2's spline at equal arc length: a smooth route on that length
+        routes = npc.Routes(pts.to(torch.float64),
+                            spacing=self.route_length / max(self.points - 1, 1))
         length = torch.tensor([c.entities[i].length for i in d],
                               dtype=torch.float64).expand(c.n, len(d)).clone()
         width = torch.tensor([c.entities[i].width for i in d],
@@ -217,7 +219,7 @@ class BatchRun:
             setattr(old, name, torch.where(m, getattr(fresh, name), getattr(old, name)))
         self._reset_constraints(m)
         old.routes.points = torch.where(m[..., None, None], fresh.routes.points, old.routes.points)
-        old.routes = npc.Routes(old.routes.points)
+        old.routes = npc.Routes(old.routes.points, spacing=old.routes.spacing)
         old.lc = old.lc & ~m         # a reset slot's lane changes end with it
         for k in torch.nonzero(mask).flatten().tolist():
             old.lc_to_lane[k] = [None] * len(old.lc_to_lane[k])

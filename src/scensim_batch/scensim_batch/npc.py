@@ -102,29 +102,61 @@ def running_distance(target, c, v, a, jerk, dt, max_steps=100000, active=None):
 
 class Routes:
     """One centreline per vehicle: points [N, E, P, 2] (a short route repeats its last point),
-    with cumulative arc length [N, E, P]."""
+    with cumulative arc length [N, E, P].
 
-    def __init__(self, points):
+    `spacing`: the points are samples of a curve at that arc length apart (world.route's, of
+    SSv2's spline), so `s` is the curve's arc length, not the chords' (a chord is short of
+    its arc in a curve: 0.13 m over Town01's turn at 5 m samples), and a pose between two is
+    on a cubic through them (Catmull-Rom), its yaw the cubic's tangent: a chord's heading is
+    up to half its turn off (0.27 rad) and its middle a sagitta off the curve (092 K2.4).
+    Without it, the chords and their headings, as for a polyline."""
+
+    def __init__(self, points, spacing=None):
         self.points = points
         seg = (points[..., 1:, :] - points[..., :-1, :]).norm(dim=-1)
+        self.smooth = spacing is not None
+        if self.smooth:     # a repeated point (a short route's tail) adds nothing
+            seg = torch.where(seg > 1e-9, torch.full_like(seg, float(spacing)),
+                              torch.zeros_like(seg))
+        self.spacing = spacing
         self.s = torch.cat([torch.zeros_like(seg[..., :1]), seg.cumsum(-1)], dim=-1)
         self.length = self.s[..., -1]
+
+    def _at(self, i):
+        return self.points.gather(-2, i[..., None, None].expand(*i.shape, 1, 2)).squeeze(-2)
 
     def pose(self, s):
         """`(x, y, yaw)` at arc length `s` [N, E] (clamped to the route)."""
         s = torch.minimum(torch.maximum(s, torch.zeros_like(s)), self.length)
+        last = self.s.shape[-1] - 1
         i = torch.searchsorted(self.s, s.unsqueeze(-1), right=True).squeeze(-1) - 1
-        i = i.clamp(0, self.s.shape[-1] - 2)
-        p0 = self.points.gather(-2, i[..., None, None].expand(*i.shape, 1, 2)).squeeze(-2)
-        p1 = self.points.gather(-2, (i + 1)[..., None, None].expand(*i.shape, 1, 2)).squeeze(-2)
+        i = i.clamp(0, last - 1)
+        p0, p1 = self._at(i), self._at(i + 1)
         s0 = self.s.gather(-1, i[..., None]).squeeze(-1)
         s1 = self.s.gather(-1, (i + 1)[..., None]).squeeze(-1)
         span = (s1 - s0)
         f = torch.where(span > 0, (s - s0) / torch.where(span > 0, span, torch.ones_like(span)),
                         torch.zeros_like(span))
-        xy = p0 + (p1 - p0) * f[..., None]
         d = p1 - p0
-        yaw = torch.atan2(d[..., 1], d[..., 0])
+        chord_yaw = torch.atan2(d[..., 1], d[..., 0])
+        if not self.smooth:
+            xy = p0 + d * f[..., None]
+            return xy[..., 0], xy[..., 1], chord_yaw
+        # Catmull-Rom on the samples: tangents from the neighbours; at an end, the parabola's
+        # through the three last (2 d minus the inner tangent)
+        pm = self._at((i - 1).clamp(min=0))
+        p2 = self._at((i + 1 + 1).clamp(max=last))
+        inner0, inner1 = (p1 - pm) * 0.5, (p2 - p0) * 0.5
+        m0 = torch.where((i > 0)[..., None], inner0, 2 * d - inner1)
+        m1 = torch.where((i + 1 < last)[..., None], inner1, 2 * d - inner0)
+        u = f[..., None]
+        u2, u3 = u * u, u * u * u
+        xy = ((2 * u3 - 3 * u2 + 1) * p0 + (u3 - 2 * u2 + u) * m0
+              + (-2 * u3 + 3 * u2) * p1 + (u3 - u2) * m1)
+        t = ((6 * u2 - 6 * u) * p0 + (3 * u2 - 4 * u + 1) * m0
+             + (-6 * u2 + 6 * u) * p1 + (3 * u2 - 2 * u) * m1)
+        tn = t.norm(dim=-1)
+        yaw = torch.where(tn > 1e-9, torch.atan2(t[..., 1], t[..., 0]), chord_yaw)
         return xy[..., 0], xy[..., 1], yaw
 
     def project(self, xy):
@@ -140,7 +172,9 @@ class Routes:
         dist = (q - foot).norm(dim=-1)
         j = dist.argmin(-1)                                               # [N, E, K]
         s0 = self.s[..., :-1][..., None, :].expand_as(dist).gather(-1, j[..., None]).squeeze(-1)
-        segl = L2.sqrt()[..., None, :].expand_as(dist).gather(-1, j[..., None]).squeeze(-1)
+        # the segment's own arc length: its chord, or the spacing of a sampled curve
+        segs = self.s[..., 1:] - self.s[..., :-1]
+        segl = segs[..., None, :].expand_as(dist).gather(-1, j[..., None]).squeeze(-1)
         tj = t.gather(-1, j[..., None]).squeeze(-1)
         abx = ab[..., 0][..., None, :].expand_as(dist).gather(-1, j[..., None]).squeeze(-1)
         aby = ab[..., 1][..., None, :].expand_as(dist).gather(-1, j[..., None]).squeeze(-1)
@@ -261,7 +295,7 @@ class DefaultVehicles:
             route = self.world.route(px, py, ph, self.route_length, pts.shape[-2])   # [1, P, 2]
             pts[k, d] = torch.as_tensor(route, dtype=pts.dtype).reshape(pts.shape[-2], 2)
             self.s[k, d] = 0.0
-        self.routes = Routes(pts)
+        self.routes = Routes(pts, spacing=self.routes.spacing)   # world.route's samples again
         self.lc = self.lc & ~done
 
     def front(self, others=None):
