@@ -42,6 +42,11 @@ GRIP_SLIP = 0.5      # m/s between the tread and the hub: above it, the tyre sli
 JOINT_KINDS = ("suspension", "steer", "spin")
 
 
+def _clip(x, lo, hi):
+    """x between tensor bounds (torch 1.8, the gate's apt torch, has no tensor clamp)."""
+    return torch.maximum(torch.minimum(x, hi), lo)
+
+
 def load_body(path):
     """The body file as a dict, its required keys checked."""
     import yaml
@@ -156,13 +161,12 @@ class ArticulationModel:
             # an estimate only from a torque that moved the wheel the way it pushed
             ok = self._known & (self._tau.abs() > 1.0) & (alpha * self._tau > 0)
             est = (self._tau / torch.where(ok, alpha, torch.ones_like(alpha)))
-            self._I = torch.where(ok, est.clamp(lo, hi), self._I)
+            self._I = torch.where(ok, _clip(est, lo, hi), self._I)
         I_now = self._I if grip is None else torch.where(
             torch.as_tensor(grip, dtype=torch.bool, device=self.device), self._I, lo.expand_as(
                 self._I))
         hold = -(I_now * omega / dt + drive)            # what brings the wheel to rest
-        tau = (drive + torch.maximum(torch.minimum(hold, brake), -brake)).clamp(
-            -self.spin_limit, self.spin_limit)
+        tau = _clip(drive + _clip(hold, -brake, brake), -self.spin_limit, self.spin_limit)
         self._omega, self._tau, self._dt = omega.clone(), tau.clone(), dt
         self._known = torch.ones(self.n, 1, dtype=torch.bool, device=self.device)
         return tau
