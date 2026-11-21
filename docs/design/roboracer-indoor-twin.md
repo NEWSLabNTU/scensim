@@ -287,7 +287,14 @@ The rules:
   input has its array whether or not a slot has it. Where `valid` or `truth_valid[name]` is
   False, its zeros are not a reading, and the scalar form's truth dict lacks the name.
 - **The shape contract for later backends.** Torch and Warp keep these keys and shapes. A batch
-  declares `array_api` ("numpy" now) and `dtype` (float64 now).
+  declares `array_api` and `dtype` (float64): "numpy", or a tuple of the namespaces it is
+  written over (`sim_vehicle_ecu.xp`: numpy and torch, 092 K2.2c). `load_batch(...,
+  array_api="torch", device="cuda")` builds it on torch on that device, its commands, sensors
+  and actuation tensors there, nothing in its per-step path brought to the host.
+  `roboracer_vesc` is the first: one code, numpy and torch on CPU and GPU equal bit for bit
+  (its `test_torch.py`), its pending commands drained in one pass, a queue overflow a device
+  flag on torch (`check`, at each reset) and an error at once on numpy, and only a car with
+  latency jitter drawing on the host.
 - **Bit for bit.** A batched form equals N scalar steps exactly only when both compute
   elementwise with `+ - * /`, sqrt, min, max, clip, where and comparisons. Two things differ in
   the last bit:
