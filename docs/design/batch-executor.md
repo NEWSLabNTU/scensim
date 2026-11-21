@@ -311,7 +311,10 @@ numpy.
 
 Named differences: the lanelet pose ignores an entity's bounding box (SSv2's `matchToLane`
 runs first for one) and the altitude check (the batch is 2D); lanelets equally near a point
-(two overlapping at 0 m) are taken in the export's order, where lanelet2's R-tree's may differ.
+(two overlapping at 0 m) are taken in the export's order, where lanelet2's R-tree's may differ. The
+routing graph is lanelet2's plain Germany/Vehicle one; SSv2's default is
+VEHICLE_WITH_ROAD_SHOULDER (its own RoadShoulderPassableGermany rules), so on a map with
+`road_shoulder` lanelets following, previous, left and right can differ (243). Town01 has none.
 
 `LaneletWorld.from_polylines` is a world of polylines with the same interface (094 P2's oval
 track: one lanelet that follows itself).
