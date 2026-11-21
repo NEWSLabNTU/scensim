@@ -458,7 +458,17 @@ Rules:
   value outside the knob's declared values. The refusal names the scenario, the parameter and
   the world.
 - **The same names on every target.** A CARLA town and an Isaac stage of the same place
-  declare the same anchors and knobs, so one scenario runs on both. Where a target cannot
+  declare the same anchors and knobs, so one scenario runs on both.
+- *Built, K9a (roadmap 092):* lanes. The declaration lives beside the map, not in a
+  `world.yaml`: `<map dir>/anchors.yaml` (`anchors: 1`, `lanes: {<name>: {lanelets: [...]}}`), so
+  a CARLA town and its Isaac stage, which share the Lanelet2 map, read the same file. The map's
+  author resolves it once (`python3 -m scensim_batch.anchors resolve`, which needs torch, from
+  the map's export) into `anchors.resolved.json`: each lane's length, lowest speed limit, ends and
+  heading table, every number in SSv2's arc length, and the map's digest. Users read that file
+  with ROS 2 alone; the sampler refuses one resolved on other map bytes. Expressions read
+  `anchor.<lane>.<attribute>` and `anchor.<lane>.heading(s)`; the record names the file read
+  (`anchor_source`). Binding a scenario's positions to anchors and the check are K9b; conflict
+  points, regions and curves K9c. Where a target cannot
   honour a knob (fog on a target without fog), it refuses the knob by name.
 
 ## 4. Behaviour models (D3, first draft)

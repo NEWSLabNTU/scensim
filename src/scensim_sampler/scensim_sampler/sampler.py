@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import __version__, record as R
+from . import __version__, anchors as A, record as R
 from .dist import SpecError
 from .plugins.importance import Importance
 from .plugins.joint import Joint
@@ -54,19 +54,32 @@ class Sampler:
         # the world's anchor attributes (093 gap 7): read-only values an expression reads as
         # anchor.<name>.<attribute>, {name: {attribute: value}} as testbench.yaml's
         # world.anchors declares them; a derived value may read them and still feed the cell
-        self.anchors = _anchor_env(anchors)
+        try:
+            numbers, functions = A.env(anchors)
+        except A.AnchorError as e:
+            raise SpecError(str(e)) from None
+        self.anchors = numbers
+        self.anchor_functions = {k + "()": f for k, f in functions.items()}
+        self.anchor_specs = dict(anchors or {})
         missing = sorted({r for rs in reads.values() for r in rs
-                          if r.startswith("anchor.") and r not in self.anchors})
+                          if r.startswith("anchor.") and r not in self.anchors
+                          and r not in functions})
         if missing:
+            known = sorted(set(self.anchors) | set(functions))
             raise SpecError(f"{', '.join(missing)}: read by a derived value, but the world "
-                            f"declares no such anchor attribute (testbench.yaml world.anchors"
-                            f"{': ' + ', '.join(sorted(self.anchors)) if self.anchors else ': none'})")
+                            f"declares no such anchor attribute (testbench.yaml world.anchors, "
+                            f"or the map's {A.RESOLVED}"
+                            f"{': ' + ', '.join(known) if known else ': none'})")
         self.anchors_read = sorted({r for rs in reads.values() for r in rs
                                     if r.startswith("anchor.")})
+        # a read the world declares only as a function (a resolved lane's heading) has no
+        # value of its own to record: its file does (anchor_source)
+        self.anchor_values_read = [r for r in self.anchors_read if r in self.anchors]
+        self.anchor_source = A.sources(self.anchor_specs, self.anchors_read)
         # the derived values a cell may be computed from: reading only parameters (a bound knob
         # is one), anchor attributes and such values, transitively (scenario-description.md
         # section 7)
-        self.derived_ok = scenario.derived_ok(reads, fixed=set(self.anchors))
+        self.derived_ok = scenario.derived_ok(reads, fixed=set(self.anchors) | set(functions))
         self.knobs = {}
         for p in self.plugins:
             self.knobs.update(p.knobs)
@@ -136,6 +149,7 @@ class Sampler:
     def _finish(self, values):
         env = dict(self.knobs)
         env.update(self.anchors)
+        env.update(self.anchor_functions)
         env.update(values)
         derived = []
         for p in self.plugins:
@@ -193,8 +207,10 @@ class Sampler:
             **({"latent": latent} if latent else {}),
             # the anchor attributes this sample's derived values read, as the world declared
             # them: a replay recomputes its cell from them (093 gap 7)
-            **({"anchors": _anchors_record(self.anchors, self.anchors_read)}
-               if self.anchors_read else {}),
+            **({"anchors": _anchors_record(self.anchors, self.anchor_values_read)}
+               if self.anchor_values_read else {}),
+            # the map's resolved anchors files read (092 K9a): which geometry, by digest
+            **({"anchor_source": self.anchor_source} if self.anchor_source else {}),
             "seeds": {"scenario": int(scen_ss.generate_state(1)[0]),
                       "world": int(world_ss.generate_state(1)[0]),
                       "pilots": {e: int(s) for e, s in zip(sc.entities, pilots)}},
@@ -278,22 +294,6 @@ def _plain(v):
     if isinstance(v, (np.generic,)):
         return v.item()
     return v
-
-
-def _anchor_env(anchors):
-    """{"anchor.<name>.<attribute>": value} from {name: {attribute: value}} (a `kind` key is
-    the anchor's, not an attribute)."""
-    out = {}
-    for name, attrs in (anchors or {}).items():
-        if not isinstance(attrs, dict):
-            raise SpecError(f"anchor {name}: {{attribute: value}}, not {attrs!r}")
-        for a, v in attrs.items():
-            if a == "kind":
-                continue
-            if isinstance(v, bool) or not isinstance(v, (int, float)):
-                raise SpecError(f"anchor {name}.{a}: a number, not {v!r}")
-            out[f"anchor.{name}.{a}"] = float(v)
-    return out
 
 
 def _anchors_record(env, read):

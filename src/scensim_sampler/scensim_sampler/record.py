@@ -26,9 +26,10 @@ FAMILIES = {
 CATEGORY = re.compile(r"^(R[1-8])\.[a-z0-9_]+\.[a-z0-9_]+$")
 HEX = re.compile(r"^[0-9a-f]{64}$")
 KEYS = ("record", "id", "scenario", "distribution", "category", "cell", "values", "derived",
-        "latent", "anchors", "seeds", "base", "proposal", "weight", "log_weight", "search",
+        "latent", "anchors", "anchor_source", "seeds", "base", "proposal", "weight", "log_weight", "search",
         "world", "car", "sampler")
-REQUIRED = tuple(k for k in KEYS if k not in ("world", "car", "latent", "anchors"))
+REQUIRED = tuple(k for k in KEYS if k not in ("world", "car", "latent", "anchors",
+                                                 "anchor_source"))
 UINT32 = 2 ** 32
 SCHEMA = Path(__file__).parent / "schema" / "sample-record-1.json"
 
@@ -160,6 +161,14 @@ def check(rec, scenario=None, bound=False):
                 for k, a in an.items()):
             out.append("anchors: {name: {attribute: number}}, the world's anchor attributes "
                        "the derived values read")
+    if "anchor_source" in rec:
+        src = rec["anchor_source"]
+        if not isinstance(src, list) or not src or not all(
+                isinstance(x, dict) and set(x) == {"map", "map_sha256", "file_sha256"}
+                and all(isinstance(v, str) and v for v in x.values())
+                and HEX.match(x["map_sha256"]) and HEX.match(x["file_sha256"]) for x in src):
+            out.append("anchor_source: [{map, map_sha256, file_sha256}], each a map's resolved "
+                       "anchors file read (sha256 hex)")
     if "derived" in rec:
         d = rec["derived"]
         if not isinstance(d, list) or not all(isinstance(x, str) for x in d):

@@ -66,7 +66,9 @@ def entries(value, where):
 
 def draw(value, resolve, where, anchors=None):
     """`[(record, scenario path)]` for a suite's `sample:`. `resolve(str) -> Path` resolves a
-    suite-relative path. `anchors`: the world's (testbench.yaml world.anchors)."""
+    suite-relative path. `anchors`: the world's anchors, a mapping, or a callable taking the
+    distribution's path and returning them (the project's world.anchors merged with its map's
+    resolved file, 092 K9a)."""
     ss, xosc = _sampler()
     out = []
     for at, s in entries(value, where):
@@ -75,11 +77,12 @@ def draw(value, resolve, where, anchors=None):
             raise SampleRefused(f"{at}: distribution {s['distribution']}: no such file")
         proposal = resolve(s["proposal"]) if s.get("proposal") else None
         try:
-            sampler = ss.Sampler.from_file(dist, proposal=proposal, knobs=s.get("knobs"),
-                                           anchors=anchors)
+            sampler = ss.Sampler.from_file(
+                dist, proposal=proposal, knobs=s.get("knobs"),
+                anchors=anchors(dist) if callable(anchors) else anchors)
             batch = sampler.draw(n=s.get("n"), seed=s.get("seed"))
         except (ss.SpecError, ss.SamplingError, ValueError) as e:
-            raise SampleRefused(f"{at}: {e}") from None
+            raise SampleRefused(f"{at}: {e}") from None   # an AnchorError is a ValueError
         for r in batch.records:
             # the sampler names the scenario as it opened it, dist.parent / ScenarioFile, so
             # absolute here (dist is); a relative one is the distribution's, not the cwd's
@@ -199,7 +202,7 @@ def bind(record, rec, prov, pilots):
         notes.append("car: the stack names no spec_hash for the ego (or there is no ego)")
     out["id"] = ss.record_id(out)
     keys = ("record", "id", "scenario", "distribution", "category", "cell", "values", "derived",
-            "latent", "anchors", "seeds", "base", "proposal", "weight", "log_weight", "search",
+            "latent", "anchors", "anchor_source", "seeds", "base", "proposal", "weight", "log_weight", "search",
             "world", "car", "sampler")
     return {k: out[k] for k in keys if k in out}, notes
 

@@ -13,6 +13,8 @@ One directory per map, in Autoware's map layout plus each simulator's files:
         carla/map_origin.yaml       (only for a map not in CARLA's frame)
         isaac/world.yaml            (Isaac Sim: the world for this map)
         surfaces.yaml               (Isaac Sim: optional, the label defaults)
+        anchors.yaml                (optional: the map's anchors, by name)
+        anchors.resolved.json       (made from anchors.yaml by the map's author)
 ```
 
 A fetched map is read-only. What the stack writes for a map goes to the testbench's
@@ -53,6 +55,44 @@ ground_paths:
 by the stack), relative to the map directory, or absolutely. `ros2 run scensim_isaac_world
 make_world <map dir> [--town <Town>] [--usd <stage>]` writes it for a CARLA town from the
 USD set; it runs in Isaac's Python.
+
+## A map's anchors
+
+A map may name parts of its geometry for scenarios: a lane by the lanelets it runs along, so a
+scenario's derived values can read its length, speed limit or heading
+(`anchor.<name>.heading(s)`, scenario-description.md sections 2a and 3). The map's author
+declares them in `anchors.yaml`:
+
+```yaml
+anchors: 1
+lanes:
+  west_street: {lanelets: [6583]}                    # Town01's street where follow_to_goal starts
+  west_left_turn: {lanelets: [6583, 42664, 32582]}   # each lanelet following the one before
+```
+
+and resolves them, once, into `anchors.resolved.json` beside it:
+
+```bash
+python3 -m scensim_batch.map_export <map dir> -o export.json    # lanelet2 (system Python)
+python3 -m scensim_batch.anchors resolve <map dir> --export export.json   # needs torch
+```
+
+**Only a map's author runs these.** A user reads the resolved file, with ROS 2 alone: the
+sampler and `scensim` read its numbers and never need lanelet2 or torch. The file records the
+map's digest, and a file resolved on other map bytes is refused. A lane's length and its arc
+positions are SSv2's (its Catmull-Rom spline through each lanelet's centreline), so an `s` read
+from an anchor is an `s` in a LanePosition. Its heading is a table: every 0.5 m, each lanelet
+join and each joint of a lanelet's spline listed twice (the tangent before and after, which
+need not agree), and any interval whose linear interpolation is off by more than 1e-3 rad
+halved, down to 1 cm. The file states the step, the tolerance and the error it measured
+(`heading_max_error`): Town01's left turn measures 9.9e-4 rad.
+
+The published maps dataset does not carry anchors files yet: until it does, a host that has
+them keeps a copy of the dataset of its own (`datasets:` in `host.yaml`), which `scensim assets
+fetch` links instead.
+
+A testbench's `world.anchors` adds anchors of the project's own, as stated numbers; a name
+both declare is refused. Conflict points, curves and regions come later (roadmap 092 K9c).
 
 ## Datasets
 
