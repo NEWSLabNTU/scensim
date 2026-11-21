@@ -95,6 +95,17 @@ class AgreementTest(unittest.TestCase):
                  "to": "runningState"}]))
             self.assertEqual(A.context_steps(p, 0.05),
                              {"s/a": {"runningState": 0, "completeState": 19}})
+            # a run that ends by an exit: its last context is the evaluation's own time
+            p.write_text("\n".join(json.dumps(o) for o in [
+                {"ev": "state", "sim": 0.1, "element": "s", "from": "standbyState",
+                 "to": "runningState"},
+                {"ev": "state", "sim": 3.0, "element": "s/a/g/m/e", "from": "standbyState",
+                 "to": "runningState"},
+                {"ev": "state", "sim": 3.0, "element": "s/a/g/m/e/exit", "from": "standbyState",
+                 "to": "startTransition"}]))
+            self.assertEqual(A.context_steps(p, 0.05),
+                             {"s": {"runningState": 1}, "s/a/g/m/e": {"runningState": 60},
+                              "s/a/g/m/e/exit": {"startTransition": 60}})
 
     def test_taken_commands_and_their_delivery(self):
         """Frame i's step starts at the previous frame's clock; a command stamped there ran

@@ -134,15 +134,25 @@ def context_steps(path, step_time):
     """{element path: {state: the first step k (at scenario time k dt) it entered}} from the
     storyboard log's state changes. Its `sim` is the time of the context SSv2 published, after
     the frame's update (evaluate at T, update to T + dt, publish: the interpreter's
-    evaluate_storyboard), so the evaluation that made a change was a step before."""
-    out = {}
+    evaluate_storyboard), so the evaluation that made a change was a step before. Except an
+    exit's: exitSuccess and exitFailure throw in the evaluate, and the handler publishes before
+    any update, at the evaluation's own time (243). That is the log's last time, with an action
+    starting in it."""
+    rows = []
     for line in Path(path).read_text().splitlines():
         if not line.strip():
             continue
         o = json.loads(line)
         if o.get("ev") != "state" or o.get("sim") is None:
             continue
-        k = round(float(o["sim"]) / step_time) - 1
+        rows.append(o)
+    last = max((float(o["sim"]) for o in rows), default=None)
+    exit_tick = any(float(o["sim"]) == last and o["element"].count("/") >= 5
+                    and o["to"] in ("startTransition", RUNNING) for o in rows)
+    out = {}
+    for o in rows:
+        at_exit = exit_tick and float(o["sim"]) == last
+        k = round(float(o["sim"]) / step_time) - (0 if at_exit else 1)
         out.setdefault(o["element"], {}).setdefault(o["to"], k)
     return out
 

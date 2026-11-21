@@ -398,16 +398,16 @@ What it took, each read from a seats run:
 |---|---|---|
 | ego 9 m apart | the pilot's hold before command 0 had the seats brake pressed (sim_vehicle_ecu releases in ~0.3 s); a fresh batch component was not | the ego pre-roll |
 | lead turned the other way | map_export built the routing graph after moving the map's points, reordering 20 of Town01's 36 branches | map_export v2: the graph on the parsed map, checked against SSv2's own lanelet_wrapper (0 of 300 differ) |
-| elements started 2 steps early | the storyboard log's time is after the step; SSv2's first evaluation is at dt (the batch evaluated at 0 too); SSv2 sees the ego a frame late (`time-and-ticking.md`) | `context_steps` less a step; no evaluation at reset; the storyboard reads the ego's previous step (its vehicles the current one) |
+| elements started 2 steps early | the storyboard log's time is after the step, except an exit's (published before the update, at the evaluation's time); SSv2's first evaluation is at dt (the batch evaluated at 0 too); SSv2's storyboard sees the ego two frames before the frame its tick makes (`time-and-ticking.md`) | `context_steps` less a step, not on an exit's lines; no evaluation at reset; the storyboard reads the ego two steps back, SSv2's vehicles the current world (243) |
 | lead 0.36 m, 0.27 rad off in the turn | the route sampled every 5 m and followed chord by chord | a Catmull-Rom cubic on samples 2.5 m apart, arc length the spline's |
 
 The rows (Isaac, engine A, `allow_loop`, one slot; seats on newslab-server139):
 
 | scenario (Town01) | outcome | ego max / RMS | NPC max / RMS / yaw | element offsets | delivery | pre-roll |
 |---|---|---|---|---|---|---|
-| follow_to_goal (the ego at 1.23 m/s behind a 4 m/s lead; the lead through a turn) | passed / passed | 0.9 mm / 0.9 mm | lead 2.8 cm / 1.4 cm / 0.035 rad | all 0 (goal at step 1262 both) | 1271 of 1271 at delay 0 | 10 steps |
+| follow_to_goal (the ego at 1.23 m/s behind a 4 m/s lead; the lead through a turn) | passed / passed | 0.9 mm / 0.9 mm | lead 2.8 cm / 1.4 cm / 0.035 rad | all 0 (goal at step 1263 both) | 1271 of 1271 at delay 0 | 10 steps |
+| k24_npc_stops_for_ego (the ego to ~2.7 m/s, braking to a stop at 13 s; a default vehicle 20 m behind at 6 m/s) | passed / passed | 2.4 mm / 2.2 mm | follower 0.90 m / 0.54 m / 0 (open: K2.1's front-entity following, inputs being diffed by 243) | all 0 (time-up at step 600 both) | 608 of 608 at delay 0 | 10 steps |
 
-Open: a row where a default vehicle reacts to the ego (it sees the ego current, by SSv2's
-order; follow_to_goal cannot tell), and one with a Distance condition between ego and NPC
-(the storyboard reads the NPC's canonical pose); engine B's column; the Hermite case on
-Town10HD (CARLA).
+Open: the reacting follower's 0.9 m (its first second: seats loses 1.22 m/s, the batch
+0.57); k24_distance, whose 8 m never fired on seats (the follower stops 11.55 m off), once the
+follower agrees; engine B's column; the Hermite case on Town10HD (CARLA).
