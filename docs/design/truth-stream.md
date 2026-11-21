@@ -64,6 +64,9 @@ commands arrived by the step's start. The latest wins, as on a car's vehicle int
 frame's delivery delay is the frames between the step's start (the previous frame's
 `sim_time_ns`) and `stamp_ns`, for a sender that stamps a command with the clock it answers
 (scensim_agent's replay_pilot does). `scensim_batch.agreement.delivery` counts them.
+Superseded commands are expected whenever the stack's control rate exceeds the frame rate
+(Autoware's control at 30 Hz against 20 frames a second): the latest wins, as on a real
+vehicle interface.
 
 Schema 2 names the simulator's values neutrally. Schema 1 (CARLA only) named them `carla`
 (`sim_pose`), `carla_frame` (`sim_frame`), `actor_id` (`sim_id`), `blueprint` (`asset`) and
