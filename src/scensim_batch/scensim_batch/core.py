@@ -54,6 +54,9 @@ class _OnDevice:
         return False
 
 
+SYNC_EVERY = 16     # a device run's steps per host check (BatchRun's sync_every)
+
+
 def request_motion(kind, commands):
     """`(velocity [N], gear [N])` of the requests, as aib's Vehicle.apply takes them for the
     sticky-tire release: Autoware's velocity and gear; Ackermann's speed (0 when stale) and its
@@ -87,7 +90,7 @@ def request_motion(kind, commands):
 class BatchRun:
     def __init__(self, compiled, world, backend, component, route_length=300.0,
                  points=121, speed_limit=None, allow_loop=False, start_frames=0,
-                 step_time=None, device=None):
+                 step_time=None, device=None, sync_every=SYNC_EVERY):
         """`allow_loop`: accept a LoopBatch component (one Python step per slot), for checking
         a component before it has a batched form; never for a throughput number, and the run
         says so (`self.looped`)."""
@@ -97,6 +100,12 @@ class BatchRun:
         # sensors there; a numpy component gets them on the host (the CPU contract), each step
         self.device = None if device in (None, "cpu") else torch.device(device)
         self.on_device = _OnDevice(self.device)
+        # a device run checks every `sync_every` steps (092 K2.2c): between, no host sync -- the
+        # storyboard's and the vehicles' branches run as masked work, the actuation's check
+        # and an element's overflow are kept as device flags, raised at the next check
+        self.sync_every = 1 if self.device is None else max(1, int(sync_every))
+        self._ticks = 0
+        self._act_bad = None
         with self.on_device:
             self._init(compiled, world, backend, component, route_length, points, speed_limit,
                        allow_loop, start_frames, step_time, ecu_batch)
@@ -246,11 +255,12 @@ class BatchRun:
 
     def _post_update(self):
         veh = self.vehicles
-        if veh is None or not bool((self.job != 0).any()):
+        lazy = self._lazy()
+        if veh is None or (not lazy and not bool((self.job != 0).any())):
             return
         done = (((self.job == 1) & (veh.v >= self.job_target))
                 | ((self.job == 2) & (veh.v <= self.job_target)))
-        if bool(done.any()):
+        if lazy or bool(done.any()):
             self._reset_constraints(done)
             self.job = torch.where(done, torch.zeros_like(self.job), self.job)
 
@@ -332,9 +342,13 @@ class BatchRun:
         """The ego's component on what its sensors read, its actuation handed to the backend:
         what a host that owns the physics loop (Isaac Lab's DirectRLEnv) calls before each
         physics step, then steps the engine itself, then calls after_physics."""
+        self._set_lazy()
         st = self.backend.state()
-        act = self._ecu.checked_batch(
-            self.component.step_batch(commands, self._sensors(st), dt), self.c.n, "ego component")
+        act = self.component.step_batch(commands, self._sensors(st), dt)
+        if self._lazy() and isinstance(act, dict) and torch.is_tensor(act.get("drive")):
+            self._check_deferred(act)
+        else:
+            act = self._ecu.checked_batch(act, self.c.n, "ego component")
         self.first = torch.zeros_like(self.first)
         velocity, gear = request_motion(self.component.commands, commands)
         if self.device is not None and not torch.is_tensor(act["drive"]):
@@ -349,6 +363,7 @@ class BatchRun:
         """After one physics step: the ego read back, SSv2's default vehicles moved, the
         storyboard evaluated at the new time. Returns the observation: the ego's state, every
         entity's pose [N, E] (x, y, yaw, v) and each slot's outcome."""
+        self._set_lazy()
         before = self.seen_before
         self.seen_before = self.seen
         self.obs = self._observe(self.backend.state(), dt, npc_ego=before)
@@ -361,7 +376,44 @@ class BatchRun:
         self.ctx.t = self.clock - self.clock0
         self.ctx.update(view, dt)
         self._tick()
+        if not self._lazy():
+            self._check()
+        self._ticks += 1
         return self.obs
+
+    def _lazy(self):
+        """Whether this step skips its host checks (a device run between its checks)."""
+        return self.sync_every > 1 and self._ticks % self.sync_every != 0
+
+    def _set_lazy(self):
+        lazy = self._lazy()
+        if self.storyboard is not None:
+            self.storyboard.lazy = lazy
+        if self.vehicles is not None:
+            self.vehicles.lazy = lazy
+
+    def _check_deferred(self, act):
+        """The actuation check without a sync: the shapes on the host, the values into a
+        device flag (`_check` raises it)."""
+        n = self.c.n
+        for f, shape in (("drive", (n, 4)), ("brake", (n, 4)), ("tire_angle", (n,))):
+            a = act.get(f)
+            if not torch.is_tensor(a) or tuple(a.shape) != shape:
+                self._ecu.checked_batch(act, n, "ego component")    # raises, naming it
+        bad = ~(torch.isfinite(act["drive"]).all() & torch.isfinite(act["brake"]).all()
+                & torch.isfinite(act["tire_angle"]).all() & (act["brake"] >= 0).all())
+        self._act_bad = bad if self._act_bad is None else (self._act_bad | bad)
+
+    def _check(self):
+        """What the lazy steps since the last check kept on the device, raised."""
+        if self._act_bad is not None:
+            bad, self._act_bad = self._act_bad, None
+            if bool(bad):
+                raise self._ecu.BatchError(
+                    "ego component: actuation not finite, or a brake negative, in a step since "
+                    f"step {self._ticks - self.sync_every + 1} (sync_every=1 names the slot)")
+        if self.storyboard is not None:
+            self.storyboard.check()
 
     def _ego_view(self, obs):
         """The ego's columns of an observation (x, y, yaw, v [N]) and its state dict."""
@@ -397,20 +449,25 @@ class BatchRun:
         x[:, self.ego], y[:, self.ego], yaw[:, self.ego], v[:, self.ego] = (
             st["x"], st["y"], st["yaw"], st["v"])
         if self.defaults:
-            others_idx = [self.ego] + self.props
-            ego_len = torch.tensor([c.entities[i].length for i in others_idx], dtype=torch.float64)
-            ego_wid = torch.tensor([c.entities[i].width for i in others_idx], dtype=torch.float64)
+            if getattr(self, "_others", None) is None:   # once: the indices and boxes on the device
+                idx = [self.ego] + self.props
+                f64 = lambda q: torch.tensor(q, dtype=torch.float64)   # noqa: E731
+                self._others = (torch.tensor(idx, dtype=torch.int64),
+                                f64([c.entities[i].length for i in idx]),
+                                f64([c.entities[i].width for i in idx]),
+                                f64([c.entities[i].cx for i in idx]),
+                                torch.tensor(self.defaults, dtype=torch.int64))
+            others_idx, ego_len, ego_wid, ego_cx, _ = self._others
             others = {"x": x[:, others_idx].clone(), "y": y[:, others_idx].clone(),
                       "yaw": yaw[:, others_idx].clone(), "v": v[:, others_idx].clone(),
                       "length": ego_len.expand(c.n, -1), "width": ego_wid.expand(c.n, -1),
-                      "cx": torch.tensor([c.entities[i].cx for i in others_idx],
-                                         dtype=torch.float64).expand(c.n, -1)}
+                      "cx": ego_cx.expand(c.n, -1)}
             if npc_ego is not None:         # column 0 is the ego
                 for k in ("x", "y", "yaw", "v"):
                     others[k][:, 0] = npc_ego[k]
             nx, ny, nyaw = (self.vehicles.step(dt, others) if dt is not None
                             else self.vehicles.poses())
-            d = self.defaults
+            d = self._others[4]
             x[:, d], y[:, d], yaw[:, d], v[:, d] = nx, ny, nyaw, self.vehicles.v
         return {"x": x, "y": y, "yaw": yaw, "v": v, "ego": st}
 

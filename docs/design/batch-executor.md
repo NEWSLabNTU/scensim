@@ -444,6 +444,24 @@ a device run gets host arrays each step, the CPU contract. Checked against it:
 | BatchRun on cs2 (a default lead, a braking storyboard), 120 steps, a point-mass backend | CPU and numpy, cuda and torch | poses within 2.8e-14 m, speeds equal, storyboard states and outcomes equal |
 | engine B through ScensimEnv, the RoboRacer body and its VESC, 4 cars, 290 steps (`scripts/check_resident.py`) | the CPU path and resident, one GPU sim | x and y equal, yaw within 1.1e-16, v 2.2e-16, outcomes equal; 97 against 188 ms a step, contended |
 
-Engine A stays on the CPU path (PhysX's CPU pipeline). What still brings values to the host on
-the resident path: the storyboard's and SSv2's vehicles' branch tests (`bool(x.any())`), the
-world adapter's route on a lane change, and the actuation check (one value a step).
+Engine A stays on the CPU path (PhysX's CPU pipeline).
+
+A device run checks every `sync_every` steps (BatchRun's, default 16); the steps between bring
+nothing to the host. There the storyboard's branch tests (an element skipped when no slot is in
+its mask) run as masked work instead, which gives the same result; an element of one execution
+makes one pass, one of more makes all its passes, and one past its executions in a tick is a
+device flag. The actuation's check (finite, brakes not negative) is a device flag too; the
+shapes are still checked on the host each step, which costs nothing. Both flags are raised at
+the next check, naming the steps since the last ("sync_every=1 names the slot"). A condition's
+history drops its unused entries at checks only. Measured with torch's sync debug mode
+(`test_device.py`, `check_resident.py --sync-count`, 2026-11-22):
+
+| configuration | host syncs a step between checks |
+|---|---|
+| 094 P2's: an ego alone, a time-up exit, the VESC on torch (`test_device.NoHostSync`) | 0 (asserted: the debug mode raises) |
+| engine B through ScensimEnv, the same, 4 cars, 269 steps | 0 of ours; 1 of Isaac Lab's (DirectRLEnv's `reset_buf.nonzero()`, which a task may override with a masked reset) |
+| cs2 (a default lead, a braking storyboard) | 2.5: SSv2's running distance, its planner looped until every vehicle has reached its target (asked every 8th iteration) |
+
+Still synced as before: a lane change's start and end, and a route goal's start (the world's
+route is computed on the host: a lazy step syncs only when a slot starts one), and a partial
+reset (its indices).
