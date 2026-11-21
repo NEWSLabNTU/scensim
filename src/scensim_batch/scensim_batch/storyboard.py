@@ -235,9 +235,14 @@ class Storyboard:
         self.lazy = False
         self.overflow = None
         # the host-action elements (Action.host) no slot can start again: each slot's outcome
-        # decided, or the element or an ancestor complete (an element leaves COMPLETE only by a
-        # reset). Found at checks (one sync each); a lazy tick starts no settled element and
-        # asks the host about the others (a sync a tick each, until they settle)
+        # decided, or its event complete, or an ancestor above that complete with nothing above
+        # it to execute again. Not the action's own COMPLETE: Event::start restarts its actions
+        # from COMPLETE (an event of more executions back in STANDBY, 243). An event leaves
+        # COMPLETE only by a reset; a maneuver could by its group's next execution in SSv2
+        # (ManeuverGroup::start restarts its maneuvers; the port does not yet), so above the
+        # event a COMPLETE counts only where no element above it executes more than once.
+        # Found at checks (one sync each); a lazy tick starts no settled element and asks the
+        # host about the others (a sync each time, until they settle)
         self.host_nodes = [x for x in self.nodes if x.action is not None and x.action.host]
         self.settled = set()
 
@@ -303,9 +308,13 @@ class Storyboard:
             if id(x) in self.settled:
                 continue
             done = self.outcome != 0
-            a = x
+            a = x.parent if x.kind == "action" else x
+            first = True
             while a is not None:
-                done = done | (self.state[id(a)] == COMPLETE)
+                once_above = all(u.max_exec <= 1 for u in _above(a))
+                if first or once_above:
+                    done = done | (self.state[id(a)] == COMPLETE)
+                first = False
                 a = a.parent
             if bool(done.all()):
                 self.settled.add(id(x))
@@ -440,6 +449,15 @@ class Storyboard:
         self._set(x, RUNNING, go)
         self.count[id(x)] = torch.where(go, self.count[id(x)] + 1, self.count[id(x)])
         self._emit(x, "runningState", go)
+
+
+def _above(x):
+    """The elements above `x`, its parent first."""
+    out, a = [], x.parent
+    while a is not None:
+        out.append(a)
+        a = a.parent
+    return out
 
 
 class Latch:
