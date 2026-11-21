@@ -31,6 +31,37 @@ def t(x):
 
 @unittest.skipIf(torch is None, "no torch")
 class Planner(unittest.TestCase):
+    def test_a_sampled_curve_is_followed_on_its_arc(self):
+        """092 K2.4: a route of a curve sampled every 5 m (world.route's) is the curve's arc
+        length, its poses on a cubic through the samples and the yaw its tangent; chords
+        cut a 10 m radius turn by ~0.3 m and head up to 0.25 rad off."""
+        import math
+        R, ds = 10.0, 5.0
+        n = 13
+        ang = [i * ds / R for i in range(n)]
+        pts = torch.tensor([[[[R * math.sin(a), R - R * math.cos(a)] for a in ang]]],
+                           dtype=torch.float64)
+        smooth, chords = npc.Routes(pts, spacing=ds), npc.Routes(pts)
+        self.assertAlmostEqual(float(smooth.length), ds * (n - 1))
+        worst_p = worst_end = worst_y = 0.0
+        for k in range(1, 100):
+            s = torch.tensor([[k * ds * (n - 1) / 100]], dtype=torch.float64)
+            a = float(s) / R
+            x, y, yaw = smooth.pose(s)
+            err = math.hypot(float(x) - R * math.sin(a), float(y) - (R - R * math.cos(a)))
+            inner = ds <= float(s) <= ds * (n - 2)
+            worst_p, worst_end = (max(worst_p, err), worst_end) if inner else (
+                worst_p, max(worst_end, err))
+            worst_y = max(worst_y, abs((float(yaw) - a + math.pi) % (2 * math.pi) - math.pi))
+        self.assertLess(worst_p, 0.03)       # a chord's sagitta here: 0.31 m
+        self.assertLess(worst_end, 0.1)      # the end segments' parabola
+        self.assertLess(worst_y, 0.03)
+        _, _, cyaw = chords.pose(torch.tensor([[0.1]], dtype=torch.float64))
+        self.assertGreater(abs(float(cyaw)), 0.2)            # a chord's heading, as before
+        # a point on the curve projects to its arc length
+        s_p, lat = smooth.project(pts[..., 4:5, :])
+        self.assertAlmostEqual(float(s_p), 4 * ds, places=6)
+
     def test_dynamic_states_and_running_distance_equal_the_scalar_planner(self):
         rng = random.Random(3)
         rows = [(rng.uniform(0, 30), rng.uniform(0, 30), rng.uniform(-5, 5)) for _ in range(400)]
