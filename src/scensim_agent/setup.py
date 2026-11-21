@@ -25,6 +25,7 @@ setup(
             'vehicle_agent = scensim_agent.adapters.vehicle_agent:main',
             'carla_basic = scensim_agent.adapters.carla_basic:main',
             'simple_pilot = scensim_agent.adapters.simple_pilot:main',
+            'replay_pilot = scensim_agent.adapters.replay_pilot:main',
         ],
     },
 )
