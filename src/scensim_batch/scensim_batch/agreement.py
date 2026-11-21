@@ -1,0 +1,182 @@
+"""K2.4's agreement between a seats run and a batch replay of it (roadmap 092; batch-executor.md
+section 8): no simulator here, only the two runs' records.
+
+The seats side is the run directory: its truth (gap trace: each entity's pose per SSv2 frame,
+`npc_logic_started`), its storyboard log (`context.jsonl`: each element's state changes at
+SSv2's time) and the replay pilot's log (`replay_pilot.jsonl`: the world frame each command
+went out on). The batch side is what the runner records per batch step k: every entity's
+pose, the storyboard elements' states and the outcome.
+
+Frames are paired on scenario time: seats frame S + k (S, the frames before startNpcLogic,
+`scensim.truth.start_frames`) is batch step k, both at scenario time k dt. The ego's commands
+start on seats at world frame f0 (the replay pilot's first command); that frame's trace line
+less S is the steps the batch ego holds before its command 0 (`hold_steps`), paired by time
+(the line whose `sim_time_ns` is f0's clock), not by frame number (243).
+
+    table = agreement.compare(seats, batch)     # per entity: max and RMS position error,
+                                                # per element: first-running and complete
+                                                # steps on each side; the two outcomes
+"""
+import json
+import math
+from pathlib import Path
+
+RUNNING, COMPLETE = "runningState", "completeState"
+
+
+# --- the seats side ----------------------------------------------------------------------------
+
+def replay_log(path):
+    """The replay pilot's frame lines (after its last reset)."""
+    rows = []
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        o = json.loads(line)
+        if o.get("reset"):
+            rows = []
+        else:
+            rows.append(o)
+    return rows
+
+
+def first_command(rows):
+    """The replay log line of command 0, or None when the pilot never started."""
+    return next((r for r in rows if r.get("k") == 0), None)
+
+
+def hold_steps(trace, start_frames, command0):
+    """Batch steps the ego holds before command 0: the trace line at command 0's clock, as a
+    count of lines from the first, less S. None when no line has that clock."""
+    frames = sorted(trace.frames, key=lambda f: f.frame)
+    ns = command0["clock_ns"]
+    for f in frames:
+        if f.sim_time_ns is not None and f.sim_time_ns == ns:
+            return (f.frame - frames[0].frame) - start_frames
+    return None
+
+
+def seats_poses(trace, start_frames, steps, entities, pose="ssv2"):
+    """{entity: [(x, y, yaw) | None] for k in 0..steps-1}: seats frame S + k's poses. `pose`
+    {entity: "ssv2" | "sim"}, or one for all: SSv2's pose (what it drives) or the simulator's
+    (what physics did: the ego's)."""
+    frames = sorted(trace.frames, key=lambda f: f.frame)
+    first = frames[0].frame
+    by = {f.frame: f for f in frames}
+    out = {e: [] for e in entities}
+    for k in range(steps):
+        f = by.get(first + start_frames + k)
+        for e in entities:
+            which = pose.get(e, "ssv2") if isinstance(pose, dict) else pose
+            st = None if f is None else f.entities.get(e)
+            p = None if st is None else (st.sim_pose if which == "sim" else st.ssv2)
+            out[e].append(None if p is None else (p.x, p.y, p.yaw))
+    return out
+
+
+def context_steps(path, step_time):
+    """{element path: {state: the first step k (at scenario time k dt) it entered}} from the
+    storyboard log's state changes (its `sim` is SSv2's scenario time)."""
+    out = {}
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        o = json.loads(line)
+        if o.get("ev") != "state" or o.get("sim") is None:
+            continue
+        k = round(float(o["sim"]) / step_time)
+        out.setdefault(o["element"], {}).setdefault(o["to"], k)
+    return out
+
+
+# --- the batch side ----------------------------------------------------------------------------
+
+def element_paths(storyboard):
+    """{path: node} of the batch storyboard's elements, as the storyboard log names them
+    (story/act/group/maneuver/event[/action])."""
+    out = {}
+
+    def walk(x, prefix):
+        for ch in x.children:
+            path = f"{prefix}/{ch.name}" if prefix else ch.name
+            out[path] = ch
+            walk(ch, path)
+
+    walk(storyboard.root, "")
+    return out
+
+
+class BatchRecorder:
+    """What the runner records per batch step of slot `slot`: poses and element states."""
+
+    NAMES = {0: "standbyState", 1: RUNNING, 2: COMPLETE}
+
+    def __init__(self, run, slot=0):
+        self.run, self.slot = run, slot
+        self.paths = element_paths(run.storyboard) if run.storyboard is not None else {}
+        self.poses = {e.name: [] for e in run.c.entities}
+        self.steps = {}
+        self.k = 0
+
+    def record(self, obs):
+        names = [e.name for e in self.run.c.entities]
+        for i, n in enumerate(names):
+            self.poses[n].append((float(obs["x"][self.slot, i]), float(obs["y"][self.slot, i]),
+                                  float(obs["yaw"][self.slot, i])))
+        sb = self.run.storyboard
+        for path, node in self.paths.items():
+            name = self.NAMES.get(int(sb.state[id(node)][self.slot]))
+            if name is not None:
+                self.steps.setdefault(path, {}).setdefault(name, self.k)
+        self.k += 1
+
+
+# --- the comparison ----------------------------------------------------------------------------
+
+def _wrap(a):
+    return (a + math.pi) % (2 * math.pi) - math.pi
+
+
+def trajectory_error(seats, batch):
+    """{entity: {frames, max_m, rms_m, max_yaw_rad, missing}} over the steps both have."""
+    out = {}
+    for e, b in batch.items():
+        s = seats.get(e)
+        if s is None:
+            continue
+        d2, dy, missing = [], [], 0
+        for p, q in zip(s, b):
+            if p is None or q is None:
+                missing += 1
+                continue
+            d2.append((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2)
+            dy.append(abs(_wrap(p[2] - q[2])))
+        out[e] = {"frames": len(d2), "missing": missing,
+                  "max_m": math.sqrt(max(d2)) if d2 else None,
+                  "rms_m": math.sqrt(sum(d2) / len(d2)) if d2 else None,
+                  "max_yaw_rad": max(dy) if dy else None}
+    return out
+
+
+def trigger_steps(seats, batch, states=(RUNNING, COMPLETE)):
+    """{element: {state: (seats step, batch step, batch - seats)}} for the elements either side
+    names; a side that never entered the state has None."""
+    out = {}
+    for el in sorted(set(seats) | set(batch)):
+        row = {}
+        for st in states:
+            a, b = seats.get(el, {}).get(st), batch.get(el, {}).get(st)
+            row[st] = (a, b, None if a is None or b is None else b - a)
+        out[el] = row
+    return out
+
+
+def compare(seats, batch):
+    """The agreement table's row: `seats` and `batch` are {poses, steps, outcome}."""
+    traj = trajectory_error(seats["poses"], batch["poses"])
+    trig = trigger_steps(seats["steps"], batch["steps"])
+    return {"outcome": {"seats": seats["outcome"], "batch": batch["outcome"],
+                        "agree": seats["outcome"] == batch["outcome"]},
+            "trajectory": traj, "triggers": trig,
+            "trigger_offsets": sorted({r[2] for row in trig.values() for r in row.values()
+                                       if r[2] is not None})}
