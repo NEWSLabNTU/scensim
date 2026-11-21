@@ -66,15 +66,19 @@ declares them in `anchors.yaml`:
 ```yaml
 anchors: 1
 lanes:
-  west_street: {lanelets: [6583]}                    # Town01's street where follow_to_goal starts
-  west_left_turn: {lanelets: [6583, 42664, 32582]}   # each lanelet following the one before
+  # Town01's street where follow_to_goal starts
+  west_street: {lanelets: [6583]}
+  # the street, then its left turn: each lanelet follows the one before
+  west_left_turn: {lanelets: [6583, 42664, 32582]}
 ```
 
 and resolves them, once, into `anchors.resolved.json` beside it:
 
 ```bash
-python3 -m scensim_batch.map_export <map dir> -o export.json    # lanelet2 (system Python)
-python3 -m scensim_batch.anchors resolve <map dir> --export export.json   # needs torch
+# the map's export: lanelet2, in system Python
+python3 -m scensim_batch.map_export <map dir> -o export.json
+# its anchors resolved: needs torch
+python3 -m scensim_batch.anchors resolve <map dir> --export export.json
 ```
 
 **Only a map's author runs these.** A user reads the resolved file, with ROS 2 alone: the
