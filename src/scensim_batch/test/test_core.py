@@ -190,6 +190,28 @@ class Core(unittest.TestCase):
         self.assertEqual(run.component.resets.tolist(), [2, 1])
         _ = lead
 
+    def test_an_ego_preroll_moves_the_ego_only(self):
+        """092 K2.4: the pre-roll steps the ego through commands before the scenario's time;
+        SSv2's vehicles stay at their spawn, the clock at its start, and only a reset of
+        every slot takes one."""
+        c, run = self.run_of([{"values": {}}, {"values": {}}])
+        v0 = None
+
+        def preroll(r):
+            nonlocal v0
+            v0 = r.backend.v.clone()
+            for _ in range(10):
+                r.before_physics(cmds(2, 2.0), DT)
+                r.backend.advance(DT)
+
+        run.reset(preroll=preroll)
+        self.assertTrue(bool((run.backend.v > v0).all()))       # the ego moved
+        self.assertEqual(run.vehicles.s[:, 0].tolist(), [0.0, 0.0])  # SSv2's lead did not
+        self.assertEqual(run.clock.tolist(), [run.a0, run.a0])
+        self.assertTrue(bool((run.obs["ego"]["v"] == run.backend.v).all()))  # observed after it
+        with self.assertRaisesRegex(ValueError, "a reset of every slot only"):
+            run.reset(torch.tensor([True, False]), preroll=preroll)
+
     def test_a_loop_batch_is_refused(self):
         from scensim_batch import compile as C, core
 

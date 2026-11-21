@@ -110,6 +110,8 @@ class AgreementTest(unittest.TestCase):
         taken = A.taken_commands(t, 1, 5, "ego")
         self.assertEqual([None if c is None else c.acceleration for c in taken],
                          [1.0, 1.0, 1.0, 0.5, 0.0])
+        self.assertEqual([None if c is None else c.stamp_ns
+                          for c in A.taken_before(t, 1, "ego")], [None, ns[0]])  # lines 0..S
         d = A.delivery(t, "ego", 0.05)
         self.assertEqual(d, {"frames": 5, "delay": {0: 3, 1: 1, 2: 1}, "superseded": 3,
                              "repeated": 1})

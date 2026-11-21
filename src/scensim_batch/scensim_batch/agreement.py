@@ -89,6 +89,16 @@ def taken_commands(trace, start_frames, steps, ego):
     return out
 
 
+def taken_before(trace, start_frames, ego):
+    """[TakenCommand | None]: what the seats ego ran in the steps up to scenario time 0, the
+    trace's lines 0..S (the frames before startNpcLogic and the one it began on): a batch
+    pre-roll of the ego (BatchRun.reset's `preroll`), so it starts the scenario as seats did,
+    its brake held by the pilot's hold or already pulling (092 K2.4)."""
+    frames = sorted(trace.frames, key=lambda f: f.frame)[:start_frames + 1]
+    return [None if f.entities.get(ego) is None else getattr(f.entities[ego], "command", None)
+            for f in frames]
+
+
 def delivery(trace, ego, step_time):
     """How the seats ego's commands reached its vehicle, over the frames that ran one:
     `delay` {frames: count}, the frames between the frame a command answered (its stamp) and

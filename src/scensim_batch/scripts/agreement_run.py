@@ -125,6 +125,20 @@ def main(argv=None):
     cfg.sim.dt = step_time / cfg.decimation
     cfg.episode_length_s = (steps + 1) * step_time
     cfg.start_frames = S
+    # the seats ego's steps up to scenario time 0, as a pre-roll of the batch ego, where the
+    # truth has them (092 K2.4: its brake was held by the pilot's hold before command 0)
+    hold_cmd = {"accel": -3.0, "velocity": 0.0, "steer": 0.0}
+    from scensim_batch.compile import compile_scenario
+    ego_entity = next(e for e in compile_scenario(a.scenario, cfg.records, world).entities
+                      if e.role == "ego").name
+    before = A.taken_before(trace, S, ego_entity)
+    preroll = []
+    if any(c is not None for c in before):
+        for t in before:
+            c = hold_cmd if t is None else {"accel": t.acceleration, "velocity": t.velocity,
+                                            "steer": t.tire_angle}
+            preroll.append([[c["accel"], c["velocity"], c["steer"]]])
+        cfg.ego_preroll = preroll
     env = ScensimEnv(cfg)
     env.reset()
     rec = A.BatchRecorder(env.run)
@@ -148,7 +162,6 @@ def main(argv=None):
     # column; else the commands as sent, from the hold on
     taken = A.taken_commands(trace, S, steps, ego_name)
     replay = "taken" if any(c is not None for c in taken) else "sent"
-    hold_cmd = {"accel": -3.0, "velocity": 0.0, "steer": 0.0}
     for k in range(steps - 1):
         if replay == "taken":
             # the step to frame S + k + 1 ran that frame's command (the record at k + 1)
@@ -178,7 +191,7 @@ def main(argv=None):
         Path(a.dump).write_text(json.dumps({"seats": seats["poses"], "batch": batch["poses"]}))
     row = {"scenario": Path(a.scenario).name, "engine": a.engine, "S": S, "hold_steps": hold,
            "skipped_frames": skipped, "steps": steps, "batch_end_step": end.get("step"),
-           "replay": replay,
+           "replay": replay, "preroll_steps": len(preroll),
            "delivery": A.delivery(trace, ego_name, step_time) if replay == "taken" else None,
            **A.compare(seats, batch)}
     text = json.dumps(row, indent=1)

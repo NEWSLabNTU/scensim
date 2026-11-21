@@ -88,14 +88,26 @@ class BatchRun:
 
     # --- reset ----------------------------------------------------------------------------
 
-    def reset(self, mask=None):
+    def reset(self, mask=None, preroll=None):
+        """`preroll`: a callable the host runs once the ego and its component are reset and
+        before the first observation and storyboard evaluation, to step the ego's physics
+        through commands it ran before the scenario's time began (a seats ego's frames before
+        startNpcLogic, 092 K2.4: its brake held by then). It drives the ego only, through
+        before_physics and the host's physics step; nothing here moves SSv2's vehicles, ticks
+        the storyboard or advances the clock meanwhile. It steps every slot's physics, so only
+        a reset of every slot takes one."""
         c = self.c
         n = c.n
         mask = torch.ones(n, dtype=torch.bool) if mask is None else torch.as_tensor(mask)
+        if preroll is not None and not bool(mask.all()):
+            raise ValueError("an ego pre-roll steps every slot's physics: a reset of every "
+                             "slot only")
         e = self.ego
         self.backend.reset(mask, c.x[:, e], c.y[:, e], c.yaw[:, e], c.speed[:, e])
         self.component.reset_batch(mask.numpy())
         self.first = mask.clone() if self.first is None else (self.first | mask)
+        if preroll is not None:
+            preroll(self)     # its first step clears `first`: the sensors have read by then
         if self.defaults:
             self._reset_vehicles(mask)
             self.job = torch.where(mask[:, None], torch.zeros_like(self.job), self.job)
