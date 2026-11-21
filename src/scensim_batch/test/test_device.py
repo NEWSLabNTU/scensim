@@ -186,6 +186,69 @@ class NoHostSync(unittest.TestCase):
         self.assertGreater(quiet, 120)
         self.assertEqual(run.outcome(), ["success"] * run.c.n)
 
+    def test_a_story_lane_change_syncs_only_until_it_settles(self):
+        """A LaneChangeAction starts on the host: a lazy tick asks whether a slot starts it (one
+        sync) until a check finds it settled (its event complete in every slot); then none."""
+        import warnings
+
+        from scensim_batch import compile as C, core
+        from test_storyboard import NIGHT, case, event, lane_change, story, time_trigger
+        p = case(story(event("lc", lane_change(), time_trigger(0.5))),
+                 params='<ParameterDeclaration name="lc_t" parameterType="double" value="1"/>')
+        text = p.read_text()
+        i = text.index('<Private entityRef="lead">')
+        p.write_text(text[:i] + text[i:].replace('laneId="34513"', 'laneId="34514"', 1))
+        n = 2
+        with torch.device("cuda"):
+            c = C.compile_scenario(p, [{"values": {}}] * n, StraightWorld(), provides=NIGHT,
+                                   device="cuda")
+            c.y[:, c.index("ego")] = -7.0
+            backend = PointMass(n)
+        comp = ecu_batch.load_batch(AccelX, {}, {}, [1] * n, array_api="torch", device="cuda")
+        run = core.BatchRun(c, StraightWorld(), backend, comp, route_length=2000.0,
+                            device="cuda")
+        run.reset()
+        cm = {f: torch.as_tensor(v, device="cuda") for f, v in cmds(n, 0.0).items()}
+        node = next(x for x in run.storyboard.host_nodes)
+        per_tick = []
+        seen = []
+
+        def hook(msg, *a, **k):
+            if "synchroniz" in str(msg):
+                import traceback
+                st = [f for f in traceback.extract_stack() if "scensim_batch/" in f.filename
+                      and "test" not in f.filename]
+                if any(f.filename.endswith("storyboard.py") for f in st):
+                    seen.append(f"{st[-1].filename.split('/')[-1]}:{st[-1].lineno}")
+        old = warnings.showwarning
+        warnings.showwarning = hook
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("always")
+                warnings.showwarning = hook
+                for _ in range(80):        # 4 s: the change (0.5 s + 1 s) and its settling
+                    lazy = run._ticks % run.sync_every != 0
+                    seen.clear()
+                    if lazy:
+                        torch.cuda.set_sync_debug_mode("warn")
+                    run.step(cm, DT)
+                    torch.cuda.set_sync_debug_mode(0)
+                    if lazy:
+                        per_tick.append((id(node) in run.storyboard.settled, len(seen)))
+        finally:
+            warnings.showwarning = old
+        self.assertIn(id(node), run.storyboard.settled)
+        self.assertEqual(float(run.obs["y"][0, c.index("lead")]), 0.0)    # the change ran
+        before = [k for s, k in per_tick if not s]
+        after = [k for s, k in per_tick if s]
+        self.assertTrue(before and after)
+        # before it settles, a sync each time a lazy tick asks whether a slot starts it: twice
+        # a tick (from its event's start and its own evaluation); the tick it starts, its
+        # curve's on the host as well
+        self.assertEqual(sorted(set(before))[0], 2, per_tick)
+        self.assertEqual(sum(k > 2 for k in before), 1, per_tick)
+        self.assertEqual(set(after), {0})        # none after
+
     def test_a_bad_actuation_is_raised_at_the_next_check(self):
         class Bad(AccelXBatch):
             k = 0
