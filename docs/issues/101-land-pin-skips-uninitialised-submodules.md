@@ -1,6 +1,6 @@
 # 101: land_pin and check_pins skip an uninitialised submodule silently
 
-**Status:** open (found; not fixed). **Severity:** high: a cascade can land partial. **Found:**
+**Status:** fixed (9ddce01d: scripts/land_pin.py, scripts/check_pins.py, the pre-push hook through check_pins). **Severity:** high: a cascade can land partial. **Found:**
 2026-11-22, scensim 241, in the dry run of issue 100's step 1 cascade; 133 caught the gap.
 
 ## What happens
@@ -31,22 +31,27 @@ The real run from the first checkout would have pushed a cascade leaving those t
 spec. Its check_pins would have passed. A fully initialised clone, such as a gate's, would then
 find main red: those two components' deps no longer equal this repository's pin.
 
-## The fix, proposed
+## Fix
 
-Both scripts take their components from `.gitmodules`, not from the checkouts on disk. An
-uninitialised one is refused by name, with the command that initialises it:
+Both scripts take their components from `.gitmodules`, not from the checkouts on disk, and
+refuse an uninitialised one by name, with the command that initialises it, and end with
+`git submodule update --init --recursive`, which initialises the whole set at once. Neither initialises
+it itself: a check that changes the checkout it checks would hide what it found.
 
-```
-src/scensim_carla_world is not initialised: its deps/ pins cannot be read.
-Run: git submodule update --init src/scensim_carla_world
-```
+- `check_pins.py` checks every `.gitmodules` submodule. An uninitialised one is a failure,
+  `<path>: not initialised, so its deps/ pins cannot be checked: git submodule update --init
+  --recursive <path>`, so `just test` and the pre-push hook (`scripts/hooks/pre-push`, which
+  calls `check()`) refuse the tree.
+- `land_pin.py`'s components are the `.gitmodules` submodules under `src/`. If any is
+  uninitialised it exits 2, naming each, before it fetches or changes anything; a dry run
+  included.
 
-The scripts may also initialise it themselves, as land_pin already does for the `deps/` of a
-component it moves. Either way, never skip one. check_pins's own comment (roadmap 070) names
-the same failure for an unknown commit: skipping silently once reported "0 checked, 0
-mismatches" over three real mismatches.
+So every submodule must be initialised to push to main, `third_party/cuda_ndt_matcher`
+included, as a `git submodule update --init --recursive` checkout is.
 
-## Workaround until then
-
-Run `git submodule update --init --recursive` in the checkout before land_pin, dry run
-included, and before check_pins.
+Tests: `scripts/test_pre_push.py::test_an_uninitialised_submodule_refuses_the_push_by_name` (the
+hook as git runs it, from a worktree) and
+`scripts/test_land_pin.py::test_an_uninitialised_component_refuses_the_landing_by_name`. Both
+fail on the old scripts. The two tests that replay check_pins on this repository's history
+(`test_check_pins_ignores_a_hooks_git_environment`, `test_it_would_have_refused_the_push_that_broke_main`)
+skip a tree that is not fully initialised, as they skip one without the commits.
