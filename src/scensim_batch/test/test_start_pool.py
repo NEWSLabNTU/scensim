@@ -12,6 +12,7 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 REPO = HERE.parents[2]
 DRIFT = REPO / "scenarios" / "projects" / "mushr_drift" / "scenarios" / "mushr_drift_dist.xosc"
+CATALOGS = {"vehicles": str(REPO / "src" / "sim_vehicle_spec" / "catalogs" / "vehicles.xosc")}
 CASES = HERE.parents[1] / "scensim_sampler" / "examples" / "cases"
 
 try:
@@ -26,6 +27,7 @@ except ImportError:      # no torch
 class StartPoolTest(unittest.TestCase):
     def pool(self, **kw):
         return SP.StartPool(DRIFT, StraightWorld(), seed=7, chunk=kw.pop("chunk", 40),
+                            catalogs=CATALOGS,
                             background=kw.pop("background", False), **kw)
 
     def test_rows_are_records_never_reused(self):
@@ -87,6 +89,7 @@ class StartPoolTest(unittest.TestCase):
         self.assertEqual(len(knobs), 20)
         self.assertTrue(all(0.0 <= v < TRACK_LENGTH for v in knobs.values()))
         p = SP.StartPool(DRIFT, StraightWorld(), seed=3, chunk=200, background=False,
+                         catalogs=CATALOGS,
                          knobs=knobs)
         refs = set()
         for r in p.records:
