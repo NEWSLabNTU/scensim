@@ -4,6 +4,7 @@ the batch's policy or refused, distributions read through, and SSv2's own exampl
 measured (skipped without the submodule)."""
 import io
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -54,6 +55,25 @@ def scenario(d, params="", entities="", init="", action=SPEED, condition=TIME, n
 class CaseStudies(unittest.TestCase):
     def verdict(self, name, ego="policy"):
         return subset.check(CASES / f"{name}.xosc", ego=ego)
+
+    def test_a_named_lane_id_is_refused_with_the_binding_to_use(self):
+        """SSv2 reads a laneId as a lanelet's id: CS7's old laneId="exit_n" ran nowhere (092
+        K9b); a $parameter bound to the world's anchor, or a number, is what runs."""
+        with tempfile.TemporaryDirectory() as d:
+            for f in ("cs7_cyclist_low_sun.xosc", "cs7_cyclist_low_sun_dist.xosc"):
+                shutil.copy(CASES / f, Path(d) / f)
+            shutil.copytree(CASES / "models", Path(d) / "models")
+            p = Path(d) / "cs7_cyclist_low_sun.xosc"
+            self.assertFalse(any("laneId" in r["construct"]
+                                 for r in subset.check(p).refusals))
+            p.write_text(p.read_text().replace('laneId="$exit_lane"', 'laneId="exit_n"'))
+            r = [r for r in subset.check(p).refusals if "laneId" in r["construct"]]
+            self.assertEqual(len(r), 1)
+            self.assertEqual(r[0]["class"], subset.UNIMPLEMENTED)
+            self.assertIn("exit_n.lanelet_at(<s>)", r[0]["fix"])
+            p.write_text(p.read_text().replace('laneId="exit_n"', 'laneId="6583"'))
+            self.assertFalse(any("laneId" in r["construct"]
+                                 for r in subset.check(p).refusals))
 
     def test_cs6_conditions_its_per_sample_vehicle_class_on_per_slot_assets(self):
         """093 D7 gap 6: CS6's stopped car is `vehicleCategory="$stopped_kind"`. A batch can

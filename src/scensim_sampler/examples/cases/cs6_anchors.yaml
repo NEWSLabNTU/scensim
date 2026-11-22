@@ -1,0 +1,4 @@
+# CS6's world anchors, as a testbench.yaml's world.anchors declares them (092 K9b): the
+# highway's right lane, by its lanelet. INVENTED FOR ILLUSTRATION: the world CS6 runs on
+# states its own. Read with scensim-sample draw --anchors.
+hwy_right: {kind: lane, lanelet: 201}

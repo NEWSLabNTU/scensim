@@ -9,12 +9,17 @@
     <Properties>
       <Property name="scensim.category" value="R2.cyclist.overtaken_at_exit"/>
       <Property name="scensim.cell_attributes" value="glare,swerve"/>
+      <!-- the lanes are the world's anchors (092 K9b): their lanelets, bound before SSv2 starts -->
+      <Property name="scensim.anchor.approach_lane" value="approach_n.lanelet"/>
+      <Property name="scensim.anchor.exit_lane" value="exit_n.lanelet"/>
     </Properties>
   </FileHeader>
   <ParameterDeclarations>
     <ParameterDeclaration name="ego_speed" parameterType="double" value="11"/>
     <ParameterDeclaration name="cyclist_speed" parameterType="double" value="5"/>
     <ParameterDeclaration name="cyclist_s" parameterType="double" value="12"/>
+    <ParameterDeclaration name="approach_lane" parameterType="string" value=""/>
+    <ParameterDeclaration name="exit_lane" parameterType="string" value=""/>
     <ParameterDeclaration name="kerb_offset" parameterType="double" value="-1.1"/>
     <ParameterDeclaration name="swerve_offset" parameterType="double" value="-0.3"/>
     <ParameterDeclaration name="swerve_gap" parameterType="double" value="9"/>
@@ -47,13 +52,13 @@
         <RoadCondition frictionScaleFactor="1.0"/>
       </Environment></EnvironmentAction></GlobalAction>
       <Private entityRef="ego"><PrivateAction><TeleportAction><Position>
-        <LanePosition roadId="" laneId="approach_n" s="10" offset="0"/></Position></TeleportAction></PrivateAction>
+        <LanePosition roadId="" laneId="$approach_lane" s="10" offset="0"/></Position></TeleportAction></PrivateAction>
         <PrivateAction><LongitudinalAction><SpeedAction>
           <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
           <SpeedActionTarget><AbsoluteTargetSpeed value="$ego_speed"/></SpeedActionTarget>
         </SpeedAction></LongitudinalAction></PrivateAction></Private>
       <Private entityRef="cyclist"><PrivateAction><TeleportAction><Position>
-        <LanePosition roadId="" laneId="exit_n" s="$cyclist_s" offset="$kerb_offset"/></Position></TeleportAction></PrivateAction>
+        <LanePosition roadId="" laneId="$exit_lane" s="$cyclist_s" offset="$kerb_offset"/></Position></TeleportAction></PrivateAction>
         <PrivateAction><LongitudinalAction><SpeedAction>
           <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
           <SpeedActionTarget><AbsoluteTargetSpeed value="$cyclist_speed"/></SpeedActionTarget>

@@ -94,6 +94,19 @@ halved, down to 1 cm. The file states the step, the tolerance and the error it m
 The published maps dataset carries Town01's (`carla-town-autoware-maps` from its tag
 `v2026.11d`); its other towns have none yet.
 
+A scenario binds a parameter to a lane anchor in its FileHeader, for a LanePosition along the
+lane: `anchor.<name>.lanelet_at(s)` is the lanelet holding lane position s (the later one at a
+join), `anchor.<name>.local_s(s)` the s within it.
+
+```xml
+<Property name="scensim.anchor.exit_lane"
+          value="west_left_turn.lanelet_at($cyclist_s)"/>
+<Property name="scensim.anchor.exit_s"
+          value="west_left_turn.local_s($cyclist_s)"/>
+<!-- ... -->
+<LanePosition roadId="" laneId="$exit_lane" s="$exit_s" offset="0"/>
+```
+
 A testbench's `world.anchors` adds anchors of the project's own, as stated numbers; a name
 both declare is refused. Conflict points, curves and regions come later (roadmap 092 K9c).
 
