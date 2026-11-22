@@ -1,0 +1,29 @@
+# The drift episode's start, as WheeledLab's reset_root_state_along_track draws it (stock's
+# drifting/mdp/events.py, fork isaaclab-3.0 a35060c): a point along the oval's centre line, then
+# uniform noise of +-0.5 m in x and y and +-1 rad in yaw, at rest. Stock draws its 20 reference
+# points once per run (torch.rand at the event's construction) and picks one per reset; here the
+# point is drawn per episode, uniform along the track: the same marginal over runs, not stock's
+# 20 per run (a named difference, 094 P2's table).
+model: 1
+header:
+  name: mushr_drift_start
+  dataset: "none: WheeledLab's reset distribution, written out"
+  version: "0"
+  licence: BSD-3-Clause
+variables:
+  - {name: s_ref, latent: true, uniform: {low: 0.0, high: 8.226548245743669}}  # 2 pi 0.8 + 4 x 0.8
+  - {name: dx, latent: true, uniform: {low: -0.5, high: 0.5}}
+  - {name: dy, latent: true, uniform: {low: -0.5, high: 0.5}}
+  - {name: dh, latent: true, uniform: {low: -1.0, high: 1.0}}
+derived:
+  # the centre line from s (stock's generate_reference_poses: up x = 0.8, the turn about (0, 0.8),
+  # down x = -0.8, the turn about (0, -0.8)); its heading in rad
+  a1: "(s_ref - 1.6) / 0.8"
+  a2: "(s_ref - 3.2 - pi * 0.8) / 0.8"
+  ref_x: "0.8 if s_ref < 1.6 else (0.8 * cos(a1) if s_ref < 1.6 + pi * 0.8 else (-0.8 if s_ref < 3.2 + pi * 0.8 else -0.8 * cos(a2)))"
+  ref_y: "s_ref - 0.8 if s_ref < 1.6 else (0.8 + 0.8 * sin(a1) if s_ref < 1.6 + pi * 0.8 else (0.8 - (s_ref - 1.6 - pi * 0.8) if s_ref < 3.2 + pi * 0.8 else -0.8 - 0.8 * sin(a2)))"
+  ref_h: "pi / 2 if s_ref < 1.6 else (pi / 2 + a1 if s_ref < 1.6 + pi * 0.8 else (3 * pi / 2 if s_ref < 3.2 + pi * 0.8 else 3 * pi / 2 + a2))"
+  start_x: "ref_x + dx"
+  start_y: "ref_y + dy"
+  start_h: "ref_h + dh"
+cell: {}

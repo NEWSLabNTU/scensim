@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<OpenSCENARIO>
+  <FileHeader author="scensim" date="2026-11-22T00:00:00+00:00" description="MuSHR drift starts (094 P2)" revMajor="1" revMinor="2" />
+  <ParameterValueDistribution>
+    <ScenarioFile filepath="mushr_drift.xosc"/>
+    <Stochastic numberOfTestRuns="1000" randomSeed="42">
+      <StochasticDistribution parameterName="start_x">
+        <UserDefinedDistribution type="scensim.sampler:joint">models/mushr_drift_start.yaml</UserDefinedDistribution>
+      </StochasticDistribution>
+    </Stochastic>
+  </ParameterValueDistribution>
+</OpenSCENARIO>
