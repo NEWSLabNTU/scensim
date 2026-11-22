@@ -95,7 +95,8 @@ def asset_name(doc, name):
 
 def asset_usd(doc, root, check_mass=True):
     """The body's asset under `root` (094 P2), its bytes checked against body.asset.sha256 and
-    (`check_mass`) its authored mass against the spec's."""
+    its authored mass against the spec's. `check_mass=False` is for a test's stand-in file only
+    (bytes without bodies); every load of a car's asset keeps the default."""
     import hashlib
     import os
     a = doc["asset"]
@@ -116,10 +117,14 @@ def asset_usd(doc, root, check_mass=True):
 def check_asset_mass(doc, path, rel=0.01):
     """The asset's authored mass (its rigid bodies' physics:mass, as PhysX spawns it, before a
     task's randomisation) is the spec's within `rel` (094 P2: the spec is measured from the
-    asset). Skipped without pxr (an asset is loaded only where Isaac's is)."""
+    asset). Without pxr it cannot read the stage: it says so (a warning naming the asset) and
+    returns None, never a silent pass. Isaac's Python, where an asset is loaded, has pxr."""
     try:
         from pxr import Usd, UsdPhysics
     except ImportError:
+        import warnings
+        warnings.warn(f"{doc['name']}: the mass check of its asset {path} was skipped: no pxr "
+                      "in this Python, so its stage is not read", RuntimeWarning, stacklevel=2)
         return None
     stage = Usd.Stage.Open(path)
     total = sum(float(p.GetAttribute("physics:mass").Get() or 0.0) for p in stage.Traverse()
