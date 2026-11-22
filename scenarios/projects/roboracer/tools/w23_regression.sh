@@ -3,11 +3,14 @@
 #
 #     tools/w23_regression.sh OUT
 #
-# For each perturbation in protocol/perturbations (p1: representable by the fit's model; p2: with
-# latency jitter it cannot hold, and a scan-matching reference), it does the following:
+# For each perturbation: p1 and p2 in protocol/perturbations (p1: representable by the fit's
+# model; p2: with latency jitter it cannot hold, and a scan-matching reference), and p3, drawn
+# blind (tools/draw_perturbation.py) into OUT/draw/p3, which nobody reads before the check:
 # 1. The generator drives the perturbed twin through the protocol and writes the "real" logs as
 #    the real car's rosbag2. The truth is sealed in OUT/sealed/<p>/, which the fit never reads.
-# 2. The fit runs, its stages and then the twin in the loop, on the logs only.
+# 2. The fit runs, its stages and then the twin in the loop, on the logs only. The loop fits the
+#    tyres (W10): each axle's stiffness from M5's circles below 2 m/s^2, where the friction does
+#    not bind, then each axle's friction from M6 and M6b, the stiffness held.
 # 3. The harness runs: the unfitted and the fitted twins against the logs, by design note 5.3.
 # 4. Only then does the recovery check read the sealed truth.
 #
@@ -36,20 +39,25 @@ isaac() {  # Isaac's Python with aib
 cp "$ROOT/vehicles/roboracer.yaml" "$OUT/roboracer.yaml"
 printf 'rig: roboracer.rig.yaml\ndomain: 1\nnode_name: isaac_vehicle\nvehicle: {}\necu: {}\nsensors: {}\n' > "$OUT/ego.yaml"
 sys "export PYTHONPATH=$AIB/src/aib:\$PYTHONPATH; cd $OUT; python3 -m aib.gen --spec roboracer.yaml -o roboracer.rig.yaml"
-cat > "$OUT/twin_eval.sh" <<EOF
+for pass in M5 M6,M6b; do  # refine_twin.py's --twin-cmd per pass: twin_eval_<pass>.sh FITTED RUNS
+cat > "$OUT/twin_eval_${pass/,/_}.sh" <<EOF
 #!/usr/bin/env bash
-# refine_twin.py's --twin-cmd: twin_eval.sh FITTED RUNS
-env -i HOME="\$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" bash -c "source $AIB/src/aib/scripts/isaac_env.sh >/dev/null 2>&1; export PYTHONPATH=$AIB/src/aib:\\\$PYTHONPATH; cd $OUT; python $HERE/twin_runs.py --ego ego.yaml --out \$2 --fitted \$1 --repetitions 1 --only M1,M3,M5,M6,M6b" > "\$2.log" 2>&1
+env -i HOME="\$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" bash -c "source $AIB/src/aib/scripts/isaac_env.sh >/dev/null 2>&1; export PYTHONPATH=$AIB/src/aib:\\\$PYTHONPATH; cd $OUT; timeout -k 30 1800 python $HERE/twin_runs.py --ego ego.yaml --out \$2 --fitted \$1 --repetitions 1 --only $pass" > "\$2.log" 2>&1
 EOF
-chmod +x "$OUT/twin_eval.sh"
+chmod +x "$OUT/twin_eval_${pass/,/_}.sh"
+done
 isaac "python $HERE/twin_runs.py --ego ego.yaml --out $OUT/logs/twin0 --repetitions 1" > "$OUT/twin0.log" 2>&1
+[ -e "$OUT/draw/p3/perturbation.yaml" ] || python3 "$HERE/draw_perturbation.py" --out "$OUT/draw/p3/perturbation.yaml"
 seed=23
-for p in p1 p2; do
-    isaac "python $HERE/twin_runs.py --ego ego.yaml --out $OUT/logs/real_$p --perturb $ROOT/protocol/perturbations/$p.yaml --sealed $OUT/sealed/$p --seed $seed" > "$OUT/real_$p.log" 2>&1
+for p in p1 p2 p3; do
+    src=$ROOT/protocol/perturbations/$p.yaml; [ "$p" = p3 ] && src=$OUT/draw/p3/perturbation.yaml
+    isaac "python $HERE/twin_runs.py --ego ego.yaml --out $OUT/logs/real_$p --perturb $src --sealed $OUT/sealed/$p --seed $seed" > "$OUT/real_$p.log" 2>&1
     seed=$((seed + 1))
     sys "python3 $HERE/bags.py convert $OUT/logs/real_$p" > "$OUT/bags_$p.log" 2>&1
     sys "python3 $HERE/fit_twin.py --logs $OUT/logs/real_$p --spec $OUT/roboracer.yaml --out $OUT/fit_$p.yaml" > "$OUT/fit_$p.log" 2>&1
-    sys "python3 $HERE/refine_twin.py --logs $OUT/logs/real_$p --fitted $OUT/fit_$p.yaml --out $OUT/fit_${p}_refined.yaml --twin-cmd '$OUT/twin_eval.sh {fitted} {out}' --max-evals 40" > "$OUT/refine_$p.log" 2>&1
+    T=vehicle.axle_tires
+    sys "python3 $HERE/refine_twin.py --logs $OUT/logs/real_$p --fitted $OUT/fit_$p.yaml --out $OUT/fit_${p}_stiffness.yaml --twin-cmd '$OUT/twin_eval_M5.sh {fitted} {out}' --only M5 --max-ay 2.0 --params $T.front.lat_stiff_value,$T.rear.lat_stiff_value --anchor 0 --max-evals 30" > "$OUT/refine_${p}_stiffness.log" 2>&1
+    sys "python3 $HERE/refine_twin.py --logs $OUT/logs/real_$p --fitted $OUT/fit_${p}_stiffness.yaml --out $OUT/fit_${p}_refined.yaml --twin-cmd '$OUT/twin_eval_M6_M6b.sh {fitted} {out}' --only M6,M6b --params $T.front.tire_friction,$T.rear.tire_friction --anchor 0 --max-evals 30" > "$OUT/refine_${p}_friction.log" 2>&1
     for stage in fit_$p fit_${p}_refined; do
         isaac "python $HERE/twin_runs.py --ego ego.yaml --out $OUT/logs/twin_$stage --repetitions 1 --fitted $OUT/$stage.yaml" > "$OUT/twin_$stage.log" 2>&1
         sys "python3 $HERE/compare_runs.py $OUT/logs/real_$p $OUT/logs/twin_$stage --json $OUT/cmp_$stage.json" > "$OUT/cmp_$stage.txt" 2>&1 || true

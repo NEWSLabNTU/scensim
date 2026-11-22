@@ -138,7 +138,7 @@ means not yet assigned; 133 assigns.
 | W7 | the physics rate and solver for a light car: jitter tests at 100 to 600 Hz, the cost of each, the chosen default | V4 | 3 | 118 | done 2026-11-20: 240 Hz for a 1/10 car (`scenarios/projects/roboracer` README). Below 200 Hz its wheels slip against a wall they push on (0.16 to 0.33, against 0.02); above 240 Hz the results move by a few percent, at 1.4 ms per step per car (0.35 s per simulated s at 240 Hz). TGS kept. aib's acceleration (IMU, brake module) is a second difference of float32 positions per step, its noise about the rate squared (0.16 m/s^2 at 600 Hz). The cone's tip-or-carry is W9's (NAS `2026-11-20 091 W7 RoboRacer physics rate (118)`) |
 | W8 | the tyre-model risk: PhysX's tyre against foam and soft RC tyres, measured on M5 and M6; a decision to keep it, tune it, or take tyre forces from the component | V4 | 3 | 118 | done 2026-11-20: keep PhysX's tyre, tuned per axle (`scenarios/projects/roboracer` README, `tools/tyre_compare.py`). Against ForzaETH's identified F1TENTH tyres (NUC6, NUC7: rear about twice the front's cornering stiffness), one tyre for all four wheels (spec v2) misses M5's radii by up to 23 to 27 %; a stiffness and friction per axle comes within 5 to 7 %, and on Isaac (aib's per-wheel setters) within 4.5 and 1.8 %. Needs front and rear tyres in the spec (proposed to 133). Beyond the peak PhysX's curve stays flat (NAS `2026-11-20 091 W8 RoboRacer tyre model (118)`) |
 | W9 | collisions with walls and cones: restitution and friction read from the authored materials, checked by drop and push tests | F3 | 3, 4 | 118 | done 2026-11-20: authored restitution and friction are PhysX's as authored (drop, slide, tilt within 0.01 to 0.02 at 240 Hz; `tools/contact_check.py`); a pair's friction is combined (`average` by default), so a measured pair value goes on both materials or with a combine mode (for W21). The car's body has no material (aib authors none): a wall at restitution 1.0 returns 0.41, 0.86 with a body material (proposed to 133: a body contact material in the spec). The cone tips above about mu 0.5 and rides below it at every rate; PhysX's defaults sit on that threshold (W7's flip) (NAS `2026-11-20 091 W9 RoboRacer walls and cones (118)`) |
-| W10 | the fitting tool: long-horizon trajectory error from matched starts; on-track tyre identification first; fits the spec's tyre and suspension values and a component's exposed `params`; randomisation bands from the real spread | V3, V4 | 3b | 118 | in progress: the stages and the twin-in-the-loop refinement are in (`tools/fit_twin.py`, `refine_twin.py`); next, from W23's p2: refine the latency too, anchor each parameter to its stage estimate, report drift beyond the stage interval (the drift rule), longer runs |
+| W10 | the fitting tool: long-horizon trajectory error from matched starts; on-track tyre identification first; fits the spec's tyre and suspension values and a component's exposed `params`; randomisation bands from the real spread | V3, V4 | 3b | 118 | in progress: the tyre stage is PhysX's own tyre and the twin fits each axle's stiffness from M5's gentle circles, then its friction from M6 and M6b (the protocol's new rear limit); the latency is held at its stage; W23's regression reruns at the RoboRacer's new lateral slip denominator (0.05) with a blind p3. Findings below (W10: findings) |
 | W11 | the validation harnesses: (a) component replay against logged VESC telemetry, (b) M1 to M6 against 5.3's bands, (c) lap comparison for M7; one report per twin release | V3, V4, J1 | 3b, 6 | open | |
 | W12 | session conditions: a schema (battery voltage, floor state, tyre age) recorded with each run and each real log; battery voltage declarable as a component input | V2, J2, J3 | 2b, 6 | open | |
 | W13 | the authored stage as a map (`authored: true`): the session-layer rule, the material and `scensim:surface` readers, Track C overrides only where given | F2, F3 | 4 | 243 | done 2026-11-21 (scensim_isaac_world 3314646 and f7f155a). Isaac exit (`spikes/authored_floor.py`): a field authored as in Isaac's editor, floor material at dynamicFriction 0.5 and 1.0, decided by the material both times; the aib car's friction-limited stop 4.36 and 8.10 m/s^2 (ratio 1.86, distance 12.62 and 7.13 m), the field's file untouched. It first worked end to end through the bridge on 2026-11-21, with W17's fix: the bridge's world file refused `authored` until then, and W13's exit drove IsaacWorld directly, not through the bridge |
@@ -197,6 +197,42 @@ swaps data, not code. The stand-in's pieces, in order:
    between the stage fit and the refined fit, and flags any parameter the refinement moves
    beyond its stage estimate's interval. A pass with flagged parameters is not a good fit: it
    says the model cannot hold the car, and the parameters are bent to make up for it.
+
+### W10: findings (118, 2026-11-22)
+
+What W10's first runs showed, on W23's stand-ins (p1, p2), and what changed because of it:
+
+1. **The latency is not identifiable from the twin's cost.** At the stage's tyres the cost
+   falls steadily with latency for p1 (2.666 at 24 ms to 3.089 at 54 ms, no minimum inside) and
+   is flat for p2. With the tyres refitted at each latency it is flat for both (p1 0.013 to
+   0.022 from 24 to 54 ms). The twin prefers a latency far from the drive unit's replay (p1's
+   42 +- 1 ms), making up for the tyres. So the latency comes from the drive unit's stage and is
+   held in the refinement.
+2. **The twin's cost has a valley** along the rear stiffness against the rear friction: p1's
+   refitted end points run from (rear stiffness 17.8, friction 1.08) at 24 ms to (14.7, 1.31)
+   at 54 ms, against the stage's (20.57, 0.896). A refinement with both free slides along it.
+   W23's p2 rear friction at 0.717, below what its logs show, and the 54 ms point are its
+   examples. The refinement now changes only what the stages leave open, and the tyres are fitted
+   axle by axle from the manoeuvre that shows each: the stiffness from the linear range, the
+   friction from the limit.
+3. **The stage's interval was about 50 times overconfident.** The jackknife gave the rear
+   stiffness +-0.13 %; against known tyres the stage's estimate was 5 to 15 % off on the
+   stiffness and 5 to 12 % on the friction. Three causes were found and fixed:
+   - PhysX adds the lateral slip denominator to the contact's speed (`computeLateralSlip`), so
+     the twin's force per slip angle was the tyre's times v / (v + 0.25), 0.80 at 1 m/s. The
+     RoboRacer's denominator is 0.05 now (the user's decision); its circles moved under 1.5 %.
+   - The synthetic reference pose led the path by half a physics step, so the sideslip read from
+     it was r dt / 2 short (9 % at small slip). twin_runs.py writes it without the half step; a
+     real car's pose has no step.
+   - The tyre stage now inverts PhysX's own tyre (the Michigan model, with the denominator and
+     the lateral load transfer) instead of a curve measured at one stiffness. On a real car it
+     fits PhysX's tyre parameters, not the real tyre's, and its residual per manoeuvre is the
+     model-form error.
+4. **The rear's limit was never in the logs.** On a car that understeers, M6's slide is the
+   front's. M6b (a brake in a turn) brings the rear to it, and the real car's M6b runs are still
+   to be collected.
+5. Two Kit instances hung on GPU memory when 8 to 10 ran at once; each twin run now has a time
+   limit and one retry.
 
 The exit (133, 2026-11-20):
 - The fit recovers each deliberate perturbation within a stated tolerance: the tyre per axle,

@@ -127,6 +127,14 @@ def targets(real, doc):
     return out
 
 
+def linear_range(tg, max_ay):
+    """targets without the M5 circles whose real lateral acceleration is max_ay or more: the
+    stiffness from the tyres' linear range, where the friction does not bind (W10)."""
+    keep = {(m, c) for (m, c, q), (mean, _) in tg.items()
+            if m == "M5" and q == "lateral_acceleration" and mean < max_ay}
+    return {k: v for k, v in tg.items() if k[0] != "M5" or (k[0], k[1]) in keep}
+
+
 def cost_of(twin, doc, tg, anchor=()):
     total, n, worst = 0.0, 0, (0.0, None)
     for s, st in twin:
@@ -156,6 +164,9 @@ def main(argv=None):
     ap.add_argument("--max-evals", type=int, default=80)
     ap.add_argument("--params", default="",
                     help="dotted names to refine (default: the fit's not_identified)")
+    ap.add_argument("--max-ay", type=float, default=None,
+                    help="keep only the M5 circles whose real lateral acceleration (m/s^2) is "
+                         "below this: the tyres' linear range, for their stiffness")
     ap.add_argument("--anchor", type=float, default=1.0,
                     help="the stage intervals' weight in the cost; 0: unanchored")
     args = ap.parse_args(argv)
@@ -163,6 +174,10 @@ def main(argv=None):
     only = [m for m in args.only.split(",") if m]
     real = load_runs(args.logs, only)
     tg = targets(real, doc)
+    if args.max_ay is not None:
+        tg = linear_range(tg, args.max_ay)
+        print(f"M5 circles below {args.max_ay} m/s^2: "
+              f"{len({c for m, c, _ in tg if m == 'M5'})}", flush=True)
     base = yaml.safe_load(Path(args.fitted).read_text())
     names = [n for n in args.params.split(",") if n] or default_params(base)
     if not names:

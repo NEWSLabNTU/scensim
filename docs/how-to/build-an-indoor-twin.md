@@ -191,6 +191,11 @@ quantity with the bands. A fitting tool and a
 comparison harness are planned; until then, run the manoeuvres as scenarios and compare the
 values yourself.
 
+The tyre values you fit are PhysX's tyre model's parameters, not your tyre's own: PhysX's tyre
+has its own shape, and the fit finds the values that make it reproduce your car's circles and
+slides. What it cannot reproduce stays in the fit's residual, reported per manoeuvre. Read that
+residual as the twin's honest gap from your car, not as noise.
+
 ## Acceptance
 
 Each quantity at each condition has a band: from the smallest real value minus the measurement

@@ -69,27 +69,31 @@ def stages(runs, doc, car, comp=None, latencies=None):
     servo_offset = conv["steering_angle_to_servo_offset"] + d_offset
     offset_angle = -d_offset / conv["steering_angle_to_servo_gain"]
 
-    # 4. the tyres, each axle from its own slip angles and forces (the reference's sideslip)
-    pts = fit.axle_points(runs, doc, car, offset_angle)
-    front, rear = fit.fit_axle(pts["front"]), fit.fit_axle(pts["rear"])
-    tyres = front + rear
-    report["tyre_points"] = {k: len(v) for k, v in pts.items()}
-    not_identified, lower = [], {}
-    for axle, f in (("front", front), ("rear", rear)):
-        reached, top = fit.peak_reached(pts[axle], f)
-        if not reached:
+    # 4. the tyres, each axle on PhysX's own tyre from its wheels' slips and the axle's force
+    #    (the reference's sideslip; the spec's lateral slip denominator, as the twin adds it)
+    segs = fit.axle_segments(runs, doc, car, offset_angle)
+    d = float(((car.get("isaac") or {}).get("physx") or {}).get("min_lateral_slip_denominator", 1.0))
+    axle_tires, not_identified, lower, tyres = {}, [], {}, []
+    report["tyre_segments"] = len(segs)
+    for axle in ("front", "rear"):
+        k, mu, rep = fit.fit_axle_physx(segs, car, axle, d,
+                                        float(car["tires"].get("lat_stiff_max_load", 2.0)))
+        axle_tires[axle] = {"lat_stiff_value": round(k, 4), "tire_friction": round(mu, 4)}
+        tyres += [k, mu]
+        report[f"tyres_{axle}"] = rep  # residual_rms: the model-form error, per unit weight
+        if rep["grip_used"] < 0.9:
             name = f"vehicle.axle_tires.{axle}.tire_friction"
             not_identified.append(name)
-            lower[name] = round(top / fit.PEAK_PER_FRICTION, 4)
+            lower[name] = rep["friction_at_least"]
             report.setdefault("notes", []).append(
-                f"{axle} tyres: the logs never come near their limit (at most {top:.3f} of the "
-                f"load); their friction is not identified, only at least {lower[name]}")
+                f"{axle} tyres: the logs use at most {rep['grip_used']:.2f} of their grip; their "
+                f"friction is not identified, only at least {lower[name]}")
 
     # 5. the noise
     noise = fit.fit_noise(runs, doc)
 
     fitted = {
-        "vehicle": {"mass": round(mass, 4), "axle_tires": fit.axle_tires_of(tyres)},
+        "vehicle": {"mass": round(mass, 4), "axle_tires": axle_tires},
         "component": {**{k: round(float(v), 6) for k, v in comp.items()},
                       "servo_offset": round(servo_offset, 5)},
         "noise": {k: (round(v, 5) if v is not None else None) for k, v in noise.items()},

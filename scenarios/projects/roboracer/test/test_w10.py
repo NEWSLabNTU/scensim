@@ -120,3 +120,23 @@ def test_a_circle_from_the_pose_gives_its_speed_and_sideslip_exactly():
     assert seg["v"] == pytest.approx(v, rel=1e-4)
     assert seg["beta"] == pytest.approx(beta, abs=1e-6)
     assert seg["r"] == pytest.approx(r, rel=1e-6)
+
+
+def test_the_linear_range_keeps_only_the_gentle_circles():
+    tg = {("M5", "a", "lateral_acceleration"): (1.0, 0.1), ("M5", "a", "radius"): (2.0, 0.1),
+          ("M5", "b", "lateral_acceleration"): (6.0, 0.1), ("M5", "b", "radius"): (1.0, 0.1),
+          ("M6", "c", "lateral_acceleration_at_slide"): (8.0, 0.1)}
+    out = refine_twin.linear_range(tg, 2.0)
+    assert set(out) == {("M5", "a", "lateral_acceleration"), ("M5", "a", "radius"),
+                        ("M6", "c", "lateral_acceleration_at_slide")}
+
+
+def test_a_drawn_perturbation_stays_in_its_ranges_and_has_twin_runs_format():
+    import random
+    import draw_perturbation as dp
+    p = dp.draw(random.Random(7))
+    assert set(p) == {"vehicle", "component", "noise"}
+    for (sec, key), (lo, hi) in dp.RANGES.items():
+        v = (p["vehicle"][key] if sec == "vehicle" else
+             p["component"][key] if sec == "component" else p["vehicle"]["axle_tires"][sec][key])
+        assert lo <= v <= hi
