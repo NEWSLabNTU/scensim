@@ -80,6 +80,7 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
             raise ValueError(f"row {self.row!r}: joints or ecu")
         if self.row == "ecu":
             self.component, self.bypass_component, self.implicit_effort = "ev", False, ()
+            self.device_resident = True      # EvBatch's torch form on the sim's GPU
         else:
             self.component, self.bypass_component, self.implicit_effort = "ideal", True, ("spin",)
 
