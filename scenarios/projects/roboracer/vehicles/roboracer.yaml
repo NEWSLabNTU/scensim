@@ -84,8 +84,10 @@ isaac:
   physx:
     substeps: 8
     substep_threshold_speed: 1.0       # m/s: the Model 3's 5.0, scaled to the car's speeds
-    # PhysX floors each slip's denominator at these speeds. At the Model 3's 4 m/s a car whose
-    # speeds are 0.5 to 8 m/s would see its slip divided by a floor above its own speed.
+    # PhysX adds each of these to the contact point's speed in its slip's denominator, at every
+    # speed, so a slip is scaled by v / (v + d) (PhysX 5's physxvehicle/src/tire/
+    # VhTireFunctions.cpp; only its legacy passive longitudinal slip takes a max). With the
+    # Model 3's 4 m/s a car whose speeds are 0.5 to 8 m/s keeps 0.11 to 0.67 of its slip.
     min_active_slip_denominator: 0.5
     min_passive_slip_denominator: 0.5
     min_lateral_slip_denominator: 0.25
