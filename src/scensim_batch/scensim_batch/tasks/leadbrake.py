@@ -116,6 +116,31 @@ def check_trigger_geometry(scenario, world):
                                      "onset condition is not its s")
 
 
+G = 9.81
+
+
+def ecu_scales(doc):
+    """The ECU row's acceleration scales (133), from the spec's body document: full throttle asks
+    the motor's peak tractive acceleration (peak torque x gear ratio / wheel radius / mass), full
+    brake the tires' friction limit (friction x g), which the ECU clamps at anyway."""
+    pt, geo = doc["powertrain"], doc["geometry"]
+    a_drive = float(pt["motor_peak_torque"]) * float(pt["gear_ratio"]) / \
+        float(geo["wheel_radius"]) / float(doc["inertia"]["mass"])
+    return a_drive, float(doc["tires"]["friction"]) * G
+
+
+def ecu_command(a, v, a_drive, a_brake, steer_max, dt):
+    """Stock's action [N, 2] in [-1, 1]^2 (its meaning in the joints row: drive or brake, steer)
+    as the `ev` component's Autoware command [N, 3]: acceleration lon x a_drive (lon >= 0) or
+    lon x a_brake (lon < 0); velocity, the speed that acceleration reaches in a policy step,
+    never below 0 (at rest braking: 0, the ECU's standstill hold); tire angle steer x steer_max."""
+    import torch
+    lon, steer = a[:, 0], a[:, 1]
+    acc = torch.where(lon >= 0, lon * a_drive, lon * a_brake)
+    vel = torch.clamp(v.to(acc.dtype) + acc * dt, min=0.0)
+    return torch.stack([acc, vel, steer * steer_max], -1)
+
+
 def ackermann(delta, wheel_base, tread):
     """Stock's (mdp.ackermann): the left and right front wheels' angles for the bicycle angle."""
     import torch

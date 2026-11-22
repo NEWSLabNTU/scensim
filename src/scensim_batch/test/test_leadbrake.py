@@ -240,6 +240,32 @@ class Replay(unittest.TestCase):
             LB.records_from_samples(bad)
 
 
+
+@unittest.skipIf(torch is None, "no torch")
+class EcuRow(unittest.TestCase):
+    """The ECU row's reading of stock's action (133): its scales from the spec, the map."""
+
+    def test_the_scales_are_the_specs(self):
+        from sim_vehicle_spec import spec as specmod
+        root = LB._spec_root()
+        doc = specmod.effective(specmod.load(root / "vehicles" / f"{LB.SPEC}.yaml"),
+                                LB.BODY_NAME).doc
+        a_drive, a_brake = LB.ecu_scales(doc)
+        pt = doc["powertrain"]
+        self.assertAlmostEqual(a_drive, pt["motor_peak_torque"] * pt["gear_ratio"]
+                               / doc["geometry"]["wheel_radius"] / doc["inertia"]["mass"])
+        self.assertAlmostEqual(a_brake, doc["tires"]["friction"] * 9.81)
+        self.assertTrue(4.0 < a_drive < 7.0)
+
+    def test_the_command(self):
+        a = torch.tensor([[1.0, 1.0], [0.5, -0.5], [0.0, 0.0], [-1.0, 0.2], [-0.5, 0.0]])
+        v = torch.tensor([10.0, 10.0, 10.0, 0.0, 0.2])
+        c = LB.ecu_command(a, v, 5.0, 9.81, 0.7, 0.05)
+        want = torch.tensor([[5.0, 10.25, 0.7], [2.5, 10.125, -0.35], [0.0, 10.0, 0.0],
+                             [-9.81, 0.0, 0.14], [-4.905, 0.0, 0.0]])
+        self.assertTrue(torch.allclose(c, want, atol=1e-6), c)
+
+
 def stock_lead(rear0, v0, decel, onset, steps, dt):
     """Stock's lead (mdp.py LeadCommand._update_command), from its reset: per policy step, it
     brakes when its rear is at or past the onset, then steps its speed and its rear."""
