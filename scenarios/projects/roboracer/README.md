@@ -55,9 +55,14 @@ agrees within about 1 %:
 |---|---|---|---|---|
 | 0 to 5 m/s, s | 0.633 | 0.633 | 0.633 | 0.633 |
 | stop from 3 m/s at -6 m/s^2, m | 0.670 | 0.708 | 0.725 | 0.734 |
-| full lock at 1.5 m/s, radius m (kinematic 0.88) | 0.877 | 0.886 | 0.887 | 0.887 |
-| full lock at 4 m/s, radius m | 0.956 | 0.955 | 0.956 | 0.956 |
-| full lock at 4 m/s, lateral acceleration m/s^2 | 8.10 | 8.14 | 8.16 | 8.17 |
+| full lock at 1.5 m/s, radius m (kinematic 0.88) | 0.879 | 0.887 | 0.887 | 0.887 |
+| full lock at 4 m/s, radius m | 0.964 | 0.962 | 0.961 | 0.961 |
+| full lock at 4 m/s, lateral acceleration m/s^2 | 8.22 | 8.26 | 8.27 | 8.28 |
+
+Rerun on 2026-11-23 at the lateral slip denominator 0.05 (W10), on Isaac Sim 6.2. Launch and
+braking are identical to the 0.25 runs. The full-lock circles are within 0.2 % at 1.5 m/s; at
+4 m/s the radius is 0.6 % and the lateral acceleration 1.5 % higher, since the tyres now give
+their force at the car's speeds.
 
 The stopping distance differs by the speed the braking starts at (2.87 m/s at 60 Hz, 2.98 at
 480 Hz), not by the deceleration (6.0 to 6.2 m/s^2 at every rate). At rest no rate drifts. The
@@ -83,12 +88,17 @@ default solver) at 60 to 600 Hz and PGS at 120 and 600 Hz:
 | | 60 Hz | 120 Hz | 240 Hz | 300 Hz | 600 Hz |
 |---|---|---|---|---|---|
 | launch, braking, full lock (W6's table) | agree | agree | agree | agree | agree |
-| pushing on a wall: rear wheel slip | 0.16 | 0.33 | 0.015 | 0.021 | 0.021 |
+| pushing on a wall: rear wheel slip | 0.25 | 0.33 | 0.015 | 0.021 | 0.021 |
 | 10 mm cleats at 3 m/s: lowest speed, m/s | 2.39 | 2.38 | 2.34 | 2.33 | 2.33 |
 | the same: peak pitch rate, rad/s | 0.97 | 1.64 | 2.02 | 2.10 | 2.28 |
 | the cone, 0.1 kg at 2 m/s: carried, m | 0.48 | 0.73 | 3.91 | 0.57 | 3.91 |
-| cruise: acceleration noise (per step), m/s^2 | 0.003 | 0.006 | 0.021 | 0.022 | 0.160 |
+| cruise: acceleration noise (per step), m/s^2 | 0.0025 | 0.0025 | 0.0025 | 0.0025 | 0.0025 |
 | cost: wall-clock s per simulated s, one car | 0.09 | 0.17 | 0.35 | 0.43 | 0.84 |
+
+Rerun on 2026-11-23 at the lateral slip denominator 0.05 (W10), on Isaac Sim 6.2: the cleats,
+the cone (repeated at 240 and 300 Hz, the same again), TGS against PGS and the cost are as
+before. The wall's slip at 60 Hz is 0.25 (was 0.16), still wrong, and the acceleration noise is
+0.0025 m/s^2 at every rate since issue 086. 240 Hz stands.
 
 - **The wall.** The car pushes about 15 N into the wall, and its tyres hold about 38 N, so its
   wheels should not turn. At 120 Hz and below they slip at 0.16 to 0.33 while the car stands
@@ -147,6 +157,20 @@ after the car was made (`smallcar.py --axle`). Isaac's M5 radii then come within
 NUC6's and 1.8 % of NUC7's, against 18.5 % and 14 % with the spec's tyres. M6 at 0.2 rad comes
 within 4 to 5 %. At 0.1 rad Isaac's grip limit is 14 % below the reference's. That compares
 Isaac's transient speed ramp, with load transfer, to a steady model without it.
+
+Rerun on 2026-11-23 at the lateral slip denominator 0.05 (W10), with the same per-axle values,
+against the same references (M5's twelve circles, radius error; M6, lateral acceleration):
+
+| per axle in Isaac | M5 radius, rms and worst | M6 at 0.2 rad | M6 at 0.1 rad |
+|---|---|---|---|
+| NUC6, at 0.25 | 3.9 %, 11.5 % | -4.0 % | -14.3 % |
+| NUC6, at 0.05 | 4.1 %, 12.3 % | -6.9 % | -19.0 % |
+| NUC7, at 0.25 | 3.7 %, 11.4 % | +5.2 % | -14.1 % |
+| NUC7, at 0.05 | 3.9 %, 11.8 % | +3.0 % | -14.6 % |
+
+The spec's own tyres stay at 16 % and 13 % rms against NUC6 and NUC7. The decision stands. The
+per-axle values were fitted at 0.25 with the shape measured then; W10's tyre stage now inverts
+PhysX's own tyre instead, so a refit would use it.
 
 The decision, for the three options roadmap 091 names:
 - **Keep PhysX's tyre model.** Its curve's shape fits these tyres' M5 and M6 once each axle has
@@ -220,6 +244,10 @@ A cone's measured push-over behaviour therefore needs the measured floor frictio
 body material, both authored.
 
 The runs are on the NAS under `2026 SSv2 on CARLA/2026-11-20 091 W9 RoboRacer walls and cones (118)`.
+
+Rerun on 2026-11-23 at the lateral slip denominator 0.05 (W10): the car's impacts and the cone
+give the same numbers (rebound 0.007, 0.17, 0.41, 0.41 and 0.86; the cone 4.00 to 0.24 m). The
+material checks use no car and were not rerun.
 
 ## Front and rear tyres, and the body's contact, in the spec (W24)
 
