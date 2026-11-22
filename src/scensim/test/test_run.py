@@ -105,8 +105,9 @@ def where(host):
                    "ports": {"base": ports, "stride": 100},
                    "web": {"base": web, "stride": 100}},
          # no CARLA here: the stack uses whatever serves its port and is not refused for
-         # the lack of one (G39)
-         "carla": {"start": "external"}}))
+         # the lack of one (G39). Its own free port, not CARLA's 2000: a CARLA live there
+         # (any session's) was observed into the provenance and failed the end-to-end test
+         "carla": {"start": "external", "port": _free_block(1)}}))
     (tmp / "fake_ssv2.py").write_text(FAKE_SSV2)
     (tmp / "fake_pilot.py").write_text(FAKE_PILOT)
     # seat 1's ports, for the tests that check them
