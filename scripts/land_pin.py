@@ -185,6 +185,29 @@ def unpushed(rev, pending=()):
     return out
 
 
+def component_checks(src, components):
+    """Each landing component's own `just check-generated`, where its justfile has one: this
+    repository's gate does not run a component's suite, so a component whose generator was not
+    rerun against its moved deps (aib's MuSHR rig, 094 P2) landed stale. ["<c>: <its output>"]
+    for each that fails; run in the component's checkout, its deps/ synced (sync_deps)."""
+    failed = []
+    for c in components:
+        cd = src / c
+        if not (cd / "justfile").is_file():
+            continue
+        listed = subprocess.run(["just", "--summary"], cwd=cd, capture_output=True, text=True)
+        if listed.returncode or "check-generated" not in listed.stdout.split():
+            continue
+        r = subprocess.run(["just", "check-generated"], cwd=cd, capture_output=True, text=True)
+        print(f"== {c}: just check-generated: {'ok' if r.returncode == 0 else 'FAILED'}")
+        if r.returncode:
+            # the check's own words, not just's "Recipe failed" line
+            said = [ln for ln in (r.stdout + r.stderr).splitlines()
+                    if ln.strip() and not ln.startswith("error: Recipe")]
+            failed.append(f"{c}: " + ("; ".join(said[-3:]) if said else f"exit {r.returncode}"))
+    return failed
+
+
 def checkout_state(src, components) -> dict:
     """This checkout's HEAD, each landing component's checked-out commit, and what is uncommitted
     in tracked files (here or in those components), less what a build itself writes (a
@@ -414,7 +437,17 @@ def main(argv):
         print(f"== gate: {os.environ['LAND_PIN_GATE']}")
         # what the gate is about to test: anything that moves under it (a checkout switched, a
         # file edited mid-run) means it tested something else, and nothing is pushed (issue 096)
+        # every component's deps/, not only the landing ones': one that does not move here was
+        # still checked out on its old deps (scensim_carla_world against a stale
+        # scensim_world_protocol, 094 P2's aib landing), and the build failed on code that was right
+        for c in sorted(p.name for p in src.iterdir() if (p / "deps").is_dir()):
+            sync_deps(src, c)
         before = checkout_state(src, landing)
+        failed = component_checks(src, landing)
+        if failed:
+            print("a landing component's own generated-file check failed: nothing pushed\n  "
+                  + "\n  ".join(failed), file=sys.stderr)
+            return 1
         if before["dirty"]:
             print("the checkout has uncommitted changes before the gate: nothing pushed\n  "
                   + "\n  ".join(before["dirty"]), file=sys.stderr)
