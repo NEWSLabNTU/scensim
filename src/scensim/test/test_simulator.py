@@ -977,3 +977,18 @@ def test_testbench_check_reads_the_carla_block(where, maps_hub):
     found = [str(f) for f in project.check_project(d)]
     assert any("-RenderOffScreen is scensim's" in f for f in found)
     assert any("carla.port: unknown key" in f and "host settings" in f for f in found)
+
+
+def test_project_check_refuses_a_carla_root_that_is_no_install(where, maps_hub):
+    """133: a carla.root naming a path that is not a CARLA install (gone after a move or a
+    cleanup) is refused by `project check`, by name with the path, not only once the stack comes
+    to start CARLA from it; this host's real one passes."""
+    gone_root = where["tmp"] / "CARLA_gone"
+    d = make(where, {"root": str(gone_root)})
+    f = [x for x in project.check_project(d, scenarios=False) if "carla.root" in x.what]
+    assert len(f) == 1 and f[0].refused and str(gone_root) in f[0].what
+    assert "is not a CARLA install" in f[0].what
+    root = fake_root(where["tmp"])
+    (d / ".scensim" / "local.yaml").write_text(yaml.safe_dump({"carla": {"root": str(root)}}))
+    assert not [x for x in project.check_project(d, scenarios=False)
+                if "is not a CARLA install" in x.what]
