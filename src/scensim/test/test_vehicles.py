@@ -47,7 +47,7 @@ def test_merge_keeps_the_installed_cars_and_adds_the_projects(tmp_path):
                    'model3d="x"/></Catalog></OpenSCENARIO>')
     out = vehicles.merge([INSTALLED, own], tmp_path / "m" / "vehicles.xosc")
     names = [v.get("name") for v in ET.parse(out).getroot().iter("Vehicle")]
-    assert names == ["drift_mustang", "tesla_model3", "my_lincoln"]   # the first of a name
+    assert names == ["drift_mustang", "mushr_nano", "tesla_model3", "my_lincoln"]   # the first of a name
 
 
 def test_problems_name_a_taken_name_or_body(tmp_path):
