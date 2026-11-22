@@ -80,6 +80,10 @@ class LeadBrakeEnv(ScensimEnv):
         self.proc = torch.zeros(n, 2, device=dev)
         self.s_prev = torch.zeros(n, device=dev)
         self.outcome = {}
+        # the lead as the last observation showed it: stock's lead is a CommandTerm, updated after
+        # its terminations and rewards (ManagerBasedRLEnv.step), so those read the lead of the
+        # step before while the observation reads this step's (243)
+        self.lead_seen = None
 
     # --- the action (stock's CarAction) ---------------------------------------------------------
 
@@ -122,18 +126,24 @@ class LeadBrakeEnv(ScensimEnv):
         a = torch.as_tensor(self.run.vehicles.a[:, self.lead_col], device=self.device).float()
         return x - LB.REAR - LB.EGO_S, v, a
 
-    def gap(self):
+    def gap(self, lead=None):
         s, _, yaw, _, _ = self._ego()
-        lead_s, _, _ = self._lead()
+        lead_s = (lead if lead is not None else self._lead())[0]
         return lead_s - (s + LB.FRONT * torch.cos(yaw))
+
+    def _lead_before(self):
+        """The lead as stock's terminations and rewards see it: the last observation's."""
+        return self.lead_seen if self.lead_seen is not None else self._lead()
 
     # --- observations (stock's obs_ego, obs_lead, last_action) ----------------------------------
 
     def _get_observations(self):
         _, y, yaw, v, r = self._ego()
-        _, lv, la = self._lead()
-        obs = torch.cat([torch.stack([v, r, y, yaw], 1), torch.stack([self.gap(), v - lv, la], 1),
-                         self.raw], -1).float()
+        lead = self._lead()
+        _, lv, la = lead
+        obs = torch.cat([torch.stack([v, r, y, yaw], 1),
+                         torch.stack([self.gap(lead), v - lv, la], 1), self.raw], -1).float()
+        self.lead_seen = tuple(t.clone() for t in lead)
         self.extras["scensim"] = self.run.obs
         return {"policy": obs}
 
@@ -142,12 +152,14 @@ class LeadBrakeEnv(ScensimEnv):
     def _get_dones(self):
         super()._get_dones()                   # the step's world (BatchRun.after_physics)
         s, y, _, v, _ = self._ego()
-        g = self.gap()
+        lead = self._lead_before()
+        g = self.gap(lead)
+        self.gap_before = g
         self.collided = g <= 0.0
         self.off_road = y.abs() > LB.OFF_ROAD
         route_done = s >= LB.ROUTE
         time_out = self.episode_length_buf >= self.max_episode_length    # stock's time_out
-        _, lv, _ = self._lead()
+        lv = lead[1]
         self.safe = (lv <= 0.0) & (v.abs() < 0.1) & (g >= LB.SAFE_GAP[0]) & (g <= LB.SAFE_GAP[1])
         self.time_out = time_out
         # the evaluator's record of the episodes ending now, before their reset (record_outcome)

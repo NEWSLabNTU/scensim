@@ -676,6 +676,11 @@ class ArticulationBackend:
         f32 = lambda t: torch.as_tensor(t, dtype=torch.float64).to(  # noqa: E731
             self.device).to(torch.float32)
         damping, limit = getattr(self, "spin_props", (None, None))
+        fresh = (damping is not None and damping is not getattr(self, "_damping_written", None)) \
+            or (limit is not None and limit is not getattr(self, "_limit_written", None))
+        if fresh and getattr(self, "_verified", 0) < 3 and \
+                getattr(self, "_damping_written", None) is not None:
+            self._verify_spin_props()      # the last step's, as PhysX still holds them (243)
         if damping is not None and damping is not getattr(self, "_damping_written", None):
             a.write_joint_damping_to_sim_index(damping=f32(damping).contiguous(),
                                                joint_ids=self._spin_asset)
@@ -693,6 +698,31 @@ class ArticulationBackend:
             a.set_joint_effort_target_index(target=f32(spin), joint_ids=self._spin_asset)
         if not self.host_writes:
             a.write_data_to_sim()
+
+    def _verify_spin_props(self):
+        """The spin joints' damping and effort limit as PhysX holds them, read back through the
+        articulation's view after a policy step's substeps, against what was written (094 P4:
+        stock's brake is them; an Isaac Lab that rewrote them each step would brake no more,
+        found only by a stopping distance). The first three policy steps; a mismatch raises."""
+        view = getattr(self.asset, "root_view", None)
+        if view is None or not hasattr(view, "get_dof_dampings"):
+            return
+        import warp as wp
+
+        def got(arr):
+            t = wp.to_torch(arr) if not isinstance(arr, torch.Tensor) else arr
+            return t.to("cpu", torch.float32)[:, self.spin_ids]
+        for name, read, want in (("damping", view.get_dof_dampings, self._damping_written),
+                                 ("effort limit", view.get_dof_max_forces, self._limit_written)):
+            if want is None:
+                continue
+            w = torch.as_tensor(want, dtype=torch.float64).to("cpu", torch.float32)
+            g = got(read())
+            if not torch.allclose(g, w, rtol=1e-4, atol=1e-3):
+                raise RuntimeError(f"{self.doc['name']}: the spin joints' {name} PhysX holds "
+                                   f"({g[0].tolist()}) is not what was written ({w[0].tolist()}): "
+                                   "the brake is not the one asked")
+        self._verified = getattr(self, "_verified", 0) + 1
 
     def advance(self, dt):
         import time

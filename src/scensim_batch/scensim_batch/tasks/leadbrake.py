@@ -69,10 +69,10 @@ def check_trigger_geometry(scenario, world):
     so the trigger cannot stop being s without an error. Returns nothing; raises ValueError."""
     import xml.etree.ElementTree as ET
     pts = world.lanelets[1]["centerline"]
-    if any(abs(float(p[1])) > 1e-12 for p in pts) or \
+    if abs(float(pts[0][0])) > 1e-12 or any(abs(float(p[1])) > 1e-12 for p in pts) or \
             any(float(b[0]) <= float(a[0]) for a, b in zip(pts, pts[1:])):
-        raise ValueError("leadbrake: lanelet 1 is not straight along +x at y = 0: the onset "
-                         "condition is not the lead's s")
+        raise ValueError("leadbrake: lanelet 1 is not straight along +x from x = 0 at y = 0: "
+                         "the onset condition is not the lead's s, nor x - EGO_S the ego's")
     root = ET.parse(scenario).getroot()
     for c in root.iter("DistanceCondition"):
         wp = c.find("Position/WorldPosition")
