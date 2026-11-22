@@ -4,14 +4,15 @@
 # bench/p4_leadbrake/run_p4.sh runs P4-LeadBrake-v0: the same stages, sizes, iterations,
 # timers, warm-up and evaluation schedule.
 #
-#   run_p4.sh <stage: smoke|seeds|seed|sweep> <out dir> [headway: stock|record]
-#   (seed: the one seed SEED names, into the seeds stage's directory)
+#   run_p4.sh <stage: smoke|seeds|seed|evals|sweep> <out dir> [headway: stock|record]
+#   (seed: the one seed SEED names, into the seeds stage's directory; evals: SEED's evaluation
+#   grid completed for a seed already trained, the iterations its evals.jsonl lacks)
 #
 # stages (each writes under <out dir>/<stage>/):
 #   smoke   3 iterations at 64 envs
 #   seeds   5 seeds (1-5) at 1024 envs, 1500 iterations, a checkpoint every 50; then each
-#           seed's checkpoints evaluated (eval_leadbrake.py, stock's bar) every 100 iterations up
-#           to its first pass, and its last
+#           seed's checkpoints evaluated (eval_leadbrake.py, stock's bar) on the whole grid,
+#           100 to 1400 by 100 and 1499, as stock's curves (133: not stopped at the first pass)
 #   sweep   throughput at N = 256, 1024, 4096 (60 iterations, 20 warm-up); timers off at 1024
 #
 # headway: the training headway (LeadBrakeEnvCfg.train_headway): stock, the comparable row's
@@ -80,25 +81,27 @@ evaluate() {
     grep '^{' "$d/$name.eval$it.log" | sed "s/^{/{\"iteration\": $it, /"
 }
 
-# a seed and its evaluations, stock's schedule
-seed_run() {
-    local s=$1
-    run "seed$s" sync "$s" 1024 1500 20
-    local evals="$out/seeds/seed$s.evals.jsonl" line
-    [ -s "$evals" ] && { echo "seed$s: evaluated already"; return 0; }
+# a seed's evaluation grid: every iteration of it its evals.jsonl lacks
+evals_run() {
+    local s=$1 evals="$out/seeds/seed$1.evals.jsonl" line
     for it in $(seq 100 100 1400) 1499; do
+        if [ -s "$evals" ] && grep -q "^{\"iteration\": $it, \"checkpoint\"" "$evals"; then continue; fi
         line=$(evaluate "seed$s" "$it"); echo "$line" >> "$evals"
         echo "seed$s it$it: $(echo "$line" | grep -oE '"success_rate": [0-9.]+')"
-        if echo "$line" | grep -q '"pass": true' && [ "$it" != 1499 ]; then
-            line=$(evaluate "seed$s" 1499); echo "$line" >> "$evals"; break
-        fi
     done
+}
+
+# a seed and its evaluations
+seed_run() {
+    run "seed$1" sync "$1" 1024 1500 20
+    evals_run "$1"
 }
 
 case $stage in
 smoke) run smoke sync 1 64 3 1 ;;
 seeds) for s in 1 2 3 4 5; do seed_run "$s"; done ;;
 seed) s=${SEED:?SEED: the seed}; out_stage=seeds; seed_run "$s" ;;
+evals) s=${SEED:?SEED: the seed}; out_stage=seeds; evals_run "$s" ;;
 sweep)
     for n in 256 1024 4096; do run "n$n" sync 1 "$n" 60 20; done
     run n1024-timers-off off 1 1024 60 20
