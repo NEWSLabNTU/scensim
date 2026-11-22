@@ -257,9 +257,17 @@ class MushrDriftRLEnvCfg(DriftEnvCfg):
         self.body = str(body)
         self.vehicle = sp.doc
         self.asset_root = os.environ.get("SCENSIM_ASSET_ROOT", "")
+        # the pool's seed: the run's (DirectRLEnvCfg.seed, which the trainer sets from the
+        # agent's seed), unless SCENSIM_DRIFT_POOL_SEED names one
         self.start_pool = {"distribution": str(project / "scenarios" / "mushr_drift_dist.xosc"),
-                           "seed": int(os.environ.get("SCENSIM_DRIFT_POOL_SEED", "0")),
                            "chunk": 10000, "log": os.environ.get("SCENSIM_DRIFT_STARTS", "")}
+        if os.environ.get("SCENSIM_DRIFT_STARTS_UNIFORM"):     # the variant row
+            self.start_pool["distribution"] = str(project / "scenarios" /
+                                                  "mushr_drift_uniform_dist.xosc")
+        else:                                                  # stock's: 20 points a run
+            self.start_pool["run_knobs"] = "scensim_batch.tasks.drift_start:reference_points"
+        if os.environ.get("SCENSIM_DRIFT_POOL_SEED"):
+            self.start_pool["seed"] = int(os.environ["SCENSIM_DRIFT_POOL_SEED"])
         self.world_factory = _oval_world
         self.component = os.environ.get("SCENSIM_DRIFT_COMPONENT", "ideal")
         self.bypass_component = "SCENSIM_DRIFT_COMPONENT" not in os.environ

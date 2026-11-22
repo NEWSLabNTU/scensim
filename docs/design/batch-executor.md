@@ -532,3 +532,11 @@ stock's is 0, as it draws on the device.
 
 Measured on the MuSHR drift episode (2026-11-22; 64 envs, 300 steps, random actions,
 contended GPU): 1000 records drawn and compiled in 0.093 s, 93 us a record; 251 taken, no stall.
+
+A run-level draw rides on the distribution's world knobs: `start_pool["run_knobs"]`
+("module:function" of the run's seed) gives the knobs every record of the run reads, and the
+records log's first line names them. The drift run's default is stock's start: 20 points along
+the track drawn once a run (`tasks.drift_start.reference_points`, knobs `ref_s_0` to
+`ref_s_19`), then per episode one of them and stock's noise (`mushr_drift_dist.xosc`).
+Uniform along the track per episode is the variant row (`mushr_drift_uniform_dist.xosc`,
+`SCENSIM_DRIFT_STARTS_UNIFORM=1`).

@@ -79,6 +79,22 @@ class StartPoolTest(unittest.TestCase):
         with self.assertRaisesRegex(SP.PoolError, "its storyboard reads"):
             SP.StartPool(dist, StraightWorld(), seed=1, chunk=5, background=False)
 
+    def test_stocks_20_points_a_run_then_an_index_per_episode(self):
+        from scensim_batch.tasks.drift_start import TRACK_LENGTH, reference_points
+        knobs = reference_points(3)
+        self.assertEqual(knobs, reference_points(3))               # the run's, reproducibly
+        self.assertNotEqual(knobs, reference_points(4))
+        self.assertEqual(len(knobs), 20)
+        self.assertTrue(all(0.0 <= v < TRACK_LENGTH for v in knobs.values()))
+        p = SP.StartPool(DRIFT, StraightWorld(), seed=3, chunk=200, background=False,
+                         knobs=knobs)
+        refs = set()
+        for r in p.records:
+            refs.add(r["latent"]["ref"])
+            dx = r["latent"]["dx"]
+            self.assertLessEqual(abs(dx), 0.5)
+        self.assertEqual(refs, set(range(20)))       # every point drawn, only those 20
+
     def test_the_drift_storyboard_reads_no_parameter(self):
         self.assertEqual(SP.storyboard_parameters(DRIFT.parent / "mushr_drift.xosc"), set())
 
