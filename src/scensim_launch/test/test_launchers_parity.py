@@ -10,6 +10,18 @@ import time
 
 import pytest
 
+
+def ceiling(base=120.0):
+    """How long to wait for a child to get ready: at least `base` s, longer on a loaded host
+    (by the load per core, above 1). A fixed 20-30 s lost to gates at load 105 on 32 cores; it
+    costs nothing when the child is ready sooner."""
+    try:
+        per_core = os.getloadavg()[0] / (os.cpu_count() or 1)
+    except OSError:
+        per_core = 1.0
+    return base * max(1.0, per_core)
+
+
 LAUNCH = """<launch>
   <node pkg="demo_nodes_cpp" exec="talker" name="a9_talker" output="screen">
     <param name="empty" value=""/>
@@ -43,7 +55,7 @@ def test_an_empty_string_parameter_starts_its_node(tmp_path, launcher):
         p = subprocess.Popen(cmd, env=env, stdout=fh, stderr=subprocess.STDOUT,
                              start_new_session=True)
     try:
-        deadline = time.time() + 30
+        deadline = time.time() + ceiling()
         seen = False
         while time.time() < deadline and not seen:
             time.sleep(0.5)
@@ -132,13 +144,13 @@ def test_a_nested_ros2_launch_stops_on_the_groups_sigint_when_it_was_ignored(tmp
                              preexec_fn=_ignore_sigint)
     try:
         console = tmp_path / "in" / "console.log"
-        deadline = time.time() + 30
+        deadline = time.time() + ceiling()
         while time.time() < deadline and "process started" not in (
                 console.read_text(errors="replace") if console.exists() else ""):
             time.sleep(0.5)
         assert "process started" in console.read_text(errors="replace")
         os.killpg(p.pid, signal.SIGINT)
-        deadline = time.time() + 20
+        deadline = time.time() + ceiling()
         while time.time() < deadline and (p.poll() is None or _group(p.pid)):
             time.sleep(0.5)
         left = _group(p.pid) if p.poll() is not None else [p.pid]

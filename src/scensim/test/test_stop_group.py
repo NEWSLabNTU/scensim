@@ -4,6 +4,7 @@ on SIGINT before its children, which must not survive it."""
 import os
 import sys
 import time
+from _ceiling import ceiling
 
 from scensim import stack
 
@@ -25,7 +26,7 @@ def test_a_child_the_leader_leaves_behind_is_stopped(tmp_path):
     pidfile = tmp_path / "child.pid"
     proc = stack.start_process([sys.executable, "-c", LEADER, str(pidfile)], dict(os.environ),
                                tmp_path / "log")
-    deadline = time.time() + 20
+    deadline = time.time() + ceiling()
     while not (pidfile.exists() and pidfile.read_text()) and time.time() < deadline:
         time.sleep(0.05)
     child = int(pidfile.read_text())
@@ -83,7 +84,7 @@ def _keeper(tmp_path, delay, says="says"):
     (tmp_path / "proc").mkdir(exist_ok=True)
     proc = stack.start_process([sys.executable, "-c", KEEPER, str(tmp_path), str(delay), says,
                                 "scensim.stack", "keep"], dict(os.environ), tmp_path / "klog")
-    deadline = time.time() + 20
+    deadline = time.time() + ceiling()
     while not (tmp_path / "events.jsonl").exists() and time.time() < deadline:
         time.sleep(0.05)
     return proc, {"pid": proc.pid, "proc": str(tmp_path / "proc"), "stack_id": "s"}

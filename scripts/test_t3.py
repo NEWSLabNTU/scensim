@@ -293,8 +293,17 @@ def _alive(pid):
         return f.read().split(")")[-1].split()[0] != "Z"
 
 
-def _wait_for(cond, timeout=20):
+def _wait_for(cond, timeout=None):
+    import os
     import time
+    # a child's readiness: at least 120 s, longer by the load per core above 1 (a fixed 20 s
+    # lost to loaded gates; free when the child is ready sooner)
+    if timeout is None:
+        try:
+            per_core = os.getloadavg()[0] / (os.cpu_count() or 1)
+        except OSError:
+            per_core = 1.0
+        timeout = 120.0 * max(1.0, per_core)
     end = time.time() + timeout
     while time.time() < end:
         if cond():

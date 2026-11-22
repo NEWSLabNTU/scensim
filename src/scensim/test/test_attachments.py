@@ -4,6 +4,7 @@ import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from _ceiling import ceiling
 
 from scensim import attachments as at
 
@@ -20,19 +21,19 @@ while True:
 """
 
 
-def ready(run_dir, name="netsim", timeout=30.0):
+def ready(run_dir, name="netsim", timeout=None):
     """Wait until the watch script has its SIGINT handler (it writes `ready` after): a fixed
     sleep raced a loaded host, whose SIGINT then found the default action (exit -2)."""
     f = run_dir / "attachments" / name / "ready"
-    deadline = time.time() + timeout
+    deadline = time.time() + (timeout or ceiling())
     while not f.exists() and time.time() < deadline:
         time.sleep(0.05)
     assert f.exists(), "the attachment never got ready"
 
 
-def ended(r, timeout=30.0):
+def ended(r, timeout=None):
     """Wait until the attachment's process has exited on its own."""
-    deadline = time.time() + timeout
+    deadline = time.time() + (timeout or ceiling())
     while r.proc.poll() is None and time.time() < deadline:
         time.sleep(0.05)
     assert r.proc.poll() is not None, "the attachment never ended"
@@ -75,7 +76,7 @@ def test_an_attachment_gets_its_env_is_stopped_and_recorded(tmp_path):
     env = at.env_for(a, {"ROS_DOMAIN_ID": "9", "PATH": "/usr/bin:/bin"}, run_dir, 42, roles,
                      tick_gate="127.0.0.1:5561")
     r = at.start(a, env, run_dir, tmp_path)
-    deadline = time.time() + 10
+    deadline = time.time() + ceiling()
     seen = run_dir / "attachments" / "netsim" / "env.json"
     while not seen.is_file() and time.time() < deadline:
         time.sleep(0.05)
@@ -118,7 +119,7 @@ def test_one_that_ignores_sigint_is_terminated(tmp_path):
     run_dir = tmp_path / "run"
     a = {"name": "s", "run": [sys.executable, str(tmp_path / "stubborn.py")], "stop_timeout": 0.5}
     r = at.start(a, at.env_for(a, {}, run_dir, None, {}), run_dir, tmp_path)
-    deadline = time.time() + 10
+    deadline = time.time() + ceiling()
     while not (run_dir / "attachments" / "s" / "up").exists() and time.time() < deadline:
         time.sleep(0.05)
     t = time.time()

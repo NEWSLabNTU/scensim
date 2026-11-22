@@ -2,6 +2,7 @@
 named with how it exited, its last stderr line and Kit's crash dump, from either launcher's
 logs (play_launch's play_launch.log and node/<name>/err.<k>; ros2 launch's console.log)."""
 import pytest
+from _ceiling import ceiling
 
 from scensim import crashloop, run
 
@@ -135,7 +136,7 @@ def test_wait_started_ends_on_a_crash_loop(tmp_path, monkeypatch):
     monkeypatch.setattr(run, "find_stack", lambda project, h: {"state": "starting",
                                                                 "proc": str(proc)})
     with pytest.raises(run.StackFailed, match="scensim_carla_world exited 75 5 times"):
-        run.wait_started(started, tmp_path, {"logs": str(tmp_path)}, timeout=30)
+        run.wait_started(started, tmp_path, {"logs": str(tmp_path)}, timeout=ceiling())
 
 
 # --- issue 052: any exit during the start ends it at once, exit 0 too -------------------------

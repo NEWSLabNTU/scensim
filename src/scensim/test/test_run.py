@@ -11,6 +11,7 @@ import sys
 import textwrap
 import time
 from pathlib import Path
+from _ceiling import ceiling
 
 import pytest
 import yaml
@@ -35,7 +36,7 @@ FAKE_SSV2 = textwrap.dedent('''\
     after = os.environ.get("FAKE_SSV2_AFTER")
     if after:
         seen = run_dir / "attachments" / after / "seen.json"
-        deadline = time.time() + 20
+        deadline = time.time() + ceiling()
         while not seen.exists() and time.time() < deadline:
             time.sleep(0.05)
         time.sleep(1.0)
@@ -169,7 +170,7 @@ def start_stack(d, ready=("true",), map_name="Town01"):
                              "--poll", "0.05", "--pilot-wrap", wrap], env=env)
     proc.bridge = fake_bridge(p.record)
     _BRIDGES.append(proc.bridge)
-    deadline = time.time() + 20
+    deadline = time.time() + ceiling()
     while time.time() < deadline:
         rec = json.loads(p.stack_json.read_text())
         if rec.get("pid") and (rec["state"] == "ready" or ready == ("false",)):
@@ -598,12 +599,12 @@ def test_keeper_respawns_a_pilot(where, maps_hub):
     d = make(where)
     p, proc = start_stack(d)
     try:
-        deadline = time.time() + 20
+        deadline = time.time() + ceiling()
         while len(starts(where)) < 3 and time.time() < deadline:
             time.sleep(0.05)
         ego = json.loads(p.stack_json.read_text())["pilots"][0]
         os.killpg(ego["pid"], signal.SIGKILL)  # an episode end
-        deadline = time.time() + 30
+        deadline = time.time() + ceiling()
         while len(starts(where)) < 4 and time.time() < deadline:
             time.sleep(0.1)
         again = starts(where)[3:]
@@ -1085,7 +1086,7 @@ def test_an_interrupted_run_stops_ssv2(live, where, monkeypatch):
             started["ssv2"] = proc
 
             def wait(timeout=None):
-                deadline = time.time() + 10
+                deadline = time.time() + ceiling()
                 while not pidfile.exists() and time.time() < deadline:
                     time.sleep(0.05)
                 raise KeyboardInterrupt
@@ -1111,7 +1112,7 @@ def test_an_interrupted_run_stops_ssv2(live, where, monkeypatch):
 def test_a_crash_looping_pilot_fails_the_run_fast(where, maps_hub):
     d = make(where, RUN_PILOT)
     p, proc = start_stack(d, ready=lambda x: ["false"] if x["entity"] == "follower" else ["true"])
-    deadline = time.time() + 20
+    deadline = time.time() + ceiling()
     while json.loads(p.stack_json.read_text()).get("state") != "ready" and time.time() < deadline:
         time.sleep(0.05)
     loop = ("import sys, time\n"
@@ -1143,7 +1144,7 @@ def test_a_run_pilot_stuck_on_a_lost_load_reply_fails_the_run_fast(where, maps_h
     monkeypatch.setattr(timeline, "LOST_GRACE", 0.0)
     d = make(where, RUN_PILOT)
     p, proc = start_stack(d, ready=lambda x: ["false"] if x["entity"] == "follower" else ["true"])
-    deadline = time.time() + 20
+    deadline = time.time() + ceiling()
     while json.loads(p.stack_json.read_text()).get("state") != "ready" and time.time() < deadline:
         time.sleep(0.05)
     bp = "planning.behavior_planning_container"
@@ -1175,7 +1176,7 @@ def test_a_run_pilot_whose_launch_exits_fails_the_run_at_once(where, maps_hub):
     once, naming the pilot, the exit code and the first error line of its console."""
     d = make(where, RUN_PILOT)
     p, proc = start_stack(d, ready=lambda x: ["false"] if x["entity"] == "follower" else ["true"])
-    deadline = time.time() + 20
+    deadline = time.time() + ceiling()
     while json.loads(p.stack_json.read_text()).get("state") != "ready" and time.time() < deadline:
         time.sleep(0.05)
     exits = ("import sys\n"

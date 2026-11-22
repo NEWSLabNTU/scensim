@@ -11,6 +11,7 @@ import textwrap
 import threading
 import time
 from pathlib import Path
+from _ceiling import ceiling
 
 import pytest
 import yaml
@@ -706,7 +707,7 @@ def test_a_started_carla_dies_with_a_killed_keeper(tmp_path):
     root = str(Path(sim.__file__).resolve().parents[1])
     keeper = sp.Popen([sys.executable, str(script)],
                       env=dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", "")))
-    deadline = time.time() + 15
+    deadline = time.time() + ceiling()
     while not (pidfile.exists() and pidfile.read_text()) and time.time() < deadline:
         time.sleep(0.05)
     assert pidfile.exists(), "the stand-in CARLA never started"
@@ -743,7 +744,7 @@ def test_a_carla_deaf_to_sigterm_is_killed_after_its_keeper(tmp_path):
     root = str(Path(sim.__file__).resolve().parents[1])
     keeper = sp.Popen([sys.executable, str(script)],
                       env=dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", "")))
-    deadline = time.time() + 15
+    deadline = time.time() + ceiling()
     while not (pidfile.exists() and pidfile.read_text()) and time.time() < deadline:
         time.sleep(0.05)
     assert pidfile.exists(), "the stand-in CARLA never started"

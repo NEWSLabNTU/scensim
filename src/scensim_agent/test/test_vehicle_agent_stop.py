@@ -11,6 +11,18 @@ import time
 
 import pytest
 
+
+def ceiling(base=120.0):
+    """How long to wait for a child to get ready: at least `base` s, longer on a loaded host
+    (by the load per core, above 1). A fixed 20-30 s lost to gates at load 105 on 32 cores; it
+    costs nothing when the child is ready sooner."""
+    try:
+        per_core = os.getloadavg()[0] / (os.cpu_count() or 1)
+    except OSError:
+        per_core = 1.0
+    return base * max(1.0, per_core)
+
+
 vehicle_agent = pytest.importorskip("scensim_agent.adapters.vehicle_agent")
 
 
@@ -29,7 +41,7 @@ def test_the_agent_ends_cleanly_on_a_stop_signal(tmp_path, sig):
                               "--ros-args", "-p", f"relay:=tcp://127.0.0.1:{_free_port()}"],
                              env=env, stdout=out, stderr=subprocess.STDOUT)
     try:
-        deadline = time.time() + 60
+        deadline = time.time() + ceiling()
         # up: its node, its executor, its step thread, and the relay client retrying
         while "retrying" not in log.read_text() and time.time() < deadline:
             assert p.poll() is None, log.read_text()
@@ -84,7 +96,7 @@ def test_a_run_that_raises_still_closes_in_order(tmp_path):
     env = dict(os.environ, ROS_DOMAIN_ID="57", ROS_LOG_DIR=str(tmp_path))
     p = subprocess.run([sys.executable, "-c", code, "--ros-args", "-p",
                         f"relay:=tcp://127.0.0.1:{_free_port()}"], env=env,
-                       capture_output=True, text=True, timeout=60)
+                       capture_output=True, text=True, timeout=ceiling())
     text = p.stdout + p.stderr
     assert p.returncode == 1, text
     assert text.count("Traceback") == 1 and "relay protocol error" in text

@@ -20,6 +20,18 @@ from pathlib import Path
 
 import pytest
 
+
+def ceiling(base=120.0):
+    """How long to wait for a child to get ready: at least `base` s, longer on a loaded host
+    (by the load per core, above 1). A fixed 20-30 s lost to gates at load 105 on 32 cores; it
+    costs nothing when the child is ready sooner."""
+    try:
+        per_core = os.getloadavg()[0] / (os.cpu_count() or 1)
+    except OSError:
+        per_core = 1.0
+    return base * max(1.0, per_core)
+
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 SCENSIM_SRC = REPO / "src" / "scensim"
@@ -76,7 +88,7 @@ def test_a_support_packages_world_server_passes_conformance(ws):
     port = free_port()
     r = in_ws(ws, "python3 -c \"from scensim import own_world; "
                   f"ok, report = own_world.conformance(['fixture_world', 'fake_world'], {port}, "
-                  f"check=['{CHECK}'], start_timeout=60); print(report); "
+                  f"check=['{CHECK}'], start_timeout={ceiling():.0f}); print(report); "
                   "raise SystemExit(0 if ok else 1)\"")
     assert r.returncode == 0, r.stdout + r.stderr
     assert " 0 failed" in r.stdout

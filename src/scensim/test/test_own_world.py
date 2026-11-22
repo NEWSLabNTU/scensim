@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from _ceiling import ceiling
 
 import pytest
 
@@ -124,7 +125,7 @@ def _fixture(*flags):
 def test_a_conforming_world_server_passes_the_real_check(tmp_path):
     check, env = _real_check()
     got = own_world.conformance_findings(["fixture_world", "kinematic_world"], _free_port(),
-                                         check=check, env=env, start_timeout=20,
+                                         check=check, env=env, start_timeout=ceiling(),
                                          command=_fixture(), log=tmp_path / "server.log")
     assert got == [], [str(f) for f in got]
 
@@ -132,7 +133,7 @@ def test_a_conforming_world_server_passes_the_real_check(tmp_path):
 def test_a_world_server_that_breaks_the_protocol_fails_it_by_name(tmp_path):
     check, env = _real_check()
     got = own_world.conformance_findings(["fixture_world", "kinematic_world"], _free_port(),
-                                         check=check, env=env, start_timeout=20,
+                                         check=check, env=env, start_timeout=ceiling(),
                                          command=_fixture("--broken"),
                                          log=tmp_path / "server.log")
     assert got and all(f.file == "world.server" and f.what.startswith("conformance: ")
