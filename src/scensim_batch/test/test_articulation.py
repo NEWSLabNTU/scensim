@@ -489,10 +489,11 @@ class SpawnPropsTest(unittest.TestCase):
     Lab takes them; a body without them has none (its USD's own stand)."""
 
     def test_split(self):
-        doc = {"asset": {"spawn": {"solver_position_iteration_count": 4,
-                                   "solver_velocity_iteration_count": 0,
-                                   "sleep_threshold": 0.005, "max_depenetration_velocity": 100.0,
-                                   "enable_gyroscopic_forces": True}}}
+        doc = {"asset": {"spawn": {"physxArticulation:solverPositionIterationCount": 4,
+                                   "physxArticulation:solverVelocityIterationCount": 0,
+                                   "physxArticulation:sleepThreshold": 0.005,
+                                   "physxRigidBody:maxDepenetrationVelocity": 100.0,
+                                   "physxRigidBody:enableGyroscopicForces": True}}}
         root, rigid = art.spawn_props(doc)
         self.assertEqual(root, {"solver_position_iteration_count": 4,
                                 "solver_velocity_iteration_count": 0, "sleep_threshold": 0.005})
@@ -501,4 +502,96 @@ class SpawnPropsTest(unittest.TestCase):
         self.assertEqual(art.spawn_props({}), ({}, {}))
         self.assertEqual(art.spawn_props({"asset": {"usd": "x"}}), ({}, {}))
         self.assertIn("spawn", doc["asset"])                 # not consumed
+        with self.assertRaisesRegex(ValueError, "not one of"):
+            art.spawn_props({"asset": {"spawn": {"solver_position_iteration_count": 4}}})
 
+    def test_every_mapped_field_is_isaac_labs(self):
+        """241: a field Isaac Lab renames fails here, not as a silently dropped property."""
+        try:
+            from isaaclab.sim import ArticulationRootPropertiesCfg, RigidBodyPropertiesCfg
+        except Exception:      # noqa: BLE001 -- no Isaac Lab in this Python
+            self.skipTest("no Isaac Lab")
+        import dataclasses
+        have = {"root": {f.name for f in dataclasses.fields(ArticulationRootPropertiesCfg)},
+                "body": {f.name for f in dataclasses.fields(RigidBodyPropertiesCfg)}}
+        for attr, (where, field) in art.SPAWN_ATTRS.items():
+            self.assertIn(field, have[where], attr)
+
+    def test_the_mushr_specs_spawn_is_mapped_whole(self):
+        """The spec's own MuSHR: every attribute it names maps (none dropped), 4/0 iterations."""
+        import sys
+        from pathlib import Path
+        svs = Path(__file__).resolve().parents[2] / "sim_vehicle_spec"     # this checkout's
+        if str(svs) not in sys.path:
+            sys.path.insert(0, str(svs))
+        import yaml
+        from sim_vehicle_spec import articulation as gen, spec as specmod
+        sp = specmod.load(svs / "vehicles" / "mushr_nano.yaml")
+        doc = yaml.safe_load(gen.files(sp, "t")["articulation.yaml"])
+        root, rigid = art.spawn_props(doc)
+        self.assertEqual(len(root) + len(rigid), len(doc["asset"]["spawn"]))
+        self.assertEqual((root["solver_position_iteration_count"],
+                          root["solver_velocity_iteration_count"]), (4, 0))
+
+
+
+try:
+    from pxr import Sdf, Usd
+except ImportError:      # the system Python: no pxr (Isaac's Python has it)
+    Usd = None
+
+
+@unittest.skipIf(Usd is None, "no pxr")
+class SpawnReadBackTest(unittest.TestCase):
+    """094 P3's guard: the env reads the spawned car's spawn properties back from the stage
+    (spawn_mismatches) and refuses to start on a difference; here on a stage written by hand
+    as Isaac Lab's spawner authors it."""
+
+    SPAWN = {"physxArticulation:solverPositionIterationCount": 4,
+             "physxArticulation:solverVelocityIterationCount": 0,
+             "physxArticulation:sleepThreshold": 0.005,
+             "physxRigidBody:maxDepenetrationVelocity": 100.0,
+             "physxRigidBody:enableGyroscopicForces": True}
+
+    def stage(self, pos_iters=4, gyro=True):
+        st = Usd.Stage.CreateInMemory()
+        root = st.DefinePrim("/World/envs/env_0/ego/base", "Xform")
+        root.AddAppliedSchema("PhysxArticulationAPI")
+        root.CreateAttribute("physxArticulation:solverPositionIterationCount",
+                             Sdf.ValueTypeNames.Int).Set(pos_iters)
+        root.CreateAttribute("physxArticulation:solverVelocityIterationCount",
+                             Sdf.ValueTypeNames.Int).Set(0)
+        root.CreateAttribute("physxArticulation:sleepThreshold",
+                             Sdf.ValueTypeNames.Float).Set(0.005)
+        for name in ("chassis", "wheel"):
+            b = st.DefinePrim(f"/World/envs/env_0/ego/base/{name}", "Xform")
+            b.AddAppliedSchema("PhysicsRigidBodyAPI")
+            b.CreateAttribute("physxRigidBody:maxDepenetrationVelocity",
+                              Sdf.ValueTypeNames.Float).Set(100.0)
+            b.CreateAttribute("physxRigidBody:enableGyroscopicForces",
+                              Sdf.ValueTypeNames.Bool).Set(gyro)
+        return st
+
+    def doc(self):
+        return {"asset": {"spawn": dict(self.SPAWN)}}
+
+    def test_a_car_that_holds_them_passes(self):
+        self.assertEqual(art.spawn_mismatches(self.stage(), "/World/envs/env_0/ego", self.doc()),
+                         [])
+
+    def test_the_usds_own_iterations_are_found(self):
+        bad = art.spawn_mismatches(self.stage(pos_iters=32), "/World/envs/env_0/ego",
+                                   self.doc())
+        self.assertEqual(len(bad), 1)
+        self.assertIn("solverPositionIterationCount", bad[0])
+        self.assertIn("32", bad[0])
+
+    def test_every_rigid_body_is_read(self):
+        bad = art.spawn_mismatches(self.stage(gyro=False), "/World/envs/env_0/ego", self.doc())
+        self.assertEqual(len(bad), 2)                      # chassis and wheel
+        self.assertTrue(all("enableGyroscopicForces" in b for b in bad))
+
+    def test_a_missing_car_or_none_asked(self):
+        self.assertEqual(art.spawn_mismatches(self.stage(), "/World/nothing", self.doc()),
+                         ["no prim at /World/nothing"])
+        self.assertEqual(art.spawn_mismatches(self.stage(pos_iters=32), "/x", {}), [])

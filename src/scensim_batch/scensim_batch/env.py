@@ -117,6 +117,12 @@ class ScensimEnv(DirectRLEnv):
                 art.write_usd(self._body_doc, usd)
             cfg.scene.ego = art.articulation_cfg(self._body_doc, usd, z=self._spawn_z())
         super().__init__(cfg, render_mode, **kwargs)
+        if getattr(self, "_physics_handles_decimation", False):
+            # _apply_action, and the backend's sample, then run once per several substeps while
+            # each sample is told one substep's dt: the accelerations would be that factor too
+            # large (241). PhysX's manager does not handle decimation; one that does is refused
+            raise ValueError("a physics manager that handles decimation itself: the backend "
+                             "samples once a substep (ScensimEnv._apply_action)")
 
     # --- the scene ----------------------------------------------------------------------------
 
@@ -137,6 +143,15 @@ class ScensimEnv(DirectRLEnv):
                 static_friction=st, dynamic_friction=dy, friction_combine_mode=comb,
                 restitution_combine_mode=comb))
         spawn_ground_plane("/World/ground", g)
+        if cfg.engine == "B":
+            # the car as spawned holds its asset's spawn properties, read back from the stage
+            # (094 P3: a spawn that dropped them trained on 8 times stock's solver iterations)
+            from . import articulation as art
+            bad = art.spawn_mismatches(omni.usd.get_context().get_stage(),
+                                       "/World/envs/env_0/ego", self._body_doc)
+            if bad:
+                raise ValueError("the spawned car does not hold its spec's spawn properties "
+                                 "(body.asset.spawn):\n  " + "\n  ".join(bad))
         world = cfg.world_factory()
         self.pool, self._episodes, self._start_log = None, None, None
         if cfg.start_pool:

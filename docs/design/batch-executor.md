@@ -223,8 +223,9 @@ loads that articulation, with the spec's drives, instead of building the generat
 (`ScensimEnvCfg.asset_root`, a host setting, is where it lives; a file whose sha256 differs is
 refused, and so is an asset whose mass, as PhysX reads it, is not the spec's within 1 %). What
 the asset's own config sets over its USD at spawn is the spec's too (`body.asset.spawn`: the
-articulation's solver iterations and thresholds, its rigid bodies' properties), applied by
-`articulation_cfg`: the MuSHR's USD authors 32 position and 1 velocity solver iterations and
+articulation's solver iterations and thresholds, its rigid bodies' properties, keyed by the USD
+attributes they set), applied by `articulation_cfg` and read back from the stage when the env
+starts, which refuses a car that does not hold them (`spawn_mismatches`): the MuSHR's USD authors 32 position and 1 velocity solver iterations and
 stock's config 4 and 0, and read alone it ran 8 times stock's (094 P3, 2026-11-22: physics 18.4 ms
 a step at 256 envs against stock's 7.2; 7.5 with them). 094
 P2's MuSHR is one, because the generated body did not match stock's own within 5 %: the

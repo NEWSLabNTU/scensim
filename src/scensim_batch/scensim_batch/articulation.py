@@ -411,17 +411,85 @@ def actuator_groups(doc):
     return groups
 
 
-ARTICULATION_SPAWN = ("solver_position_iteration_count", "solver_velocity_iteration_count",
-                      "sleep_threshold", "stabilization_threshold")
+# sim_vehicle_spec's body.asset.spawn, keyed by the USD attribute each property sets (PhysX's
+# schema names): where it is authored (the articulation root's prim, or every rigid body) and
+# Isaac Lab 3.0's cfg field that sets it (ArticulationRootPropertiesCfg, RigidBodyPropertiesCfg)
+SPAWN_ATTRS = {
+    "physxArticulation:solverPositionIterationCount": ("root", "solver_position_iteration_count"),
+    "physxArticulation:solverVelocityIterationCount": ("root", "solver_velocity_iteration_count"),
+    "physxArticulation:sleepThreshold": ("root", "sleep_threshold"),
+    "physxArticulation:stabilizationThreshold": ("root", "stabilization_threshold"),
+    "physics:rigidBodyEnabled": ("body", "rigid_body_enabled"),
+    "physxRigidBody:maxLinearVelocity": ("body", "max_linear_velocity"),
+    "physxRigidBody:maxAngularVelocity": ("body", "max_angular_velocity"),
+    "physxRigidBody:maxDepenetrationVelocity": ("body", "max_depenetration_velocity"),
+    "physxRigidBody:maxContactImpulse": ("body", "max_contact_impulse"),
+    "physxRigidBody:enableGyroscopicForces": ("body", "enable_gyroscopic_forces"),
+}
 
 
 def spawn_props(doc):
     """The body's asset's spawn properties (sim_vehicle_spec's body.asset.spawn: what the
-    asset's own config sets over its USD), split as Isaac Lab takes them: (articulation root's,
-    rigid bodies'). Empty for a body without them (a generated body, whose USD is the spec's)."""
-    spawn = dict((doc.get("asset") or {}).get("spawn") or {})
-    root = {k: spawn.pop(k) for k in ARTICULATION_SPAWN if k in spawn}
-    return root, spawn
+    asset's own config sets over its USD) as Isaac Lab's cfg fields, split as it takes them:
+    (articulation root's, rigid bodies'). Empty for a body without them (a generated body, whose
+    USD is the spec's). An attribute this does not map is refused, never dropped."""
+    root, rigid = {}, {}
+    for attr, value in ((doc.get("asset") or {}).get("spawn") or {}).items():
+        if attr not in SPAWN_ATTRS:
+            raise ValueError(f"{doc.get('name')}: body.asset.spawn {attr!r}: not one of "
+                             f"{', '.join(SPAWN_ATTRS)}")
+        where, field = SPAWN_ATTRS[attr]
+        (root if where == "root" else rigid)[field] = value
+    return root, rigid
+
+
+def spawn_mismatches(stage, root_path, doc):
+    """Each spawn property of the body's asset that the spawned car at `root_path` on `stage`
+    does not hold, as "<attribute>: <prim> has <value>, the spec <value>" (094 P3: a spawn that
+    dropped them ran 8 times stock's solver iterations, found only by a profile; this finds it
+    at the env's start). pxr only."""
+    want = dict((doc.get("asset") or {}).get("spawn") or {})
+    if not want:
+        return []
+    root = stage.GetPrimAtPath(root_path)
+    if not root or not root.IsValid():
+        return [f"no prim at {root_path}"]
+    prims = list(_subtree(root))
+    arts = [p for p in prims if "PhysxArticulationAPI" in _schemas(p)]
+    bodies = [p for p in prims if "PhysicsRigidBodyAPI" in _schemas(p)]
+    out = []
+    for attr, value in sorted(want.items()):
+        where = SPAWN_ATTRS[attr][0]
+        targets = arts if where == "root" else bodies
+        if not targets:
+            out.append(f"{attr}: no {'articulation root' if where == 'root' else 'rigid body'} "
+                       f"under {root_path}")
+            continue
+        for p in targets:
+            a = p.GetAttribute(attr)
+            got = a.Get() if a and a.IsValid() else None
+            same = (got is not None and
+                    (bool(got) == bool(value) if isinstance(value, bool)
+                     else abs(float(got) - float(value)) <= 1e-6 * max(1.0, abs(float(value)))))
+            if not same:
+                out.append(f"{attr}: {p.GetPath()} has {got!r}, the spec {value!r}")
+    return out
+
+
+def _subtree(prim):
+    from pxr import Usd
+    return Usd.PrimRange(prim)
+
+
+def _schemas(prim):
+    """A prim's applied API schemas: the registered ones, and the authored list's names (a
+    Python without PhysX's schema plugin leaves PhysxArticulationAPI out of the first)."""
+    names = set(prim.GetAppliedSchemas())
+    op = prim.GetMetadata("apiSchemas")
+    if op is not None:
+        for items in (op.explicitItems, op.prependedItems, op.appendedItems, op.addedItems):
+            names.update(str(x) for x in items)
+    return names
 
 
 def articulation_cfg(doc, usd_path, prim_path="/World/envs/env_.*/ego", z=0.0,
