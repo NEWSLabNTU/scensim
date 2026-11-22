@@ -18,6 +18,7 @@ import numpy as np
 
 from . import __version__, anchors as A, record as R
 from .dist import SpecError
+from .expr import ExprError
 from .plugins.importance import Importance
 from .plugins.joint import Joint
 from .xosc import Distribution, Scenario
@@ -60,6 +61,7 @@ class Sampler:
             raise SpecError(str(e)) from None
         self.anchors = numbers
         self.anchor_functions = {k + "()": f for k, f in functions.items()}
+        self._functions = functions
         self.anchor_specs = dict(anchors or {})
         missing = sorted({r for rs in reads.values() for r in rs
                           if r.startswith("anchor.") and r not in self.anchors
@@ -70,12 +72,45 @@ class Sampler:
                             f"declares no such anchor attribute (testbench.yaml world.anchors, "
                             f"or the map's {A.RESOLVED}"
                             f"{': ' + ', '.join(known) if known else ': none'})")
+        # the bindings, checked where they can be: a literal anchor the world lacks, the wrong
+        # form, or a constant s off the lane (an s from a drawn value is checked per draw)
+        drawn_names = {n for p in self.plugins for n in getattr(p, "names", ())}
+        for param, text in scenario.anchor_bindings.items():
+            where = f"{scenario.path.name}: scensim.anchor.{param}"
+            if param in drawn_names:
+                raise SpecError(f"{where}: {param} is drawn and bound to an anchor; keep one")
+            ref, attr, arg = A.parse_binding(text, where)
+            if ref.startswith("$"):
+                continue
+            dotted = f"anchor.{ref}.{attr}"
+            if arg is None and dotted not in numbers:
+                why = (f"read at a lane position, {dotted}(s)" if dotted in functions
+                       else "the world declares no such anchor attribute")
+                raise SpecError(f"{where}: {dotted}: {why}")
+            if arg is not None:
+                if dotted not in functions:
+                    raise SpecError(f"{where}: {dotted}(...): no such function of the world's "
+                                    f"anchors")
+                if not arg.startswith("$"):
+                    try:
+                        functions[dotted](float(arg))
+                    except A.AnchorError as e:
+                        raise SpecError(f"{where}: {e}") from None
         self.anchors_read = sorted({r for rs in reads.values() for r in rs
-                                    if r.startswith("anchor.")})
+                                    if r.startswith("anchor.")}
+                                   | {f"anchor.{r}.{a}" for r, a, _ in
+                                      (A.parse_binding(t) for t in
+                                       scenario.anchor_bindings.values())
+                                      if not r.startswith("$")})
         # a read the world declares only as a function (a resolved lane's heading) has no
         # value of its own to record: its file does (anchor_source)
         self.anchor_values_read = [r for r in self.anchors_read if r in self.anchors]
-        self.anchor_source = A.sources(self.anchor_specs, self.anchors_read)
+        # a $parameter binding picks its anchor per draw: every resolved file may be read
+        dynamic = any(A.parse_binding(t)[0].startswith("$")
+                      for t in scenario.anchor_bindings.values())
+        self.anchor_source = A.sources(
+            self.anchor_specs, [f"anchor.{n}.x" for n in self.anchor_specs] if dynamic
+            else self.anchors_read)
         # the derived values a cell may be computed from: reading only parameters (a bound knob
         # is one), anchor attributes and such values, transitively (scenario-description.md
         # section 7)
@@ -152,11 +187,39 @@ class Sampler:
         env.update(self.anchor_functions)
         env.update(values)
         derived = []
-        for p in self.plugins:
-            d = p.derived(env)
-            env.update(d)
-            derived += list(d)
         why = []
+        try:
+            for p in self.plugins:
+                d = p.derived(env)
+                env.update(d)
+                derived += list(d)
+        except ExprError as e:
+            if "outside the lane" not in str(e):
+                raise
+            # a lane position the draw put off its lane (092 K9b): a rejection, named
+            return ({k: env[k] for k in itertools.chain(values, derived)}, derived, {}, 0.0,
+                    [_lane_why(str(e))])
+        # the parameters bound to the world's anchors (scensim.anchor.<parameter>, 092 K9b)
+        sc = self.scenario
+        if sc.anchor_bindings:
+            vals = {k: v for k, (_t, v) in sc.parameters.items()}
+            vals.update({k: env[k] for k in env if k in sc.parameters})
+            for param, text in sc.anchor_bindings.items():
+                try:
+                    env[param] = A.bind(text, vals, self.anchors, self._functions,
+                                        f"scensim.anchor.{param}")
+                except A.AnchorError as e:
+                    if "outside the lane" not in str(e):
+                        raise SpecError(str(e)) from None
+                    return ({k: env[k] for k in itertools.chain(values, derived)}, derived, {},
+                            0.0, [_lane_why(str(e))])
+                v = env[param]
+                if (isinstance(v, float) and v.is_integer()
+                        and sc.parameters[param][0] != "double"):
+                    v = env[param] = int(v)     # a lanelet id, not 6583.0
+                env[param] = sc.cast(param, v)
+                vals[param] = env[param]
+                derived.append(param)
         for p in self.plugins:
             why += p.violations(env)
         log_w = sum(p.log_weight(env) for p in self.plugins)
@@ -303,3 +366,10 @@ def _anchors_record(env, read):
         _, name, attr = dotted.split(".", 2)
         out.setdefault(name, {})[attr] = env[dotted]
     return out
+
+
+def _lane_why(text):
+    """A lane-position rejection's reason, without the sample's own number (counted by kind)."""
+    import re
+    m = re.search(r"(anchor\.\w+)", text)
+    return f"a lane position outside {m.group(1) if m else 'its lane'}"

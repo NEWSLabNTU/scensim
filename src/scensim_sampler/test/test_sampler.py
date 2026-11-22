@@ -30,6 +30,9 @@ knobs: {max_gap: 3}
 """
 
 
+
+CS6_ANCHORS = {"hwy_right": {"kind": "lane", "lanelet": 201}}   # cs6_anchors.yaml
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.d = Dir()
@@ -209,7 +212,7 @@ class Latent(Base):
     scenario; CS6's time_headway and reveal_time are latent."""
 
     def test_cs6_records_its_latent_variables_and_binds_only_its_parameters(self):
-        b = Sampler.from_file(CASES / "cs6_cut_out_stopped_car_dist.xosc").draw(n=50, seed=3)
+        b = Sampler.from_file(CASES / "cs6_cut_out_stopped_car_dist.xosc", anchors=CS6_ANCHORS).draw(n=50, seed=3)
         sc = Scenario(CASES / "cs6_cut_out_stopped_car.xosc")
         for r in b.records:
             self.assertEqual(set(r["latent"]), {"time_headway", "reveal_time"})
@@ -236,7 +239,7 @@ class Latent(Base):
             Sampler.from_file(self.d.path / "s.xosc", model=self.d.path / "m.yaml")
 
     def test_the_record_check_keeps_latent_out_of_values_and_the_scenario(self):
-        r = Sampler.from_file(CASES / "cs6_cut_out_stopped_car_dist.xosc").draw(
+        r = Sampler.from_file(CASES / "cs6_cut_out_stopped_car_dist.xosc", anchors=CS6_ANCHORS).draw(
             n=1, seed=3).records[0]
         sc = Scenario(CASES / "cs6_cut_out_stopped_car.xosc")
         bad = dict(r, latent={**r["latent"], "ego_speed": r["values"]["ego_speed"]})
@@ -256,7 +259,10 @@ class Anchors(Base):
         b = Sampler.from_file(CASES / "cs7_cyclist_low_sun_dist.xosc",
                               anchors=self.anchors()).draw(n=200, seed=4)
         for r in b.records:
-            self.assertEqual(r["anchors"], {"exit_n": {"heading": 1.5708}})
+            self.assertEqual(r["anchors"], {"approach_n": {"lanelet": 101.0},
+                                            "exit_n": {"heading": 1.5708, "lanelet": 102.0}})
+            self.assertEqual((r["values"]["approach_lane"], r["values"]["exit_lane"]),
+                             ("101", "102"))       # bound, as the lanelets' ids
             self.assertNotIn("exit_heading", r["values"])
             az, el = r["values"]["sun_azimuth"], r["values"]["sun_elevation"]
             want = "into_sun" if abs(az - 1.5708) < 0.35 and el < 0.2 else "low_sun"
@@ -270,12 +276,13 @@ class Anchors(Base):
             an["exit_n"]["heading"] = heading
             for r in Sampler.from_file(CASES / "cs7_cyclist_low_sun_dist.xosc",
                                        anchors=an).draw(n=20, seed=4).records:
-                self.assertEqual(r["anchors"], {"exit_n": {"heading": heading}})
+                self.assertEqual(r["anchors"]["exit_n"], {"heading": heading, "lanelet": 102.0})
                 self.assertAlmostEqual(r["values"]["sun_azimuth"],
                                        heading + r["values"]["rel_azimuth"], places=9)
 
     def test_a_world_without_the_anchor_is_refused(self):
-        for an in (None, {"exit_s": {"kind": "lane", "heading": 0.0}}):
+        for an in (None, {"exit_s": {"kind": "lane", "heading": 0.0},
+                          "approach_n": {"kind": "lane", "lanelet": 101}}):
             with self.assertRaisesRegex(SpecError, "anchor.exit_n.heading: read by a derived "
                                         "value, but the world declares no such anchor"):
                 Sampler.from_file(CASES / "cs7_cyclist_low_sun_dist.xosc", anchors=an)
@@ -283,7 +290,8 @@ class Anchors(Base):
     def test_an_anchor_attribute_is_a_number(self):
         with self.assertRaisesRegex(SpecError, "anchor exit_n.heading: a number"):
             Sampler.from_file(CASES / "cs7_cyclist_low_sun_dist.xosc",
-                              anchors={"exit_n": {"kind": "lane", "heading": "north"}})
+                              anchors={"exit_n": {"kind": "lane", "heading": "north"},
+                                       "approach_n": {"kind": "lane", "lanelet": 101}})
 
     def test_the_record_check_takes_anchors(self):
         r = Sampler.from_file(CASES / "cs7_cyclist_low_sun_dist.xosc",
@@ -292,6 +300,108 @@ class Anchors(Base):
             self.assertTrue(any(p.startswith("anchors:") for p in check(dict(r, anchors=bad))),
                             bad)
 
+
+
+def _lane(ids_lengths, h0=0.0, h1=1.5708):
+    """A resolved lane as anchors.resolved.json carries it (092 K9a), by hand: lanelets of the
+    given lengths in a row, its heading turning linearly from h0 to h1."""
+    spans, s0 = [], 0.0
+    for i, ln in ids_lengths:
+        spans.append({"id": i, "from_s": s0, "to_s": s0 + ln})
+        s0 += ln
+    return {"kind": "lane", "lanelets": spans, "length": s0, "speed_limit": 13.89,
+            "start_x": 0.0, "start_y": 0.0, "end_x": s0, "end_y": 0.0,
+            "heading_s": [0.0, s0], "heading": [h0, h1], "heading_max_error": 0.0}
+
+
+class Binding(Base):
+    """092 K9b: a scenario parameter bound to the world's anchor (FileHeader
+    scensim.anchor.<parameter>), set before SSv2 starts: CS7 on a resolved exit lane, its
+    cyclist's LanePosition the lanelet holding cyclist_s and the s in that lanelet."""
+
+    def cs7(self, model_edit=lambda m: m, bind_s=True):
+        import shutil
+        for f in ("cs7_cyclist_low_sun.xosc", "cs7_cyclist_low_sun_dist.xosc"):
+            shutil.copy(CASES / f, self.d.path / f)
+        shutil.copytree(CASES / "models", self.d.path / "models")
+        m = self.d.path / "models" / "cs7_cyclist.yaml"
+        m.write_text(model_edit(m.read_text().replace("anchor.exit_n.heading",
+                                                      "anchor.exit_n.heading(cyclist_s)")))
+        p = self.d.path / "cs7_cyclist_low_sun.xosc"
+        x = p.read_text().replace("exit_n.lanelet\"", "exit_n.lanelet_at($cyclist_s)\"")
+        if bind_s:
+            x = x.replace('<Property name="scensim.anchor.exit_lane"',
+                          '<Property name="scensim.anchor.exit_ls" '
+                          'value="exit_n.local_s($cyclist_s)"/>\n      '
+                          '<Property name="scensim.anchor.exit_lane"')
+            x = x.replace('<ParameterDeclaration name="exit_lane" parameterType="string" value=""/>',
+                          '<ParameterDeclaration name="exit_lane" parameterType="string" value=""/>'
+                          '\n    <ParameterDeclaration name="exit_ls" parameterType="double" '
+                          'value="0"/>')
+            x = x.replace('s="$cyclist_s" offset="$kerb_offset"', 's="$exit_ls" offset="$kerb_offset"')
+        p.write_text(x)
+        return self.d.path / "cs7_cyclist_low_sun_dist.xosc"
+
+    def anchors(self, exit_lengths=((1, 15.0), (2, 15.7))):
+        return {"approach_n": {"kind": "lane", "lanelet": 101}, "exit_n": _lane(exit_lengths)}
+
+    def test_a_lane_position_is_the_lanelet_holding_s_and_s_in_it(self):
+        b = Sampler.from_file(self.cs7(), anchors=self.anchors()).draw(n=200, seed=4)
+        sc = Scenario(self.d.path / "cs7_cyclist_low_sun.xosc")
+        self.assertEqual(sc.anchor_bindings["exit_ls"], "exit_n.local_s($cyclist_s)")
+        seen = set()
+        for r in b.records:
+            v = r["values"]
+            want = ("1", v["cyclist_s"]) if v["cyclist_s"] < 15.0 else ("2", v["cyclist_s"] - 15.0)
+            self.assertEqual(v["exit_lane"], want[0])
+            self.assertAlmostEqual(v["exit_ls"], want[1], places=9)
+            self.assertEqual(v["approach_lane"], "101")
+            seen.add(v["exit_lane"])
+            self.assertEqual(check(r), [])
+        self.assertEqual(seen, {"1", "2"})                  # cyclist_s spans both lanelets
+
+    def test_a_draw_off_the_lane_is_rejected_by_name(self):
+        """cyclist_s is drawn in [5, 25]; a 20 m exit lane rejects the draws past its end, as a
+        constraint does, and counts them under one reason."""
+        b = Sampler.from_file(self.cs7(), anchors=self.anchors(((1, 20.0),))).draw(n=100, seed=4)
+        self.assertTrue(all(r["values"]["cyclist_s"] <= 20.0 for r in b.records))
+        self.assertGreater(b.rejected_why.get("a lane position outside anchor.exit_n", 0), 0)
+
+    def test_bindings_are_checked_before_any_draw(self):
+        cases = (
+            ("exit_n.lanelet_at($cyclist_s)", "ghost_n.lanelet_at($cyclist_s)",
+             "anchor.ghost_n.lanelet_at"),
+            ("exit_n.lanelet_at($cyclist_s)", "exit_n.heading", "read at a lane position"),
+            ("exit_n.lanelet_at($cyclist_s)", "exit_n.lanelet_at(99.0)", "outside the lane"),
+            ("exit_n.lanelet_at($cyclist_s)", "exit_n.lanelet_at($nope)", "not a declared"),
+            ("exit_n.lanelet_at($cyclist_s)", "exit_n lanelet", "an anchor binding is"),
+            ("approach_n.lanelet", "approach_n.lanelet_at(3.0)", "no such function"),
+        )
+        for old, new, why in cases:
+            dist = self.cs7()
+            p = self.d.path / "cs7_cyclist_low_sun.xosc"
+            p.write_text(p.read_text().replace(f'value="{old}"', f'value="{new}"', 1))
+            with self.assertRaisesRegex(SpecError, why, msg=new):
+                Sampler.from_file(dist, anchors=self.anchors())
+            import shutil
+            shutil.rmtree(self.d.path / "models")
+
+    def test_a_drawn_parameter_is_not_also_bound(self):
+        dist = self.cs7()
+        p = self.d.path / "cs7_cyclist_low_sun.xosc"
+        p.write_text(p.read_text().replace('name="scensim.anchor.exit_ls"',
+                                           'name="scensim.anchor.cyclist_s"'))
+        with self.assertRaisesRegex(SpecError, "cyclist_s is drawn and bound"):
+            Sampler.from_file(dist, anchors=self.anchors())
+
+    def test_the_record_names_the_resolved_file(self):
+        an = self.anchors()
+        src = {"map": "town_street", "map_sha256": "a" * 64, "file_sha256": "b" * 64}
+        an["exit_n"]["source"] = src
+        r = Sampler.from_file(self.cs7(), anchors=an).draw(n=1, seed=4).records[0]
+        self.assertEqual(r["anchor_source"], [src])
+        self.assertEqual(r["anchors"], {"approach_n": {"lanelet": 101.0}})
+        self.assertEqual(check(r), [])
 
 class Importance(Base):
     def setUp(self):

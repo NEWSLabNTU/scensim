@@ -115,6 +115,9 @@ class RunResult:
     # 093 D7 gap 1, additive: the run's bound knobs, what was sent, the world's read-back
     # (scensim.knobs.compare); absent from runs whose scenario binds none
     knobs: dict = None
+    # 092 K9b, additive: the parameters bound to the world's anchors, {parameter: {value,
+    # anchor, source}}; absent from runs whose scenario binds none
+    anchors: dict = None
     # roadmap 092 K4, additive: an error run's class and message (error_block), and the run's
     # clock: its mode and its lag against wall time (scensim.truth.clock); absent when unknown
     error: dict = None
@@ -123,7 +126,7 @@ class RunResult:
 
     def to_dict(self) -> dict:
         d = dataclasses.asdict(self)
-        for k in ("sample", "replay", "attachments", "knobs", "error", "clock"):
+        for k in ("sample", "replay", "attachments", "knobs", "anchors", "error", "clock"):
             if d.get(k) is None:
                 d.pop(k)
         return {"schema": d.pop("schema"), **d}
@@ -165,7 +168,8 @@ class RunResult:
 # --- validation -----------------------------------------------------------------------------
 
 _TOP = ("schema", "run_id", "verdict", "reason", "scenario", "ssv2", "events", "metrics",
-        "pilots", "provenance", "sample", "replay", "attachments", "knobs", "error", "clock")
+        "pilots", "provenance", "sample", "replay", "attachments", "knobs", "anchors", "error",
+        "clock")
 _REQUIRED = ("schema", "run_id", "verdict")
 
 
@@ -266,6 +270,12 @@ def problems(d) -> list:
         for k in ("weight", "log_weight"):
             if not _is_num(sm.get(k)):
                 out.append(f"sample.{k}: expected a number")
+    if "anchors" in d:
+        an = d["anchors"]
+        if not isinstance(an, dict) or not an or not all(
+                isinstance(b, dict) and "value" in b and isinstance(b.get("anchor"), str)
+                for b in an.values()):
+            out.append("anchors: expected an object, {parameter: {value, anchor, source}}")
     if "knobs" in d:
         kb = obj("knobs")
         if not isinstance(kb.get("ok"), bool):

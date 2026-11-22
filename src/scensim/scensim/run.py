@@ -103,6 +103,9 @@ class RunSpec:
     ssv2: dict = field(default_factory=dict)   # the suite's and its item's (scensim.ssv2)
     sample: dict = None      # its sample record, as drawn (scensim.sampled; roadmap 092 K3)
     replay_of: str = None    # a replay: the run it replays, or None for a record file
+    # the parameters bound to the world's anchors (092 K9b): {parameter: {value, anchor,
+    # source}}, set before SSv2 starts; None when the scenario binds none
+    anchors: dict = None
 
     @property
     def key(self) -> str:
@@ -172,7 +175,90 @@ def _expect_for(expect: dict, project: Path, scenario: Path):
 def expand(target: Path, project: Path, repeat: int = None, params: dict = None,
            seed: int = None) -> tuple:
     """``(specs, suite settings or None)`` for a scenario file or a suite file. ``seed``
-    (``--seeds``): repetition k's seed is ``seed + k``, over a suite's own ``seed``."""
+    (``--seeds``): repetition k's seed is ``seed + k``, over a suite's own ``seed``. Each
+    spec's anchor-bound parameters are set from the world's anchors (092 K9b)."""
+    specs, suite = _expand(target, project, repeat, params, seed)
+    for s in specs:
+        bind_anchors(s, project)
+    return specs, suite
+
+
+def _anchor_scenario(spec):
+    """The scensim_sampler Scenario a spec runs (a distribution: its ScenarioFile's), or None
+    for a file the sampler does not read (an SSv2 YAML scenario)."""
+    from scensim_sampler.dist import SpecError   # noqa: PLC0415
+    from scensim_sampler.xosc import Scenario    # noqa: PLC0415
+    path = Path(spec.scenario)
+    if path.suffix != ".xosc":
+        return None
+    try:
+        sc = projectmod.read_scenario(path)
+        if sc.distribution_of is not None and "$(" not in sc.distribution_of:
+            t = Path(sc.distribution_of)
+            path = t if t.is_absolute() else path.parent / t
+        # only a scenario that binds anchors is read by the sampler's parser, which refuses
+        # what it does not model (a parameter type it does not cast); the rest run as before
+        if "scensim.anchor." not in path.read_text(errors="replace"):
+            return None
+        return Scenario(path)
+    except (ValueError, OSError):
+        return None
+    except SpecError as e:
+        raise Refused(str(e)) from None
+
+
+def bind_anchors(spec, project: Path):
+    """Set a spec's anchor-bound parameters (FileHeader scensim.anchor.<parameter>, 092 K9b)
+    from the world's anchors, before SSv2 starts. A sample record's values are checked against
+    them, not replaced: a record drawn on other anchors, or edited, is refused. An s off its
+    lane is refused. SSv2's own distribution cannot set them per run, so it is refused."""
+    from scensim_sampler import anchors as A     # noqa: PLC0415
+    from scensim_sampler.dist import SpecError   # noqa: PLC0415
+    sc = _anchor_scenario(spec)
+    if sc is None or not sc.anchor_bindings:
+        return
+    where = Path(spec.scenario).name
+    if spec.distribution:
+        raise Refused(f"{where}: its scenario binds parameters to the world's anchors "
+                      f"(scensim.anchor.{next(iter(sc.anchor_bindings))}), which SSv2's own "
+                      f"distribution cannot set per run: draw it with a suite's sample: instead")
+    try:
+        anchors = _anchors_for(project, spec.scenario) or {}
+        numbers, functions = A.env(anchors)
+    except A.AnchorError as e:
+        raise Refused(f"{where}: {e}") from None
+    vals = {k: v for k, (_t, v) in sc.parameters.items()}
+    vals.update(spec.parameters)
+    out = {}
+    for param, text in sc.anchor_bindings.items():
+        here = f"{where}: scensim.anchor.{param}"
+        if spec.sample is None and param in spec.parameters:
+            raise Refused(f"{here}: {param} is bound to the world's anchor {text}; it is not "
+                          f"given (--param, a suite's parameters: or cases:)")
+        try:
+            v = A.bind(text, vals, numbers, functions, here)
+            if isinstance(v, float) and v.is_integer() and sc.parameters[param][0] != "double":
+                v = int(v)
+            v = sc.cast(param, v)
+        except (A.AnchorError, SpecError) as e:
+            raise Refused(str(e)) from None
+        if spec.sample is not None:
+            got = spec.parameters.get(param)
+            same = (abs(float(got) - v) <= 1e-9 if isinstance(v, float) and got is not None
+                    else got == v)
+            if not same:
+                raise Refused(f"{here}: the record's {param} is {got!r}, the world's anchor "
+                              f"gives {v!r}: the record was drawn on other anchors, or edited")
+        spec.parameters[param] = vals[param] = v
+        ref = A.parse_binding(text)[0]
+        name = vals.get(ref[1:]) if ref.startswith("$") else ref
+        out[param] = {"value": v, "anchor": text,
+                      "source": (anchors.get(name) or {}).get("source")}
+    spec.anchors = out
+
+
+def _expand(target: Path, project: Path, repeat: int = None, params: dict = None,
+            seed: int = None) -> tuple:
     target = Path(target)
     if not target.is_absolute():
         target = _resolve(target, project, Path.cwd())
@@ -311,7 +397,9 @@ def replay_specs(target: str, index, project: Path) -> list:
         scenario = sampledmod.replay_scenario(record, project)
     except sampledmod.SampleRefused as e:
         raise Refused(str(e)) from None
-    return [sample_spec(record, scenario, replay_of=of_run or "")]
+    spec = sample_spec(record, scenario, replay_of=of_run or "")
+    bind_anchors(spec, project)     # the record's bound values, checked against the world
+    return [spec]
 
 
 def _seed(seed, k):
@@ -1574,6 +1662,7 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                               "lifetime": p.get("lifetime", "stack")} for p in pilots},
         provenance=prov, sample=sample_block, replay=replay_block,
         attachments={r.name: r.record() for r in attached} or None, knobs=knob_block,
+        anchors=spec.anchors,
         error=results.error_block(verdict, infra, reason), clock=clock_block)
     result.write(run_dir / "result.json")
     judge_list = config.project_settings(project).get("judges")

@@ -137,6 +137,25 @@ class Scenario:
                 raise SpecError(f"{path}: FileHeader {k} = {v!r}: a knob is bound to a declared "
                                 "parameter, as $<name> (scenario-description.md section 3)")
             self.knobs[knob] = v[1:]
+        # scensim.anchor.<parameter> = <anchor>.<attribute>[(<arg>)] (092 K9b): that parameter
+        # takes the world's anchor value before SSv2 starts
+        from . import anchors as A
+        self.anchor_bindings = {}
+        for k, v in self.properties.items():
+            if not k or not k.startswith(A.BIND):
+                continue
+            param = k[len(A.BIND):]
+            where = f"{path}: FileHeader {k}"
+            if param not in self.parameters:
+                raise SpecError(f"{where}: {param} is not a declared parameter")
+            try:
+                ref, _attr, arg = A.parse_binding(v, where)
+            except A.AnchorError as e:
+                raise SpecError(str(e)) from None
+            for r in (ref, arg):
+                if r and r.startswith("$") and r[1:] not in self.parameters:
+                    raise SpecError(f"{where}: {r} is not a declared parameter")
+            self.anchor_bindings[param] = v.strip()
         self.is_distribution = root.find("ParameterValueDistribution") is not None
 
     def cell_source(self, attribute, derived_ok=()):

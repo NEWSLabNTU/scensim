@@ -467,8 +467,24 @@ Rules:
   heading table, every number in SSv2's arc length, and the map's digest. Users read that file
   with ROS 2 alone; the sampler refuses one resolved on other map bytes. Expressions read
   `anchor.<lane>.<attribute>` and `anchor.<lane>.heading(s)`; the record names the file read
-  (`anchor_source`). Binding a scenario's positions to anchors and the check are K9b; conflict
-  points, regions and curves K9c. Where a target cannot
+  (`anchor_source`). Conflict points, regions and curves are K9c.
+- *Built, K9b (roadmap 092):* binding. A FileHeader Property `scensim.anchor.<parameter>` with
+  the value `<anchor>.<attribute>` or `<anchor>.<function>(<number or $parameter>)` sets that
+  declared parameter from the world before SSv2 starts; `<anchor>` may be `$<parameter>`, a
+  string parameter naming the anchor, so a distribution can draw which. A resolved lane has
+  `lanelet_at(s)` (the lanelet holding lane position s, the later one at a join) and
+  `local_s(s)` (s within that lanelet), so a LanePosition along a lane of several lanelets is
+  `laneId="$<lane parameter>" s="$<s parameter>"`; a stated lane may state its `lanelet` id.
+  CS6 and CS7 bind their lanes this way: a literal `laneId="exit_n"`, which SSv2 reads as a
+  lanelet id and so runs nowhere, is refused by `scensim-sample compilable`, its fix the
+  binding. The sampler checks the bindings before any draw (an anchor or attribute the world
+  lacks, a function on a stated anchor, a constant s off the lane, a parameter both drawn and
+  bound) and rejects a draw whose s falls off its lane, counted under
+  `a lane position outside anchor.<lane>`. `scensim run` sets the bound parameters of a plain
+  scenario, checks a sample record's against the world instead of replacing them (a record
+  drawn on other anchors, or edited, is refused), refuses a given value for one and SSv2's own
+  distribution of a bound scenario, and records them in `result.json`'s `anchors`
+  (`{parameter: {value, anchor, source}}`). Where a target cannot
   honour a knob (fog on a target without fog), it refuses the knob by name.
 
 ## 4. Behaviour models (D3, first draft)

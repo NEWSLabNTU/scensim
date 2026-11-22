@@ -10,6 +10,8 @@
       <Property name="scensim.cell_attributes" value="illumination,stopped_kind"/>
       <!-- the knob is bound by property (scenario-description.md section 3) -->
       <Property name="scensim.knob.illumination" value="$illumination"/>
+      <!-- the highway's right lane is the world's anchor (092 K9b), bound before SSv2 starts -->
+      <Property name="scensim.anchor.hwy_lane" value="hwy_right.lanelet"/>
     </Properties>
   </FileHeader>
   <ParameterDeclarations>
@@ -19,6 +21,7 @@
     <ParameterDeclaration name="lc_time" parameterType="double" value="2.5"/>
     <ParameterDeclaration name="stopped_s" parameterType="double" value="600"/>
     <ParameterDeclaration name="ego_s" parameterType="double" value="5"/>
+    <ParameterDeclaration name="hwy_lane" parameterType="string" value=""/>
     <ParameterDeclaration name="lead_s" parameterType="double" value="45"/>
     <ParameterDeclaration name="stopped_kind" parameterType="string" value="car"/>
     <ParameterDeclaration name="illumination" parameterType="string" value="day"/>
@@ -51,19 +54,19 @@
   <Storyboard>
     <Init><Actions>
       <Private entityRef="ego"><PrivateAction><TeleportAction><Position>
-        <LanePosition roadId="" laneId="hwy_right" s="$ego_s" offset="0"/></Position></TeleportAction></PrivateAction>
+        <LanePosition roadId="" laneId="$hwy_lane" s="$ego_s" offset="0"/></Position></TeleportAction></PrivateAction>
         <PrivateAction><LongitudinalAction><SpeedAction>
           <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
           <SpeedActionTarget><AbsoluteTargetSpeed value="$ego_speed"/></SpeedActionTarget>
         </SpeedAction></LongitudinalAction></PrivateAction></Private>
       <Private entityRef="lead"><PrivateAction><TeleportAction><Position>
-        <LanePosition roadId="" laneId="hwy_right" s="$lead_s" offset="0"/></Position></TeleportAction></PrivateAction>
+        <LanePosition roadId="" laneId="$hwy_lane" s="$lead_s" offset="0"/></Position></TeleportAction></PrivateAction>
         <PrivateAction><LongitudinalAction><SpeedAction>
           <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
           <SpeedActionTarget><AbsoluteTargetSpeed value="$ego_speed"/></SpeedActionTarget>
         </SpeedAction></LongitudinalAction></PrivateAction></Private>
       <Private entityRef="stopped"><PrivateAction><TeleportAction><Position>
-        <LanePosition roadId="" laneId="hwy_right" s="$stopped_s" offset="0"/></Position></TeleportAction></PrivateAction></Private>
+        <LanePosition roadId="" laneId="$hwy_lane" s="$stopped_s" offset="0"/></Position></TeleportAction></PrivateAction></Private>
     </Actions></Init>
     <Story name="main"><Act name="act">
       <ManeuverGroup name="cut_out" maximumExecutionCount="1">

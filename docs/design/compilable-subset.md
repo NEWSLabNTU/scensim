@@ -75,6 +75,11 @@ executor refuses.
 |---|
 | LaneOffsetAction (and its LaneOffsetActionDynamics, LaneOffsetTarget, AbsoluteTargetLaneOffset, RelativeTargetLaneOffset); RelativeLanePosition; TraveledDistanceCondition |
 
+A LanePosition whose `laneId` is a name (neither a number nor a `$parameter`) is refused the
+same way: SSv2 reads a laneId as a lanelet's id, so a name runs nowhere. The fix is the
+world's anchor, bound in the FileHeader (`scensim.anchor.<parameter> = <lane>.lanelet_at(<s>)`,
+scenario-description.md section 3; roadmap 092 K9b); CS6 and CS7 bind theirs.
+
 These three were batch rows until 243's D7 review (093) found LaneOffsetAction's children
 refused; checking every row against SSv2's table then found all three unimplemented there. The
 check is now a rule: a batch or conditional row must be a construct SSv2 runs.

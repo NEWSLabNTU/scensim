@@ -316,14 +316,15 @@ def test_a_suites_sample_reads_the_projects_world_anchors(tmp_path):
         shutil.copy(cases / f, tmp_path)
     shutil.copytree(cases / "models", tmp_path / "models")
     (tmp_path / "testbench.yaml").write_text(
-        "simulator: carla\nworld:\n  anchors:\n    exit_n: {kind: lane, heading: 0.5}\n")
+        "simulator: carla\nworld:\n  anchors:\n    exit_n: {kind: lane, heading: 0.5, lanelet: 102}\n"
+        "    approach_n: {kind: lane, lanelet: 101}\n")
     anchors = run._world_anchors(tmp_path)
-    assert anchors == {"exit_n": {"kind": "lane", "heading": 0.5}}
+    assert anchors["exit_n"] == {"kind": "lane", "heading": 0.5, "lanelet": 102}
     drawn = sampled.draw([{"distribution": "cs7_cyclist_low_sun_dist.xosc", "n": 3, "seed": 2}],
                          lambda x: tmp_path / x, "suite", anchors=anchors)
     assert len(drawn) == 3
     for rec, _ in drawn:
-        assert rec["anchors"] == {"exit_n": {"heading": 0.5}}
+        assert rec["anchors"]["exit_n"] == {"heading": 0.5, "lanelet": 102.0}
     with pytest.raises(sampled.SampleRefused, match="anchor.exit_n.heading"):
         sampled.draw([{"distribution": "cs7_cyclist_low_sun_dist.xosc", "n": 1, "seed": 2}],
                      lambda x: tmp_path / x, "suite")
@@ -356,10 +357,14 @@ def test_a_maps_resolved_anchors_reach_the_sampler(tmp_path):
                                   "heading_s": [0.0, 30.0], "heading": [0.25, 0.25],
                                   "heading_max_error": 0.0}}}
     (md / A.RESOLVED).write_text(json.dumps(doc))
-    (tmp_path / "testbench.yaml").write_text("simulator: carla\n")
+    (tmp_path / "testbench.yaml").write_text(
+        "simulator: carla\nworld:\n  anchors:\n    approach_n: {kind: lane, lanelet: 101}\n")
+    # a resolved lane's LanePosition: the lanelet holding cyclist_s (092 K9b)
+    sc.write_text(sc.read_text().replace('value="exit_n.lanelet"',
+                                         'value="exit_n.lanelet_at($cyclist_s)"'))
     dist = tmp_path / "cs7_cyclist_low_sun_dist.xosc"
     got = run._anchors_for(tmp_path, dist)
-    assert got["exit_n"]["length"] == 30.0 and got["exit_n"]["source"]["map"] == "town_street"
+    assert got["exit_n"]["length"] == 30.0 and got["approach_n"]["lanelet"] == 101 and got["exit_n"]["source"]["map"] == "town_street"
     # CS7 reads the bare heading, a stated anchor's number; a resolved lane has heading(s)
     with pytest.raises(sampled.SampleRefused, match=r"anchor.exit_n.heading\(s\), not bare"):
         sampled.draw([{"distribution": dist.name, "n": 1, "seed": 2}], lambda x: tmp_path / x,
@@ -370,13 +375,14 @@ def test_a_maps_resolved_anchors_reach_the_sampler(tmp_path):
                          lambda x: tmp_path / x, "suite",
                          anchors=lambda d: run._anchors_for(tmp_path, d))
     for rec, _ in drawn:
-        assert "anchors" not in rec                      # no value of its own: its file
+        assert rec["anchors"] == {"approach_n": {"lanelet": 101.0}}   # the stated one
         assert rec["anchor_source"] == [got["exit_n"]["source"]]
         assert scensim_sampler.check(rec) == []
         assert abs(rec["values"]["sun_azimuth"] - (0.25 + rec["values"]["rel_azimuth"])) < 1e-9
     # a name in both
     (tmp_path / "testbench.yaml").write_text(
-        "simulator: carla\nworld:\n  anchors:\n    exit_n: {kind: lane, heading: 1.0}\n")
+        "simulator: carla\nworld:\n  anchors:\n    exit_n: {kind: lane, heading: 1.0}\n"
+        "    approach_n: {kind: lane, lanelet: 101}\n")
     with pytest.raises(A.AnchorError, match="exit_n: declared by the map"):
         run._anchors_for(tmp_path, dist)
     # resolved on another map's bytes
@@ -385,3 +391,96 @@ def test_a_maps_resolved_anchors_reach_the_sampler(tmp_path):
     with pytest.raises(sampled.SampleRefused, match="not the map in use"):
         sampled.draw([{"distribution": dist.name, "n": 1, "seed": 2}], lambda x: tmp_path / x,
                      "suite", anchors=lambda d: run._anchors_for(tmp_path, d))
+
+
+def _cs7_on_a_resolved_exit(tmp_path, length=30.0):
+    """CS7 in a project on map town_street, its exit lane resolved (two lanelets, 7 then 8),
+    bound by lane position: exit_lane = exit_n.lanelet_at($cyclist_s), exit_ls its local s."""
+    import shutil
+    from scensim_sampler import anchors as A
+    cases = Path(scensim_sampler.__file__).resolve().parents[1] / "examples" / "cases"
+    for f in ("cs7_cyclist_low_sun.xosc", "cs7_cyclist_low_sun_dist.xosc"):
+        shutil.copy(cases / f, tmp_path)
+    shutil.copytree(cases / "models", tmp_path / "models")
+    m = tmp_path / "models" / "cs7_cyclist.yaml"
+    m.write_text(m.read_text().replace("anchor.exit_n.heading", "anchor.exit_n.heading(cyclist_s)"))
+    sc = tmp_path / "cs7_cyclist_low_sun.xosc"
+    x = sc.read_text().replace('filepath="maps/town_street"',
+                               'filepath="$(env SCENSIM_MAPS)/town_street"')
+    x = x.replace('value="exit_n.lanelet"', 'value="exit_n.lanelet_at($cyclist_s)"')
+    x = x.replace('<Property name="scensim.anchor.exit_lane"',
+                  '<Property name="scensim.anchor.exit_ls" value="exit_n.local_s($cyclist_s)"/>'
+                  '\n      <Property name="scensim.anchor.exit_lane"')
+    x = x.replace('<ParameterDeclaration name="exit_lane" parameterType="string" value=""/>',
+                  '<ParameterDeclaration name="exit_lane" parameterType="string" value=""/>\n'
+                  '    <ParameterDeclaration name="exit_ls" parameterType="double" value="0"/>')
+    x = x.replace('s="$cyclist_s" offset="$kerb_offset"', 's="$exit_ls" offset="$kerb_offset"')
+    sc.write_text(x)
+    md = tmp_path / "assets" / "maps" / "town_street"
+    md.mkdir(parents=True)
+    (md / "lanelet2_map.osm").write_text("<osm/>")
+    half = length / 2
+    doc = {"format": A.FORMAT, "version": A.VERSION, "map": "town_street",
+           "map_sha256": A.map_digest(md), "heading_step": 0.5, "heading_max_error": 0.0,
+           "anchors": {"exit_n": {"kind": "lane", "lanelets": [
+               {"id": 7, "from_s": 0.0, "to_s": half}, {"id": 8, "from_s": half, "to_s": length}],
+               "length": length, "speed_limit": 13.9, "start_x": 0.0, "start_y": 0.0,
+               "end_x": 0.0, "end_y": length, "heading_s": [0.0, length],
+               "heading": [0.25, 0.25], "heading_max_error": 0.0}}}
+    (md / A.RESOLVED).write_text(json.dumps(doc))
+    (tmp_path / "testbench.yaml").write_text(
+        "simulator: carla\nworld:\n  anchors:\n    approach_n: {kind: lane, lanelet: 101}\n")
+    return sc
+
+
+def test_a_scenarios_anchor_bindings_are_set_before_ssv2_starts(tmp_path):
+    """092 K9b: scensim run sets a scenario's anchor-bound parameters from the world's anchors,
+    and result.json keeps them; a given value for one is refused."""
+    sc = _cs7_on_a_resolved_exit(tmp_path)
+    specs, _ = run.expand(sc, tmp_path, params={"cyclist_s": [20.0]})
+    (s,) = specs
+    assert (s.parameters["exit_lane"], s.parameters["exit_ls"]) == ("8", 5.0)
+    assert s.parameters["approach_lane"] == "101"
+    assert s.anchors["exit_lane"]["anchor"] == "exit_n.lanelet_at($cyclist_s)"
+    assert s.anchors["exit_lane"]["source"]["map"] == "town_street"
+    assert s.anchors["approach_lane"]["source"] is None             # a stated anchor
+    r = results.RunResult("x", "passed", anchors=s.anchors).to_dict()
+    assert results.problems(r) == []
+    assert results.problems(dict(r, anchors={"exit_lane": 8})) == [
+        "anchors: expected an object, {parameter: {value, anchor, source}}"]
+    with pytest.raises(run.Refused, match="exit_lane is bound to the world's anchor"):
+        run.expand(sc, tmp_path, params={"exit_lane": ["9"]})
+    with pytest.raises(run.Refused, match=r"cs7_cyclist_low_sun.xosc: scensim.anchor.exit_l\w+: "
+                                          r"anchor.exit_n: s 31.0 outside the lane"):
+        run.expand(sc, tmp_path, params={"cyclist_s": [31.0]})
+
+
+def test_a_record_off_its_lane_or_on_other_anchors_is_refused(tmp_path):
+    """092 K9b: a sample record's bound values are checked against the world before SSv2
+    starts, not replaced."""
+    sc = _cs7_on_a_resolved_exit(tmp_path)
+    dist = tmp_path / "cs7_cyclist_low_sun_dist.xosc"
+    drawn = sampled.draw([{"distribution": dist.name, "n": 3, "seed": 2}],
+                         lambda x: tmp_path / x, "suite",
+                         anchors=lambda d: run._anchors_for(tmp_path, d))
+    rec, scenario = drawn[0]
+    good = run.sample_spec(rec, scenario)
+    run.bind_anchors(good, tmp_path)
+    assert good.anchors["exit_ls"]["value"] == good.parameters["exit_ls"]
+    edited = json.loads(json.dumps(rec))
+    edited["values"]["exit_lane"] = "99"
+    with pytest.raises(run.Refused, match="the record's exit_lane is '99'"):
+        run.bind_anchors(run.sample_spec(edited, scenario), tmp_path)
+    off = json.loads(json.dumps(rec))
+    off["values"]["cyclist_s"] = 45.0
+    with pytest.raises(run.Refused, match="outside the lane"):
+        run.bind_anchors(run.sample_spec(off, scenario), tmp_path)
+    assert sc.is_file()
+
+
+def test_ssv2s_own_distribution_of_a_bound_scenario_is_refused(tmp_path):
+    _cs7_on_a_resolved_exit(tmp_path)
+    dist = tmp_path / "cs7_cyclist_low_sun_dist.xosc"
+    spec = run.RunSpec(dist, {}, distribution=True)
+    with pytest.raises(run.Refused, match="draw it with a suite's sample: instead"):
+        run.bind_anchors(spec, tmp_path)

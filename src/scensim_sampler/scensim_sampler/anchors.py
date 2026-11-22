@@ -11,11 +11,14 @@ Two sources, merged by name (a name in both is refused):
 
 An expression reads `anchor.<name>.<attribute>`; a resolved lane's heading is read at an arc
 position, `anchor.<name>.heading(s)`, interpolated from the file's table (its error at most the
-file's `heading_max_error`); a bare `heading` is only a stated anchor's number.
+file's `heading_max_error`); a bare `heading` is only a stated anchor's number. A lane position
+s along a resolved lane is a LanePosition through `anchor.<name>.lanelet_at(s)` (the lanelet
+holding it, the later one at a join) and `anchor.<name>.local_s(s)` (s in that lanelet).
 """
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 
 FORMAT = "scensim-anchors"
@@ -100,6 +103,31 @@ class Heading:
         return math.atan2(math.sin(self.h[lo] + f * d), math.cos(self.h[lo] + f * d))
 
 
+class Spans:
+    """A resolved lane's lanelets along it: which lanelet holds a lane position, and the
+    position in that lanelet's own frame (SSv2's LanePosition: s along one lanelet)."""
+
+    def __init__(self, name, spans, length):
+        self.name, self.spans, self.length = name, list(spans), float(length)
+
+    def _at(self, s):
+        s = float(s)
+        if not (-1e-9 <= s <= self.length + 1e-9):
+            raise AnchorError(f"anchor.{self.name}: s {s} outside the lane's "
+                              f"[0, {self.length:.3f}] m")
+        for sp in reversed(self.spans):      # the later lanelet at a join
+            if s >= sp["from_s"] - 1e-12:
+                return sp, s
+        return self.spans[0], s
+
+    def lanelet_at(self, s):
+        return int(self._at(s)[0]["id"])
+
+    def local_s(self, s):
+        sp, s = self._at(s)
+        return max(0.0, min(s - sp["from_s"], sp["to_s"] - sp["from_s"]))
+
+
 def env(anchors):
     """({"anchor.<name>.<attr>": number}, {"anchor.<name>.<attr>": callable}) for expressions:
     a stated anchor's numbers; a resolved lane's numbers, its start heading, and heading(s)."""
@@ -112,6 +140,9 @@ def env(anchors):
                 numbers[f"anchor.{name}.{k}"] = float(a[k])
             functions[f"anchor.{name}.heading"] = Heading(name, a["heading_s"], a["heading"],
                                                           a["length"])
+            spans = Spans(name, a["lanelets"], a["length"])
+            functions[f"anchor.{name}.lanelet_at"] = spans.lanelet_at
+            functions[f"anchor.{name}.local_s"] = spans.local_s
             continue
         for k, v in a.items():
             if k == "kind":
@@ -131,3 +162,62 @@ def sources(anchors, read):
         if src and src not in out:
             out.append(src)
     return out
+
+
+# --- binding a scenario parameter to an anchor (092 K9b) ------------------------------------
+#
+#   <Property name="scensim.anchor.<parameter>" value="<ref>.<attribute>"/>
+#   <Property name="scensim.anchor.<parameter>" value="<ref>.<function>(<arg>)"/>
+#
+# <ref> is an anchor's name, or $<parameter> naming one (a string parameter, so the sampler can
+# draw which); <arg> is a number or $<parameter>. Before SSv2 starts the parameter takes the
+# anchor's value: a LanePosition's laneId (`<lane>.lanelet_at(s)`), its s (`<lane>.local_s(s)`),
+# a heading, a length.
+
+BIND = "scensim.anchor."
+_BINDING = re.compile(r"^(\$?[A-Za-z_]\w*)\.([A-Za-z_]\w*)"
+                      r"(?:\(\s*(\$?[A-Za-z_]\w*|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*\))?$")
+
+
+def parse_binding(text, where="binding"):
+    """(ref, attribute, arg or None) of a binding's value; `ref` and `arg` keep their `$`."""
+    m = _BINDING.match((text or "").strip())
+    if not m:
+        raise AnchorError(f"{where}: {text!r}: an anchor binding is <anchor>.<attribute>, or "
+                          f"<anchor>.<function>(<number or $parameter>); <anchor> may be "
+                          f"$<parameter> naming one")
+    return m.group(1), m.group(2), m.group(3)
+
+
+def bind(text, values, numbers, functions, where="binding"):
+    """A binding's value, from a sample's (or a run's) parameter `values` and the world's
+    anchors (`env`'s two mappings). An s outside the lane raises AnchorError."""
+    ref, attr, arg = parse_binding(text, where)
+    name = ref
+    if ref.startswith("$"):
+        name = values.get(ref[1:])
+        if not isinstance(name, str) or not name:
+            raise AnchorError(f"{where}: {ref} names no anchor (its value is {name!r})")
+    dotted = f"anchor.{name}.{attr}"
+    if arg is None:
+        if dotted in numbers:
+            return numbers[dotted]
+        if dotted in functions:
+            raise AnchorError(f"{where}: {dotted} is read at a lane position, {dotted}(s)")
+        raise AnchorError(f"{where}: {dotted}: the world declares no such anchor attribute")
+    fn = functions.get(dotted)
+    if fn is None:
+        raise AnchorError(f"{where}: {dotted}(...): no such function of the world's anchors "
+                          f"(a resolved lane's heading, lanelet_at, local_s)")
+    if arg.startswith("$"):
+        v = values.get(arg[1:])
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            raise AnchorError(f"{where}: {arg} is not a number ({v!r})") from None
+    else:
+        v = float(arg)
+    try:
+        return fn(v)
+    except AnchorError as e:
+        raise AnchorError(f"{where}: {e}") from None

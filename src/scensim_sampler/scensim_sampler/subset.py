@@ -533,6 +533,14 @@ def _walk(el, where, v, in_init, entity):
             raise SubsetError(f"{v.path}: {tag} at {here} moves {', '.join(moved)}, which is "
                               f"{STATIC}: a static entity has no motion action (drop the action, "
                               f"or {STATIC})")
+    if tag == "LanePosition":
+        lane = (el.get("laneId") or "").strip()
+        if lane and not lane.startswith("$") and not re.fullmatch(r"[-+]?\d+", lane):
+            v.add(UNIMPLEMENTED, here, f"LanePosition laneId {lane!r}",
+                  "SSv2 reads a laneId as a lanelet's id, so a name runs nowhere",
+                  fix=f"bind it to the world's anchor: FileHeader Property "
+                      f"scensim.anchor.<parameter> = {lane}.lanelet_at(<s>) (or {lane}.lanelet, "
+                      f"a stated anchor's), and laneId=\"$<parameter>\" (092 K9b)")
     if init and tag == "ControllerAction":
         _init_controller(el, here, v, entity)
         return

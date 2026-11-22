@@ -287,8 +287,9 @@ world:
 
 `world.anchors` states the world's anchors that a scenario's derived values read, as
 `anchor.<name>.<attribute>` (scenario-description.md section 2a, gap 7): a lane's `heading`
-(rad, world frame), `length` and `speed_limit`, a point's `x` and `y`, numbers the project gives
-for the world it runs on. `testbench check` refuses another kind or attribute, and the sampler
+(rad, world frame), `length`, `speed_limit` and `lanelet` (its id in the map, which a
+scenario's LanePosition binds), a point's `x` and `y`, numbers the project gives for the world
+it runs on. `testbench check` refuses another kind or attribute, and the sampler
 refuses a distribution whose derived values read an anchor attribute the world does not
 declare. A sample record keeps the values it read (`anchors`).
 
@@ -296,7 +297,14 @@ A map's own anchors come with the map: `assets/maps/<map>/anchors.resolved.json`
 author makes from the map's `anchors.yaml` ([Maps and assets](../reference/maps-and-assets.md)).
 A distribution on that map reads them beside `world.anchors`, a name in both refused. A resolved
 lane's heading is read at an arc position, `anchor.<lane>.heading(s)`, and the record names the
-file it came from (`anchor_source`: the map, its digest, the file's digest). The published maps
+file it came from (`anchor_source`: the map, its digest, the file's digest).
+
+A scenario binds a parameter to an anchor in its FileHeader, `<Property
+name="scensim.anchor.<parameter>" value="exit_n.lanelet_at($cyclist_s)"/>` (or
+`exit_n.local_s($cyclist_s)`, `exit_n.lanelet` for a stated lane), and its LanePosition reads
+the parameter. `scensim run` sets it from the world before SSv2 starts, refuses an s off the
+lane, checks a sample record's value rather than replace it, and records each binding in
+`result.json`'s `anchors` (scenario-description.md section 3). The published maps
 dataset carries Town01's from its tag `v2026.11d`, which the repository's testbenches lock.
 
 ```yaml
@@ -624,7 +632,7 @@ window's (an upper bound on the run's); `tick_*` the same for the tick; `frame_w
 `frame_count`, `frames_over_budget`, `ticks_over_budget`. A run's last partial window is
 not logged, so a run under 200 frames has no frame metrics.
 
-`sample` and `replay` (above, "Sampled runs"), and `knobs` (above, `world.knobs`: per bound knob its `value`, the read-back `applied`, `ok`, and `ok` over all, `sent`, `notes`), were added to `swb.result/1` without a new version.
+`sample` and `replay` (above, "Sampled runs"), and `knobs` (above, `world.knobs`: per bound knob its `value`, the read-back `applied`, `ok`, and `ok` over all, `sent`, `notes`), and `anchors` (above: per bound parameter its `value`, `anchor` and resolved `source`) were added to `swb.result/1` without a new version.
 Only a sampled run or a replay has them, and the readers of results are scensim's own, changed
 with the validator in the same commit.
 
