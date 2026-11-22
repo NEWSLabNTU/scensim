@@ -53,8 +53,10 @@ def test_check_pins_ignores_a_hooks_git_environment(monkeypatch):
     monkeypatch.setenv("GIT_DIR", gd)
     monkeypatch.setenv("GIT_INDEX_FILE", gd + "/index")
     checked, bad = check_pins.check("ab7c7b82")
-    if any("not in its checkout" in b for b in bad):
-        pytest.skip("the component checkouts lack the commits")
+    if any("not in its checkout" in b or "not initialised" in b for b in bad):
+        # this repository's real tree: a checkout without the commits, or with a submodule
+        # not initialised (101), cannot replay the history (241)
+        pytest.skip("the component checkouts lack the commits, or are not all initialised")
     assert len(bad) == 4
     assert check_pins.check("494064bb")[1] == []
 
@@ -63,8 +65,10 @@ def test_check_pins_ignores_a_hooks_git_environment(monkeypatch):
 def test_it_would_have_refused_the_push_that_broke_main():
     import check_pins
     checked, bad = check_pins.check("ab7c7b82")
-    if any("not in its checkout" in b for b in bad):
-        pytest.skip("the component checkouts lack the commits")
+    if any("not in its checkout" in b or "not initialised" in b for b in bad):
+        # this repository's real tree: a checkout without the commits, or with a submodule
+        # not initialised (101), cannot replay the history (241)
+        pytest.skip("the component checkouts lack the commits, or are not all initialised")
     assert len(bad) == 4
     assert check_pins.check("494064bb")[1] == []
 
@@ -178,3 +182,29 @@ def test_the_installed_stub_runs_each_worktrees_hook_and_survives_a_removed_one(
     out = subprocess.run(["bash", str(wt / "scripts/install_hooks.sh")], capture_output=True,
                          text=True)
     assert "left alone" in out.stderr and stub.read_text() == "#!/bin/sh\nexit 0\n"
+
+
+def test_an_uninitialised_submodule_refuses_the_push_by_name(tmp_path):
+    """Issue 101: check_pins took its components from the checkouts that exist, so a worktree
+    with a submodule not initialised (scensim_carla_world, acb) passed with its deps/ pins
+    unread. It is refused now, by name."""
+    sup, wt, comp = _superproject(tmp_path)
+    other = tmp_path / "other"
+    other.mkdir()
+    _git("init", "-q", "-b", "main", cwd=other)
+    _git("config", "user.email", "t@example.invalid", cwd=other)
+    _git("config", "user.name", "t", cwd=other)
+    (other / "g").write_text("x\n")
+    _git("add", "g", cwd=other)
+    _git("commit", "-qm", "o", cwd=other)
+    _git("submodule", "add", "-q", str(other), "src/other", cwd=sup)
+    _git("commit", "-qm", "pin other", cwd=sup)
+    sha = _git("rev-parse", "main", cwd=sup)
+    _git("checkout", "-q", "--detach", sha, cwd=wt)
+    _git("submodule", "update", "-q", "--init", "src/component", cwd=wt)   # src/other left out
+    r = _push(wt, sha)
+    assert r.returncode == 1 and "src/other: not initialised" in r.stderr, r.stderr
+    assert "git submodule update --init --recursive`" in r.stderr     # the whole set at once
+    _git("submodule", "update", "-q", "--init", "src/other", cwd=wt)
+    r = _push(wt, sha)
+    assert r.returncode == 0, r.stderr

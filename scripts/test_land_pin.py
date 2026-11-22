@@ -595,3 +595,18 @@ def test_a_component_not_landing_has_its_deps_synced_before_the_gate(world, monk
     r = world.land("--onto", "feat", "A", a2)
     assert r.returncode == 0, r.stdout + r.stderr
     assert git(fdep, "rev-parse", "HEAD") == want
+
+
+def test_an_uninitialised_component_refuses_the_landing_by_name(world):
+    """Issue 101: the components were the initialised checkouts under src/, so one not checked
+    out was left out of the cascade and the pin check silently. They come from .gitmodules now,
+    and an uninitialised one is refused by name before anything changes."""
+    a2 = world.advance("A")
+    git(world.super, "submodule", "deinit", "-q", "-f", "src/E")
+    r = world.land("A", a2)
+    assert r.returncode == 2 and "src/E" in r.stderr and "not initialised" in r.stderr, \
+        r.stdout + r.stderr
+    assert world.remote_pin("A") == world.sha["A"]           # nothing pushed
+    git(world.super, "submodule", "update", "-q", "--init", "--recursive", "src/E")
+    r = world.land("A", a2)
+    assert r.returncode == 0, r.stdout + r.stderr
