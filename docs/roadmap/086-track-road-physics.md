@@ -8,7 +8,8 @@ approved by 133 the same day with its three decisions. C1 done 2026-11-20 (scens
 87e0ea1, pins f00f02a2). C2 done 2026-11-20 (scensim_world_protocol 2519aca, scensim_isaac_world
 51a95b4, pins 7aad5216). C3 done 2026-11-20 (scensim_isaac_world 98a5d8c, pins 4c67e51d); the
 courses' dataset revision prepared, not published. C4 landed 2026-11-20 (scensim_isaac_world
-6177ced, scensim 82787b91); its Town01 suite waits for 139. C5 next.
+6177ced, scensim 82787b91); its Town01 suite waits for 139. C5 started 2026-11-23 in four
+steps ("C5's steps" below); C5a done (scensim_isaac_world ea35f35).
 Issue 077's cause is confirmed (2026-11-20, 118): PhysX's raycast wheel query takes Town01's
 sharp curb face as the ground, and Town01 has no road layer. Its fix comes first, ahead of C5:
 recheck the sweep (066 R1's check, from C6). If the sweep no longer throws the car, aib switches
@@ -246,6 +247,40 @@ scensim_isaac_world 6177ced (pins cebb5557), scensim 82787b91; 056's steps 1-4.
 - Open: 056 step 5 and its acceptance, `isaac_soil`'s suite on Town01 one after another on one
   world server, on 139 (asked of 133); and 056's "one scenario setting a label class beside a
   road it leaves" has no Town01 scenario yet.
+
+### C5's steps (approved by 133, 2026-11-23)
+
+- **C5a, the road layer per station.** `road_detail.StationSection` interpolates a record's
+  section along the road: the bank, the crown line's offset, each side's crown, shoulder,
+  foreslope, ditch and backslope, and the lip. A constant, symmetric, level record stays
+  `road_detail.Section`. The layer no longer refuses a record it could not shape, nor takes a
+  record's first station's left side with a note. Done 2026-11-23 (scensim_isaac_world
+  ea35f35): 8 tests, the world server's 339 pass. Haruna's and Tsukuba's published records are
+  both level (C3's builder writes a level section with no lip), so they still reduce to one
+  `Section` and give the same road. A per-station corridor's tile takes 0.07 s against 0.043.
+- **C5b, the ribbon from the record.** The course meshes tilt each strip by bank and crown,
+  so PhysX's base road carries the cross slope, and the layer adds only what the mesh does
+  not. Check: Isaac's road height and cross slope against the record at every station (within
+  5 mm and 0.1 deg), and midway between stations against the layer's own interpolation, so the
+  mesh and the layer agree where the record says nothing. The nonzero-crown exit runs on a
+  synthetic fixture course built by the same pipeline from a fixture centreline: a stated
+  crown (2 to 3 %), a bank rising from 0 to 6 % through a bend, and a lip segment for C5c,
+  driven with haruna_down's controller and checks. Haruna's and Tsukuba's records stay level:
+  their only elevation source, GSI's 5 m DEM, cannot resolve either (one or two samples across
+  a 6.5 m carriageway, a vertical error of about 0.3 m against a crown's 6 cm or a hairpin's
+  0.4 m of superelevation). A record gains a crown or bank only from a source that resolves
+  it (a lidar point cloud, a survey), named in the record.
+- **C5c, the lip and the strips.** The lip as a step in the mesh at the carriageway's edge, and
+  the shoulder and run-off as surface zones from the record (C2's class table). Check: the lip
+  re-entry fixtures, 5, 10 and 15 cm at 90, 45 and 30 deg. Each case's expected outcome
+  (re-enters or held) is written into the fixture file from the record's rule before any run.
+- **C5d, Autoware's maps from the same meshes.** The point cloud and the lanelet heights are
+  regenerated from C5b's meshes, divided when large. Check: lanelet heights against the mesh
+  within 5 mm; NDT holds on haruna_down.
+
+C5's exit is 086's row. aib's slope matrix and haruna_down run against main's baseline on the
+same host and GPU, so "unchanged" is a paired comparison. Every Isaac run is on 118's GPU0;
+GPU1 stays with 094's training seeds.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
