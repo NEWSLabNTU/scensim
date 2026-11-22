@@ -13,7 +13,10 @@ An expression reads `anchor.<name>.<attribute>`; a resolved lane's heading is re
 position, `anchor.<name>.heading(s)`, interpolated from the file's table (its error at most the
 file's `heading_max_error`); a bare `heading` is only a stated anchor's number. A lane position
 s along a resolved lane is a LanePosition through `anchor.<name>.lanelet_at(s)` (the lanelet
-holding it, the later one at a join) and `anchor.<name>.local_s(s)` (s in that lanelet).
+holding it, the later one at a join) and `anchor.<name>.local_s(s)` (s in that lanelet). A
+resolved conflict's numbers are `s_<lane>` (where it lies along each of its two lanes), `x`,
+`y`, `angle` and `position_error`; a curve's `from_s`, `to_s`, `length`, `turn`, `min_radius`;
+a region's `area`, `x`, `y`, and `from_<lane>`, `to_<lane>` for each lane entering it once.
 """
 import hashlib
 import json
@@ -25,6 +28,7 @@ FORMAT = "scensim-anchors"
 VERSION = 1
 RESOLVED = "anchors.resolved.json"
 DIGEST_FILES = ("lanelet2_map.osm", "map_projector_info.yaml")   # scensim_batch.map_export's
+RESOLVED_KINDS = ("conflict", "curve", "region")
 LANE_NUMBERS = ("length", "speed_limit", "start_x", "start_y", "end_x", "end_y")
 
 
@@ -135,6 +139,11 @@ def env(anchors):
     for name, a in (anchors or {}).items():
         if not isinstance(a, dict):
             raise AnchorError(f"anchor {name}: {{attribute: value}}, not {a!r}")
+        if a.get("kind") in RESOLVED_KINDS:   # only a map's file has these: its numbers
+            for k, v in a.items():
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    numbers[f"anchor.{name}.{k}"] = float(v)
+            continue
         if "heading_s" in a:        # resolved
             for k in LANE_NUMBERS:
                 numbers[f"anchor.{name}.{k}"] = float(a[k])
@@ -175,8 +184,9 @@ def sources(anchors, read):
 # a heading, a length.
 
 BIND = "scensim.anchor."
+_NUMBER = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
 _BINDING = re.compile(r"^(\$?[A-Za-z_]\w*)\.([A-Za-z_]\w*)"
-                      r"(?:\(\s*(\$?[A-Za-z_]\w*|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*\))?$")
+                      r"(?:\(\s*(\$?[A-Za-z_]\w*|" + _NUMBER + r")\s*\))?$")
 
 
 def parse_binding(text, where="binding"):
