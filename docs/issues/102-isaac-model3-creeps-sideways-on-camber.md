@@ -1,6 +1,6 @@
 # 102: the Isaac Model 3, held still, creeps sideways on a 3 % camber
 
-**Status:** open (measured; fixed in issue 100's retune, step c). **Severity:** medium. **Found:**
+**Status:** open (fixed in issue 100 step 2: lateral sticky damping 3200, 0.13 cm in 60 s; landing). **Severity:** medium. **Found:**
 2026-11-22, scensim 241, writing issue 100's camber constraint.
 
 ## What happens
@@ -47,9 +47,19 @@ speed falls as 1/damping, consistent with N8's ratio of 1.5 cm/s at 20 against a
 creep at 200. It never reaches 0. This is a reading, not a proof: step c's retune measures
 the creep against the damping, which tests it.
 
+## Measured against the damping (issue 100 step 2)
+
+The viscous reading above does not hold: the creep falls faster than 1/damping, so the damping
+does more than balance the camber's pull at a speed. 60 s on the 3 % camber, at issue 100's new
+slip denominators:
+
+| lateral sticky damping | 50 | 200 | 800 | 3200 | 12800 |
+|---|---|---|---|---|---|
+| sideways in 60 s | 21.2 cm | 4.91 cm | 0.955 cm | 0.127 cm | 0.011 cm |
+
 ## Fix
 
-In issue 100's retune, step c (aib's sticky-tyre thresholds), aiming at N8's 0.1 cm in 60 s. If
-the damping alone cannot reach that without the car stiffening or chattering at rest, the
-write-up says so and what it reaches. The other candidates come after the damping: a static
-lateral friction at rest, or the hold brake's share at the front.
+Lateral sticky damping 3200, the smallest that meets about 0.1 cm in 60 s (N8's target). At
+3200 the turning starts from rest are unchanged (start_turn: 0.1 m in 0.95 s, radius 3.76 m)
+and the car does not chatter at rest (chatter_camber: sideways RMS 1e-5 mm/s). The spec's
+comment cites hold_camber now. It lands with issue 100 step 2.

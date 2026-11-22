@@ -1,7 +1,7 @@
 # 100: PhysX's slip denominators scale the full-size cars' slip at every speed
 
 **Status:** open (decided 2026-11-22: the Model 3 is changed and retuned now, the Mustang after;
-plan below, no values changed yet). **Severity:** medium. **Found:** 2026-11-22, scensim 118 (the
+the Model 3's values landing with step 2, below). **Severity:** medium. **Found:** 2026-11-22, scensim 118 (the
 RoboRacer's sweep); the full-size cars checked by 241.
 
 ## What happens
@@ -170,6 +170,38 @@ world server, agent and catalog name different specs. The outputs are:
 Landing goes through land_pin, dry run first: sim_vehicle_spec, sim_vehicle_ecu, aib and
 autoware_sim_vehicle, then scensim's pins and the references.
 
+**Step 2, the values (2026-11-22, approved by 133).** The sweep ran on the Isaac Model 3 (aib
+bf35c0b, GPU1 of 241, shared). Its grid was the longitudinal denominator (active = passive) in
+0.25, 0.5, 1 and 2 m/s against the lateral in 0.1, 0.25 and 0.5, plus the shipped values.
+
+| d long / lat | holds, rest, camber | start_flat | start_up | brake_10 / 20 / 100 | front true slip angle, 5 m/s circle | v / (v + d) at 5 m/s |
+|---|---|---|---|---|---|---|
+| shipped 4 / 1 | pass | 0.264 m | 3.73 m | 5.37 / 20.31 / 40.01 m | 0.572 deg | 0.56 |
+| 2 / any | pass | 0.296 | 3.56 | 5.39 / 20.45 / 40.43 | | 0.71 |
+| 1 / any | pass | 0.284 | 3.57 to 3.64 | 5.67 / 20.58 / 40.07 | | 0.83 |
+| 0.5 / any | pass | 0.006 to 0.011 | 3.15 to 3.60 | 5.60 / 20.54 / 40.33 | | 0.91 |
+| 0.25 / any | pass | about 0 | 1.15 to 2.58 | 5.66 / 20.90 / 40.05 | | 0.95 |
+
+Notes on the table:
+- The front true slip angle at the lateral denominator: 0.483 deg at 0.1, 0.498 at 0.25, 0.523
+  at 0.5.
+- The braking columns ran before step b: ABS's slip estimate still used the 4 m/s offset.
+- No denominator moved the holds (hold_flat 0, hold_down 0.0077 m), the rest drift (0) or the
+  camber creep (4.91 cm, issue 102).
+
+**Chosen: 1 m/s active and passive, 0.1 m/s lateral.** The plan's rule, the smallest values
+that meet the constraints, gives 0.25 and 0.1, since every point meets them. That rule is not
+followed, for two reasons:
+- below 1 m/s the flat creep start dies (0.0008 to 0.011 m against 0.26), and the uphill
+  start loses up to 70 %. Bringing them back needs the release torque retuned (issue 070),
+  with its own risk;
+- at 1 m/s the creep start stays as shipped (0.284 m), and the longitudinal slip already goes
+  from 0.56 to 0.83 of the true slip at 5 m/s, and from 0.71 to 0.91 at 10.
+The lateral 0.1 costs nothing measured. The same step sets the lateral sticky damping from 200
+to 3200, issue 102's fix: the camber creep falls from 4.91 to 0.13 cm in 60 s, the turning
+starts are unchanged, and there is no chatter. Retunes: ABS and TC, step b; the release torque
+stays unless step b moves the starts.
+
 **Follow-up: an Isaac physics hash.** physics_hash leaves out `isaac`, so the Isaac-side
 references are not keyed to the physics they were measured on:
 - aib.steptest;
@@ -183,6 +215,56 @@ has three parts:
 - those references write it into their results, so a comparison against a reference with
   another hash says so.
 physics_hash stays as it is, so the CARLA artefacts do not move for an Isaac-only change.
+
+**Step b, ABS and TC (2026-11-22, 241).** At the new denominators, with the brake module's
+estimate kept at 4 m/s, 13 ABS settings were run through brake_100, brake_10 and brake_20:
+
+| release / reapply | brake_100 | locked frames | brake_10 | brake_20 |
+|---|---|---|---|---|
+| shipped car | 39.91 m | 4 | 5.372 m (+3.7 % of mu g) | 20.31 m (-1.1 %) |
+| 0.25 / 0.15 on the new tyre | 39.86 m | 2 | 5.671 m (+9.5 %) | 20.58 m |
+| 0.2 / 0.05, chosen | 39.55 m | 2 | 5.391 m (+4.1 %) | 20.04 m (-2.4 %) |
+| 0.18 / 0.05 | 39.29 m | 1 | 5.398 m (+4.2 %) | 20.18 m |
+| 0.15 / 0.08 | 39.61 m | 0 | 5.444 m (+5.1 %) | 20.33 m |
+
+0.2 / 0.05 stops shorter than the shipped car from 100 km/h and 20 m/s, and from 10 m/s within
+0.4 points of it. TC stays as shipped (0.25 / 0.15): the launch takes 6.43 s against 6.44, and
+lower limits only slow it (0.12: 6.85 s). The run first found issue 103, a latch of TC at an
+estimate offset of 1 m/s, whose cause was aib's release torque.
+
+**The estimate's offset is the car's own.** sim_vehicle_ecu read it from
+`isaac.physx.min_active_slip_denominator`, the simulator's tyre. It is now the spec's
+`brakes.estimator.slip_offset`, 4.0 on the Model 3, 0.5 on the RoboRacer (its active denominator's, so
+unchanged).
+
+**The other cars stay as they were.** aib's PhysX defaults and sim_vehicle_ecu's ABS defaults
+follow the Model 3, as their tests require, so they move with it. The Mustang sets every one of
+these values in its own spec. The MuSHR Nano took the old defaults, so its spec now writes them:
+4, 4 and 1 m/s, damping 200, ABS 0.25 / 0.15, offset 4. The RoboRacer sets ABS itself, and its
+offset of 0.5 is the value its estimate took from its own 0.5 m/s active denominator (its lateral one is 0.05). Its TC defaults
+did not move. Tests: aib's OtherCarsUnchangedTest, and the RoboRacer's test_issue100.py. Every
+calibration and rig value is as before, and only spec_hash and isaac_physics_hash move.
+
+**The fingerprints.** `brakes.abs`, `brakes.estimator`, `brakes.esc`,
+`powertrain.traction_control` and `powertrain.regen_slip_control` are the onboard computer's,
+which CARLA never runs. The world server turns CARLA's ABS and TC off and reads none of them,
+acb reads none, and `carla_physics*.yaml` holds none. They were in physics_hash, so this ABS
+change asked for CARLA's pedal maps to be measured again. sim_vehicle_spec now leaves them out
+of physics_hash (`ONBOARD_COMPUTER`), and isaac_physics_hash has them. The definition change
+moves physics_hash once, unlike the table above, which held for `isaac` alone:
+
+| body | physics_hash |
+|---|---|
+| Model 3, carla-0.9.16 | 33635ad5 to 47a1043b |
+| Model 3, carla-1.0 | 6384e6a2 to 5af7c9f6 |
+| Mustang | 933597f5 to 87a96d29 |
+| MuSHR Nano | unchanged (none of those keys) |
+
+Every CARLA output regenerated identical but for its hash lines. sim_vehicle_spec's
+OnboardComputerTest asserts it on every car and body, so the pedal maps move to the new hash
+without a new measurement. Each one records the old hash in `physics_hash_moved`. Citations of
+the old values elsewhere are records of their time: roadmap 057, step 1's table, and the P4
+bench, which 139 moves.
 
 ## Not decided here
 

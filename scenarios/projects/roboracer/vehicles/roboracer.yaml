@@ -57,6 +57,9 @@ brakes:
   dead_time: 0.02              # s: a VESC brakes electrically, no hydraulics
   time_constant: 0.02
   abs: {enabled: false, slip_release: 0.25, slip_reapply: 0.15, release_rate: 8.0, apply_rate: 4.0, min_speed: 0.3}
+  # The brake module's slip estimate over |v| + this (m/s): its 0.5 m/s PhysX denominator's, which
+  # the estimate followed until it became its own key (scensim issue 100); unchanged
+  estimator: {slip_offset: 0.5}
 
 powertrain:
   model: ideal                 # until the user's component (091 step 2) models the VESC
