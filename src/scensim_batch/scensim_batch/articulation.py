@@ -93,8 +93,9 @@ def asset_name(doc, name):
     return m[name]
 
 
-def asset_usd(doc, root):
-    """The body's asset under `root` (094 P2), its bytes checked against body.asset.sha256."""
+def asset_usd(doc, root, check_mass=True):
+    """The body's asset under `root` (094 P2), its bytes checked against body.asset.sha256 and
+    (`check_mass`) its authored mass against the spec's."""
     import hashlib
     import os
     a = doc["asset"]
@@ -102,11 +103,13 @@ def asset_usd(doc, root):
     if not os.path.isfile(path):
         raise FileNotFoundError(f"{doc['name']}: its asset {a['usd']!r} is not under {root} "
                                 f"(source: {a['source']})")
-    h = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    with open(path, "rb") as f:
+        h = hashlib.sha256(f.read()).hexdigest()
     if h != a["sha256"]:
         raise ValueError(f"{doc['name']}: {path} has sha256 {h}, the spec names "
                          f"{a['sha256']}: not the asset the spec was measured from")
-    check_asset_mass(doc, path)
+    if check_mass:
+        check_asset_mass(doc, path)
     return path
 
 
