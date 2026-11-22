@@ -1,7 +1,6 @@
 """094 P2's start pool (scensim_batch.start_pool): real sample records, compiled to the ego's
 Init, taken one per reset, never one used before; a dry pool waits and counts it; a storyboard
 that reads a sampled parameter is refused."""
-import json
 import math
 import sys
 import unittest
@@ -74,12 +73,22 @@ class StartPoolTest(unittest.TestCase):
         self.assertEqual(len(p.records), 40)
 
     def test_a_storyboard_reading_a_sampled_parameter_is_refused(self):
-        dist = CASES / "cs6_cut_out_stopped_car_dist.xosc"
-        reads = SP.storyboard_parameters(CASES / "cs7_cyclist_low_sun.xosc")
-        if not reads:
-            self.skipTest("cs6s storyboard reads no parameter")
-        with self.assertRaisesRegex(SP.PoolError, "its storyboard reads"):
-            SP.StartPool(dist, StraightWorld(), seed=1, chunk=5, background=False)
+        """The drift episode with its time-up at $start_x: a sampled parameter the compiled
+        storyboard would hold per slot, so a pool that draws only Init again refuses it."""
+        import shutil
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            shutil.copytree(DRIFT.parent, d / "scenarios")
+            x = d / "scenarios" / "mushr_drift.xosc"
+            text = x.read_text()
+            self.assertIn('SimulationTimeCondition value="5"', text)
+            x.write_text(text.replace('SimulationTimeCondition value="5"',
+                                      'SimulationTimeCondition value="$start_x"'))
+            self.assertIn("start_x", SP.storyboard_parameters(x))
+            with self.assertRaisesRegex(SP.PoolError, "its storyboard reads start_x"):
+                SP.StartPool(d / "scenarios" / DRIFT.name, StraightWorld(), seed=1, chunk=5,
+                             background=False, catalogs=CATALOGS)
 
     def test_stocks_20_points_a_run_then_an_index_per_episode(self):
         from scensim_batch.tasks.drift_start import TRACK_LENGTH, reference_points
