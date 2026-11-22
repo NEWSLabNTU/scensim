@@ -237,6 +237,14 @@ What W10's first runs showed, on W23's stand-ins (p1, p2), and what changed beca
    regression at the new denominator (118's `isaac-ex/w23reg3`), sealed before any fit; its
    file's sha256 is `1f33818133e947aa22e428695a016fe31673f2a0c973a9b7b75ad070917ebb9f`, so the
    truth the recovery check reads can be checked against what was drawn.
+7. **The development set and the test.** p1 and p2 are the development set: the method was
+   tuned on them, and their truth is in the repository. p3 is the only held-out test. Changes
+   made after seeing a development result, with the date:
+   - 2026-11-22: M5 gives the sideslip at the reference. p1 at the new denominator showed the
+     stiffness pass, on the circles' radius and yaw rate alone, moving the rear stiffness from
+     the stage's 19.91 (truth 19.30) to 25.40: those see only the balance of the two axles'
+     stiffness. The sideslip is the rear's own slip. p1's run without it is kept beside the
+     rerun (`p1_before_sideslip`).
 
 The exit (133, 2026-11-20):
 - The fit recovers each deliberate perturbation within a stated tolerance: the tyre per axle,
