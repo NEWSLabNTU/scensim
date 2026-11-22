@@ -233,6 +233,10 @@ What W10's first runs showed, on W23's stand-ins (p1, p2), and what changed beca
    to be collected.
 5. Two Kit instances hung on GPU memory when 8 to 10 ran at once; each twin run now has a time
    limit and one retry.
+6. **p3, the blind check.** Drawn by `tools/draw_perturbation.py` on 2026-11-22 for W23's
+   regression at the new denominator (118's `isaac-ex/w23reg3`), sealed before any fit; its
+   file's sha256 is `1f33818133e947aa22e428695a016fe31673f2a0c973a9b7b75ad070917ebb9f`, so the
+   truth the recovery check reads can be checked against what was drawn.
 
 The exit (133, 2026-11-20):
 - The fit recovers each deliberate perturbation within a stated tolerance: the tyre per axle,
