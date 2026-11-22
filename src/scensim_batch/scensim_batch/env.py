@@ -175,10 +175,16 @@ class ScensimEnv(DirectRLEnv):
                 import importlib
                 mod, fn = sp["run_knobs"].split(":")
                 knobs = getattr(importlib.import_module(mod), fn)(seed)
+            sampler = None
+            if sp.get("records"):            # a fixed list, replayed in order (ReplaySampler)
+                from scensim_sampler.sampler import Sampler
+                from .start_pool import ReplaySampler
+                sampler = ReplaySampler(Sampler.from_file(sp["distribution"], knobs=knobs),
+                                        sp["records"])
             self.pool = StartPool(sp["distribution"], world, seed=seed,
                                   chunk=int(sp.get("chunk", 10000)), device=dev,
                                   provides=cfg.provides, knobs=knobs,
-                                  catalogs=cfg.catalogs)
+                                  catalogs=cfg.catalogs, sampler=sampler)
             n = cfg.scene.num_envs
             while len(self.pool.records) < n:
                 self.pool.refill()
@@ -192,7 +198,8 @@ class ScensimEnv(DirectRLEnv):
             import json
             run = {"run": {"seed": seed, "knobs": knobs,
                            "distribution": str(sp["distribution"]),
-                           "run_knobs": sp.get("run_knobs") or None}}
+                           "run_knobs": sp.get("run_knobs") or None,
+                           "replayed": len(sp["records"]) if sp.get("records") else None}}
             self.start_log.append(run)
             if self._start_log is not None:
                 self._start_log.write(json.dumps(run) + "\n")

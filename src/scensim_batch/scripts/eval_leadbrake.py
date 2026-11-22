@@ -25,6 +25,9 @@ ap.add_argument("--checkpoint", required=True)
 ap.add_argument("--conditions", type=int, default=256)
 ap.add_argument("--seed", type=int, default=20261122)
 ap.add_argument("--out", default="")
+ap.add_argument("--conditions-from", default="",
+                help="stock's evaluator's --samples-out file: its episodes, replayed in env order "
+                     "(their count is the conditions'), and each paired with stock's outcome")
 AppLauncher.add_app_launcher_args(ap)
 args = ap.parse_args()
 app = AppLauncher(args).app
@@ -49,9 +52,15 @@ def main():
     agent_cfg = load_cfg_from_registry(TASK, "rsl_rl_cfg_entry_point")
     agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, check_rsl_rl_version())
     n = args.conditions
+    stock_eps = None
+    if args.conditions_from:
+        _, doc = LB.records_from_samples(args.conditions_from)
+        stock_eps = doc["episodes"]
+        n = len(stock_eps)
     env_cfg = LeadBrakeEnvCfg(num_envs=n)
     env_cfg.seed = args.seed
     env_cfg.pool_seed = args.seed            # the conditions: the pool's first n records
+    env_cfg.conditions_from = args.conditions_from    # or stock's episodes, in its env order
     env_cfg.train_headway = "record"         # the evaluation is at h exactly, as stock's
     env_cfg.__post_init__()
     configure_seed(args.seed)
@@ -102,6 +111,19 @@ def main():
                                    round(max(c[k] for c in cond), 2)] for k in keys},
         "records": [r["id"] for r in recs],
     }
+    if stock_eps is not None:                # the same episodes: paired, one by one
+        for k, (c, e) in enumerate(zip(cond, stock_eps)):
+            if any(abs(c[key] - float(e[key])) > 1e-6 for key in LB.KEYS):
+                raise SystemExit(f"episode {k}: replayed {c}, stock's {e}")
+        st = [bool(e["success"]) for e in stock_eps]
+        ours = ok.tolist()
+        res["conditions_from"] = os.path.abspath(args.conditions_from)
+        res["paired"] = {
+            "both": sum(a and b for a, b in zip(ours, st)),
+            "ours_only": sum(a and not b for a, b in zip(ours, st)),
+            "stock_only": sum(b and not a for a, b in zip(ours, st)),
+            "neither": sum(not a and not b for a, b in zip(ours, st)),
+            "stock_successes": sum(st)}
     print(json.dumps({k: v for k, v in res.items() if k != "records"}), flush=True)
     if args.out:
         res["per_env"] = {"ok": ok.tolist(), "why": why, "end_gap": end_gap.tolist(),

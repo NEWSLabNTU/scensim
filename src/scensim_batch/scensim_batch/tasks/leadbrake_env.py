@@ -37,6 +37,9 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
     # its lead one policy step further on (v dt; Isaac Lab steps stock's lead command after its
     # resets), env.reset()'s at h exactly, as stock's evaluation. Named in P4's table.
     train_headway: str = "record"
+    # stock's evaluator's --samples-out file: its episodes replayed as the records, in env order
+    # (eval_leadbrake.py --conditions-from); none: the pool's draws
+    conditions_from: str = ""
 
     def __post_init__(self):
         super().__post_init__()
@@ -61,6 +64,10 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
                            "log": self.starts_log}
         if self.pool_seed >= 0:
             self.start_pool["seed"] = int(self.pool_seed)
+        if self.conditions_from:
+            recs, _ = LB.records_from_samples(self.conditions_from)
+            self.start_pool["records"] = recs
+            self.start_pool["chunk"] = len(recs)
         LB.check_trigger_geometry(scen / "leadbrake.xosc", LB.straight_world())
         if self.train_headway not in ("record", "stock"):
             raise ValueError(f"train_headway {self.train_headway!r}: record or stock")

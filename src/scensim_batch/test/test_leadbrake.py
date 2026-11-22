@@ -195,6 +195,51 @@ class Resets(unittest.TestCase):
             pool.write_init(c, [0, 1], pool.take(2))
 
 
+
+@unittest.skipIf(torch is None or not DIST.exists(), "no torch, or no leadbrake_rl project")
+class Replay(unittest.TestCase):
+    """Stock's evaluator's episodes (--samples-out) replayed as the pool's records."""
+
+    def test_a_stock_episode_is_the_record_the_model_derives(self):
+        from scensim_sampler.sampler import Sampler
+        recs = Sampler.from_file(DIST).draw(n=200, seed=5).records
+        for r in recs:
+            ep = LB.episode_from_record(r["values"])
+            got = LB.record_from_episode(ep)["values"]
+            for k, v in r["values"].items():
+                self.assertAlmostEqual(got[k], v, places=9, msg=k)
+            self.assertAlmostEqual(ep["headway"], r["latent"]["headway"], places=9)
+            self.assertAlmostEqual(ep["onset"], r["latent"]["onset"], places=9)
+
+    def test_the_pool_replays_the_file_in_order_then_round_again(self):
+        import json
+        import tempfile
+        eps = [{"lead_speed": 8.0 + k, "headway": 1.0 + 0.3 * k, "decel": 3.0 + 0.5 * k,
+                "onset": 40.0 + 10 * k, "success": k % 2 == 0, "end_reason": "time_out"}
+               for k in range(5)]
+        f = Path(tempfile.mkdtemp()) / "samples.json"
+        f.write_text(json.dumps({"seed": 1, "conditions": 5, "keys": list(LB.KEYS),
+                                 "episodes": eps}))
+        recs, _ = LB.records_from_samples(f)
+        from scensim_sampler.sampler import Sampler
+        world = LB.straight_world()
+        pool = SP.StartPool(DIST, world, seed=0, chunk=5, background=False, catalogs=CATALOGS,
+                            sampler=SP.ReplaySampler(Sampler.from_file(DIST), recs))
+        rows = pool.take(5)
+        for k, row in enumerate(rows):
+            got = LB.episode_from_record(pool.record(row)["values"])
+            for key in LB.KEYS:
+                self.assertAlmostEqual(got[key], eps[k][key], places=9)
+            self.assertEqual(pool.record(row)["stock"]["success"], eps[k]["success"])
+        more = pool.take(3)                    # a refill: the file again, its next round
+        self.assertEqual([pool.record(r)["id"] for r in more], [r["id"] for r in recs[:3]])
+        self.assertEqual(pool.record(more[0])["replay_round"], 1)
+        bad = Path(tempfile.mkdtemp()) / "bad.json"
+        bad.write_text(json.dumps({"keys": ["headway", "lead_speed"], "episodes": eps}))
+        with self.assertRaisesRegex(ValueError, "not stock's"):
+            LB.records_from_samples(bad)
+
+
 def stock_lead(rear0, v0, decel, onset, steps, dt):
     """Stock's lead (mdp.py LeadCommand._update_command), from its reset: per policy step, it
     brakes when its rear is at or past the onset, then steps its speed and its rear."""

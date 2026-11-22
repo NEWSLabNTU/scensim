@@ -47,6 +47,31 @@ def storyboard_parameters(scenario):
     return names
 
 
+class ReplaySampler:
+    """A fixed list of records, drawn in order (another tool's conditions, replayed: 094 P4's
+    stock evaluator's episodes): `draw(n)` gives the next n, round again from the first once
+    through (each round's records marked `replay_round`), so a pool's refills still have rows.
+    The scenario is the distribution's own sampler's."""
+
+    def __init__(self, sampler, records):
+        if not records:
+            raise PoolError("a replay of no records")
+        self.scenario = sampler.scenario
+        self._recs, self._next, self._round = [dict(r) for r in records], 0, 0
+
+    def draw(self, n, seed=None):
+        from types import SimpleNamespace
+        out = []
+        while len(out) < n:
+            r = dict(self._recs[self._next], replay_round=self._round)
+            out.append(r)
+            self._next += 1
+            if self._next == len(self._recs):
+                self._next, self._round = 0, self._round + 1
+        return SimpleNamespace(records=out, rejected=0, rejected_why={},
+                               summary=lambda: f"replayed {len(out)}")
+
+
 class StartPool:
     """Sample records of one distribution, compiled to the ego's Init, taken one per reset."""
 

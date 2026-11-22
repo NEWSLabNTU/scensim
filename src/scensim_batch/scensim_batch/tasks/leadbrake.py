@@ -48,6 +48,34 @@ def episode_from_record(values):
             "onset": float(values["onset_d"]) - BEHIND - EGO_S - REAR}
 
 
+KEYS = ("lead_speed", "headway", "decel", "onset")      # stock's samples, its order
+
+
+def record_from_episode(ep, k=0):
+    """A start-pool record of one of stock's episodes (its four samples): the values the
+    distribution's model derives from them (models/leadbrake_episode.yaml), the latents named,
+    an id of its values. The inverse of episode_from_record."""
+    import hashlib
+    import json
+    v, h, d, on = (float(ep[k_]) for k_ in KEYS)
+    values = {"lead_speed": v, "decel": d, "ego_speed": v,
+              "lead_s": EGO_S + h * v + FRONT + REAR, "onset_d": BEHIND + EGO_S + on + REAR}
+    rid = hashlib.sha256(json.dumps([k, values], sort_keys=True).encode()).hexdigest()
+    return {"record": k + 1, "id": rid, "values": values, "latent": {"headway": h, "onset": on},
+            "derived": ["ego_speed", "lead_s", "onset_d"], "replayed": "stock evaluator",
+            "stock": {x: ep[x] for x in ("success", "end_reason") if x in ep}}
+
+
+def records_from_samples(path):
+    """Stock's evaluator's --samples-out file (WheeledLab isaaclab-3.0 9810846: its episodes in
+    env order) as start-pool records, in that order."""
+    import json
+    doc = json.loads(Path(path).read_text())
+    if list(doc.get("keys", [])) != list(KEYS):
+        raise ValueError(f"{path}: keys {doc.get('keys')}, not stock's {list(KEYS)}")
+    return [record_from_episode(ep, k) for k, ep in enumerate(doc["episodes"])], doc
+
+
 # --- the task, through K2's environment ---------------------------------------------------------
 # Isaac Lab is imported by the environment's module; this file's constants and world serve the
 # tests without it (test_leadbrake)
