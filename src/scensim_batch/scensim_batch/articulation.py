@@ -56,6 +56,21 @@ def load_body(path):
     return doc
 
 
+def with_component_drives(doc):
+    """The body as a control component drives it: each spin joint's `component_drive`
+    (sim_vehicle_spec's articulation.component_spin_drive: the effort drive the component's
+    torque goes through, where `drive` models the motor itself) in place of its drive. A body
+    without one is returned unchanged (094 P2's row a)."""
+    import copy
+    if not any("component_drive" in j for j in doc["joints"].values()):
+        return doc
+    out = copy.deepcopy(doc)
+    for j in out["joints"].values():
+        if "component_drive" in j:
+            j["drive"] = j.pop("component_drive")
+    return out
+
+
 def check_body(doc, where="body file"):
     for k in ("name", "spec_hash", "physics_hash", "links", "joints", "actuation"):
         if k not in doc:

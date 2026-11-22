@@ -36,6 +36,20 @@ class ModelTest(unittest.TestCase):
         self.doc = body()
         self.m = art.ArticulationModel(self.doc, 3)
 
+    def test_a_component_drives_through_the_component_drive(self):
+        """094 P2's row (a): with a control component, the MuSHR's driven spin joints take its
+        component_drive (an effort drive), so the model takes torques; a body without one is
+        unchanged."""
+        mushr = SPEC / "mushr_nano" / "articulation.yaml"
+        doc = art.load_body(mushr)
+        self.assertEqual(art.ArticulationModel(doc, 2).spin_type, "dc_motor")
+        driven = art.with_component_drives(doc)
+        self.assertEqual(driven["joints"]["rear_left_spin"]["drive"]["type"], "effort")
+        self.assertNotIn("component_drive", driven["joints"]["rear_left_spin"])
+        self.assertEqual(art.ArticulationModel(driven, 2).spin_type, "effort")
+        self.assertIn("component_drive", doc["joints"]["rear_left_spin"])    # not changed
+        self.assertIs(art.with_component_drives(self.doc), self.doc)
+
     def test_not_a_body_file_refused(self):
         with self.assertRaisesRegex(ValueError, "not a sim_vehicle_spec articulation"):
             art.check_body({"name": "x"})
