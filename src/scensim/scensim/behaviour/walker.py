@@ -10,6 +10,15 @@ logit are taken once per walker at reset, on the host (`random.Random(seed)`, `m
 the per-step path is only + - * /, comparisons and where. That path is one code over
 sim_vehicle_ecu.xp, and its numpy and torch forms agree bit for bit.
 
+Before it decides, a walker may be out of sight (CS1's walker behind the van). With
+`start_gap`, it waits there until the ego's time to the conflict point falls to `start_gap`
+(CS1's start trigger, `ttc_entry`, as a parameter the sampler binds). It then walks `approach`
+metres toward the kerb edge at its speed, and decides where it can still stop at the kerb,
+speed^2 / (2 accel_limit) before it (a walker judges the gap on the way). The decision then sees
+the gap at that point, not at the start. Without `start_gap`, it starts walking (or, with no `approach`,
+decides) at the first step. Positions along the crossing are measured from the kerb edge, so
+the hidden spot is at -approach.
+
 A walker that rejects waits until the ego has passed the conflict point, then crosses, since
 no other vehicle offers a gap in CS1. Its styles:
 - `steady` crosses at its speed;
@@ -31,10 +40,12 @@ step (an int per slot, `EVENTS`).
 import math
 import random
 
-EVENTS = {0: "none", 1: "go", 2: "reject", 3: "go_after", 4: "hesitate", 5: "resume", 6: "done"}
-GO, REJECT, GO_AFTER, HESITATE, RESUME, DONE = 1, 2, 3, 4, 5, 6
+# one event per slot and step; reaching the kerb is the decision's step, so it has none of its own
+EVENTS = {0: "none", 1: "go", 2: "reject", 3: "go_after", 4: "hesitate", 5: "resume", 6: "done",
+          7: "appear"}
+GO, REJECT, GO_AFTER, HESITATE, RESUME, DONE, APPEAR = 1, 2, 3, 4, 5, 6, 7
 # phases
-UNDECIDED, WAITING, CROSSING, HELD, CROSSED = 0, 1, 2, 3, 4
+UNDECIDED, WAITING, CROSSING, HELD, CROSSED, HIDDEN, APPROACH = 0, 1, 2, 3, 4, 5, 6
 STYLES = ("steady", "run", "hesitate")
 EPS_VV = 1e-6           # (m/s)^2: below it the ego is at rest and offers no gap
 
@@ -53,6 +64,10 @@ PARAMS = {
     "hesitate_at":   (float, 0.5, (0.0, 10.0), "ours: m along the crossing where hesitate re-checks"),
     "abort_gap":     (float, 1.5, (0.0, 10.0), "ours: s; a closer ego there holds the walker"),
     "accel_limit":   (float, 1.5, (0.1, 10.0), "ours: m/s^2, the world's limit on the command"),
+    "start_gap":     (float, None, (0.0, 30.0), "the scenario's: s; hidden until the ego is this "
+                                                "close in time (CS1's ttc_entry)"),
+    "approach":      (float, 0.0, (0.0, 20.0), "the scenario's: m walked to the kerb before "
+                                               "deciding"),
 }
 
 
@@ -116,6 +131,10 @@ class GapAcceptanceWalker:
         self.hesitate_at, self.abort_gap = col("hesitate_at"), col("abort_gap")
         self.accel_limit = col("accel_limit")
         self.hesitates = xp.asarray([p["style"] == "hesitate" for p in self.params], xp.bool)
+        self.start_gap = col("start_gap")
+        self.walk_speed = col("walk_speed")
+        self.decide_at = col("decide_at")
+        self.phase0 = xp.asarray([h["phase0"] for h in self._host], xp.int64)
         self.threshold = xp.zeros(n)          # logit(u), per episode
         self.phase = xp.zeros(n, xp.int64)
         self.wait_t = xp.zeros(n)
@@ -145,7 +164,12 @@ class GapAcceptanceWalker:
                     cross_speed=p["speed"] * factor, base=base, c_gap=b["GAP"],
                     c_time=b["TIME"], c_yield=b["YIELD"], yd2=p["yield_decel"] ** 2,
                     hesitate_at=p["hesitate_at"], abort_gap=p["abort_gap"],
-                    accel_limit=p["accel_limit"], rate=rate)
+                    accel_limit=p["accel_limit"], rate=rate,
+                    start_gap=-1.0 if p["start_gap"] is None else p["start_gap"],
+                    walk_speed=p["speed"],
+                    decide_at=-(p["speed"] ** 2) / (2.0 * p["accel_limit"]),
+                    phase0=(HIDDEN if p["start_gap"] is not None
+                            else APPROACH if p["approach"] > 0.0 else UNDECIDED))
 
     @staticmethod
     def draw(seed: int) -> float:
@@ -170,7 +194,7 @@ class GapAcceptanceWalker:
             th[i] = self.draw(self.seeds[i])
         self.threshold = xp.asarray(th, xp.float64)
         m = xp.ones(n, xp.bool) if mask is None else xp.asarray(mask, xp.bool)
-        self.phase = xp.where(m, xp.zeros(n, xp.int64), self.phase)
+        self.phase = xp.where(m, self.phase0, self.phase)
         self.wait_t = xp.where(m, xp.zeros(n), self.wait_t)
         self.rechecked = self.rechecked & ~m
         self.decision_gap = xp.where(m, xp.full(n, xp.nan), self.decision_gap)
@@ -195,6 +219,13 @@ class GapAcceptanceWalker:
         accept = (~approaching) | (u > self.threshold)
         ev = xp.zeros(n, xp.int64)
         ph = self.phase
+
+        # out of sight until the ego is start_gap away in time, then walking to the kerb
+        appear = valid & (ph == HIDDEN) & approaching & (gap <= self.start_gap)
+        ev = xp.where(appear, xp.full(n, APPEAR, xp.int64), ev)
+        ph = xp.where(appear, xp.full(n, APPROACH, xp.int64), ph)
+        kerb = valid & (ph == APPROACH) & (s >= self.decide_at)
+        ph = xp.where(kerb, xp.full(n, UNDECIDED, xp.int64), ph)
 
         decide = valid & (ph == UNDECIDED)
         self.decision_gap = xp.where(decide & approaching, gap, self.decision_gap)
@@ -228,6 +259,7 @@ class GapAcceptanceWalker:
         self.wait_t = xp.where(waiting, self.wait_t + dt, self.wait_t)
         self.phase = ph
         speed = xp.where(ph == CROSSING, self.cross_speed, xp.zeros(n))
+        speed = xp.where(ph == APPROACH, self.walk_speed, speed)
         return {"speed": speed, "heading": self.heading, "accel_limit": self.accel_limit}, ev
 
     def record(self) -> list:

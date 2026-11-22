@@ -26,7 +26,8 @@ def episode(xp, params, seeds, ego_speed, ego_decel_at=None, steps=400, dt=0.05)
     ex = xp.asarray([0.0] * n)
     ey = xp.full(n, 1.75)
     v = xp.asarray(ego_speed, xp.float64)
-    wx, wy = xp.full(n, 30.0), xp.full(n, -1.75)
+    wx = xp.full(n, 30.0)
+    wy = xp.asarray([-1.75 - p.get("approach", 0.0) for p in params])   # hidden behind the kerb
     ws = xp.zeros(n)
     trace = []
     for k in range(steps):
@@ -49,8 +50,12 @@ def episode(xp, params, seeds, ego_speed, ego_decel_at=None, steps=400, dt=0.05)
 
 def params_mix(n, rng):
     styles = w.STYLES
-    return [{"speed": rng.uniform(0.9, 2.2), "style": styles[i % 3], "group": rng.random() < 0.3,
-             "lane": 1 + i % 2, "conflict_rate": rng.uniform(0.1, 1.0)} for i in range(n)]
+    out = [{"speed": rng.uniform(0.9, 2.2), "style": styles[i % 3], "group": rng.random() < 0.3,
+            "lane": 1 + i % 2, "conflict_rate": rng.uniform(0.1, 1.0)} for i in range(n)]
+    for i in range(3, n, 4):       # every fourth hidden until a start gap (CS1)
+        out[i]["start_gap"] = rng.uniform(1.0, 3.0)
+        out[i]["approach"] = rng.uniform(0.5, 2.0)
+    return out
 
 
 def test_parameter_set_is_the_papers():
@@ -187,7 +192,7 @@ def test_numpy_and_torch_agree_bit_for_bit():
             assert x.tobytes() == y.tobytes(), f"step {k}, output {j}"
     # every behaviour happened somewhere, so the agreement is not vacuous
     seen = {int(e) for t in out["numpy"] for e in t[1]}
-    assert {w.GO, w.REJECT, w.GO_AFTER, w.HESITATE, w.RESUME, w.DONE} <= seen
+    assert {w.GO, w.REJECT, w.GO_AFTER, w.HESITATE, w.RESUME, w.DONE, w.APPEAR} <= seen
     del torch
 
 
@@ -243,3 +248,32 @@ def test_usable_torch_never_imports_after_a_failed_probe(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", guard)
     with pytest.raises(pytest.skip.Exception, match="_ARRAY_API"):
         usable_torch()
+
+
+def test_a_hidden_walker_appears_at_its_start_gap_and_decides_at_the_kerb():
+    """CS1: behind the van until the ego is start_gap away in time, then `approach` metres to
+    the kerb at its speed, and the decision there sees the gap as it is then."""
+    xp = xpmod.namespace("numpy")
+    v, dt, approach, start_gap, speed = 10.0, 0.05, 1.4, 2.5, 1.4
+    p = {"speed": speed, "start_gap": start_gap, "approach": approach}
+    m = w.GapAcceptanceWalker([p], [3], [anchors()], xp)
+    assert int(m.phase[0]) == w.HIDDEN
+    ex, wy, ws, events = 0.0, -1.75 - approach, 0.0, []
+    for k in range(200):
+        obs = {"x": xp.asarray([30.0]), "y": xp.asarray([wy]), "ego_x": xp.asarray([ex]),
+               "ego_y": xp.asarray([1.75]), "ego_vx": xp.asarray([v]), "ego_vy": xp.zeros(1),
+               "ego_ax": xp.zeros(1), "ego_ay": xp.zeros(1), "valid": xp.ones(1, xp.bool)}
+        act, ev = m.step(obs, dt)
+        events.append((k, int(ev[0])))
+        ws = float(act["speed"][0])        # an ideal world: the command at once
+        wy += ws * dt
+        ex += v * dt
+    seq = [e for _, e in events if e]
+    assert seq[0] == w.APPEAR and seq[1] in (w.GO, w.REJECT)   # the decision at the kerb
+    k_appear = next(k for k, e in events if e == w.APPEAR)
+    assert (30.0 - k_appear * dt * v) / v == pytest.approx(start_gap, abs=v * dt / v)
+    # it decides where it can still stop at the kerb, speed^2 / (2 accel_limit) = 0.65 m before
+    # it: the ego is closer by the walk to there, (1.4 - 0.65) m at 1.4 m/s
+    stop = speed ** 2 / (2 * 1.5)
+    assert float(m.decision_gap[0]) == pytest.approx(start_gap - (approach - stop) / speed,
+                                                     abs=0.11)

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- CS1 of docs/design/scenario-description.md with its walker as a behaviour model (092 K10): the walker waits behind a parked
+     van until the ego's time to the crossing falls to ttc_entry (the model's start_gap), walks to the kerb, and there takes or
+     rejects the gap it is offered (scensim.behaviour:gap_acceptance_walker, parameter set khaki2021_restricted). The model alone
+     moves the walker: no storyboard action names it. Values invented; an example, not a tuned scenario. -->
+<OpenSCENARIO>
+  <FileHeader revMajor="1" revMinor="3" date="2026-11-22T00:00:00" author="scensim"
+              description="a walker behind a parked van takes or rejects the ego's gap"/>
+  <ParameterDeclarations>
+    <ParameterDeclaration name="ego_speed" parameterType="double" value="8.3"/>
+    <ParameterDeclaration name="walk_speed" parameterType="double" value="1.4"/>
+    <ParameterDeclaration name="ttc_entry" parameterType="double" value="3.0"/>
+    <ParameterDeclaration name="behaviour" parameterType="string" value="steady"/>
+  </ParameterDeclarations>
+  <CatalogLocations/>
+  <RoadNetwork><LogicFile filepath="maps/town_street"/></RoadNetwork>
+  <Entities>
+    <ScenarioObject name="ego">
+      <Vehicle name="car" vehicleCategory="car"><BoundingBox><Center x="1.4" y="0" z="0.8"/><Dimensions length="4.7" width="1.9" height="1.5"/></BoundingBox><Properties/></Vehicle>
+      <ObjectController><Controller name="ego"><Properties>
+        <Property name="isEgo" value="true"/></Properties></Controller></ObjectController>
+    </ScenarioObject>
+    <ScenarioObject name="van">
+      <MiscObject name="van" miscObjectCategory="obstacle" mass="2000"><BoundingBox><Center x="0" y="0" z="1.1"/><Dimensions length="5.2" width="2.0" height="2.2"/></BoundingBox><Properties/></MiscObject>
+    </ScenarioObject>
+    <ScenarioObject name="walker">
+      <Pedestrian name="walker" pedestrianCategory="pedestrian" mass="60"><BoundingBox><Center x="0" y="0" z="0.9"/><Dimensions length="0.4" width="0.5" height="1.8"/></BoundingBox><Properties/></Pedestrian>
+      <ObjectController><Controller name="walker_model"><Properties>
+        <Property name="model" value="scensim.behaviour:gap_acceptance_walker"/>
+        <Property name="speed" value="$walk_speed"/>
+        <Property name="style" value="$behaviour"/>
+        <Property name="start_gap" value="$ttc_entry"/>
+        <Property name="approach" value="1.5"/>
+        <Property name="anchor.crossing" value="7.0"/>
+      </Properties></Controller></ObjectController>
+    </ScenarioObject>
+  </Entities>
+  <Storyboard>
+    <Init><Actions>
+      <Private entityRef="ego"><PrivateAction><TeleportAction><Position>
+        <LanePosition roadId="" laneId="34513" s="5" offset="0"/></Position></TeleportAction></PrivateAction>
+        <PrivateAction><LongitudinalAction><SpeedAction>
+          <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
+          <SpeedActionTarget><AbsoluteTargetSpeed value="$ego_speed"/></SpeedActionTarget>
+        </SpeedAction></LongitudinalAction></PrivateAction></Private>
+      <Private entityRef="van"><PrivateAction><TeleportAction><Position>
+        <LanePosition roadId="" laneId="34513" s="44" offset="-2.6"/></Position></TeleportAction></PrivateAction></Private>
+      <Private entityRef="walker"><PrivateAction><TeleportAction><Position>
+        <LanePosition roadId="" laneId="34513" s="47" offset="-3.25">
+          <Orientation type="relative" h="1.5707963267948966"/></LanePosition>
+      </Position></TeleportAction></PrivateAction></Private>
+    </Actions></Init>
+    <Story name="main"><Act name="act">
+      <ManeuverGroup name="none" maximumExecutionCount="1">
+        <Actors selectTriggeringEntities="false"/>
+      </ManeuverGroup>
+      <StartTrigger><ConditionGroup><Condition name="t0" delay="0" conditionEdge="none">
+        <ByValueCondition><SimulationTimeCondition value="0" rule="greaterThan"/></ByValueCondition>
+      </Condition></ConditionGroup></StartTrigger>
+    </Act></Story>
+    <StopTrigger><ConditionGroup><Condition name="end" delay="0" conditionEdge="none">
+      <ByValueCondition><SimulationTimeCondition value="20" rule="greaterThan"/></ByValueCondition>
+    </Condition></ConditionGroup></StopTrigger>
+  </Storyboard>
+</OpenSCENARIO>

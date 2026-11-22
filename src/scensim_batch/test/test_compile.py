@@ -62,10 +62,12 @@ class Compile(unittest.TestCase):
         with self.assertRaisesRegex(self.C.CompileError, "refused: TimeToCollisionCondition"):
             self.C.compile_scenario(CASES / "cs1_walker_dartout_ttc.xosc", [rec()],
                                     StraightWorld())
-        with self.assertRaisesRegex(self.C.CompileError, "behaviour model"):
-            self.C.compile_scenario(CASES / "cs1_walker_dartout.xosc", [rec()], StraightWorld(),
-                                    provides=("behaviour model scensim.behaviour:"
-                                              "gap_acceptance_walker",))
+        # the walker is a model entity (092 K10): only its model moves it, so the description
+        # example's storyboard SpeedAction on it is refused, by name (the batch example,
+        # cs1_walker_gap_acceptance.xosc, leaves the walker to its model: test_models.py)
+        with self.assertRaisesRegex(self.C.CompileError, "SpeedAction on 'walker', a model "
+                                                         "entity"):
+            self.C.compile_scenario(CASES / "cs1_walker_dartout.xosc", [rec()], StraightWorld())
 
     def test_relative_positions_follow_their_reference_per_slot(self):
         xosc = """<?xml version="1.0"?><OpenSCENARIO>

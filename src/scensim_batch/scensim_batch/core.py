@@ -17,6 +17,8 @@ kinematic stand-in in tests. Its contract:
 The component is a vectorised batch (`sim_vehicle_ecu.batch.load_batch`, then
 `require_vectorised`): a LoopBatch is refused here, for an executor that needs throughput.
 """
+import math
+
 import numpy as np
 import torch
 
@@ -130,6 +132,7 @@ class BatchRun:
         self.defaults = compiled.of_role("default")
         self.props = compiled.of_role("prop")
         self.route_length, self.points = route_length, points
+        self.models = Models(self, compiled.of_role("model"))
         self.speed_limit = speed_limit
         self.vehicles = None
         self.first = None
@@ -201,6 +204,7 @@ class BatchRun:
         self.ctx.t = torch.where(mask, torch.zeros_like(self.ctx.t), self.ctx.t)
         self.ctx.standstill = torch.where(mask[:, None], torch.zeros_like(self.ctx.standstill),
                                           self.ctx.standstill)
+        self.models.reset(mask)
         if self.storyboard is not None:
             self.storyboard.reset(mask)
         # No storyboard evaluation here: SSv2's first is a step after startNpcLogic (its tick
@@ -371,7 +375,9 @@ class BatchRun:
         self._set_lazy()
         before = self.seen_before
         self.seen_before = self.seen
-        self.obs = self._observe(self.backend.state(), dt, npc_ego=before)
+        st = self.backend.state()
+        self.models.step(st, dt)     # behaviour models, on this step's ego (092 K10)
+        self.obs = self._observe(st, dt, npc_ego=before)
         self.seen = self._ego_view(self.obs)
         view = self._as_ssv2_sees(self.obs, before)
         self._post_update()
@@ -478,8 +484,134 @@ class BatchRun:
                             else self.vehicles.poses())
             d = self._others[4]
             x[:, d], y[:, d], yaw[:, d], v[:, d] = nx, ny, nyaw, self.vehicles.v
-        return {"x": x, "y": y, "yaw": yaw, "v": v, "ego": st}
+        out = {"x": x, "y": y, "yaw": yaw, "v": v, "ego": st}
+        self.models.place(out)
+        return out
 
+
+
+class Models:
+    """The batch's behaviour-model entities (092 K10): one model per entity, its slots on the
+    run's device (array_api "torch"). Each step after the ego's physics, a model reads that
+    step's ego truth and its own pose, and its command (speed, heading, an acceleration
+    limit) moves its entity kinematically: speed toward the command within the limit, then
+    along the heading. Seats run the same model on numpy as a K4 attachment, through K12's
+    entity_command, so the two forms differ only in how the world integrates the command and
+    in the seats' latency (the agreement check measures both).
+
+    The crossing's anchors come from the model's `anchor.*` properties and its Init pose:
+    `kerb` is `anchor.approach` metres ahead along its heading (default the model's
+    `approach`, else 0); `far` is `anchor.crossing` metres further (default 7 m); `conflict`
+    is where that line meets the ego's route (its first crossing), or the line's middle if the
+    route does not meet it."""
+
+    def __init__(self, run, indices):
+        self.run, self.idx = run, list(indices)
+        self.models, self.events = [], {}
+        if not self.idx:
+            return
+        from scensim import behaviour
+        from sim_vehicle_ecu import xp as xpmod
+        c = run.c
+        self.xp = xpmod.namespace("torch", None if run.device is None else str(run.device))
+        self.cls = behaviour.MODELS
+        n = c.n
+        z = torch.zeros(n, len(self.idx), dtype=torch.float64)
+        self.x, self.y, self.yaw, self.v = z.clone(), z.clone(), z.clone(), z.clone()
+        self._prev_v = None
+        self.anchors = [self._anchors(j, i) for j, i in enumerate(self.idx)]
+
+    def _anchors(self, j, i):
+        """Per slot, entity i's crossing in the map frame."""
+        c, run = self.run.c, self.run
+        e = c.entities[i]
+        ego = run.ego
+        route = run.world.route(c.x[:, ego:ego + 1].cpu(), c.y[:, ego:ego + 1].cpu(),
+                                c.yaw[:, ego:ego + 1].cpu(), run.route_length, run.points)
+        out = []
+        for k in range(c.n):
+            p, a = e.model["params"][k], e.model["anchors"][k]
+            x0, y0, h = float(c.x[k, i]), float(c.y[k, i]), float(c.yaw[k, i])
+            dx, dy = math.cos(h), math.sin(h)
+            ap = a.get("approach", p.get("approach") or 0.0)
+            cross = a.get("crossing", 7.0)
+            kx, ky = x0 + ap * dx, y0 + ap * dy
+            fx, fy = kx + cross * dx, ky + cross * dy
+            cp = _first_crossing(route[k, 0].tolist(), (kx, ky), (fx, fy))
+            out.append({"kerb": [kx, ky], "far": [fx, fy],
+                        "conflict": list(cp) if cp else [(kx + fx) / 2, (ky + fy) / 2]})
+        return out
+
+    def reset(self, mask):
+        if not self.idx:
+            return
+        c = self.run.c
+        if not self.models:       # built at the first reset, every slot
+            for j, i in enumerate(self.idx):
+                spec = c.entities[i].model
+                cls = self.cls[spec["model"]]
+                self.models.append(cls(spec["params"], spec["seeds"], self.anchors[j], self.xp))
+        else:
+            for m in self.models:
+                m.reset(mask)
+        cols = torch.tensor(self.idx, dtype=torch.int64, device=c.x.device)
+        m2 = mask[:, None].expand_as(self.x)
+        self.x = torch.where(m2, c.x[:, cols], self.x)
+        self.y = torch.where(m2, c.y[:, cols], self.y)
+        self.yaw = torch.where(m2, c.yaw[:, cols], self.yaw)
+        self.v = torch.where(m2, torch.zeros_like(self.v), self.v)
+        self._prev_v = None
+
+    def step(self, st, dt):
+        if not self.idx:
+            return
+        n = self.run.c.n
+        vx = st["v"] * torch.cos(st["yaw"])
+        vy = st["v"] * torch.sin(st["yaw"])
+        if self._prev_v is None:
+            ax, ay = torch.zeros_like(vx), torch.zeros_like(vy)
+        else:
+            ax, ay = (vx - self._prev_v[0]) / dt, (vy - self._prev_v[1]) / dt
+        self._prev_v = (vx, vy)
+        valid = torch.ones(n, dtype=torch.bool, device=vx.device)
+        for j, m in enumerate(self.models):
+            obs = {"x": self.x[:, j], "y": self.y[:, j], "ego_x": st["x"], "ego_y": st["y"],
+                   "ego_vx": vx, "ego_vy": vy, "ego_ax": ax, "ego_ay": ay, "valid": valid}
+            act, ev = m.step(obs, dt)
+            lim = act["accel_limit"] * dt
+            v = self.v[:, j] + torch.maximum(torch.minimum(act["speed"] - self.v[:, j], lim), -lim)
+            self.v[:, j] = v
+            self.yaw[:, j] = act["heading"]
+            self.x[:, j] = self.x[:, j] + v * torch.cos(act["heading"]) * dt
+            self.y[:, j] = self.y[:, j] + v * torch.sin(act["heading"]) * dt
+            self.events[self.run.c.entities[self.idx[j]].name] = ev
+
+    def place(self, obs):
+        """The model entities' poses into an observation's [N, E] columns, and their events."""
+        if not self.idx:
+            return
+        for j, i in enumerate(self.idx):
+            obs["x"][:, i], obs["y"][:, i] = self.x[:, j], self.y[:, j]
+            obs["yaw"][:, i], obs["v"][:, i] = self.yaw[:, j], self.v[:, j]
+        obs["model_events"] = dict(self.events)
+
+    def records(self):
+        """Per model entity, each slot's record (the model's own `record()`)."""
+        return {self.run.c.entities[i].name: m.record() for i, m in zip(self.idx, self.models)}
+
+
+def _first_crossing(points, a, b):
+    """Where the polyline `points` first crosses the segment a-b, or None."""
+    (ax, ay), (bx, by) = a, b
+    for (px, py), (qx, qy) in zip(points, points[1:]):
+        d = (bx - ax) * (qy - py) - (by - ay) * (qx - px)
+        if abs(d) < 1e-12:
+            continue
+        t = ((px - ax) * (qy - py) - (py - ay) * (qx - px)) / d
+        u = ((px - ax) * (by - ay) - (py - ay) * (bx - ax)) / d
+        if 0.0 <= t <= 1.0 and 0.0 <= u <= 1.0:
+            return ax + t * (bx - ax), ay + t * (by - ay)
+    return None
 
 
 def _merge(old, new, mask):

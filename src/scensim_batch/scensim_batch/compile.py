@@ -39,13 +39,16 @@ class CompileError(ValueError):
 @dataclass
 class Entity:
     name: str
-    role: str          # "ego", "default" (SSv2's default behaviour), "prop"
+    role: str          # "ego", "default" (SSv2's default behaviour), "prop", "model" (a
+                       # behaviour model, 092 K10: `model` names it)
     kind: str          # "vehicle", "pedestrian", "misc"
     length: float
     width: float
     height: float
     cx: float = 0.0    # the box's centre in the entity's frame (BoundingBox/Center)
     cy: float = 0.0
+    model: dict = None  # a model entity's {"entry": "scensim.behaviour:<name>", "params": [N
+                        # dicts], "anchors": [N dicts], "seeds": [N]}, per slot
 
 
 @dataclass
@@ -210,6 +213,71 @@ def _kind(obj):
     return None
 
 
+MODEL_PREFIX = "scensim.behaviour:"
+ANCHOR = "anchor."      # a model's property of the crossing's geometry, not one of its params
+
+
+def _models_provided():
+    """The behaviour models scensim_batch runs batched: each one whose class declares torch."""
+    try:
+        from scensim import behaviour
+    except ImportError:
+        return []
+    return [f"behaviour model {MODEL_PREFIX}{name}" for name, cls in behaviour.MODELS.items()
+            if "torch" in getattr(cls, "array_api", ())]
+
+
+def _model_of(obj):
+    """The behaviour model an entity's ObjectController names, or None."""
+    for c in obj.iter("Controller"):
+        for prop in c.iter("Property"):
+            if prop.get("name") == "model" and (prop.get("value") or "").startswith(MODEL_PREFIX):
+                return prop.get("value")
+    return None
+
+
+def _model_spec(obj, name, where, P, records):
+    """A model entity's entry point, its parameters and anchors per slot (each property's
+    value resolved as any attribute: a literal or `$name`), and its seed per slot (the
+    record's `seeds.pilots.<entity>`, else the scenario's)."""
+    from scensim import behaviour
+    entry = _model_of(obj)
+    model = entry[len(MODEL_PREFIX):]
+    if model not in behaviour.MODELS:
+        raise CompileError(f"{where}: behaviour model {entry!r} unknown (known: "
+                           f"{', '.join(MODEL_PREFIX + m for m in behaviour.MODELS)})")
+    n = P.n
+    params, anchors = [dict() for _ in range(n)], [dict() for _ in range(n)]
+    for c in obj.iter("Controller"):
+        for prop in c.iter("Property"):
+            key = prop.get("name")
+            if key == "model":
+                continue
+            vals = P.value(prop.get("value"), f"{where}/.../Property[@name='{key}']")
+            for i in range(n):
+                if key.startswith(ANCHOR):
+                    anchors[i][key[len(ANCHOR):]] = _number(vals[i])
+                else:
+                    params[i][key] = vals[i]
+    cls = behaviour.MODELS[model]
+    for i in range(n):
+        try:
+            params[i] = behaviour.walker.resolve(params[i]) if cls is behaviour.walker.GapAcceptanceWalker \
+                else params[i]
+        except ValueError as e:
+            raise CompileError(f"{where}: slot {i}: {e}") from None
+    seeds = []
+    for i, r in enumerate(records):
+        sd = r.get("seeds") or {}
+        s = (sd.get("pilots") or {}).get(name, sd.get("scenario"))
+        if s is None:
+            raise CompileError(f"{where}: slot {i}: no seed for {name!r} (seeds.pilots.{name} "
+                               "or seeds.scenario)")
+        seeds.append(int(s))
+    return {"entry": entry, "model": model, "params": params, "anchors": anchors,
+            "seeds": seeds}
+
+
 def compile_scenario(path, records, world, provides=(), device="cpu", catalogs=None):
     """The batch for `records` (N sample records, slot i = records[i]) of scenario `path`.
     `catalogs`: {catalog name: file or directory}, searched before the scenario's
@@ -219,8 +287,10 @@ def compile_scenario(path, records, world, provides=(), device="cpu", catalogs=N
     v = subset.check(path)
     if not v.compiles:
         raise CompileError(f"{path}: {v.line()}")
-    met = set(PROVIDED) | set(provides)
-    unmet = [c for c in v.conditions if c.split(":")[0] not in met]
+    met = set(PROVIDED) | set(provides) | set(_models_provided())
+    # a condition is "<what>: <reason>"; a behaviour model's <what> has a colon of its own
+    # (scensim.behaviour:<name>), so a condition is met by the <what> it starts with
+    unmet = [c for c in v.conditions if not any(c.startswith(m + ": ") for m in met)]
     if unmet:
         raise CompileError(f"{path}: compiles only if: {'; '.join(unmet)}; this environment "
                            f"provides {', '.join(sorted(met))}")
@@ -244,6 +314,8 @@ def compile_scenario(path, records, world, provides=(), device="cpu", catalogs=N
             role = "ego"
         elif kind == "misc":
             role = "prop"
+        elif _model_of(obj) is not None:
+            role = "model"         # a behaviour model drives it (092 K10)
         elif kind == "vehicle" and all(not c.findall(".//Property")
                                         for c in obj.iter("Controller")):
             # no controller, or one that sets nothing (an empty Properties): SSv2's default
@@ -252,7 +324,10 @@ def compile_scenario(path, records, world, provides=(), device="cpu", catalogs=N
         else:
             raise CompileError(f"{where}: a {kind} with a controller or behaviour model "
                                "(not compiled yet)")
-        entities.append(Entity(name, role, kind, length, width, height, cx, cy))
+        ent = Entity(name, role, kind, length, width, height, cx, cy)
+        if role == "model":
+            ent.model = _model_spec(obj, name, where, P, records)
+        entities.append(ent)
     names = [e.name for e in entities]
     e = len(entities)
     z = torch.zeros(n, e, dtype=torch.float64)
@@ -351,8 +426,16 @@ def _position(pos, where, P, world, names, x, y, yaw, placed):
         s = P.floats(lp.get("s"), where + "/LanePosition@s")
         off = P.floats(lp.get("offset") or "0", where + "/LanePosition@offset")
         px, py, pyaw = world.lane_pose(lanes, s, off)
+        pyaw = torch.as_tensor(pyaw, dtype=torch.float64)
+        ori = lp.find("Orientation")
+        if ori is not None and ori.get("h") is not None:   # the standard's: relative to the lane
+            h = P.floats(ori.get("h"), where + "/LanePosition/Orientation@h")
+            kind = ori.get("type", "relative")
+            if kind not in ("relative", "absolute"):
+                raise CompileError(f"{where}/LanePosition/Orientation@type: {kind!r}")
+            pyaw = pyaw + h if kind == "relative" else h
         return (torch.as_tensor(px, dtype=torch.float64), torch.as_tensor(py, dtype=torch.float64),
-                torch.as_tensor(pyaw, dtype=torch.float64))
+                pyaw)
     for tag in ("RelativeWorldPosition", "RelativeObjectPosition"):
         rp = pos.find(tag)
         if rp is not None:
