@@ -121,8 +121,24 @@ def test_reject_waits_for_the_ego_then_crosses():
     assert rec["decision"]["gap_s"] == pytest.approx(2.5)
 
 
-def test_numpy_and_torch_agree_bit_for_bit():
+def usable_torch():
+    """torch, if it can take this NumPy's arrays; else a skip naming why. A user-site NumPy 2
+    against a torch built for NumPy 1 imports, then fails at the first conversion
+    ("_ARRAY_API not found", "Numpy is not available")."""
     torch = pytest.importorskip("torch")
+    import numpy as np
+    try:
+        torch.as_tensor(np.zeros(1))
+    except Exception as e:
+        pytest.skip(f"torch {torch.__version__} cannot take NumPy {np.__version__}'s arrays "
+                    f"({type(e).__name__}: {e}); a NumPy built for another ABI, e.g. a user-site "
+                    "NumPy 2 against the system torch: run in the gate's environment, or with "
+                    "PYTHONNOUSERSITE=1")
+    return torch
+
+
+def test_numpy_and_torch_agree_bit_for_bit():
+    torch = usable_torch()
     rng = random.Random(7)
     n = 96
     params = params_mix(n, rng)
