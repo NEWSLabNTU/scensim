@@ -3,13 +3,13 @@ version: 1
 datasets:
   carla-town-autoware-maps:
     repo: jerry73204/carla-town-autoware-maps
-    commit: deb23e3abdf81ad05f02cbe474196eeaf8cfb580
+    commit: 19d52699f007d53f1e2fb0a42eea7181640d202b
     take:
     - Town01
     files:
       Town01/LICENSE.md: sha256:15b6eb7fe321599944ac6e278babdab10d30971f523b740517acf921bb9dcf1a
-      Town01/anchors.resolved.json: sha256:63d68b8282d6a102c2b2c15cc6b6a93701c82a75c48f452d8357a744943238a9
-      Town01/anchors.yaml: sha256:d902e9b8c2ef1f5732dd4cc9b9f8a489857d646b0f7420a327eea3b772861cbe
+      Town01/anchors.resolved.json: sha256:428462cca6b68349a476325cbf911365b82e65241098038f396f3eb306cb8d01
+      Town01/anchors.yaml: sha256:4cd53f361c41c07032bfa5c171fafebb7fb5475cfa372e9ac020ee40c12ab2e7
       Town01/carla/traffic_lights.yaml: sha256:e3a6f678750e16f7e0f1251e1b19d857efbdfa1a16bd2d6a427eefab6f2d0392
       Town01/isaac/world.yaml: sha256:59ddc34fde22d7f7bec363c5d78a74014cb9e25d62c4a45be5be574086b18ab2
       Town01/lanelet2_map.osm: sha256:a85836f51b6283422200b9c8b925db0ae540763d93fc54d3f59f24eafc8bdf62

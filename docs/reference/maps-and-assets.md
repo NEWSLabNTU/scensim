@@ -85,7 +85,7 @@ between them and `position_error`. A curve resolves to its `length`, `turn` (rad
 left), `direction`, `min_radius` (the tightest 2 m) and `mean_radius`. A region resolves to its
 `area`, centroid `x`, `y`, and for each of the file's lanes that enters it once, `from_<lane>`
 and `to_<lane>`. A point stays a project's own (`world.anchors`). The published Town01 file
-holds the first two lanes; the rest is the example.
+holds all of the above.
 
 and resolves them, once, into `anchors.resolved.json` beside it:
 
@@ -107,7 +107,7 @@ halved, down to 1 cm. The file states the step, the tolerance and the error it m
 (`heading_max_error`): Town01's left turn measures 9.9e-4 rad.
 
 The published maps dataset carries Town01's (`carla-town-autoware-maps` from its tag
-`v2026.11d`); its other towns have none yet.
+`v2026.11e`); its other towns have none yet.
 
 A scenario binds a parameter to a lane anchor in its FileHeader, for a LanePosition along the
 lane: `anchor.<name>.lanelet_at(s)` is the lanelet holding lane position s (the later one at a

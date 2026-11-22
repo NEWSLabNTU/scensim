@@ -305,7 +305,7 @@ name="scensim.anchor.<parameter>" value="exit_n.lanelet_at($cyclist_s)"/>` (or
 the parameter. `scensim run` sets it from the world before SSv2 starts, refuses an s off the
 lane, checks a sample record's value rather than replace it, and records each binding in
 `result.json`'s `anchors` (scenario-description.md section 3). The published maps
-dataset carries Town01's from its tag `v2026.11d`, which the repository's testbenches lock.
+dataset carries Town01's from its tag `v2026.11e`, which the repository's testbenches lock.
 
 ```yaml
 world:
