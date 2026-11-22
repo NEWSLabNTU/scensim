@@ -117,7 +117,8 @@ release torque is retuned.
 
 The user chose to change and retune. The Model 3 goes first. The Mustang stays as shipped until
 243 can rerun the drift results on it (057 and 058), since its slip is the drift measure. The
-RoboRacer waits on 118's sweep.
+RoboRacer's lateral denominator is 0.05 since 091 W10 (the user's choice after 118's sweep);
+its longitudinal ones stay at 0.5 (not swept).
 
 **What a change moves.** This was measured on copies of both specs with only `isaac.physx`'s
 denominators changed, hashed by sim_vehicle_spec at main's pin:
@@ -189,4 +190,8 @@ The Mustang's values, after 243's drift reruns. A change of `d` on a full-size c
 - the vehicle_check references;
 - the T3 Isaac references;
 - the ABS and TC thresholds and `est_slip_offset`, which were tuned on the scaled slip.
-The RoboRacer's values wait on 118's sweep.
+The RoboRacer (091 W10, 118): the lateral denominator swept over 0.25, 0.1, 0.05 and 0.02 m/s on
+the twin. Rest, launch and braking were unchanged and 240 Hz stayed stable at every value, and
+the circles moved under 1.5 % from 0.25 to 0.02. At 0.25 the car's grip at 1 m/s was 0.80 of its
+tyre's; at 0.05 it is 0.95. The user chose 0.05. W23's regression and W10's fits are rerun on it
+(roadmap 091, W10: findings); W6 to W9's twin quantities are still to be rerun.
