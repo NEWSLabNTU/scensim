@@ -221,6 +221,30 @@ class ModelTest(unittest.TestCase):
         k = self.doc["joints"]["rear_left_suspension"]["drive"]["stiffness"]
         self.assertEqual(g["suspension"][2]["rear_left_suspension"]["stiffness"], k)
 
+    def test_an_asset_body_maps_its_names_and_checks_its_bytes(self):
+        doc = copy.deepcopy(self.doc)
+        with tempfile.TemporaryDirectory() as root:
+            p = Path(root) / "car.usd"
+            p.write_bytes(b"#usda 1.0\n")
+            import hashlib
+            doc["asset"] = {"usd": "car.usd", "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+                            "source": "here", "licence": "MIT",
+                            "joints": {n: f"a_{n}" for n in art.joint_order(doc)},
+                            "links": {"front_left_wheel": "flw"}}
+            self.assertEqual(art.asset_usd(doc, root), str(p))
+            self.assertEqual(art.asset_name(doc, "rear_left_spin"), "a_rear_left_spin")
+            self.assertEqual(art.asset_name(doc, "front_left_wheel"), "flw")
+            with self.assertRaisesRegex(ValueError, "maps no 'rear_left_wheel'"):
+                art.asset_name(doc, "rear_left_wheel")
+            g = art.actuator_groups(doc)          # still ours; articulation_cfg maps them
+            self.assertIn("rear_left_spin", g["spin"][0])
+            doc["asset"]["sha256"] = "0" * 64
+            with self.assertRaisesRegex(ValueError, "not the asset the spec was measured from"):
+                art.asset_usd(doc, root)
+            with self.assertRaisesRegex(FileNotFoundError, "is not under"):
+                art.asset_usd(doc, Path(root) / "elsewhere")
+        self.assertEqual(art.asset_name(self.doc, "rear_left_spin"), "rear_left_spin")
+
     def test_a_2wd_dc_motor_body_groups_its_driven_and_passive_wheels(self):
         doc = copy.deepcopy(self.doc)
         dc = {"type": "dc_motor", "stiffness": 0.0, "damping": 1000.0, "effort_limit": 0.5,
