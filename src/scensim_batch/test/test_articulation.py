@@ -64,9 +64,28 @@ class ModelTest(unittest.TestCase):
 
     def test_no_ackermann_steers_both_the_same(self):
         doc = copy.deepcopy(self.doc)
+        doc["actuation"]["steer_law"] = "parallel"
+        t = art.ArticulationModel(doc, 1).steer_targets(torch.tensor([0.2], dtype=torch.float64))
+        self.assertEqual(t.tolist(), [[0.2, 0.2]])
+        # a file from before steer_law: the actuation's wording
+        del doc["actuation"]["steer_law"]
         doc["actuation"]["steer"] = "bicycle angle to the front steer joints' targets"
         t = art.ArticulationModel(doc, 1).steer_targets(torch.tensor([0.2], dtype=torch.float64))
         self.assertEqual(t.tolist(), [[0.2, 0.2]])
+
+    def test_the_tan_law_steers_both_to_tan_d_within_the_travel(self):
+        # WheeledLab's RCCarRWDAction (094 P2): a target of tan(d) rad on both front wheels
+        doc = copy.deepcopy(self.doc)
+        m = doc["actuation"]["max_steer_angle"]
+        doc["actuation"]["steer_law"] = "tan"
+        for c in ("front_left", "front_right"):
+            doc["joints"][f"{c}_steer"]["limits"] = [-math.tan(m), math.tan(m)]
+        t = art.ArticulationModel(doc, 1).steer_targets(
+            torch.tensor([0.3, 5.0, -5.0], dtype=torch.float64))
+        self.assertAlmostEqual(t[0, 0].item(), math.tan(0.3), places=12)
+        self.assertEqual(t[0, 0].item(), t[0, 1].item())
+        self.assertAlmostEqual(t[1, 0].item(), math.tan(m), places=12)    # d clipped to max
+        self.assertAlmostEqual(t[2, 1].item(), -math.tan(m), places=12)
 
     def test_drive_without_brake_passes(self):
         drive = torch.tensor([[0.0, 0.0, 500.0, 500.0]] * 3)
@@ -201,6 +220,24 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(g["suspension"][0], [f"{c}_suspension" for c in art.CORNERS])
         k = self.doc["joints"]["rear_left_suspension"]["drive"]["stiffness"]
         self.assertEqual(g["suspension"][2]["rear_left_suspension"]["stiffness"], k)
+
+    def test_a_2wd_dc_motor_body_groups_its_driven_and_passive_wheels(self):
+        doc = copy.deepcopy(self.doc)
+        dc = {"type": "dc_motor", "stiffness": 0.0, "damping": 1000.0, "effort_limit": 0.5,
+              "saturation_effort": 1.05, "velocity_limit": 450.0, "friction": 0.0}
+        free = {"type": "effort", "stiffness": 0.0, "damping": 0.0, "effort_limit": 0.0}
+        for c in art.CORNERS:
+            doc["joints"][f"{c}_spin"]["drive"] = dict(dc if c.startswith("rear") else free)
+        g = art.actuator_groups(doc)
+        self.assertEqual(g["spin_dc_motor"][:2], (["rear_left_spin", "rear_right_spin"],
+                                                  "dc_motor"))
+        self.assertEqual(g["spin_effort"][:2], (["front_left_spin", "front_right_spin"],
+                                                "explicit"))
+        self.assertEqual(g["spin_dc_motor"][2]["rear_left_spin"]["saturation_effort"], 1.05)
+        m = art.ArticulationModel(doc, 1)
+        self.assertEqual(m.spin_type, "dc_motor")       # the driven wheels'
+        with self.assertRaisesRegex(ValueError, "dc_motor drives"):
+            m.spin_efforts(torch.zeros(1, 4), torch.zeros(1, 4), torch.zeros(1, 4), DT)
 
 
 @unittest.skipIf(torch is None or not HAVE_PXR or not MODEL3.exists(), "no pxr")

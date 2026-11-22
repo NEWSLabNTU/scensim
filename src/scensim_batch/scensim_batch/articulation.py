@@ -85,12 +85,19 @@ class ArticulationModel:
         self.L, self.T = float(a["wheel_base"]), float(a["wheel_tread"])
         self.r = float(a["wheel_radius"])
         self.max_steer = float(a["max_steer_angle"])
-        self.ackermann = "Ackermann" in a.get("steer", "")
+        # the steer law (sim_vehicle_spec's articulation.steer_law; a file before it: the
+        # actuation's wording); the steer joints' travel clips the targets
+        self.steer_law = a.get("steer_law") or (
+            "ackermann" if "Ackermann" in a.get("steer", "") else "parallel")
+        self.ackermann = self.steer_law == "ackermann"
+        self.steer_travel = float(j["front_left_steer"]["limits"][1])
         f64 = dict(dtype=torch.float64, device=device)
-        self.spin_type = j["front_left_spin"]["drive"]["type"]
-        types = {j[f"{c}_spin"]["drive"]["type"] for c in CORNERS}
+        # the spin drive: the driven wheels' (an undriven wheel's may be another, e.g. passive)
+        driven = [c for c in CORNERS if j[f"{c}_spin"].get("driven")] or list(CORNERS)
+        types = {j[f"{c}_spin"]["drive"]["type"] for c in driven}
         if len(types) != 1:
-            raise ValueError(f"{doc['name']}: the spin joints' drives differ in type {types}")
+            raise ValueError(f"{doc['name']}: the driven wheels' drives differ in type {types}")
+        self.spin_type = types.pop()
         self.spin_I = torch.tensor([links[f"{c}_wheel"]["inertia"][1] for c in CORNERS], **f64)
         self.spin_limit = torch.tensor(
             [j[f"{c}_spin"]["drive"].get("effort_limit", math.inf) for c in CORNERS], **f64)
@@ -111,6 +118,9 @@ class ArticulationModel:
         """[N, 2] (front left, front right) for the bicycle angle [N] (+ left)."""
         d = torch.as_tensor(tire_angle, dtype=torch.float64, device=self.device)
         d = d.clamp(-self.max_steer, self.max_steer)
+        if self.steer_law == "tan":       # WheeledLab's RCCarRWDAction: tan(d) on both
+            t = torch.tan(d).clamp(-self.steer_travel, self.steer_travel)
+            return torch.stack([t, t], -1)
         if not self.ackermann:
             return torch.stack([d, d], -1)
         t = torch.tan(d)
@@ -316,15 +326,18 @@ def actuator_groups(doc):
     for kind in JOINT_KINDS:
         names = [n for n in joint_order(doc) if n.endswith(f"_{kind}")]
         drives = {n: doc["joints"][n]["drive"] for n in names}
-        types = {d["type"] for d in drives.values()}
-        if len(types) != 1:
-            raise ValueError(f"{doc['name']}: the {kind} joints' drives differ in type {types}")
-        t = types.pop()
-        gains = {n: {"stiffness": float(d.get("stiffness", 0.0)),
-                     "damping": float(d.get("damping", 0.0)),
-                     "effort_limit": d.get("effort_limit"),
-                     "velocity_limit": d.get("velocity_limit")} for n, d in drives.items()}
-        groups[kind] = (names, "explicit" if t == "effort" else "implicit", gains)
+        types = sorted({d["type"] for d in drives.values()})
+        for t in types:     # one group a drive type (a 2WD car: its driven and passive wheels)
+            these = [n for n in names if drives[n]["type"] == t]
+            gains = {n: {"stiffness": float(drives[n].get("stiffness", 0.0)),
+                         "damping": float(drives[n].get("damping", 0.0)),
+                         "effort_limit": drives[n].get("effort_limit"),
+                         "velocity_limit": drives[n].get("velocity_limit"),
+                         "friction": drives[n].get("friction"),
+                         "saturation_effort": drives[n].get("saturation_effort")}
+                     for n in these}
+            how = {"effort": "explicit", "dc_motor": "dc_motor"}.get(t, "implicit")
+            groups[kind if len(types) == 1 else f"{kind}_{t}"] = (these, how, gains)
     return groups
 
 
@@ -333,7 +346,7 @@ def articulation_cfg(doc, usd_path, prim_path="/World/envs/env_.*/ego", z=0.0,
     """Isaac Lab's ArticulationCfg for the body file's USD (write_usd). Import after Isaac
     Sim's app."""
     import isaaclab.sim as sim_utils
-    from isaaclab.actuators import IdealPDActuatorCfg, ImplicitActuatorCfg
+    from isaaclab.actuators import DCMotorCfg, IdealPDActuatorCfg, ImplicitActuatorCfg
     from isaaclab.assets import ArticulationCfg
 
     def per(gains, k):
@@ -342,11 +355,19 @@ def articulation_cfg(doc, usd_path, prim_path="/World/envs/env_.*/ego", z=0.0,
 
     actuators = {}
     for kind, (names, how, gains) in actuator_groups(doc).items():
-        cls = IdealPDActuatorCfg if how == "explicit" else ImplicitActuatorCfg
-        actuators[kind] = cls(joint_names_expr=names, stiffness=per(gains, "stiffness"),
-                              damping=per(gains, "damping"),
-                              effort_limit=per(gains, "effort_limit"),
-                              velocity_limit=per(gains, "velocity_limit"))
+        common = dict(joint_names_expr=names, stiffness=per(gains, "stiffness"),
+                      damping=per(gains, "damping"), effort_limit=per(gains, "effort_limit"),
+                      velocity_limit=per(gains, "velocity_limit"),
+                      friction=per(gains, "friction"))
+        if how == "dc_motor":
+            # DCMotorCfg's saturation is one number per group
+            sat = {g["saturation_effort"] for g in gains.values()}
+            if len(sat) != 1:
+                raise ValueError(f"{doc['name']}: {kind}: saturation_effort differs {sat}")
+            actuators[kind] = DCMotorCfg(saturation_effort=float(sat.pop()), **common)
+        else:
+            cls = IdealPDActuatorCfg if how == "explicit" else ImplicitActuatorCfg
+            actuators[kind] = cls(**common)
     return ArticulationCfg(
         prim_path=prim_path,
         spawn=sim_utils.UsdFileCfg(
@@ -456,7 +477,7 @@ class ArticulationBackend:
                                   grip=m.grip(q, omega, hub))
         pos_t[:, self._steer] = steer
         a.set_joint_position_target_index(target=self._dev(pos_t))
-        if m.spin_type == "velocity":
+        if m.spin_type in ("velocity", "dc_motor"):     # a velocity target (rad/s)
             a.set_joint_velocity_target_index(target=self._dev(spin), joint_ids=self._spin_asset)
         else:
             a.set_joint_effort_target_index(target=self._dev(spin), joint_ids=self._spin_asset)
