@@ -25,6 +25,8 @@ ap.add_argument("--checkpoint", required=True)
 ap.add_argument("--conditions", type=int, default=256)
 ap.add_argument("--seed", type=int, default=20261122)
 ap.add_argument("--out", default="")
+ap.add_argument("--row", choices=("joints", "ecu"), default="joints")
+ap.add_argument("--engine", choices=("B", "A"), default="B")
 ap.add_argument("--conditions-from", default="",
                 help="stock's evaluator's --samples-out file: its episodes, replayed in env order "
                      "(their count is the conditions'), and each paired with stock's outcome")
@@ -62,6 +64,7 @@ def main():
     env_cfg.pool_seed = args.seed            # the conditions: the pool's first n records
     env_cfg.conditions_from = args.conditions_from    # or stock's episodes, in its env order
     env_cfg.train_headway = "record"         # the evaluation is at h exactly, as stock's
+    env_cfg.row, env_cfg.engine_name = args.row, args.engine
     env_cfg.__post_init__()
     configure_seed(args.seed)
     env = RslRlVecEnvWrapper(gym.make(TASK, cfg=env_cfg), clip_actions=agent_cfg.clip_actions)
@@ -102,6 +105,7 @@ def main():
     keys = ("lead_speed", "headway", "decel", "onset")
     res = {
         "checkpoint": args.checkpoint, "conditions": n, "seed": args.seed,
+        "row": args.row, "engine": args.engine,
         "successes": int(ok.sum()), "success_rate": round(rate, 4), "pass": rate >= BAR,
         "end_reasons": reasons,
         "end_gap_m": {"min": round(float(end_gap.min()), 2),
