@@ -126,17 +126,31 @@ def sync_deps(src, c):
 
 
 def tracked_branch(repo, rev, path):
-    """The branch a submodule at `path` of `repo`'s `rev` tracks (.gitmodules `branch`, else
-    main)."""
+    """(branch, named): the branch a submodule at `path` of `repo`'s `rev` tracks, and whether
+    .gitmodules names it (else main)."""
     r = subprocess.run(["git", "-C", str(repo), "config", "--blob", f"{rev}:.gitmodules",
                         f"submodule.{path}.branch"], capture_output=True, text=True)
-    return r.stdout.strip() or "main"
+    b = r.stdout.strip()
+    return (b or "main"), bool(b)
 
 
-def on_remote(checkout, sha, branch):
-    git("fetch", "-q", "--no-recurse-submodules", "origin", cwd=checkout, check=False)
-    out = git("branch", "-r", "--contains", sha, cwd=checkout, check=False)
-    return f"origin/{branch}" in out.split()
+def ours(checkout):
+    return "NEWSLabNTU/" in git("remote", "get-url", "origin", cwd=checkout, check=False)
+
+
+def on_remote(checkout, sha, branch, explicit):
+    """`sha` on its remote as CLAUDE.md's submodule rule wants it: on origin/<branch> for our
+    repositories and forks (the .gitmodules branch, else main); a third-party one's pin is a
+    release or a chosen commit, so on its default branch (origin/HEAD) or under a tag, unless
+    .gitmodules names a branch."""
+    git("fetch", "-q", "--no-recurse-submodules", "--tags", "origin", cwd=checkout, check=False)
+    out = git("branch", "-r", "--contains", sha, cwd=checkout, check=False).split()
+    if explicit or ours(checkout):
+        return f"origin/{branch}" in out
+    head = git("symbolic-ref", "-q", "refs/remotes/origin/HEAD", cwd=checkout, check=False)
+    default = head.replace("refs/remotes/", "") if head else None
+    return (default in out if default else bool(out)) or bool(
+        git("tag", "--contains", sha, cwd=checkout, check=False))
 
 
 def unpushed(rev):
@@ -149,17 +163,20 @@ def unpushed(rev):
         if kind != "commit":
             continue
         c = ROOT / path
-        if not on_remote(c, sha, tracked_branch(ROOT, rev, path)):
-            out.append(f"{path} {sha[:12]}: not on origin/{tracked_branch(ROOT, rev, path)}")
+        branch, named = tracked_branch(ROOT, rev, path)
+        if not on_remote(c, sha, branch, named):
+            out.append(f"{path} {sha[:12]}: not on its remote "
+                       f"({'origin/' + branch if named or ours(c) else 'no branch or tag'})")
             continue
         for dl in git("ls-tree", "-r", sha, "deps", cwd=c, check=False).splitlines():
             dmode, dkind, dsha, dpath = dl.split(None, 3)
             if dkind != "commit":
                 continue
             dep = c / dpath
-            branch = tracked_branch(c, sha, dpath)
-            if not (dep / ".git").exists() or not on_remote(dep, dsha, branch):
-                out.append(f"{path}/{dpath} {dsha[:12]}: not on origin/{branch}")
+            dbranch, dnamed = tracked_branch(c, sha, dpath)
+            if not (dep / ".git").exists() or not on_remote(dep, dsha, dbranch, dnamed):
+                out.append(f"{path}/{dpath} {dsha[:12]}: not on its remote "
+                           f"(origin/{dbranch})")
     return out
 
 

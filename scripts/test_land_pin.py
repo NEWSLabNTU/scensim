@@ -493,10 +493,30 @@ def test_a_pin_or_a_deps_gitlink_not_on_its_remote_is_named(world):
     git(cdir, "push", "-q", "origin", "HEAD:main")         # C itself is on its remote
     git(world.super, "add", "src/C")
     commit(world.super, "super pins C")
-    assert _unpushed(world) == [f"src/C/deps/A {a_local[:12]}: not on origin/main"]
+    assert _unpushed(world) == [f"src/C/deps/A {a_local[:12]}: not on its remote (origin/main)"]
     d_local = commit(world.super / "src" / "D", "D local")  # and a pin of a commit only local
     git(world.super, "add", "src/D")
     commit(world.super, "super pins D")
     got = _unpushed(world)
-    assert f"src/D {d_local[:12]}: not on origin/main" in got and len(got) == 2, got
+    assert f"src/D {d_local[:12]}: not on its remote (no branch or tag)" in got, got
+    assert len(got) == 2, got
     _ = c_bad
+
+
+def test_a_third_party_pin_on_its_default_branch_is_on_its_remote(world):
+    """A third-party pin (not NEWSLabNTU's; color_names' default branch is master) is a release
+    or a chosen commit: on its default branch or under a tag, no main asked of it."""
+    run("git", "init", "-q", "--bare", "-b", "master", str(world.origin / "T.git"))
+    t = world.work / "T"
+    run("git", "clone", "-q", world.url("T"), str(t))
+    git(t, "checkout", "-q", "-B", "master")
+    sha = commit(t, "T 1")
+    git(t, "push", "-q", "origin", "master")
+    git(world.super, "submodule", "add", "-q", world.url("T"), "src/T")
+    commit(world.super, "super pins T")
+    assert _unpushed(world) == []
+    commit(world.super / "src" / "T", "T local")      # on no branch, under no tag: named
+    git(world.super, "add", "src/T")
+    commit(world.super, "super pins a local T")
+    assert [x.split()[0] for x in _unpushed(world)] == ["src/T"]
+    _ = sha
