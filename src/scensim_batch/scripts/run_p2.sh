@@ -6,7 +6,8 @@
 #   run_p2.sh <stage: smoke|seeds|seed|sweep> <out dir> [row: b|a] [starts: stock|uniform]
 #   (seed: the one seed SEED names, into the seeds stage's directory)
 #
-# Host settings (environment): FORK, the WheeledLab checkout at the harness pin; OV, the Isaac Lab
+# Host settings (environment): FORK, the WheeledLab checkout at the harness pin (isaaclab-3.0
+# 5de128c or later: --task-package); OV, the Isaac Lab
 # python; GPU (default 0); SHARED=1 runs on a shared GPU (--allow-shared: its wall-clock is marked
 # contended and stays out of the comparison; samples-to-pass does not depend on load).
 set -euo pipefail
@@ -23,6 +24,9 @@ export SCENSIM_ASSET_ROOT=$FORK/source
 export PYTHONPATH=$FORK/source/wheeledlab:$FORK/source/wheeledlab_tasks:$FORK/source/wheeledlab_rl:$FORK/source/wheeledlab_assets:$FORK/bench:$repo/src/sim_vehicle_ecu:$repo/src/sim_vehicle_spec:$repo/src/scensim_sampler:$repo/src/scensim_batch:$repo/scenarios/projects/roboracer/component/roboracer_vesc
 gate=(--require-idle); [ "${SHARED:-0}" = 1 ] && gate=(--allow-shared)
 hooks=(--sample-hook scensim_batch.start_pool:StartPool.refill --sample-hook scensim_batch.start_pool:StartPool.take)
+# the harness records its commit and the task package's (wheeledlab_bench >= 5de128c), and
+# refuses either dirty unless --allow-dirty (ALLOW_DIRTY=1, recorded)
+prov=(--task-package scensim_batch); [ "${ALLOW_DIRTY:-0}" = 1 ] && prov+=(--allow-dirty)
 mkdir -p "$out/$stage" "$out/seeds"
 cd "$FORK"
 
@@ -35,7 +39,7 @@ run() {
     fi
     echo "$name: row=$row starts=$starts timers=$timers seed=$seed envs=$n iterations=$iters ($(date -Is))"
     env -u DISPLAY "$OV" -m wheeledlab_bench.launch --out "$d" --form "scensim-$row-$starts" \
-        --timers "$timers" --warmup "$warmup" --seed "$seed" --gpu "$GPU" "${gate[@]}" "${hooks[@]}" \
+        --timers "$timers" --warmup "$warmup" --seed "$seed" --gpu "$GPU" "${gate[@]}" "${hooks[@]}" "${prov[@]}" \
         -- "$here/train_drift.py" source/wheeledlab_rl/scripts/train_rl.py -r SCENSIM_DRIFT_CONFIG \
         train.log.no_wandb=True train.log.video=False agent.seed="$seed" \
         train.num_iterations="$iters" env_setup.num_envs="$n" env.starts="$starts" \
