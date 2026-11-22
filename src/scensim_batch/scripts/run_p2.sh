@@ -7,7 +7,8 @@
 #   (seed: the one seed SEED names, into the seeds stage's directory)
 #
 # Host settings (environment): FORK, the WheeledLab checkout at the harness pin (isaaclab-3.0
-# 788e8a7 or later: --task-package, --max-load); OV, the Isaac Lab
+# b491b13 or later: --task-package, --max-load, --clean-rows); CLEAN_ROWS, MAX_ROWS (the
+# continuous gate, run_p1.sh's); OV, the Isaac Lab
 # python; GPU (default 0); SHARED=1 runs on a shared GPU (--allow-shared: its wall-clock is marked
 # contended and stays out of the comparison; samples-to-pass does not depend on load).
 set -euo pipefail
@@ -26,11 +27,27 @@ export PYTHONPATH=$FORK/source/wheeledlab:$FORK/source/wheeledlab_tasks:$FORK/so
 # MAX_LOAD x the cores, waited for up to WAIT_IDLE s (wheeledlab_bench refuses with exit 6 after)
 gate=(--require-idle --max-load "${MAX_LOAD:-0.5}" --wait-idle "${WAIT_IDLE:-1800}")
 [ "${SHARED:-0}" = 1 ] && gate=(--allow-shared)
+# CLEAN_ROWS=N: the continuous gate (WheeledLab b491b13, run_p1.sh's lines). A point measures until
+# it has N rows with the CPU outside its own process tree within MAX_LOAD x cores, at most
+# MAX_ROWS (default 4 N) measured rows (exit 7 then); training runs for enough iterations and the
+# harness ends it
+if [ -n "${CLEAN_ROWS:-}" ] && [ "${SHARED:-0}" != 1 ]; then
+    gate+=(--clean-rows "$CLEAN_ROWS" --max-rows "${MAX_ROWS:-$((4 * CLEAN_ROWS))}")
+fi
 # Kit's renderer on the run's GPU: CUDA_VISIBLE_DEVICES pins CUDA (the run's cuda:0 is GPU),
 # but Kit enumerates GPUs itself. Its renderer is selected by CUDA index, as Isaac Lab 3.0's
 # kit_launcher does for a single-GPU run (activeCudaGpus, the trailing comma keeps it a string):
 # index 0 under the mask, which is GPU (241; 118's GPU1, 133)
 kit=("--kit_args=--/renderer/multiGpu/activeCudaGpus=0,")
+# CPU threads per process (THREADS): the seed stages share a host, so their default is 4 (OMP,
+# MKL, OpenBLAS, USD, torch, and Kit's task threads), recorded in meta.json with the arguments;
+# smoke and sweep keep the default (none) unless THREADS says, so a throughput point is uncapped
+case $stage in seed|seeds) THREADS=${THREADS:-4} ;; esac
+thr=()
+if [ -n "${THREADS:-}" ]; then
+    thr=("--threads=$THREADS")
+    kit=("--kit_args=--/renderer/multiGpu/activeCudaGpus=0, --/plugins/carb.tasking.plugin/threadCount=$THREADS")
+fi
 hooks=(--sample-hook scensim_batch.start_pool:StartPool.refill --sample-hook scensim_batch.start_pool:StartPool.take)
 # the harness records its commit and the task package's (wheeledlab_bench >= 5de128c), and
 # refuses either dirty unless --allow-dirty (ALLOW_DIRTY=1, recorded)
@@ -41,6 +58,8 @@ cd "$FORK"
 # <name> <timers> <seed> <n_envs> <iters> <warmup>
 run() {
     local name=$1 timers=$2 seed=$3 n=$4 iters=$5 warmup=$6
+    [ -n "${CLEAN_ROWS:-}" ] && [ "${SHARED:-0}" != 1 ] && \
+        iters=$((warmup + ${MAX_ROWS:-$((4 * CLEAN_ROWS))} + 1))
     local d="$out/${out_stage:-$stage}/$name"
     if [ -f "$d/summary.json" ] && grep -q '"closed": true' "$d/summary.json"; then
         echo "$name: done already"; return 0
@@ -48,7 +67,7 @@ run() {
     echo "$name: row=$row starts=$starts timers=$timers seed=$seed envs=$n iterations=$iters ($(date -Is))"
     env -u DISPLAY "$OV" -m wheeledlab_bench.launch --out "$d" --form "scensim-$row-$starts" \
         --timers "$timers" --warmup "$warmup" --seed "$seed" --gpu "$GPU" "${gate[@]}" "${hooks[@]}" "${prov[@]}" \
-        -- "$here/train_drift.py" source/wheeledlab_rl/scripts/train_rl.py "${kit[@]}" -r SCENSIM_DRIFT_CONFIG \
+        -- "$here/train_drift.py" "${thr[@]}" source/wheeledlab_rl/scripts/train_rl.py "${kit[@]}" -r SCENSIM_DRIFT_CONFIG \
         train.log.no_wandb=True train.log.video=False agent.seed="$seed" \
         train.num_iterations="$iters" env_setup.num_envs="$n" env.starts="$starts" \
         env.starts_log="$d.starts.jsonl" "${comp[@]}" \

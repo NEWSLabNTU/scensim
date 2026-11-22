@@ -8,10 +8,26 @@ then runs the script as stock's run does:
 
 SCENSIM_ASSET_ROOT (a host setting) names WheeledLab's source/ (the MuSHR's asset). The project
 settings are arguments: env.starts=stock|uniform, env.starts_log=<jsonl>, env.pool_seed=<n>,
-env.drift_component=<name> (row a; none: row b)."""
+env.drift_component=<name> (row a; none: row b).
+
+`--threads=N` (taken out before the script sees its arguments) caps the process's CPU threads:
+OMP, MKL, OpenBLAS and USD's (PXR_WORK_THREAD_LIMIT) at N, and torch's intra-op threads once
+torch loads, so several seeds on one shared host do not oversubscribe it (133, 2026-11-22: five
+seeds of ~97 threads each ran ten times slower); the harness records it with the arguments."""
+import os
 import runpy
 import sys
 from pathlib import Path
+
+THREADS = None
+for _a in list(sys.argv[1:]):
+    if _a.startswith("--threads="):
+        THREADS = int(_a.split("=", 1)[1])
+        sys.argv.remove(_a)
+if THREADS:
+    for _k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+               "PXR_WORK_THREAD_LIMIT"):
+        os.environ[_k] = str(THREADS)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 __import__("scensim_batch.tasks")      # registers Scensim-MushrDriftRL-v0
@@ -34,6 +50,10 @@ def _startup_then_ours():
 
     def startup(*a, **k):
         out = stock(*a, **k)
+        if THREADS:
+            import torch
+            torch.set_num_threads(THREADS)
+            torch.set_num_interop_threads(THREADS)
         _register_run_config()
         return out
     su.startup = startup
