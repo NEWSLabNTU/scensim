@@ -297,9 +297,7 @@ author makes from the map's `anchors.yaml` ([Maps and assets](../reference/maps-
 A distribution on that map reads them beside `world.anchors`, a name in both refused. A resolved
 lane's heading is read at an arc position, `anchor.<lane>.heading(s)`, and the record names the
 file it came from (`anchor_source`: the map, its digest, the file's digest). The published maps
-dataset does not carry anchors files yet; a host that has them keeps its own copy of the dataset
-(`datasets:` in its `host.yaml`), which `scensim assets fetch` links instead of the Hub's, the
-lock still naming the Hub's revision and its files only.
+dataset carries Town01's from its tag `v2026.11d`, which the repository's testbenches lock.
 
 ```yaml
 world:

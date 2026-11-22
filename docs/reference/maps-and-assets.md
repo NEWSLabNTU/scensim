@@ -91,9 +91,8 @@ need not agree), and any interval whose linear interpolation is off by more than
 halved, down to 1 cm. The file states the step, the tolerance and the error it measured
 (`heading_max_error`): Town01's left turn measures 9.9e-4 rad.
 
-The published maps dataset does not carry anchors files yet: until it does, a host that has
-them keeps a copy of the dataset of its own (`datasets:` in `host.yaml`), which `scensim assets
-fetch` links instead.
+The published maps dataset carries Town01's (`carla-town-autoware-maps` from its tag
+`v2026.11d`); its other towns have none yet.
 
 A testbench's `world.anchors` adds anchors of the project's own, as stated numbers; a name
 both declare is refused. Conflict points, curves and regions come later (roadmap 092 K9c).
