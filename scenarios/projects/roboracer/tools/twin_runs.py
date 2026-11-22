@@ -206,11 +206,12 @@ def main():
                     dx, dy = state.position[0] - x0, state.position[1] - y0
                     c, s = math.cos(yaw0), math.sin(yaw0)
                     rx, ry = c * dx + s * dy, -s * dx + c * dy
-                    # A PhysX step moves the position along a velocity whose direction lags the
-                    # step's turned heading, so the path's chord lags the logged heading by half a
-                    # step and the sideslip read from the pose comes out r dt / 2 short (W10:
-                    # 9 % at small slip, at 240 Hz; measured against the body's own velocity).
-                    # A real pose has no step; the half step makes this one behave like it.
+                    # A PhysX step moves the position along the step's new velocity, already
+                    # turned with the new heading, so the chord between two positions leads the
+                    # headings read with them by half a step, and the sideslip read from the pose
+                    # comes out r dt / 2 short (W10: 9 % at small slip at 240 Hz, against the
+                    # body's own velocity). A real pose has no step: the heading is written half
+                    # a step on, so this one behaves like it (scensim issue 104).
                     h = _yaw(state.quat) - yaw0 + state.angular_velocity[2] * dt / 2
                     yaw = math.atan2(math.sin(h), math.cos(h))
                     if noise["ref_pos"] > 0:

@@ -326,7 +326,7 @@ noise 25 %. The misses:
   unit's and the mass's stages, which W10 left as W23 made them.
 
 Before W10 this car's twin ran with a lateral slip denominator of 0.25 and a synthetic reference
-pose half a physics step ahead of the path; both are fixed (roadmap 091, W10: findings), so the
+pose whose heading lagged its path by half a physics step; both are fixed (roadmap 091, W10: findings), so the
 2026-11-21 results are superseded. They stay on the NAS under `2026 SSv2 on CARLA/2026-11-21 091
 W23 synthetic stand-in (118)`; these are under `2026 SSv2 on CARLA/2026-11-23 091 W10 method v1
 (118)`. `tools/w23_regression.sh` makes them again.

@@ -221,9 +221,9 @@ What W10's first runs showed, on W23's stand-ins (p1, p2), and what changed beca
    - PhysX adds the lateral slip denominator to the contact's speed (`computeLateralSlip`), so
      the twin's force per slip angle was the tyre's times v / (v + 0.25), 0.80 at 1 m/s. The
      RoboRacer's denominator is 0.05 now (the user's decision); its circles moved under 1.5 %.
-   - The synthetic reference pose led the path by half a physics step, so the sideslip read from
-     it was r dt / 2 short (9 % at small slip). twin_runs.py writes it without the half step; a
-     real car's pose has no step.
+   - In the synthetic reference pose the path led the heading by half a physics step, so the
+     sideslip read from it was r dt / 2 short (9 % at small slip). twin_runs.py writes the
+     heading half a step on; a real car's pose has no step (issue 104).
    - The tyre stage now inverts PhysX's own tyre (the Michigan model, with the denominator and
      the lateral load transfer) instead of a curve measured at one stiffness. On a real car it
      fits PhysX's tyre parameters, not the real tyre's, and its residual per manoeuvre is the
