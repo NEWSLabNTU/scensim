@@ -140,3 +140,9 @@ def test_a_drawn_perturbation_stays_in_its_ranges_and_has_twin_runs_format():
         v = (p["vehicle"][key] if sec == "vehicle" else
              p["component"][key] if sec == "component" else p["vehicle"]["axle_tires"][sec][key])
         assert lo <= v <= hi
+
+
+def test_a_parameter_is_constrained_only_if_the_cost_rises_on_both_sides():
+    assert refine_twin.is_constrained(0.20, [0.30, 0.26])
+    assert not refine_twin.is_constrained(0.20, [0.30, 0.205])  # flat on one side
+    assert not refine_twin.is_constrained(0.001, [0.004, 0.005])  # below the search's resolution

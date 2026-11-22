@@ -127,6 +127,13 @@ def targets(real, doc):
     return out
 
 
+def is_constrained(best, probes, rel=0.05, floor=0.005):
+    """A parameter the cost pins: at both probes the cost exceeds the best by more than
+    max(rel x best, floor), the search's own resolution (fatol 0.01 on the log cost)."""
+    margin = max(rel * best, floor)
+    return all(c > best + margin for c in probes)
+
+
 def linear_range(tg, max_ay):
     """targets without the M5 circles whose real lateral acceleration is max_ay or more: the
     stiffness from the tyres' linear range, where the friction does not bind (W10)."""
@@ -164,6 +171,9 @@ def main(argv=None):
     ap.add_argument("--max-evals", type=int, default=80)
     ap.add_argument("--params", default="",
                     help="dotted names to refine (default: the fit's not_identified)")
+    ap.add_argument("--probe", type=float, default=0.1,
+                    help="after the search, each parameter at the best times (1 -/+ this): it "
+                         "is constrained only if the cost rises on both sides (0: no probe)")
     ap.add_argument("--max-ay", type=float, default=None,
                     help="keep only the M5 circles whose real lateral acceleration (m/s^2) is "
                          "below this: the tyres' linear range, for their stiffness")
@@ -226,12 +236,32 @@ def main(argv=None):
                           "initial_simplex": [x0] + [x0 + 0.15 * e for e in np.eye(len(x0))]})
     # the best evaluation, which may be a trial point the simplex had not yet taken in
     best = min((h for h in history if h[0] != float("inf")), key=lambda h: h[0])
+    # whether the twin's runs constrain each parameter: the cost at the best with that one
+    # moved by -/+ probe must rise on both sides by more than the search's own resolution
+    constrained = {}
+    if args.probe > 0:
+        zb = np.array(best[1])
+        for i, n in enumerate(names):
+            costs = []
+            for sgn in (-1.0, 1.0):
+                z = zb.copy()
+                z[i] += math.log(1.0 + sgn * args.probe)
+                costs.append(evaluate(z))
+            constrained[n] = is_constrained(best[0], costs)
+            print(f"probe {n}: best {best[0]:.4f}, at -/+{args.probe:.0%} "
+                  f"{costs[0]:.4f} / {costs[1]:.4f}: "
+                  f"{'constrained' if constrained[n] else 'NOT constrained'}", flush=True)
     refined = candidate(np.array(best[1]))
-    # what the refinement fitted is no longer unidentified: the twin's runs constrain it
-    refined["not_identified"] = [n for n in refined.get("not_identified") or [] if n not in names]
+    # what the refinement constrains is no longer unidentified; what it leaves flat stays so,
+    # its refined value only the search's start or wander, reported as at least its bound
+    refined["not_identified"] = sorted(
+        {n for n in refined.get("not_identified") or [] if n not in names}
+        | {n for n in names if constrained.get(n) is False
+           and n in (base.get("not_identified") or [])})
     refined["refine"] = {"cost_start": history[0][0], "cost_end": float(best[0]),
                          "evals": len(history), "runs": only, "params": names,
-                         "anchor": args.anchor}
+                         "anchor": args.anchor, "probe": args.probe,
+                         "constrained": constrained}
     d = drift(stage, values(np.array(best[1])), ivs)
     refined["drift"] = d
     refined["drift_flagged"] = [n for n, r in d.items() if r["outside"]]

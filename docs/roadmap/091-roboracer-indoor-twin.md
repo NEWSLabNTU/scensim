@@ -249,6 +249,10 @@ What W10's first runs showed, on W23's stand-ins (p1, p2), and what changed beca
      bound. With the sideslip, p1's stiffness came within 2 % and its front friction within
      0.3 %, but the rear friction stayed at the stage's meaningless 2.12 (truth 1.19): above the
      limit the twin's cost is flat in it, and M6b is most sensitive just above the bound.
+   - 2026-11-22 (133): a refined parameter counts as identified only if the twin's cost pins
+     it: probed at -/+10 % around the best, the cost must rise on both sides by more than the
+     search's resolution. A friction that fails is reported as at least its lower bound, with
+     the note that M6b did not constrain it.
 
 The exit (133, 2026-11-20):
 - The fit recovers each deliberate perturbation within a stated tolerance: the tyre per axle,
