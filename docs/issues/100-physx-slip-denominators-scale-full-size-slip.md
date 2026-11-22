@@ -1,6 +1,7 @@
 # 100: PhysX's slip denominators scale the full-size cars' slip at every speed
 
-**Status:** open (measured; the decision is the user's). **Severity:** medium. **Found:** 2026-11-22, scensim 118 (the
+**Status:** open (decided 2026-11-22: the Model 3 is changed and retuned now, the Mustang after;
+plan below, no values changed yet). **Severity:** medium. **Found:** 2026-11-22, scensim 118 (the
 RoboRacer's sweep); the full-size cars checked by 241.
 
 ## What happens
@@ -112,9 +113,79 @@ angles by 8 to 17 % and its sideslip with them. Small denominators would make th
 but they lengthen braking until ABS is retuned, and they break the creep start until the
 release torque is retuned.
 
+## Decision and plan (2026-11-22)
+
+The user chose to change and retune. The Model 3 goes first. The Mustang stays as shipped until
+243 can rerun the drift results on it (057 and 058), since its slip is the drift measure. The
+RoboRacer waits on 118's sweep.
+
+**What a change moves.** This was measured on copies of both specs with only `isaac.physx`'s
+denominators changed, hashed by sim_vehicle_spec at main's pin:
+
+| car | spec_hash | physics_hash |
+|---|---|---|
+| Model 3 | moves (dffb1d3d to b198595a) | unchanged: carla-0.9.16 33635ad5, carla-1.0 6384e6a2 |
+| Mustang | moves (65f1ba86 to ad450a5e) | unchanged: 933597f5 |
+
+`isaac` is not one of PHYSICS_SECTIONS. CARLA's physics has no slip denominators, so:
+- the pedal maps, which record physics_hash, stay valid;
+- the CARLA artefacts are regenerated only for the new spec_hash.
+Every output that names spec_hash moves in one cascade, because the bridge refuses an ego whose
+world server, agent and catalog name different specs. The outputs are:
+- sim_vehicle_spec's generated files and catalogs;
+- aib's rig;
+- autoware_sim_vehicle's per-car configs.
+
+**Steps**, in order:
+1. An Isaac physics hash (the follow-up below), so the new references are keyed to it.
+2. The values: a short sweep on the Isaac Model 3, as 118's.
+   - Grid: the longitudinal denominator, active and passive alike, in 0.25, 0.5, 1 and 2 m/s,
+     against the lateral one in 0.1, 0.25 and 0.5 m/s.
+   - Constraints:
+     - at rest on the flat, no drift and no speed noise;
+     - parked across a 3 % camber, at most 0.1 cm in 60 s;
+     - the held stop on the downhill unchanged;
+     - no oscillation of wheel spin at rest.
+   - The pick is the smallest values that meet all four. The creep start is not a constraint
+     here: it depends on the release torque, which step 4 retunes.
+3. sim_vehicle_ecu's thresholds.
+   - `est_slip_offset` follows the spec.
+   - ABS and TC are retuned so that:
+     - brake_10, brake_20 and brake_100 stay within the shipped car's margin of mu g;
+     - ABS cycles and does not lock;
+     - TC's launch is no worse than shipped.
+4. aib's release torque and sticky-tyre thresholds (issue 070). These are retuned until
+   Autoware's creep start matches the shipped car: start_flat about 0.26 m and 0.016 m/s in
+   20 s; start_up and start_down within 5 %; the holds unchanged. Then the camber test again.
+5. Validation:
+   - the whole aib.steptest suite against shipped;
+   - this issue's circles, with the radius and lateral acceleration within 1 % of shipped and
+     the slip angles lower.
+6. Reference reruns:
+   - vehicle_check on Isaac for the Model 3;
+   - the T3 Isaac suites, compared first against the old references, then recorded.
+   The CARLA suites and the articulation engine are not affected.
+
+Landing goes through land_pin, dry run first: sim_vehicle_spec, sim_vehicle_ecu, aib and
+autoware_sim_vehicle, then scensim's pins and the references.
+
+**Follow-up: an Isaac physics hash.** physics_hash leaves out `isaac`, so the Isaac-side
+references are not keyed to the physics they were measured on:
+- aib.steptest;
+- vehicle_check on Isaac;
+- the T3 Isaac suites.
+A change to `isaac.physx` moves only spec_hash, which a description edit moves too. The proposal
+has three parts:
+- sim_vehicle_spec gains `isaac_physics_hash(spec, body)`, over the body's PHYSICS_SECTIONS
+  and `isaac`;
+- aib's rig records it next to physics_hash;
+- those references write it into their results, so a comparison against a reference with
+  another hash says so.
+physics_hash stays as it is, so the CARLA artefacts do not move for an Isaac-only change.
+
 ## Not decided here
 
-Any value change is the user's decision. A change of `d` on the full-size cars invalidates:
+The Mustang's values, after 243's drift reruns. A change of `d` on a full-size car invalidates:
 - the vehicle_check references;
 - the T3 Isaac references;
 - the ABS and TC thresholds and `est_slip_offset`, which were tuned on the scaled slip.
