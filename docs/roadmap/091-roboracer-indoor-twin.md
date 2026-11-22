@@ -245,6 +245,10 @@ What W10's first runs showed, on W23's stand-ins (p1, p2), and what changed beca
      the stage's 19.91 (truth 19.30) to 25.40: those see only the balance of the two axles'
      stiffness. The sideslip is the rear's own slip. p1's run without it is kept beside the
      rerun (`p1_before_sideslip`).
+   - 2026-11-22: a friction the logs leave unidentified starts the refinement at its lower
+     bound. With the sideslip, p1's stiffness came within 2 % and its front friction within
+     0.3 %, but the rear friction stayed at the stage's meaningless 2.12 (truth 1.19): above the
+     limit the twin's cost is flat in it, and M6b is most sensitive just above the bound.
 
 The exit (133, 2026-11-20):
 - The fit recovers each deliberate perturbation within a stated tolerance: the tyre per axle,

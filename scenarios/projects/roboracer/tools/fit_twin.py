@@ -85,9 +85,13 @@ def stages(runs, doc, car, comp=None, latencies=None):
             name = f"vehicle.axle_tires.{axle}.tire_friction"
             not_identified.append(name)
             lower[name] = rep["friction_at_least"]
+            # the fit's value means nothing here, and above the limit the twin's cost is flat in
+            # it (a friction the car never reaches changes nothing): the refinement starts from
+            # the bound, where the limit manoeuvres (M6b) are most sensitive to it (W10)
+            axle_tires[axle]["tire_friction"] = lower[name]
             report.setdefault("notes", []).append(
                 f"{axle} tyres: the logs use at most {rep['grip_used']:.2f} of their grip; their "
-                f"friction is not identified, only at least {lower[name]}")
+                f"friction is not identified, only at least {lower[name]}, where it starts")
 
     # 5. the noise
     noise = fit.fit_noise(runs, doc)
