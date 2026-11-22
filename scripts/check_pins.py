@@ -78,6 +78,9 @@ def check(rev="HEAD", root=ROOT):
             elif mine[1] != dep_commit:
                 bad.append(f"{path}/{dep_path} is {dep_commit[:10]}, but {mine[0]} here is "
                            f"{mine[1][:10]}: move one pin to the other")
+    if any(": not initialised" in b for b in bad):
+        bad.append("every submodule must be initialised to check the pins: "
+                   "`git submodule update --init --recursive` initialises the whole set at once")
     return checked, bad
 
 
