@@ -1,0 +1,44 @@
+# The MuSHR Nano's VESC as roboracer_vesc's parameters: scensim 094 P2's row (a), the drift
+# policy's action through the car's own drive unit (133, 2026-11-22). Each value is MuSHR's own,
+# cited, except where marked "not MuSHR's".
+#
+# Sources (read 2026-11-22):
+#   [Y] github.com/prl-mushr/vesc, branch master, vesc_main/config/racecar-uw-nano/vesc.yaml
+#   [X] github.com/prl-mushr/vesc, branch master, vesc_configs/mushr_vesc_sensorless_config.xml
+#   [F] github.com/vedderb/bldc, tag 3.67 (ffbc6eb), mcpwm_foc.c, run_pid_control_speed:
+#       p_term = error * s_pid_kp * (1.0 / 20.0); i_term += error * (s_pid_ki * dt) * (1.0 / 20.0);
+#       output clipped to [-1, 1] (the integral too); m_iq_set = output * lo_current_max
+#   [B] mushr.io/hardware/build_instructions: "3000 mAH NiMH Battery (7.2 V)"
+#
+# How the driver maps an action (vesc_ackermann's ackermann_to_vesc, [Y]'s gains): ERPM =
+# speed_to_erpm_gain v + offset; servo = steering_angle_to_servo_gain d + offset, clipped to
+# [servo_min, servo_max]. scensim_batch.tasks.drift does that with the values under `driver`.
+driver:
+  erpm_per_mps: 3500.0        # [Y] speed_to_erpm_gain -3500: its sign is the motor's wiring
+                              # (erpm_sign below); a positive command drives the car forward here
+  speed_max_erpm: 3250.0      # [Y] vesc_driver.speed_max (speed_min -3250): 0.93 m/s at 3500 ERPM/(m/s)
+  servo_gain: 0.8             # [Y] steering_angle_to_servo_gain
+  servo_offset: 0.5           # [Y] steering_angle_to_servo_offset
+  servo_min: 0.15             # [Y] vesc_driver.servo_min: the tire at most 0.4375 rad
+  servo_max: 0.85             # [Y] vesc_driver.servo_max
+params:                       # roboracer_vesc's
+  erpm_per_mps: 3500.0        # [Y]
+  erpm_sign: -1.0             # [Y] the gain's sign: the VESC reports forward as negative ERPM
+  erpm_per_motor_rad_s: 9.549 # not MuSHR's: its pole pairs are not published (1 pair); only the
+                              # back-EMF and duty read it, and neither drives this row
+  kt: 0.00086612              # not MuSHR's, matched to stock's 0.5 N m per rear wheel at the
+                              # speed loop's 60 A: kt gear = 1/60 N m/A, gear = 3500 / 9.549 x
+                              # 0.0525 = 19.243 (the motor's kV is not published; 133, 2026-11-22)
+  current_max: 60.0           # [X] l_current_max: the speed loop's output limit ([F])
+  brake_max: 60.0             # not MuSHR's ([Y]'s brake_max is the driver's, in mA); speed mode
+                              # never brakes by command
+  speed_kp: 0.0003            # [X] s_pid_kp 0.0001 x [F] 1/20 x 60 A: A per ERPM
+  speed_ki: 0.0045            # [X] s_pid_ki 0.0015 x [F] 1/20 x 60 A: A per ERPM s
+  resistance: 0.03            # not MuSHR's (roboracer_vesc's default): duty mode only
+  battery: 7.2                # [B]
+  servo_gain: 0.8             # [Y]
+  servo_offset: 0.5           # [Y]
+  servo_rate: 4.0             # [Y] max_servo_speed 3.2 (servo units/s, the throttle interpolator)
+                              # / 0.8: rad/s at the tire
+  latency: 0.02               # not MuSHR's (roboracer_vesc's default)
+  timeout: 0.5                # not MuSHR's (roboracer_vesc's default)
