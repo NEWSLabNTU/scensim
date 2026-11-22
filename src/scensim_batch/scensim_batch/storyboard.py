@@ -259,10 +259,10 @@ class Storyboard:
         if not self._rebinds:
             return
         from .compile import _Params
+        from .core import _OnDevice
         P = _Params(self._declared, list(records))
         for recompute, outs in self._rebinds:
             dev = next(o.device for o in outs if o is not None)
-            from .core import _OnDevice
             with _OnDevice(None if dev.type == "cpu" else dev):    # as the compile ran
                 new = recompute(P)
             for o, v in zip(outs, new):

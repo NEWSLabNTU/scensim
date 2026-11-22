@@ -123,6 +123,15 @@ class StartPool:
         actions' values, its positions) a reset sets per slot (Storyboard.rebind; 094 P4)."""
         if storyboard is None:
             return
+        # a backstop (243): every $name in the storyboard's text the compile read some other
+        # way (a site not instrumented) is neither live nor fixed, and would never be rebound
+        unread = (storyboard_parameters(self.scenario) & self.sampled) - \
+            (set(storyboard.params_live) | set(storyboard.params_fixed))
+        if unread:
+            raise PoolError(f"{self.scenario.name}: its storyboard reads "
+                            f"{', '.join(sorted(unread))}, which a record sets, by a route the "
+                            "compile does not account for (neither live nor fixed): refused "
+                            "rather than left at its first slot's value")
         fixed = set(storyboard.params_fixed) & self.sampled
         if fixed:
             raise PoolError(f"{self.scenario.name}: its storyboard compiles in "

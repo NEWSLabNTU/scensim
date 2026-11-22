@@ -217,6 +217,134 @@ class Episodes(unittest.TestCase):
         self.assertTrue(torch.equal(x[:, 0], x0[:, 0]) and torch.equal(v[:, 0], v0[:, 0]))
         self.assertFalse(torch.equal(v[:, 1], v0[:, 1]))
 
+    ALL_SITES_PARAMS = "".join(
+        f'<ParameterDeclaration name="{n}" parameterType="{t}" value="{v}"/>'
+        for n, t, v in (("t0", "double", "1"), ("dly", "double", "0.5"), ("v_abs", "double", "5"),
+                        ("rate", "double", "2"), ("fac", "double", "0.5"), ("sp", "double", "3"),
+                        ("acc", "double", "-1"), ("lc_t", "double", "3"), ("shift", "int", "1"),
+                        ("lo", "double", "0.2"), ("rs", "double", "1"), ("ss", "double", "2"),
+                        ("th", "double", "1.5"), ("lane", "string", "34513"), ("s", "double", "80"),
+                        ("tol", "double", "2"), ("ds", "double", "120"), ("dv", "double", "10")))
+
+    @staticmethod
+    def entity_cond(name, body, who="lead"):
+        return (f'<Condition name="{name}" delay="0" conditionEdge="none"><ByEntityCondition>'
+                f'<TriggeringEntities triggeringEntitiesRule="any"><EntityRef entityRef="{who}"/>'
+                f'</TriggeringEntities><EntityCondition>{body}</EntityCondition></ByEntityCondition>'
+                '</Condition>')
+
+    def all_sites(self):
+        """A storyboard with every live site 243 listed: a condition's delay; both SpeedAction
+        targets (absolute, relative factor) and its rate; a RelativeTargetLane change with its
+        offset and time; the entity conditions (Speed, Acceleration, RelativeSpeed, StandStill,
+        TimeHeadway, ReachPosition on a LanePosition with $s and $laneId, Distance to one)."""
+        ec = self.entity_cond
+        t0 = ('<StartTrigger><ConditionGroup><Condition name="t0" delay="$dly" conditionEdge="none">'
+              '<ByValueCondition><SimulationTimeCondition value="$t0" rule="greaterThan"/>'
+              '</ByValueCondition></Condition></ConditionGroup></StartTrigger>')
+        rel = ('<PrivateAction><LongitudinalAction><SpeedAction><SpeedActionDynamics '
+               'dynamicsShape="linear" value="$rate" dynamicsDimension="rate"/><SpeedActionTarget>'
+               '<RelativeTargetSpeed entityRef="ego" value="$fac" speedTargetValueType="factor" '
+               'continuous="false"/></SpeedActionTarget></SpeedAction></LongitudinalAction>'
+               '</PrivateAction>')
+        lc = ('<PrivateAction><LateralAction><LaneChangeAction targetLaneOffset="$lo">'
+              '<LaneChangeActionDynamics dynamicsShape="sinusoidal" value="$lc_t" '
+              'dynamicsDimension="time"/><LaneChangeTarget><RelativeTargetLane entityRef="lead" '
+              'value="$shift"/></LaneChangeTarget></LaneChangeAction></LateralAction>'
+              '</PrivateAction>')
+        lanepos = '<Position><LanePosition roadId="" laneId="$lane" s="{}" offset="0"/></Position>'
+        conds = "".join([
+            ec("sp", '<SpeedCondition value="$sp" rule="greaterThan"/>'),
+            ec("acc", '<AccelerationCondition value="$acc" rule="lessThan"/>'),
+            ec("rs", '<RelativeSpeedCondition entityRef="ego" value="$rs" rule="greaterThan"/>'),
+            ec("ss", '<StandStillCondition duration="$ss"/>'),
+            ec("th", '<TimeHeadwayCondition entityRef="lead" value="$th" freespace="false" '
+                     'alongRoute="false" rule="lessThan"/>', who="ego"),
+            ec("rp", f'<ReachPositionCondition tolerance="$tol">{lanepos.format("$s")}'
+                     '</ReachPositionCondition>'),
+            ec("dc", f'<DistanceCondition value="$dv" freespace="false" rule="lessThan">'
+                     f'{lanepos.format("$ds")}</DistanceCondition>'),
+        ])
+        trig = lambda c: f"<StartTrigger><ConditionGroup>{c}</ConditionGroup></StartTrigger>"  # noqa: E731
+        events = [event("abs", speed("$v_abs", shape="linear", dim="rate", value="$rate"), t0),
+                  event("rel", rel, trig(ec("sp2", '<SpeedCondition value="$sp" '
+                                                   'rule="greaterThan"/>'))),
+                  event("lc", lc, trig(ec("acc2", '<AccelerationCondition value="$acc" '
+                                                  'rule="lessThan"/>'))),
+                  event("x", exit_(":"), trig(conds))]
+        return case(story(*events), params=self.ALL_SITES_PARAMS)
+
+    def records(self, k):
+        base = dict(t0=1.0, dly=0.5, v_abs=5.0, rate=2.0, fac=0.5, sp=3.0, acc=-1.0, lc_t=3.0,
+                    shift=1, lo=0.2, rs=1.0, ss=2.0, th=1.5, lane="34513", s=80.0, tol=2.0,
+                    ds=120.0, dv=10.0)
+        out = []
+        for i in range(k):
+            r = {n: (v if isinstance(v, str) else type(v)(v + (i + 1) * (0.37 if
+                 isinstance(v, float) else 1))) for n, v in base.items()}
+            r["lane"] = str(34513 + i % 2)
+            out.append({"values": r})
+        return out
+
+    def test_every_live_site_rebound_is_a_fresh_compile(self):
+        """243: every live site at once; compiled with records A, rebound to B, each registered
+        tensor equals a compile of B's, bit for bit, and every parameter is accounted for."""
+        from scensim_batch import compile as C
+        from scensim_batch.start_pool import storyboard_parameters
+        p = self.all_sites()
+        a, b = self.records(3), self.records(6)[3:]
+        ca = C.compile_scenario(p, a, StraightWorld(), provides=NIGHT)
+        cb = C.compile_scenario(p, b, StraightWorld(), provides=NIGHT)
+        sa, sb_ = ca.storyboard, cb.storyboard
+        names = storyboard_parameters(p)
+        self.assertEqual(sa.params_live, names)              # every one live, none fixed
+        self.assertEqual(sa.params_fixed & names, set())
+        self.assertEqual(len(sa._rebinds), len(sb_._rebinds))
+        before = [tuple(o.clone() for o in outs) for _, outs in sa._rebinds]
+        sa.rebind(b, [0, 1, 2])
+        for k, ((_, oa), (_, ob)) in enumerate(zip(sa._rebinds, sb_._rebinds)):
+            for x, y in zip(oa, ob):
+                self.assertTrue(torch.equal(x, y), f"site {k}")
+        self.assertTrue(any(not torch.equal(x, y) for o0, (_, oa) in zip(before, sa._rebinds)
+                            for x, y in zip(o0, oa)))                   # it did change them
+
+    def test_each_fixed_kind_is_fixed_and_refused_by_name(self):
+        """243: an execution count, a ParameterCondition and an AbsoluteTargetLane are compiled
+        into the structure: each lands in params_fixed, and a pool drawing it is refused."""
+        from scensim_batch import compile as C
+        from scensim_batch.start_pool import StartPool, PoolError
+        import types
+        decl = ('<ParameterDeclaration name="n" parameterType="int" value="1"/>'
+                '<ParameterDeclaration name="flag" parameterType="double" value="1"/>'
+                '<ParameterDeclaration name="lane_to" parameterType="string" value="34514"/>'
+                '<ParameterDeclaration name="lc_t" parameterType="double" value="3"/>')
+        pc = ('<StartTrigger><ConditionGroup><Condition name="pc" delay="0" conditionEdge="none">'
+              '<ByValueCondition><ParameterCondition parameterRef="flag" value="1" '
+              'rule="equalTo"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>')
+        st = story(event("x", exit_(":"), pc, count="$n"),
+                   event("lc", lane_change(target='<AbsoluteTargetLane value="$lane_to"/>'),
+                         time_trigger(1)))
+        p = case(st, params=decl)
+        c = C.compile_scenario(p, [{"values": {}}], StraightWorld(), provides=NIGHT)
+        sb = c.storyboard
+        for name in ("n", "flag", "lane_to"):
+            self.assertIn(name, sb.params_fixed)
+            self.assertNotIn(name, sb.params_live)
+        pool = types.SimpleNamespace(scenario=p, sampled={"n", "flag", "lane_to", "lc_t"})
+        with self.assertRaisesRegex(PoolError, "compiles in flag, lane_to, n"):
+            StartPool.check_storyboard(pool, sb)
+
+    def test_an_unaccounted_read_is_refused(self):
+        """243's backstop: a $name in the storyboard's text the compile neither read live nor
+        fixed (a site not instrumented) is refused, not left at its first slot's value."""
+        from scensim_batch.start_pool import StartPool, PoolError
+        import types
+        p = self.all_sites()
+        sb = types.SimpleNamespace(params_live={"t0"}, params_fixed=set())
+        pool = types.SimpleNamespace(scenario=p, sampled={"t0", "dly"})
+        with self.assertRaisesRegex(PoolError, "reads dly, which a record sets, by a route"):
+            StartPool.check_storyboard(pool, sb)
+
     def test_a_compiled_in_parameter_is_fixed(self):
         """An execution count (maximumExecutionCount="$n") is compiled into the structure: fixed,
         and a start pool refuses to draw it (StartPool.check_storyboard)."""
