@@ -279,3 +279,45 @@ def _paths(sb):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipIf("ecu_batch" not in globals(), "no torch, or no sim_vehicle_ecu")
+class HeldCommand(unittest.TestCase):
+    """A command held over steps (the same dict, as ScensimEnv holds one action over its
+    decimation's substeps) is one message that ages (BatchRun.before_physics). Before, it stayed
+    at age 0, roboracer_vesc read it as the message it had, and released the motor at its 0.5 s
+    timeout under a steady command (094 P2: the MuSHR stalled at 0.33 m/s)."""
+
+    def test_a_steady_held_command_keeps_the_vesc_driving_past_its_timeout(self):
+        rr = _roboracer()
+        if rr is None:
+            self.skipTest("no roboracer project in this checkout")
+        cls, car = rr
+        import numpy as np
+        from scensim_batch import compile as C, core
+        from sim_vehicle_ecu.signals import MOTOR_MODES
+        n = 2
+        c = C.compile_scenario(HERE.parent / "scripts" / "check_resident.xosc", [{}] * n,
+                               StraightWorld())
+        comp = ecu_batch.load_batch(cls, car, {}, list(range(n)))
+        run = core.BatchRun(c, StraightWorld(), PointMass(n), comp)
+        run.route_length = 1000.0
+        run.reset()
+        steps = round(1.0 / DT)                          # 1 s, twice the VESC's timeout
+        for _ in range(steps // 4):                      # a 4-substep env: 4 steps a message
+            held = {"value": np.full(n, 3000.0), "servo": np.full(n, 0.6),
+                    "motor": np.full(n, MOTOR_MODES.index("speed"), dtype=np.int64),
+                    "age": np.zeros(n), "valid": np.ones(n, bool)}
+            for _ in range(4):
+                run.before_physics(held, DT)
+                run.backend.advance(DT)
+                run.after_physics(DT)
+        current = np.asarray(comp.current)
+        self.assertTrue((current > 0.0).all(), current)   # still driving: not timed out
+        # one dict held for the whole second is one message: it times out, as a real VESC's
+        run.reset()
+        for _ in range(steps):
+            run.before_physics(held, DT)
+            run.backend.advance(DT)
+            run.after_physics(DT)
+        self.assertTrue((np.asarray(comp.current) == 0.0).all())
