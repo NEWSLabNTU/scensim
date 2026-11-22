@@ -70,6 +70,7 @@ class StartPool:
         self.stalls, self.stall_s = 0, 0.0
         self.refill_s, self.refills = 0.0, 0
         self._x = self._y = self._yaw = self._speed = None
+        self.ego = None
         self._lock = threading.Lock()
         self._thread = None
         self.background = background
@@ -89,8 +90,10 @@ class StartPool:
                             f"({batch.summary()})")
         c = compilemod.compile_scenario(self.scenario, recs, self.world, provides=self.provides,
                                         catalogs=self.catalogs or None)
-        e = c.of_role("ego")[0]
-        cols = [t[:, e].to(self.device, torch.float64) for t in (c.x, c.y, c.yaw, c.speed)]
+        self.ego = c.of_role("ego")[0]
+        # every entity's Init, not the ego's alone: the lead's start and speed are a record's too
+        # (094 P4: written for the ego only, a slot's other entities kept its first record's)
+        cols = [t.to(self.device, torch.float64) for t in (c.x, c.y, c.yaw, c.speed)]
         with self._lock:
             self.records.extend(recs)
             if self._x is None:
@@ -158,9 +161,24 @@ class StartPool:
 
     def init(self, rows):
         """The rows' ego Init on the device: x, y, yaw, speed [len(rows)]."""
+        x, y, yaw, v = self.init_all(rows)
+        e = self.ego
+        return x[:, e], y[:, e], yaw[:, e], v[:, e]
+
+    def init_all(self, rows):
+        """The rows' Init of every entity on the device: x, y, yaw, speed [len(rows), E]."""
         idx = torch.as_tensor(rows, dtype=torch.int64, device=self.device)
         with self._lock:
             return self._x[idx], self._y[idx], self._yaw[idx], self._speed[idx]
+
+    def write_init(self, compiled, ids, rows):
+        """Slots `ids` take rows `rows`' Init, every entity's (the compiled scenario's x, y, yaw,
+        speed), as a compile of those records would have them."""
+        x, y, yaw, v = self.init_all(rows)
+        c = compiled
+        it = torch.as_tensor(list(ids), dtype=torch.long, device=c.x.device)
+        for t, val in ((c.x, x), (c.y, y), (c.yaw, yaw), (c.speed, v)):
+            t[it] = val.to(t.device, t.dtype)
 
     def record(self, row):
         return self.records[row]

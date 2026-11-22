@@ -115,6 +115,37 @@ class Compile(unittest.TestCase):
 
 
 
+@unittest.skipIf(torch is None or not DIST.exists(), "no torch, or no leadbrake_rl project")
+class Resets(unittest.TestCase):
+    def test_a_reset_gives_every_entity_its_records_init(self):
+        """A reset slot's lead starts where its new record puts it, at its speed: the pool wrote
+        the ego's Init alone, and the lead kept the slot's first record's (found before P4's
+        first run). Here against a compile of the new records, and through BatchRun's reset."""
+        from scensim_batch import core
+        from sim_vehicle_ecu import batch as ecu_batch
+        from test_core import Accel, PointMass
+        world = LB.straight_world()
+        pool = SP.StartPool(DIST, world, seed=9, chunk=12, background=False, catalogs=CATALOGS)
+        first = pool.take(4)
+        c = C.compile_scenario(pool.scenario, [pool.record(r) for r in first], world,
+                               catalogs=CATALOGS)
+        rows = pool.take(4)
+        pool.write_init(c, [0, 1, 2, 3], rows)
+        fresh = C.compile_scenario(pool.scenario, [pool.record(r) for r in rows], world,
+                                   catalogs=CATALOGS)
+        for name in ("x", "y", "yaw", "speed"):
+            self.assertTrue(torch.equal(getattr(c, name).double(), getattr(fresh, name).double()),
+                            name)
+        lead = c.index("lead")
+        comp = ecu_batch.load_batch(Accel, {}, {}, [1] * 4)
+        run = core.BatchRun(c, world, PointMass(c.n), comp, route_length=LB.LANE_LENGTH)
+        obs = run.reset()
+        for k, r in enumerate(rows):
+            v = pool.record(r)["values"]
+            self.assertAlmostEqual(float(obs["x"][k, lead]), float(v["lead_s"]), places=6)
+            self.assertAlmostEqual(float(obs["v"][k, lead]), float(v["lead_speed"]), places=9)
+
+
 def stock_lead(rear0, v0, decel, onset, steps, dt):
     """Stock's lead (mdp.py LeadCommand._update_command), from its reset: per policy step, it
     brakes when its rear is at or past the onset, then steps its speed and its rear."""

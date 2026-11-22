@@ -32,6 +32,11 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
     num_envs: int = 1024
     starts_log: str = ""                      # the start pool's records log (a jsonl), or none
     pool_seed: int = -1                       # the pool's seed; -1: the run's
+    # the training headway (133): "record", every episode at its record's h (the default, what
+    # seats replay); "stock", stock's training distribution: an episode reset inside a step starts
+    # its lead one policy step further on (v dt; Isaac Lab steps stock's lead command after its
+    # resets), env.reset()'s at h exactly, as stock's evaluation. Named in P4's table.
+    train_headway: str = "record"
 
     def __post_init__(self):
         super().__post_init__()
@@ -57,6 +62,8 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
         if self.pool_seed >= 0:
             self.start_pool["seed"] = int(self.pool_seed)
         LB.check_trigger_geometry(scen / "leadbrake.xosc", LB.straight_world())
+        if self.train_headway not in ("record", "stock"):
+            raise ValueError(f"train_headway {self.train_headway!r}: record or stock")
 
 
 class LeadBrakeEnv(ScensimEnv):
@@ -84,6 +91,22 @@ class LeadBrakeEnv(ScensimEnv):
         # its terminations and rewards (ManagerBasedRLEnv.step), so those read the lead of the
         # step before while the observation reads this step's (243)
         self.lead_seen = None
+        self._stepping = False
+
+    def step(self, action):
+        self._stepping = True                 # a reset now is an in-training one (train_headway)
+        try:
+            return super().step(action)
+        finally:
+            self._stepping = False
+
+    def _draw_starts(self, env_ids, home):
+        super()._draw_starts(env_ids, home)
+        if self.cfg.train_headway == "stock" and self._stepping:
+            c = self.compiled
+            it = torch.as_tensor(list(env_ids), dtype=torch.long, device=c.x.device)
+            # the straight lane along +x (check_trigger_geometry): x is the lead's s
+            c.x[it, self.lead] += c.speed[it, self.lead] * self.step_dt
 
     # --- the action (stock's CarAction) ---------------------------------------------------------
 

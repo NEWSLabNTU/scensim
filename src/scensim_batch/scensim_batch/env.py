@@ -374,11 +374,8 @@ class ScensimEnv(DirectRLEnv):
         import json
         ids = [int(i) for i in torch.as_tensor(env_ids).flatten().tolist()]
         rows = self.pool.take(len(ids))
-        x, y, yaw, v = self.pool.init(rows)
-        c, e = self.compiled, self.run.ego
-        it = torch.as_tensor(ids, dtype=torch.long, device=c.x.device)
-        for t, val in ((c.x, x), (c.y, y), (c.yaw, yaw), (c.speed, v)):
-            t[it, e] = val.to(t.device, t.dtype)
+        c = self.compiled
+        self.pool.write_init(c, ids, rows)       # every entity's Init: the ego's and the lead's
         # and every storyboard value the records set (its triggers' and actions' parameters,
         # its positions): written into those slots, nothing compiled again (094 P4)
         records = [self.pool.record(row) for row in rows]
