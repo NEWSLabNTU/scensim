@@ -19,8 +19,9 @@ not evaluated again, so a rerun after the run has saved more checkpoints goes on
 
 `--eval`: the evaluator (default scensim_batch's eval_drift.py; stock's P1 passes its
 bench/p1/eval_drift.py, so both sides run this one search). Each call is
-`<python> [launcher args] <eval> --headless --run-path <run> --checkpoint <N> --out <json>
-[eval args]`; the evaluator writes a JSON with passed, share_clean, slip_deg_median,
+`<python> [launcher args] <eval> --run-path <run> --checkpoint <N> --out <json> [eval args]`
+with WHEELEDLAB_ENABLE_CAMERAS=0 (as run_p1.sh's evaluations; `--cameras` keeps the caller's)
+and without a display (headless; 241: Isaac Lab 3.0's AppLauncher has no --headless flag); the evaluator writes a JSON with passed, share_clean, slip_deg_median,
 speed_mean and laps_median, as both eval_drift.py do. `--eval-arg` (repeatable) goes to it
 as given: ours takes --row and --starts, stock's --run-config. Everything after `--` is how to
 run the evaluator (the Isaac Lab python and its environment are the caller's).
@@ -52,6 +53,8 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--eval", default=str(HERE / "eval_drift.py"))
     ap.add_argument("--eval-arg", action="append", default=[])
+    ap.add_argument("--cameras", action="store_true",
+                    help="keep the caller's WHEELEDLAB_ENABLE_CAMERAS (default: 0, as run_p1.sh)")
     ap.add_argument("--envs-train", type=int, default=1024)
     ap.add_argument("--steps-per-env", type=int, default=128)
     ap.add_argument("--coarse", type=int, default=250)
@@ -69,9 +72,9 @@ def main(argv=None):
         if it in done:
             return done[it]["passed"]
         js = f"{a.out}.ckpt{it}.json"
-        cmd = runner + [a.eval, "--headless", "--run-path", a.run_path,
+        cmd = runner + [a.eval, "--run-path", a.run_path,
                         "--checkpoint", str(it), "--out", js] + a.eval_arg
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        r = subprocess.run(cmd, capture_output=True, text=True, env=env)
         if r.returncode != 0 or not os.path.exists(js):
             tail = (r.stdout + r.stderr)[-2000:]
             raise SystemExit(f"eval of checkpoint {it} failed (rc {r.returncode}):\n{tail}")
@@ -85,6 +88,10 @@ def main(argv=None):
         print(json.dumps(o), flush=True)
         return o["passed"]
 
+    env = dict(os.environ)
+    env.pop("DISPLAY", None)
+    if not a.cameras:
+        env["WHEELEDLAB_ENABLE_CAMERAS"] = "0"
     its = saved(a.run_path)
     if not its:
         raise SystemExit(f"no checkpoints in {a.run_path}/models")
@@ -109,6 +116,7 @@ def main(argv=None):
                 break
     out = {"run_path": os.path.abspath(a.run_path), "eval": os.path.abspath(a.eval),
            "eval_args": a.eval_arg,
+           "cameras": env.get("WHEELEDLAB_ENABLE_CAMERAS", "1") != "0",
            "iterations_saved": final, "final_passed": final_passed,
            "first_pass_iteration": first,
            "samples_to_pass": None if first is None
