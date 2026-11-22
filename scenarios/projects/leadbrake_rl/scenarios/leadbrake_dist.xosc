@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<OpenSCENARIO>
+  <FileHeader author="scensim" date="2026-11-22T00:00:00+00:00" description="the lead-brake episodes, stock's distribution (094 P4)" revMajor="1" revMinor="2" />
+  <ParameterValueDistribution>
+    <ScenarioFile filepath="leadbrake.xosc"/>
+    <Stochastic numberOfTestRuns="1000" randomSeed="42">
+      <StochasticDistribution parameterName="lead_speed">
+        <UserDefinedDistribution type="scensim.sampler:joint">models/leadbrake_episode.yaml</UserDefinedDistribution>
+      </StochasticDistribution>
+    </Stochastic>
+  </ParameterValueDistribution>
+</OpenSCENARIO>

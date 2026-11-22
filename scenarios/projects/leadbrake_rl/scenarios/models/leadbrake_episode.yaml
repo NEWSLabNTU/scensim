@@ -1,0 +1,29 @@
+# The lead-brake episode as stock's reset_episode draws it (WheeledLab isaaclab-3.0,
+# bench/p4_leadbrake/p4_leadbrake/mdp.py, fef6385; RANGES): lead_speed U[8, 14] m/s, headway
+# U[1, 3] s, decel U[3, 7] m/s^2, onset U[40, 120] m, each uniform and independent; the ego starts
+# at the lead's speed. Stock places the ego's root at 0 and the lead's rear at FRONT + headway x
+# speed (the gap, front to rear, headway x speed), and brakes the lead once its rear passes the
+# onset. Here every position is along lanelet 1 from the ego's start EGO_S (5 m, leadbrake.xosc),
+# and an entity's position is its origin (the rear axle; the Model 3's box: FRONT 3.812 m ahead
+# of it, REAR 0.98 m behind, length 4.792 m):
+#   lead_s  = EGO_S + headway x lead_speed + FRONT + REAR  (the lead's origin: its rear + REAR)
+#   onset_s = EGO_S + onset + REAR + 1.0                   (ReachPosition fires within its 1 m
+#             tolerance, so the lead's rear is at the onset when it does)
+# onset and headway are the drawn variables, stock's marginals exactly; lead_s and onset_s are
+# them shifted and scaled, not draws of their own (133).
+model: 1
+header:
+  name: leadbrake_episode
+  dataset: "none: stock's reset distribution, written out"
+  version: "0"
+  licence: BSD-3-Clause
+variables:
+  - {name: lead_speed, uniform: {low: 8.0, high: 14.0}}
+  - {name: headway, latent: true, uniform: {low: 1.0, high: 3.0}}
+  - {name: decel, uniform: {low: 3.0, high: 7.0}}
+  - {name: onset, latent: true, uniform: {low: 40.0, high: 120.0}}
+derived:
+  ego_speed: "lead_speed"
+  lead_s: "5.0 + headway * lead_speed + 3.812 + 0.98"
+  onset_s: "5.0 + onset + 0.98 + 1.0"
+cell: {}
