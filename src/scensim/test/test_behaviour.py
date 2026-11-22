@@ -3,6 +3,7 @@ numpy and torch forms bit for bit on a closed loop (an ego driving through a cro
 walker integrated as the world would integrate its command)."""
 import math
 import random
+import sys
 
 import pytest
 
@@ -121,19 +122,40 @@ def test_reject_waits_for_the_ego_then_crosses():
     assert rec["decision"]["gap_s"] == pytest.approx(2.5)
 
 
+# what a torch built for another NumPy ABI says (a user-site NumPy 2 against the system torch,
+# built for NumPy 1); only these are a skip: any other failure is a broken torch, and fails
+ABI_MISMATCH = ("_ARRAY_API", "Numpy is not available", "compiled using NumPy",
+                "numpy.core.multiarray failed to import")
+
+
+def _abi_mismatch(e):
+    return any(m in str(e) for m in ABI_MISMATCH)
+
+
 def usable_torch():
-    """torch, if it can take this NumPy's arrays; else a skip naming why. A user-site NumPy 2
-    against a torch built for NumPy 1 imports, then fails at the first conversion
-    ("_ARRAY_API not found", "Numpy is not available")."""
-    torch = pytest.importorskip("torch")
+    """torch, if it imports and takes this NumPy's arrays. A missing torch is a skip, and so
+    is the NumPy ABI mismatch, at import (`from torch._C import *`: "AttributeError:
+    _ARRAY_API not found", which pytest.importorskip does not catch) or at the first
+    conversion ("Numpy is not available"). Any other error fails, with its traceback."""
     import numpy as np
+    hint = ("a NumPy built for another ABI, e.g. a user-site NumPy 2 against the system torch: "
+            "run in the gate's environment, or with PYTHONNOUSERSITE=1")
+    try:
+        import torch
+    except Exception as e:
+        if _abi_mismatch(e):
+            pytest.skip(f"torch does not import with NumPy {np.__version__} "
+                        f"({type(e).__name__}: {e}); {hint}")
+        if isinstance(e, ModuleNotFoundError) and e.name == "torch":
+            pytest.skip("no torch")
+        raise
     try:
         torch.as_tensor(np.zeros(1))
     except Exception as e:
+        if not _abi_mismatch(e):
+            raise
         pytest.skip(f"torch {torch.__version__} cannot take NumPy {np.__version__}'s arrays "
-                    f"({type(e).__name__}: {e}); a NumPy built for another ABI, e.g. a user-site "
-                    "NumPy 2 against the system torch: run in the gate's environment, or with "
-                    "PYTHONNOUSERSITE=1")
+                    f"({type(e).__name__}: {e}); {hint}")
     return torch
 
 
@@ -156,3 +178,58 @@ def test_numpy_and_torch_agree_bit_for_bit():
     seen = {int(e) for t in out["numpy"] for e in t[1]}
     assert {w.GO, w.REJECT, w.GO_AFTER, w.HESITATE, w.RESUME, w.DONE} <= seen
     del torch
+
+
+def test_a_torch_that_fails_to_import_is_a_skip(monkeypatch):
+    """The failure 243's shell had: `import torch` itself raising AttributeError."""
+    import builtins
+    real = builtins.__import__
+
+    def broken(name, *a, **k):
+        if name == "torch" or name.startswith("torch."):
+            raise AttributeError("_ARRAY_API not found")
+        return real(name, *a, **k)
+
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.setattr(builtins, "__import__", broken)
+    with pytest.raises(pytest.skip.Exception, match="AttributeError: _ARRAY_API not found"):
+        usable_torch()
+
+
+def test_an_unrelated_import_error_fails(monkeypatch):
+    """A broken torch that is not the ABI mismatch is not hidden as a skip."""
+    import builtins
+    real = builtins.__import__
+
+    def broken(name, *a, **k):
+        if name == "torch" or name.startswith("torch."):
+            raise AttributeError("module 'torch._C' has no attribute '_cuda_getDevice'")
+        return real(name, *a, **k)
+
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.setattr(builtins, "__import__", broken)
+    with pytest.raises(AttributeError, match="_cuda_getDevice"):
+        usable_torch()
+
+
+def test_an_unrelated_conversion_error_fails(monkeypatch):
+    torch = usable_torch()
+
+    def bad(*a, **k):
+        raise RuntimeError("CUDA error: an illegal memory access was encountered")
+
+    monkeypatch.setattr(torch, "as_tensor", bad)
+    with pytest.raises(RuntimeError, match="illegal memory access"):
+        usable_torch()
+
+
+def test_a_torch_that_cannot_convert_is_a_skip(monkeypatch):
+    """The other form: torch imports, then the first conversion fails."""
+    torch = usable_torch()
+
+    def bad(*a, **k):
+        raise RuntimeError("Numpy is not available")
+
+    monkeypatch.setattr(torch, "as_tensor", bad)
+    with pytest.raises(pytest.skip.Exception, match="cannot take NumPy"):
+        usable_torch()
