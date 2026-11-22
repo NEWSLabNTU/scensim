@@ -258,7 +258,8 @@ scensim_isaac_world 6177ced (pins cebb5557), scensim 82787b91; 056's steps 1-4.
   ea35f35): 8 tests, the world server's 339 pass. Haruna's and Tsukuba's published records are
   both level (C3's builder writes a level section with no lip), so they still reduce to one
   `Section` and give the same road. A per-station corridor's tile takes 0.07 s against 0.043.
-- **C5b, the ribbon from the record.** The course meshes tilt each strip by bank and crown,
+- **C5b, the ribbon from the record** (done 2026-11-23, results below). The course meshes tilt
+  each strip by bank and crown,
   so PhysX's base road carries the cross slope, and the layer adds only what the mesh does
   not. Check: Isaac's road height and cross slope against the record at every station (within
   5 mm and 0.1 deg), and midway between stations against the layer's own interpolation, so the
@@ -335,6 +336,40 @@ run on it as on Haruna. Its record is the spec below, not a measurement; the fil
   the lowest the road comes within a cell and a half (3 m), and past it to the road's edge,
   as before; the rerun had no ray off the road. A course cut to a level road had no step
   for a triangle to span.
+
+#### C5b's results (2026-11-23, 118, GPU0)
+
+scensim_isaac_world 086-c5b: `course/fixture.py`, `geometry.ribbon` taking the record,
+`course/check.py` and `course/isaac_check.py` (the geometry), `course/ego_trace.py` (a
+testbench attachment writing the ego's truth), `course/arc_drive.py` (aib's car through the
+bend without Autoware) and `course/arc_check.py` (a trace against the record), and
+road_detail's `section_in_base`. The
+fixture builds in 3 s: 510 m, a 143.2 deg turn, R 60 m. Logs: NAS "2026-11-23 086 C5b fixture
+course (118)".
+
+| check | points | at stations | midway | limit |
+|---|---|---|---|---|
+| the road mesh against the record (offline) | 97968 | 0.000 mm, 0.0000 deg | 0.089 mm, 0.0000 deg | 5 mm, 0.1 deg |
+| the road layer's tiles against the record (offline) | 92101 | 0.54 mm | 0.54 mm | 2 mm |
+| Isaac's road by PhysX's rays against the record | 97968, none off the road | 0.003 mm, 0.0001 deg | 0.089 mm, 0.0001 deg | 5 mm, 0.1 deg |
+
+The layer's check leaves out a tile cell and a half at the paved edge, where the record's
+backslope back to the ground begins (1V:2H; a 5 cm cell rounds that kink by up to 7 mm).
+
+The drive, against outcomes written before each run (`EXPECTED.md` in the logs):
+
+| | speed on the arc | straight roll | arc roll | arc less straight | lateral force on the arc | if level |
+|---|---|---|---|---|---|---|
+| expected | | -1.43 +-0.5 deg | -3.43 +-1.0 deg | -2.0 +-1.0 deg | v w cos(theta) - g sin(theta) +-0.2 m/s^2 | v w |
+| Autoware's Model 3, scensim run 2026-11-23T06-02-47_fixture_c5_down_r0, passed | 4.16 m/s | -1.48 | -3.55 | -2.07 | -0.310 against -0.290 | +0.298 |
+| aib's Model 3 without Autoware, `arc_drive` at 11.1 m/s (arc40b) | 11.37 m/s | -1.53 | -2.84 | -1.31 | +1.726 against +1.623 | +2.214 |
+
+**Finding: Autoware takes the arc at 4 m/s**, far under the course's 40 km/h: its velocity
+smoother holds the lateral acceleration to 1.0 m/s^2 (`lateral_acceleration_limits` in
+Autoware 1.5's velocity_smoother.param.yaml), so on Autoware a curve's speed is the
+smoother's, not the map's, and a check that needs a curve's v^2/R must drive without it. So the 40 km/h case drove aib's PhysX car (the ego config's rig, as aib.steptest
+builds it) with a pure pursuit and a speed hold. In both, the bank's g sin(theta) (0.59 m/s^2)
+reaches PhysX's contact, not only the mesh.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
