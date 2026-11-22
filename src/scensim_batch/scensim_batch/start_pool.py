@@ -50,9 +50,12 @@ class StartPool:
     """Sample records of one distribution, compiled to the ego's Init, taken one per reset."""
 
     def __init__(self, distribution, world, seed, chunk=10000, low_water=None, device="cpu",
-                 provides=(), background=True, sampler=None):
+                 provides=(), background=True, sampler=None, knobs=None):
         from scensim_sampler.sampler import Sampler
-        self.sampler = sampler or Sampler.from_file(distribution)
+        # `knobs`: the run's own draw (stock's 20 reference points of a drift run, say), the
+        # distribution's world knobs for every record of this run; the run's log records them
+        self.knobs = dict(knobs or {})
+        self.sampler = sampler or Sampler.from_file(distribution, knobs=self.knobs)
         self.scenario = Path(self.sampler.scenario.path)
         sampled = set(self.sampler.scenario.parameters)
         reads = storyboard_parameters(self.scenario) & sampled

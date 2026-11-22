@@ -1,21 +1,44 @@
 # The drift episode's start, as WheeledLab's reset_root_state_along_track draws it (stock's
-# drifting/mdp/events.py, fork isaaclab-3.0 a35060c): a point along the oval's centre line, then
-# uniform noise of +-0.5 m in x and y and +-1 rad in yaw, at rest. Stock draws its 20 reference
-# points once per run (torch.rand at the event's construction) and picks one per reset; here the
-# point is drawn per episode, uniform along the track: the same marginal over runs, not stock's
-# 20 per run (a named difference, 094 P2's table).
+# drifting/mdp/events.py, fork isaaclab-3.0 a35060c, BSD-3-Clause): 20 reference points along
+# the oval's centre line drawn once per run (uniform along its length: the run's knobs ref_s_0
+# to ref_s_19, which scensim_batch.tasks.drift.reference_points draws from the run's seed and
+# the run's log records), then per episode one of them, uniformly, and uniform noise of +-0.5 m
+# in x and y and +-1 rad in yaw, at rest. models/mushr_drift_start_uniform.yaml is the variant
+# whose point is drawn per episode along the whole track.
 model: 1
 header:
   name: mushr_drift_start
   dataset: "none: WheeledLab's reset distribution, written out"
-  version: "0"
+  version: "1"
   licence: BSD-3-Clause
+knobs:                          # the run's 20 points (m along the track); a run sets them
+  ref_s_0: 0.0
+  ref_s_1: 0.0
+  ref_s_2: 0.0
+  ref_s_3: 0.0
+  ref_s_4: 0.0
+  ref_s_5: 0.0
+  ref_s_6: 0.0
+  ref_s_7: 0.0
+  ref_s_8: 0.0
+  ref_s_9: 0.0
+  ref_s_10: 0.0
+  ref_s_11: 0.0
+  ref_s_12: 0.0
+  ref_s_13: 0.0
+  ref_s_14: 0.0
+  ref_s_15: 0.0
+  ref_s_16: 0.0
+  ref_s_17: 0.0
+  ref_s_18: 0.0
+  ref_s_19: 0.0
 variables:
-  - {name: s_ref, latent: true, uniform: {low: 0.0, high: 8.226548245743669}}  # 2 pi 0.8 + 4 x 0.8
+  - {name: ref, latent: true, categorical: {0: 1.0, 1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.0, 6: 1.0, 7: 1.0, 8: 1.0, 9: 1.0, 10: 1.0, 11: 1.0, 12: 1.0, 13: 1.0, 14: 1.0, 15: 1.0, 16: 1.0, 17: 1.0, 18: 1.0, 19: 1.0}}
   - {name: dx, latent: true, uniform: {low: -0.5, high: 0.5}}
   - {name: dy, latent: true, uniform: {low: -0.5, high: 0.5}}
   - {name: dh, latent: true, uniform: {low: -1.0, high: 1.0}}
 derived:
+  s_ref: "ref_s_0 if ref == 0 else (ref_s_1 if ref == 1 else (ref_s_2 if ref == 2 else (ref_s_3 if ref == 3 else (ref_s_4 if ref == 4 else (ref_s_5 if ref == 5 else (ref_s_6 if ref == 6 else (ref_s_7 if ref == 7 else (ref_s_8 if ref == 8 else (ref_s_9 if ref == 9 else (ref_s_10 if ref == 10 else (ref_s_11 if ref == 11 else (ref_s_12 if ref == 12 else (ref_s_13 if ref == 13 else (ref_s_14 if ref == 14 else (ref_s_15 if ref == 15 else (ref_s_16 if ref == 16 else (ref_s_17 if ref == 17 else (ref_s_18 if ref == 18 else (ref_s_19)))))))))))))))))))"
   # the centre line from s (stock's generate_reference_poses: up x = 0.8, the turn about (0, 0.8),
   # down x = -0.8, the turn about (0, -0.8)); its heading in rad
   a1: "(s_ref - 1.6) / 0.8"

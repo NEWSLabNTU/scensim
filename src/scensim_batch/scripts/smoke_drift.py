@@ -46,6 +46,7 @@ def main(argv=None):
     cfg.component = "ideal"
     cfg.body, cfg.asset_root = body, a.asset_root
     cfg.start_pool = {"distribution": a.dist, "seed": 7, "chunk": max(4 * a.n, 1000),
+                      "run_knobs": "scensim_batch.tasks.drift_start:reference_points",
                       "log": a.log}
     cfg.scene.num_envs = a.n
     cfg.sim.device = "cuda:0"
