@@ -146,6 +146,55 @@ class Resets(unittest.TestCase):
             self.assertAlmostEqual(float(obs["v"][k, lead]), float(v["lead_speed"]), places=9)
 
 
+    def test_a_reset_gives_the_ego_its_records_route_goal(self):
+        """243: the ego's route goal (Init's RoutingAction) is a record's too when it reads a
+        sampled parameter: a variant whose ego acquires $lead_s's position, written per reset as
+        a compile of the new records holds it."""
+        import shutil
+        import tempfile
+        d = Path(tempfile.mkdtemp())
+        shutil.copytree(DIST.parent, d / "scenarios")
+        sc = d / "scenarios" / "leadbrake.xosc"
+        text = sc.read_text()
+        tele = ('<Private entityRef="ego">\n\t\t\t\t<PrivateAction><TeleportAction><Position>'
+                '<LanePosition roadId="" laneId="1" s="5.0" offset="0" /></Position>'
+                '</TeleportAction></PrivateAction>')
+        self.assertIn(tele, text)
+        sc.write_text(text.replace(tele, tele + '\n\t\t\t\t<PrivateAction><RoutingAction>'
+                                   '<AcquirePositionAction><Position><LanePosition roadId="" '
+                                   'laneId="1" s="$lead_s" offset="0" /></Position>'
+                                   '</AcquirePositionAction></RoutingAction></PrivateAction>', 1))
+        world = LB.straight_world()
+        pool = SP.StartPool(d / "scenarios" / DIST.name, world, seed=9, chunk=12,
+                            background=False, catalogs=CATALOGS)
+        first = pool.take(4)
+        c = C.compile_scenario(pool.scenario, [pool.record(r) for r in first], world,
+                               catalogs=CATALOGS)
+        self.assertTrue(c.goal_waypoints)
+        rows = pool.take(4)
+        pool.write_init(c, [0, 1, 2, 3], rows)
+        fresh = C.compile_scenario(pool.scenario, [pool.record(r) for r in rows], world,
+                                   catalogs=CATALOGS)
+        for w, f in zip(c.goal_waypoints, fresh.goal_waypoints):
+            for t, u in zip(w, f):
+                self.assertTrue(torch.allclose(torch.as_tensor(t).double(),
+                                               torch.as_tensor(u).double(), atol=1e-12))
+        self.assertFalse(torch.allclose(torch.as_tensor(fresh.goal_waypoints[0][0]).double(),
+                                        torch.as_tensor(C.compile_scenario(
+                                            pool.scenario, [pool.record(r) for r in first],
+                                            world, catalogs=CATALOGS).goal_waypoints[0][0])
+                                        .double()))      # the records' goals do differ
+
+    def test_an_env_compile_of_other_entities_is_refused(self):
+        world = LB.straight_world()
+        pool = SP.StartPool(DIST, world, seed=9, chunk=4, background=False, catalogs=CATALOGS)
+        c = C.compile_scenario(pool.scenario, [pool.record(r) for r in pool.take(2)], world,
+                               catalogs=CATALOGS)
+        c.entities = list(reversed(c.entities))
+        with self.assertRaisesRegex(SP.PoolError, "entities"):
+            pool.write_init(c, [0, 1], pool.take(2))
+
+
 def stock_lead(rear0, v0, decel, onset, steps, dt):
     """Stock's lead (mdp.py LeadCommand._update_command), from its reset: per policy step, it
     brakes when its rear is at or past the onset, then steps its speed and its rear."""

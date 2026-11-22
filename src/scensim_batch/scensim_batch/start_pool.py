@@ -71,6 +71,8 @@ class StartPool:
         self.refill_s, self.refills = 0.0, 0
         self._x = self._y = self._yaw = self._speed = None
         self.ego = None
+        self.entity_names = None      # the compile's entities, in its column order
+        self._goal = None             # the ego's route goal per waypoint: (x, y, yaw) [rows]
         self._lock = threading.Lock()
         self._thread = None
         self.background = background
@@ -94,8 +96,21 @@ class StartPool:
         # every entity's Init, not the ego's alone: the lead's start and speed are a record's too
         # (094 P4: written for the ego only, a slot's other entities kept its first record's)
         cols = [t.to(self.device, torch.float64) for t in (c.x, c.y, c.yaw, c.speed)]
+        names = [e.name for e in c.entities]
+        goal = [tuple(torch.as_tensor(t).to(self.device, torch.float64) for t in w)
+                for w in (c.goal_waypoints or [])]
         with self._lock:
             self.records.extend(recs)
+            if self.entity_names is not None and names != self.entity_names:
+                raise PoolError(f"{self.scenario.name}: chunk {k} compiled entities {names}, "
+                                f"not {self.entity_names}")
+            self.entity_names = names
+            if self._goal is not None and len(goal) != len(self._goal):
+                raise PoolError(f"{self.scenario.name}: chunk {k} compiled {len(goal)} route "
+                                f"waypoints, not {len(self._goal)}")
+            self._goal = goal if self._goal is None else [
+                tuple(torch.cat([a, b]) for a, b in zip(old, new))
+                for old, new in zip(self._goal, goal)]
             if self._x is None:
                 self._x, self._y, self._yaw, self._speed = cols
             else:
@@ -174,11 +189,25 @@ class StartPool:
     def write_init(self, compiled, ids, rows):
         """Slots `ids` take rows `rows`' Init, every entity's (the compiled scenario's x, y, yaw,
         speed), as a compile of those records would have them."""
-        x, y, yaw, v = self.init_all(rows)
         c = compiled
+        names = [e.name for e in c.entities]
+        if names != self.entity_names:          # it writes by column (243)
+            raise PoolError(f"{self.scenario.name}: the env's compile has entities {names}, the "
+                            f"pool's {self.entity_names}")
+        x, y, yaw, v = self.init_all(rows)
         it = torch.as_tensor(list(ids), dtype=torch.long, device=c.x.device)
         for t, val in ((c.x, x), (c.y, y), (c.yaw, yaw), (c.speed, v)):
             t[it] = val.to(t.device, t.dtype)
+        # and the ego's route goal, which Init's routing may place by a record's parameter (243)
+        if len(c.goal_waypoints or []) != len(self._goal or []):
+            raise PoolError(f"{self.scenario.name}: the env's compile has "
+                            f"{len(c.goal_waypoints or [])} route waypoints, the pool's "
+                            f"{len(self._goal or [])}")
+        idx = torch.as_tensor(rows, dtype=torch.int64, device=self.device)
+        with self._lock:
+            for w, src in zip(c.goal_waypoints or [], self._goal or []):
+                for t, s in zip(w, src):
+                    t[it.to(t.device)] = s[idx].to(t.device, t.dtype)
 
     def record(self, row):
         return self.records[row]
