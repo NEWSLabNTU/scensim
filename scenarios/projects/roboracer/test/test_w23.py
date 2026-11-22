@@ -192,3 +192,21 @@ def test_m6b_gives_the_sideslip_peak_and_the_heading_change_over_the_brake(side)
     assert q["sideslip_peak"] == pytest.approx(0.06, abs=0.003)
     assert q["heading_change_braking"] == pytest.approx(abs(turned), rel=1e-3)
     assert q["heading_change_braking"] > 0
+
+
+@pytest.mark.parametrize("side", [1, -1])
+def test_m5_gives_the_sideslip_at_the_reference(side):
+    """W10: the radius and yaw rate see only the axles' balance; the sideslip sees the rear."""
+    v, r, beta, hz = 2.0, 1.2 * side, -0.03 * side, 100.0
+    t = np.arange(0.0, 8.0, 1.0 / hz)
+    yaw = r * t
+    R = v / r
+    ang = yaw + beta - math.pi / 2
+    x, y = R * np.cos(ang), R * np.sin(ang)
+    streams = {"ref_t": t, "ref_x": x - x[0], "ref_y": y - y[0], "ref_yaw": yaw,
+               "core_t": t, "core_erpm": np.full_like(t, v * 4614.0),
+               "imu_t": t, "imu_wz": np.full_like(t, r)}
+    session = {"manoeuvre": "M5", "condition": {"angle": 0.2, "speed": 2.0, "side": side}}
+    q = qmod.quantities(session, streams, DOC)
+    assert q["sideslip"] == pytest.approx(-0.03, abs=1e-5)
+    assert q["radius"] == pytest.approx(v / abs(r), rel=1e-3)

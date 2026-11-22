@@ -46,14 +46,25 @@ env -i HOME="\$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" bash -c "source
 EOF
 chmod +x "$OUT/twin_eval_${pass/,/_}.sh"
 done
-isaac "python $HERE/twin_runs.py --ego ego.yaml --out $OUT/logs/twin0 --repetitions 1" > "$OUT/twin0.log" 2>&1
+# a step that finished leaves a marker in OUT/done/, and a rerun into the same OUT skips it (the
+# logs' generation is most of the time); a step that did not finish is redone from the start
+mkdir -p "$OUT/done"
+if [ ! -e "$OUT/done/twin0" ]; then
+    rm -rf "$OUT/logs/twin0"
+    isaac "python $HERE/twin_runs.py --ego ego.yaml --out $OUT/logs/twin0 --repetitions 1" > "$OUT/twin0.log" 2>&1
+    touch "$OUT/done/twin0"
+fi
 [ -e "$OUT/draw/p3/perturbation.yaml" ] || python3 "$HERE/draw_perturbation.py" --out "$OUT/draw/p3/perturbation.yaml"
 seed=23
 for p in p1 p2 p3; do
     src=$ROOT/protocol/perturbations/$p.yaml; [ "$p" = p3 ] && src=$OUT/draw/p3/perturbation.yaml
-    isaac "python $HERE/twin_runs.py --ego ego.yaml --out $OUT/logs/real_$p --perturb $src --sealed $OUT/sealed/$p --seed $seed" > "$OUT/real_$p.log" 2>&1
+    if [ ! -e "$OUT/done/real_$p" ]; then
+        rm -rf "$OUT/logs/real_$p" "$OUT/sealed/$p"
+        isaac "python $HERE/twin_runs.py --ego ego.yaml --out $OUT/logs/real_$p --perturb $src --sealed $OUT/sealed/$p --seed $seed" > "$OUT/real_$p.log" 2>&1
+        sys "python3 $HERE/bags.py convert $OUT/logs/real_$p" > "$OUT/bags_$p.log" 2>&1
+        touch "$OUT/done/real_$p"
+    fi
     seed=$((seed + 1))
-    sys "python3 $HERE/bags.py convert $OUT/logs/real_$p" > "$OUT/bags_$p.log" 2>&1
     sys "python3 $HERE/fit_twin.py --logs $OUT/logs/real_$p --spec $OUT/roboracer.yaml --out $OUT/fit_$p.yaml" > "$OUT/fit_$p.log" 2>&1
     T=vehicle.axle_tires
     sys "python3 $HERE/refine_twin.py --logs $OUT/logs/real_$p --fitted $OUT/fit_$p.yaml --out $OUT/fit_${p}_stiffness.yaml --twin-cmd '$OUT/twin_eval_M5.sh {fitted} {out}' --only M5 --max-ay 2.0 --params $T.front.lat_stiff_value,$T.rear.lat_stiff_value --anchor 0 --max-evals 30" > "$OUT/refine_${p}_stiffness.log" 2>&1

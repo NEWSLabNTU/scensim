@@ -66,6 +66,20 @@ def _ref_speed(streams, window=0.1):
     return (t[k:] + t[:-k]) / 2, d
 
 
+def _sideslip(streams, t0, side, window=0.1):
+    """The mean sideslip after t0 (rad, in the turn's sense): the angle of the reference's path
+    from its heading, over chords of `window` s."""
+    rt, yaw = streams["ref_t"], np.unwrap(streams["ref_yaw"])
+    k = max(1, int(round(window / np.median(np.diff(rt)))))
+    tm = (rt[k:] + rt[:-k]) / 2
+    vx = streams["ref_x"][k:] - streams["ref_x"][:-k]
+    vy = streams["ref_y"][k:] - streams["ref_y"][:-k]
+    beta = np.arctan2(vy, vx) - (yaw[k:] + yaw[:-k]) / 2
+    beta = np.arctan2(np.sin(beta), np.cos(beta)) * side
+    sel = tm >= t0
+    return float(beta[sel].mean()) if sel.any() else None
+
+
 def quantities(session, streams, protocol_doc):
     """{quantity: value} of one run. Names follow design note 5.2."""
     m = session["manoeuvre"]
@@ -120,6 +134,10 @@ def quantities(session, streams, protocol_doc):
         out["yaw_rate"] = abs(r)
         out["radius"] = abs(vs / r) if abs(r) > 1e-6 else None
         out["lateral_acceleration"] = abs(vs * r)
+        # the sideslip at the reference (the rear axle: the rear's own slip), from the pose. The
+        # radius and the yaw rate see only the balance of the two axles' stiffness; this one
+        # sees the rear alone (W10)
+        out["sideslip"] = _sideslip(streams, t1, float(cond["side"]))
     elif m == "M6":
         wt, wz = streams["imu_t"], np.abs(streams["imu_wz"])
         vi = np.interp(wt, t, v)
@@ -168,6 +186,7 @@ RES = {  # a quantity's resolution: what the measurement cannot tell apart
     "yaw_rate": 0.01, "radius": None, "lateral_acceleration": 0.05,
     "lateral_acceleration_at_slide": 0.1,
     "sideslip_peak": 0.0035, "heading_change_braking": 0.0035,  # 0.2 deg: the pose's yaw
+    "sideslip": 0.0035,
 }
 
 
