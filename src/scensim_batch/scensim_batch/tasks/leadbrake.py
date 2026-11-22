@@ -86,6 +86,12 @@ BODY_NAME = "carla-0.9.16"                   # the spec's body stock's car copie
 BODY = f"articulation_{BODY_NAME}.yaml"      # its generated articulation file
 
 
+def aib_ego():
+    """aib's ego config: the Model 3 rig engine A drives (094 P4's engine A row)."""
+    return Path(__file__).resolve().parents[3] / "autoware_isaac_bridge" / "src" / "aib" / \
+        "config" / "ego.yaml"
+
+
 def _spec_root():
     return Path(__file__).resolve().parents[3] / "sim_vehicle_spec"
 
