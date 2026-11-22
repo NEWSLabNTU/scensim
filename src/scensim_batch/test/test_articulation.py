@@ -245,7 +245,11 @@ class ModelTest(unittest.TestCase):
                             "source": "here", "licence": "MIT",
                             "joints": {n: f"a_{n}" for n in art.joint_order(doc)},
                             "links": {"front_left_wheel": "flw"}}
-            self.assertEqual(art.asset_usd(doc, root), str(p))
+            # a file of no bodies: its bytes are the point here, not its mass
+            self.assertEqual(art.asset_usd(doc, root, check_mass=False), str(p))
+            if HAVE_PXR:      # where its stage can be read: it weighs nothing, the spec 1760 kg
+                with self.assertRaisesRegex(ValueError, "the spec is not measured from"):
+                    art.asset_usd(doc, root)
             self.assertEqual(art.asset_name(doc, "rear_left_spin"), "a_rear_left_spin")
             self.assertEqual(art.asset_name(doc, "front_left_wheel"), "flw")
             with self.assertRaisesRegex(ValueError, "maps no 'rear_left_wheel'"):
