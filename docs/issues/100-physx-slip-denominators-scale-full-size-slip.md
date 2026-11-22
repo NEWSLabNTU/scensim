@@ -38,8 +38,8 @@ A tyre's force curve is fitted against true slip. Under the scaling, the car nee
 slip for the same force, and it reaches the friction limit at a different true slip. The onboard
 computers' ABS and TC thresholds were tuned on PhysX's scaled slip, and sim_vehicle_ecu's slip
 estimate uses the same +4 m/s offset, so the controllers agree with what PhysX reports. What the
-scaling does to the car's braking and cornering has not been measured. This issue measures it on
-the Isaac Model 3 before anything changes.
+scaling does to the car's braking and cornering is measured below on the Isaac Model 3, before
+anything changes.
 
 ## Measurement (2026-11-22, 241)
 
