@@ -164,9 +164,12 @@ subtypes share one category id, so coverage aggregates them.
    licence allows it. Each fitted model records its dataset, version and licence in its
    header, and the sample record names it. Regional difference stays a caveat: a model
    fitted on German intersections describes German walkers.
-2. **Which reference driver?** R157's models are disputed against real near-crashes; a
-   NIEON-like model is stricter. Possibly both, reported side by side.
-3. **Severity.** Delta-v is a proxy for injury. Is it enough for the studies, or is an injury
-   risk curve needed?
-4. **Category weights.** U.S. typology frequencies or local (Taiwanese) crash statistics for
-   combining cells?
+2. **Which reference driver?** Decided (user, 2026-11-22): **both**, reported side by side:
+   R157's models and a stricter NIEON-like model. R157's are disputed against real
+   near-crashes; the pair brackets the reference.
+3. **Severity.** Decided (user, 2026-11-22): **delta-v first**. It is computable from the
+   truth on every target and standard in crash data; an injury risk curve can be layered on
+   it later.
+4. **Category weights.** Decided (user, 2026-11-22): **local (Taiwanese) crash statistics**
+   where they can be obtained; until then the U.S. typology frequencies, labelled as a
+   placeholder wherever they are used.

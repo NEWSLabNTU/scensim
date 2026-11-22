@@ -192,8 +192,11 @@ Rules that hold across families:
 
 ## 7. Open questions
 
-1. **Which families first?** R1, R2 and R5 fit what scensim already does best (traffic,
-   pedestrians, physics). R4 depends on each simulator's sensor effects. R6 needs the fault
-   hook.
-2. **What t for combinatorial coverage?** Pairs are cheap; triples catch more but grow fast.
-3. **Reporting R6.** Per fault, or folded in with stated assumed rates?
+1. **Which families first?** Decided (user, 2026-11-22): **R1, R2 and R5 first**, which fit
+   what scensim already does best (traffic, pedestrians, physics); then **R6**, which needs the
+   fault hook; then **R4**, which depends on each simulator's sensor effects.
+2. **What t for combinatorial coverage?** Decided (user, 2026-11-22): **pairs** by default,
+   **triples for the key cells** a study names. Pairs are cheap; triples catch more but grow
+   fast.
+3. **Reporting R6.** Decided (user, 2026-11-22): **per fault**, each fault its own cell, so a
+   fault the autopilot cannot handle is not hidden in a pooled rate.
