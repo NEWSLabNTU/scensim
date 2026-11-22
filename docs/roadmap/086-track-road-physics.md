@@ -328,6 +328,13 @@ run on it as on Haruna. Its record is the spec below, not a measurement; the fil
   nonzero crown". On the banked arc the body's measured roll and its lateral acceleration
   along the road surface are checked against the record's, v^2/R cos(theta) - g sin(theta)
   with theta the bank, so the tilt is shown to reach PhysX's contact, not only its mesh. aib's slope matrix and haruna_down on Haruna, paired against main's on GPU0.
+- **Finding (2026-11-23): the terrain stood above a lip's shoulder.** Isaac's first check had
+  95 rays on the shoulder below the 10 cm lip hitting the terrain, not the road: the
+  terrain's 2 m triangles, cut to the road's height at their corners, spanned the step and
+  stood above the dropped shoulder between them. Under the road the terrain is now cut to
+  the lowest the road comes within a cell and a half (3 m), and past it to the road's edge,
+  as before; the rerun had no ray off the road. A course cut to a level road had no step
+  for a triangle to span.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
