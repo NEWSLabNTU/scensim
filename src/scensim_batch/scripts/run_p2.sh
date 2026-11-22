@@ -7,7 +7,7 @@
 #   (seed: the one seed SEED names, into the seeds stage's directory)
 #
 # Host settings (environment): FORK, the WheeledLab checkout at the harness pin (isaaclab-3.0
-# 5de128c or later: --task-package); OV, the Isaac Lab
+# 788e8a7 or later: --task-package, --max-load); OV, the Isaac Lab
 # python; GPU (default 0); SHARED=1 runs on a shared GPU (--allow-shared: its wall-clock is marked
 # contended and stays out of the comparison; samples-to-pass does not depend on load).
 set -euo pipefail
@@ -22,7 +22,10 @@ export OMNI_KIT_ACCEPT_EULA=YES PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=$GPU WHE
 export VK_ICD_FILENAMES=${VK_ICD_FILENAMES:-/usr/share/vulkan/icd.d/nvidia_icd.json}
 export SCENSIM_ASSET_ROOT=$FORK/source
 export PYTHONPATH=$FORK/source/wheeledlab:$FORK/source/wheeledlab_tasks:$FORK/source/wheeledlab_rl:$FORK/source/wheeledlab_assets:$FORK/bench:$repo/src/sim_vehicle_ecu:$repo/src/sim_vehicle_spec:$repo/src/scensim_sampler:$repo/src/scensim_batch:$repo/scenarios/projects/roboracer/component/roboracer_vesc
-gate=(--require-idle); [ "${SHARED:-0}" = 1 ] && gate=(--allow-shared)
+# an idle GPU and an idle host, as run_p1.sh (WheeledLab 788e8a7): the 1-minute load at most
+# MAX_LOAD x the cores, waited for up to WAIT_IDLE s (wheeledlab_bench refuses with exit 6 after)
+gate=(--require-idle --max-load "${MAX_LOAD:-0.5}" --wait-idle "${WAIT_IDLE:-1800}")
+[ "${SHARED:-0}" = 1 ] && gate=(--allow-shared)
 hooks=(--sample-hook scensim_batch.start_pool:StartPool.refill --sample-hook scensim_batch.start_pool:StartPool.take)
 # the harness records its commit and the task package's (wheeledlab_bench >= 5de128c), and
 # refuses either dirty unless --allow-dirty (ALLOW_DIRTY=1, recorded)
