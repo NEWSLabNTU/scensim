@@ -70,7 +70,22 @@ lanes:
   west_street: {lanelets: [6583]}
   # the street, then its left turn: each lanelet follows the one before
   west_left_turn: {lanelets: [6583, 42664, 32582]}
+  north_through: {lanelets: [32855, 42824, 32189]}
+conflicts:      # two of the file's lanes that cross once
+  west_left_turn_x_north_through: {lanes: [west_left_turn, north_through]}
+curves:         # a stretch of a lane
+  west_left_turn_bend: {lane: west_left_turn, from_s: 224.22, to_s: 245.59}
+regions:        # a polygon in the map frame
+  west_junction:
+    polygon: [[84.1, -141.8], [101.4, -141.8], [101.4, -119.8], [84.1, -119.8]]
 ```
+
+A conflict resolves to where its lanes cross: `s_<lane>` along each, `x`, `y`, the `angle`
+between them and `position_error`. A curve resolves to its `length`, `turn` (rad, positive
+left), `direction`, `min_radius` (the tightest 2 m) and `mean_radius`. A region resolves to its
+`area`, centroid `x`, `y`, and for each of the file's lanes that enters it once, `from_<lane>`
+and `to_<lane>`. A point stays a project's own (`world.anchors`). The published Town01 file
+holds the first two lanes; the rest is the example.
 
 and resolves them, once, into `anchors.resolved.json` beside it:
 
@@ -106,6 +121,10 @@ join), `anchor.<name>.local_s(s)` the s within it.
 <!-- ... -->
 <LanePosition roadId="" laneId="$exit_lane" s="$exit_s" offset="0"/>
 ```
+
+A binding reads a conflict's position the same way, one parameter feeding the next:
+`conflict_s = west_left_turn_x_north_through.s_west_left_turn`, then
+`exit_lane = west_left_turn.lanelet_at($conflict_s)` places an entity at the crossing.
 
 A testbench's `world.anchors` adds anchors of the project's own, as stated numbers; a name
 both declare is refused. Conflict points, curves and regions come later (roadmap 092 K9c).

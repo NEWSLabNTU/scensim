@@ -467,7 +467,16 @@ Rules:
   heading table, every number in SSv2's arc length, and the map's digest. Users read that file
   with ROS 2 alone; the sampler refuses one resolved on other map bytes. Expressions read
   `anchor.<lane>.<attribute>` and `anchor.<lane>.heading(s)`; the record names the file read
-  (`anchor_source`). Conflict points, regions and curves are K9c.
+  (`anchor_source`).
+- *Built, K9c (roadmap 092):* conflicts, curves and regions, in the same file. A conflict
+  names two of its lanes that cross exactly once and resolves to where (`s_<lane>` along each,
+  `x`, `y`, `angle`, `position_error`); a curve is a stretch of a lane (`length`, `turn`,
+  `direction`, `min_radius` over 2 m, `mean_radius`); a region a polygon (`area`, centroid,
+  and `from_<lane>`, `to_<lane>` for each lane entering it once). Their numbers are read and
+  bound as a lane's are. Town01's example: west_left_turn crossing north_through, 233.6 m
+  along the turn and 55.1 m along the through lane, at (92.39, -131.19); the turn's bend, a
+  left turn of pi/2 over 21.4 m, mean radius 13.6 m; the junction, 380.6 m2. Points stay
+  stated (`world.anchors`).
 - *Built, K9b (roadmap 092):* binding. A FileHeader Property `scensim.anchor.<parameter>` with
   the value `<anchor>.<attribute>` or `<anchor>.<function>(<number or $parameter>)` sets that
   declared parameter from the world before SSv2 starts; `<anchor>` may be `$<parameter>`, a

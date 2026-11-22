@@ -33,6 +33,7 @@ def _map(d):
     arc = [[20.0 + 10.0 * math.sin(a), 10.0 - 10.0 * math.cos(a), 0.0]
            for a in [math.pi / 2 * k / 12 for k in range(13)]]
     apart = [[0.0, 50.0, 0.0], [5.0, 50.0, 0.0], [10.0, 50.0, 0.0]]
+    across = [[10.0, y, 0.0] for y in (-10.0, -5.0, 0.0, 5.0, 10.0)]   # crosses lanelet 1
 
     def ll(c, following, limit):
         return {"centerline": c, "subtype": "road", "turn_direction": "else",
@@ -42,7 +43,7 @@ def _map(d):
     doc = {"format": map_export.FORMAT, "version": map_export.VERSION, "map": d.name,
            "map_sha256": map_export.map_digest(d), "frame": "map",
            "lanelets": {"1": ll(straight, [2], 13.89), "2": ll(arc, [], 8.33),
-                        "3": ll(apart, [], 13.89)}}
+                        "3": ll(apart, [], 13.89), "4": ll(across, [], 8.33)}}
     export = d / "export.json"
     export.write_text(json.dumps(doc))
     return d, export
@@ -134,9 +135,87 @@ class Resolve(unittest.TestCase):
                     self.resolved(d, lanes)
         with tempfile.TemporaryDirectory() as d:
             d, export = _map(d)
-            (d / RES.DECLARATION).write_text("anchors: 1\nconflicts: {c: {lanes: [a, b]}}\n")
-            with self.assertRaisesRegex(RES.AnchorError, "K9c"):
+            (d / RES.DECLARATION).write_text("anchors: 1\npoints: {p: {}}\n")
+            with self.assertRaisesRegex(RES.AnchorError, "a point is stated"):
                 RES.resolve(d, export)
+
+    def test_a_conflict_is_where_two_lanes_cross(self):
+        """lanelet 4 runs north along x = 10 across lanelet 1 (east along y = 0): the conflict is
+        10 m along each, at (10, 0), the second lane 90 degrees left of the first."""
+        lanes = "exit_n: {lanelets: [1, 2]}\n  north: {lanelets: [4]}\n" \
+                "conflicts:\n  exit_x_north: {lanes: [exit_n, north]}"
+        with tempfile.TemporaryDirectory() as d:
+            d, export, doc = self.resolved(d, lanes)
+            c = doc["anchors"]["exit_x_north"]
+            self.assertEqual(c["kind"], "conflict")
+            self.assertAlmostEqual(c["s_exit_n"], 10.0, delta=1e-3)
+            self.assertAlmostEqual(c["s_north"], 10.0, delta=1e-3)
+            self.assertAlmostEqual(c["x"], 10.0, delta=1e-3)
+            self.assertAlmostEqual(c["y"], 0.0, delta=1e-3)
+            self.assertAlmostEqual(c["angle"], math.pi / 2, delta=1e-3)
+            self.assertLess(c["position_error"], 1e-3)
+            out = d / RES.RESOLVED
+            out.write_text(json.dumps(doc))
+            numbers, _ = A.env(A.load_resolved(out, map_dir=d))
+            self.assertAlmostEqual(numbers["anchor.exit_x_north.s_north"], c["s_north"])
+            self.assertIn("anchor.exit_x_north.angle", numbers)
+        for conflicts, why in (("c: {lanes: [exit_n, apart]}", "cross 0 times"),
+                               ("c: {lanes: [exit_n, ghost]}", "'ghost' is not a lane"),
+                               ("c: {lanes: [exit_n]}", "two lanes"),
+                               ("exit_n: {lanes: [exit_n, apart]}", "another anchor")):
+            with tempfile.TemporaryDirectory() as d:
+                with self.assertRaisesRegex(RES.AnchorError, why):
+                    self.resolved(d, "exit_n: {lanelets: [1, 2]}\n  apart: {lanelets: [3]}\n"
+                                     f"conflicts:\n  {conflicts}")
+
+    def test_a_curve_is_a_stretch_of_a_lane(self):
+        """exit_n's quarter circle (radius 10 m, from s 20): a left turn of pi/2 over its
+        length, radius 10; the straight before it has none."""
+        lanes = "exit_n: {lanelets: [1, 2]}\ncurves:\n  bend: {lane: exit_n, from_s: 20.5, " \
+                "to_s: 35.0}\n  flat: {lane: exit_n, from_s: 2.0, to_s: 18.0}"
+        with tempfile.TemporaryDirectory() as d:
+            d, export, doc = self.resolved(d, lanes)
+            bend, flat = doc["anchors"]["bend"], doc["anchors"]["flat"]
+            self.assertEqual((bend["kind"], bend["direction"], bend["lane"]),
+                             ("curve", "left", "exit_n"))
+            self.assertAlmostEqual(bend["length"], 14.5)
+            self.assertAlmostEqual(bend["min_radius"], 10.0, delta=1.0)
+            self.assertAlmostEqual(bend["turn"], 14.5 / 10.0, delta=0.05)
+            self.assertAlmostEqual(bend["mean_radius"], 10.0, delta=0.3)
+            self.assertIsNone(flat["min_radius"])    # a straight: none, not Infinity
+            self.assertIsNone(flat["mean_radius"])
+        for curves, why in (("c: {lane: ghost, from_s: 0, to_s: 1}", "'ghost' is not a lane"),
+                            ("c: {lane: exit_n, from_s: 5, to_s: 99}", "not a stretch"),
+                            ("c: {lane: exit_n, from_s: x, to_s: 1}", "numbers")):
+            with tempfile.TemporaryDirectory() as d:
+                with self.assertRaisesRegex(RES.AnchorError, why):
+                    self.resolved(d, f"exit_n: {{lanelets: [1, 2]}}\ncurves:\n  {curves}")
+
+    def test_a_region_is_a_polygon_and_where_lanes_cross_it(self):
+        lanes = "exit_n: {lanelets: [1, 2]}\n  north: {lanelets: [4]}\nregions:\n" \
+                "  box: {polygon: [[5, -2], [15, -2], [15, 2], [5, 2]]}"
+        with tempfile.TemporaryDirectory() as d:
+            d, export, doc = self.resolved(d, lanes)
+            box = doc["anchors"]["box"]
+            self.assertEqual(box["kind"], "region")
+            self.assertAlmostEqual(box["area"], 40.0)
+            self.assertAlmostEqual(box["x"], 10.0)
+            self.assertAlmostEqual(box["y"], 0.0)
+            self.assertAlmostEqual(box["from_exit_n"], 5.0, delta=0.11)
+            self.assertAlmostEqual(box["to_exit_n"], 15.0, delta=0.11)
+            self.assertAlmostEqual(box["from_north"], 8.0, delta=0.11)
+            self.assertAlmostEqual(box["to_north"], 12.0, delta=0.11)
+            out = d / RES.RESOLVED
+            out.write_text(json.dumps(doc))
+            numbers, _ = A.env(A.load_resolved(out, map_dir=d))
+            self.assertEqual(numbers["anchor.box.area"], box["area"])
+            self.assertNotIn("anchor.box.polygon", numbers)
+        for regions, why in (("r: {polygon: [[0, 0], [1, 1]]}", "three or more"),
+                             ("r: {polygon: [[0, 0], [1, 1], [2, 2]]}", "no area"),
+                             ("exit_n: {polygon: [[0, 0], [1, 0], [0, 1]]}", "another anchor")):
+            with tempfile.TemporaryDirectory() as d:
+                with self.assertRaisesRegex(RES.AnchorError, why):
+                    self.resolved(d, f"exit_n: {{lanelets: [1, 2]}}\nregions:\n  {regions}")
 
     def test_the_command_writes_beside_the_map(self):
         with tempfile.TemporaryDirectory() as d:
@@ -145,6 +224,26 @@ class Resolve(unittest.TestCase):
             self.assertEqual(RES.main(["resolve", str(d), "--export", str(export)]), 0)
             doc = json.loads((d / RES.RESOLVED).read_text())
             self.assertEqual(set(doc["anchors"]), {"exit_n"})
+
+
+class Chain(unittest.TestCase):
+    def test_a_conflicts_position_feeds_a_lane_binding(self):
+        """092 K9c: bind conflict_s = <conflict>.s_<lane>, then <lane>.lanelet_at($conflict_s):
+        the lanelet and local s at the crossing, as a scenario places an entity there."""
+        lane = {"kind": "lane", "lanelets": [{"id": 6583, "from_s": 0.0, "to_s": 224.22},
+                                             {"id": 42664, "from_s": 224.22, "to_s": 245.6}],
+                "length": 245.6, "speed_limit": 11.2, "start_x": 0.0, "start_y": 0.0,
+                "end_x": 0.0, "end_y": 0.0, "heading_s": [0.0, 245.6], "heading": [3.14, -1.57]}
+        conflict = {"kind": "conflict", "lanes": ["turn", "north"], "s_turn": 233.62,
+                    "s_north": 55.14, "x": 92.39, "y": -131.19, "angle": -2.2,
+                    "position_error": 0.0}
+        numbers, functions = A.env({"turn": lane, "cross": conflict})
+        self.assertEqual(numbers["anchor.cross.s_turn"], 233.62)
+        self.assertNotIn("anchor.cross.lanes", numbers)
+        vals = {}
+        vals["conflict_s"] = A.bind("cross.s_turn", vals, numbers, functions)
+        self.assertEqual(A.bind("turn.lanelet_at($conflict_s)", vals, numbers, functions), 42664)
+        self.assertAlmostEqual(A.bind("turn.local_s($conflict_s)", vals, numbers, functions), 9.4)
 
 
 class Merge(unittest.TestCase):

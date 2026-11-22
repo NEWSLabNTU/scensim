@@ -16,6 +16,16 @@ when its `map_sha256` is not the map's in use.
       exit_n: {lanelets: [1234, 1240]}   # a route of lanelets, each following the one before;
                                          # s runs from the first's start
 
+A conflict names two of the file's lanes that cross once (`conflicts: {<name>: {lanes: [<lane>,
+<other lane>]}}`) and resolves to where: `s_<lane>` for each (lane position, m), `x`, `y`, the
+`angle` between them there, and `position_error` (m, the two centrelines' points apart).
+
+A curve is a stretch of a lane (`curves: {<name>: {lane, from_s, to_s}}`): its `length`,
+`turn` (rad, positive left), `direction`, `min_radius` (over 2 m) and `mean_radius`. A region
+is a polygon in the map frame (`regions: {<name>: {polygon: [[x, y], ...]}}`): its `area`,
+centroid `x`, `y`, and for each of the file's lanes that enters it once, `from_<lane>` and
+`to_<lane>`.
+
 A lane resolves to its `length` (m: the sum of its lanelets' SSv2 splines, world_lanelet's
 Catmull-Rom, so an s here is an s in a LanePosition), `speed_limit` (m/s, the lowest of its
 lanelets'), `start_x`, `start_y`, `end_x`, `end_y`, its lanelets with their s ranges, and
@@ -23,10 +33,11 @@ lanelets'), `start_x`, `start_y`, `end_x`, `end_y`, its lanelets with their s ra
 each lanelet's start and end, so a join between two lanelets is listed twice (the end of the
 one before, then the start of the one after: their splines meet at an angle, and no interval
 straddles it), and likewise each boundary between the curves of a lanelet's spline (SSv2's
-Catmull-Rom is a chain of curves whose tangents need not meet); an interval whose linear interpolation is off by more than `HEADING_TOLERANCE`
-is halved, down to `HEADING_MIN_STEP`. `heading_max_error` is the largest difference between
-that table, interpolated linearly, and the spline's heading at four points inside each
-interval: at most the tolerance unless the minimum step stopped a halving.
+Catmull-Rom is a chain of curves whose tangents need not meet); an interval whose linear
+interpolation is off by more than `HEADING_TOLERANCE` is halved, down to `HEADING_MIN_STEP`.
+`heading_max_error` is the largest difference between that table, interpolated linearly, and
+the spline's heading at four points inside each interval: at most the tolerance unless the
+minimum step stopped a halving.
 """
 import argparse
 import hashlib
@@ -46,7 +57,13 @@ RESOLVED = "anchors.resolved.json"
 HEADING_STEP = 0.5
 HEADING_TOLERANCE = 1e-3   # rad: an interval off by more is halved
 HEADING_MIN_STEP = 0.01    # m: but not below
-KINDS_LATER = ("points", "conflicts", "regions", "curves")   # 092 K9c
+KINDS_LATER = ("points",)   # stated in testbench.yaml's world.anchors, not resolved
+CURVE_STEP = 0.1           # m: a curve's heading sampled this finely
+CURVE_WINDOW = 2.0         # m: its radius from the heading's change over this much lane (a
+                           # centreline of points 0.25 m apart wiggles: shorter chords read noise)
+REGION_STEP = 0.1          # m: a lane sampled this finely against a region
+CONFLICT_STEP = 0.25       # m: each lane sampled this finely to find where they cross
+CONFLICT_FINE = 0.002      # m: then again around each crossing
 
 
 class AnchorError(ValueError):
@@ -61,14 +78,16 @@ def _declaration(path):
     doc = yaml.safe_load(Path(path).read_text()) or {}
     if not isinstance(doc, dict) or doc.get("anchors") != 1:
         raise AnchorError(f"{path}: not an anchors file (anchors: 1)")
-    unknown = sorted(set(doc) - {"anchors", "lanes"} - set(KINDS_LATER))
+    unknown = sorted(set(doc) - {"anchors", "lanes", "conflicts", "curves", "regions"}
+                     - set(KINDS_LATER))
     if unknown:
         raise AnchorError(f"{path}: unknown section(s) {', '.join(unknown)} (lanes; "
                           f"{', '.join(KINDS_LATER)} come with 092 K9c)")
     later = [k for k in KINDS_LATER if doc.get(k)]
     if later:
-        raise AnchorError(f"{path}: {', '.join(later)}: not resolved yet (092 K9c); lanes only")
-    return doc.get("lanes") or {}
+        raise AnchorError(f"{path}: {', '.join(later)}: a map's file resolves lanes, conflicts, "
+                          f"curves and regions; a point is stated (testbench.yaml world.anchors)")
+    return {k: doc.get(k) or {} for k in ("lanes", "conflicts", "curves", "regions")}
 
 
 def resolve_lane(world, name, spec):
@@ -169,6 +188,172 @@ def resolve_lane(world, name, spec):
             "heading_s": ss, "heading": heading, "heading_max_error": err}
 
 
+def _lane_point(world, lane, s):
+    """A resolved lane's centreline point at lane position s (its spans, SSv2's splines)."""
+    for sp in reversed(lane["lanelets"]):
+        if s >= sp["from_s"]:
+            break
+    spl = world.spline(sp["id"])
+    x, y, _ = spl.point(min(max(s - sp["from_s"], 0.0), spl.length))
+    return x, y
+
+
+def _crossings(world, a, b, a0=0.0, a1=None, b0=0.0, b1=None, step=CONFLICT_STEP):
+    """[(s_a, s_b)] where lane a's centreline crosses lane b's, sampled every `step` m over
+    [a0, a1] and [b0, b1]: the segment intersections of the two polylines."""
+    a1 = a["length"] if a1 is None else a1
+    b1 = b["length"] if b1 is None else b1
+
+    def poly(lane, s0, s1):
+        n = max(1, int(math.ceil((s1 - s0) / step)))
+        ss = [s0 + (s1 - s0) * k / n for k in range(n + 1)]
+        return ss, [_lane_point(world, lane, s) for s in ss]
+    sa, pa = poly(a, a0, a1)
+    sb, pb = poly(b, b0, b1)
+    out = []
+    for i in range(len(pa) - 1):
+        (x1, y1), (x2, y2) = pa[i], pa[i + 1]
+        for j in range(len(pb) - 1):
+            (x3, y3), (x4, y4) = pb[j], pb[j + 1]
+            den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+            if abs(den) < 1e-12:
+                continue
+            t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den
+            u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den
+            if 0.0 <= t < 1.0 and 0.0 <= u < 1.0:
+                out.append((sa[i] + t * (sa[i + 1] - sa[i]), sb[j] + u * (sb[j + 1] - sb[j])))
+    return out
+
+
+def resolve_conflict(world, name, spec, lanes):
+    """A conflict point: where two declared lanes' centrelines cross (exactly once). Its
+    position in each lane (`s_<lane>`, SSv2's arc length), its map point, the angle between the
+    lanes there (rad, the second's heading less the first's, wrapped), and how far apart the two
+    centrelines' points are at those s (`position_error`, m)."""
+    if not isinstance(spec, dict) or not isinstance(spec.get("lanes"), list) \
+            or len(spec["lanes"]) != 2 or spec["lanes"][0] == spec["lanes"][1]:
+        raise AnchorError(f"conflict {name}: {{lanes: [<lane>, <other lane>]}}, two lanes this "
+                          f"file declares")
+    na, nb = spec["lanes"]
+    for n in (na, nb):
+        if n not in lanes or lanes[n].get("kind") != "lane":
+            raise AnchorError(f"conflict {name}: {n!r} is not a lane this file declares")
+    a, b = lanes[na], lanes[nb]
+    coarse = _crossings(world, a, b)
+    if len(coarse) != 1:
+        raise AnchorError(f"conflict {name}: lanes {na} and {nb} cross {len(coarse)} times; a "
+                          f"conflict is one crossing (shorten a lane to the part that crosses)")
+    s_a, s_b = coarse[0]
+    w = 2 * CONFLICT_STEP
+    fine = _crossings(world, a, b, max(0.0, s_a - w), min(a["length"], s_a + w),
+                      max(0.0, s_b - w), min(b["length"], s_b + w), step=CONFLICT_FINE)
+    if fine:
+        s_a, s_b = min(fine, key=lambda p: abs(p[0] - s_a) + abs(p[1] - s_b))
+    xa, ya = _lane_point(world, a, s_a)
+    xb, yb = _lane_point(world, b, s_b)
+
+    def yaw(lane, s):
+        for sp in reversed(lane["lanelets"]):
+            if s >= sp["from_s"]:
+                break
+        spl = world.spline(sp["id"])
+        return spl.yaw(min(max(s - sp["from_s"], 0.0), spl.length))
+    return {"kind": "conflict", "lanes": [na, nb], f"s_{na}": s_a, f"s_{nb}": s_b,
+            "x": (xa + xb) / 2, "y": (ya + yb) / 2,
+            "angle": _wrap(yaw(b, s_b) - yaw(a, s_a)),
+            "position_error": math.hypot(xa - xb, ya - yb)}
+
+
+def _lane_yaw(world, lane, s):
+    for sp in reversed(lane["lanelets"]):
+        if s >= sp["from_s"]:
+            break
+    spl = world.spline(sp["id"])
+    return spl.yaw(min(max(s - sp["from_s"], 0.0), spl.length))
+
+
+def _lane_of(kind, name, spec, lanes):
+    n = spec.get("lane") if isinstance(spec, dict) else None
+    if n not in lanes:
+        raise AnchorError(f"{kind} {name}: lane {n!r} is not a lane this file declares")
+    return n, lanes[n]
+
+
+def resolve_curve(world, name, spec, lanes):
+    """A curve: a stretch of a declared lane, `{lane, from_s, to_s}`. Its `length`, `turn` (rad,
+    the heading's change over it, positive left), `direction` (left or right), `min_radius` (m,
+    the tightest CURVE_WINDOW of it), `mean_radius` (length over turn; both null for a
+    straight) and its ends' s."""
+    n, lane = _lane_of("curve", name, spec, lanes)
+    try:
+        a, b = float(spec["from_s"]), float(spec["to_s"])
+    except (KeyError, TypeError, ValueError):
+        raise AnchorError(f"curve {name}: {{lane, from_s, to_s}}, numbers") from None
+    if not (0.0 <= a < b <= lane["length"] + 1e-9):
+        raise AnchorError(f"curve {name}: from_s {a} and to_s {b} are not a stretch of lane {n} "
+                          f"[0, {lane['length']:.3f}] m")
+    k = max(1, int(math.ceil((b - a) / CURVE_STEP)))
+    ss = [a + (b - a) * i / k for i in range(k + 1)]
+    hs = [_lane_yaw(world, lane, s) for s in ss]
+    cum = [0.0]
+    for i in range(k):
+        cum.append(cum[-1] + _wrap(hs[i + 1] - hs[i]))
+    turn = cum[-1]
+    w = max(1, min(k, int(round(CURVE_WINDOW / ((b - a) / k)))))
+    kappa = max(abs(cum[i + w] - cum[i]) / (ss[i + w] - ss[i]) for i in range(k - w + 1))
+    return {"kind": "curve", "lane": n, "from_s": a, "to_s": b, "length": b - a, "turn": turn,
+            "direction": "left" if turn > 0 else "right",
+            "min_radius": (1.0 / kappa) if kappa > 1e-9 else None,
+            "mean_radius": ((b - a) / abs(turn)) if abs(turn) > 1e-9 else None}
+
+
+def _inside(poly, x, y):
+    c = False
+    for (x1, y1), (x2, y2) in zip(poly, poly[1:] + poly[:1]):
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            c = not c
+    return c
+
+
+def resolve_region(world, name, spec, lanes):
+    """A region: a polygon in the map frame, `{polygon: [[x, y], ...]}` (three or more corners).
+    Its `area`, centroid `x` and `y`, and for each declared lane that enters it once the lane
+    positions where it enters and leaves (`from_<lane>`, `to_<lane>`, sampled every
+    REGION_STEP m)."""
+    poly = spec.get("polygon") if isinstance(spec, dict) else None
+    try:
+        poly = [(float(p[0]), float(p[1])) for p in poly]
+    except (TypeError, ValueError, IndexError, KeyError):
+        poly = None
+    if not poly or len(poly) < 3:
+        raise AnchorError(f"region {name}: {{polygon: [[x, y], ...]}}, three or more corners")
+    a2 = sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(poly, poly[1:] + poly[:1]))
+    if abs(a2) < 1e-9:
+        raise AnchorError(f"region {name}: its polygon has no area")
+    cx = sum((x1 + x2) * (x1 * y2 - x2 * y1)
+             for (x1, y1), (x2, y2) in zip(poly, poly[1:] + poly[:1])) / (3 * a2)
+    cy = sum((y1 + y2) * (x1 * y2 - x2 * y1)
+             for (x1, y1), (x2, y2) in zip(poly, poly[1:] + poly[:1])) / (3 * a2)
+    out = {"kind": "region", "polygon": [list(p) for p in poly], "area": abs(a2) / 2,
+           "x": cx, "y": cy}
+    for n, lane in lanes.items():
+        k = max(1, int(math.ceil(lane["length"] / REGION_STEP)))
+        ss = [lane["length"] * i / k for i in range(k + 1)]
+        ins = [_inside(poly, *_lane_point(world, lane, s)) for s in ss]
+        runs, start = [], None
+        for s, i in zip(ss, ins):
+            if i and start is None:
+                start = s
+            if not i and start is not None:
+                runs.append((start, s))
+                start = None
+        if start is not None:
+            runs.append((start, ss[-1]))
+        if len(runs) == 1:
+            out[f"from_{n}"], out[f"to_{n}"] = runs[0]
+    return out
+
+
 def resolve(map_dir, export):
     """The resolved document for `<map dir>/anchors.yaml`, from the map's export (its digest
     checked against the map)."""
@@ -178,15 +363,23 @@ def resolve(map_dir, export):
     if not decl.is_file():
         raise AnchorError(f"{map_dir}: no {DECLARATION}")
     world = LaneletWorld.load(export, map_dir=map_dir)
-    lanes = _declaration(decl)
-    anchors = {name: resolve_lane(world, name, spec) for name, spec in lanes.items()}
+    decl_doc = _declaration(decl)
+    anchors = {name: resolve_lane(world, name, spec)
+               for name, spec in decl_doc["lanes"].items()}
+    lanes = dict(anchors)
+    for kind, fn in (("conflict", resolve_conflict), ("curve", resolve_curve),
+                     ("region", resolve_region)):
+        for name, spec in decl_doc[kind + "s"].items():
+            if name in anchors:
+                raise AnchorError(f"{kind} {name}: another anchor has that name")
+            anchors[name] = fn(world, name, spec, lanes)
     return {"format": FORMAT, "version": VERSION, "map": map_dir.name,
             "map_sha256": map_export.map_digest(map_dir),
             "declaration_sha256": hashlib.sha256(decl.read_bytes()).hexdigest(),
             "heading_step": HEADING_STEP, "heading_tolerance": HEADING_TOLERANCE,
             "heading_min_step": HEADING_MIN_STEP,
-            "heading_max_error": max([a["heading_max_error"] for a in anchors.values()],
-                                     default=0.0),
+            "heading_max_error": max([a["heading_max_error"] for a in anchors.values()
+                                      if "heading_max_error" in a], default=0.0),
             "anchors": anchors}
 
 
