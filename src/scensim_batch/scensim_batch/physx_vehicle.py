@@ -49,11 +49,13 @@ class PhysxVehicleBackend:
             env = stage.GetPrimAtPath(f"{root}/env_{i}")
             if env.IsValid():
                 m = cache.GetLocalToWorldTransform(env)
+                if any(abs(m[r_][c_] - (1.0 if r_ == c_ else 0.0)) > 1e-9
+                       for r_ in range(3) for c_ in range(3)):
+                    raise RuntimeError(f"{root}/env_{i} is rotated or scaled: a car's pose, "
+                                       "written relative to it, would be too (issue 109)")
                 t = m.ExtractTranslation()
-                if not m.ExtractRotationMatrix().GetOrthonormalized() == \
-                        type(m.ExtractRotationMatrix())(1.0):
-                    raise RuntimeError(f"{root}/env_{i} is rotated: its cars' poses would be")
                 self.parent[i] = (t[0], t[1], t[2])
+        self._landing = {}   # slot -> its reset's world (x, y, speed, yaw): checked at its sample
         self.cars, self.states = [], []
         for i in range(n):
             ox, oy = self.origins[i]
@@ -80,6 +82,7 @@ class PhysxVehicleBackend:
                     (math.cos(h / 2), 0.0, 0.0, math.sin(h / 2)))
             car = self.cars[i]
             car.teleport((self._local(i, pose[0]), pose[1]), self.physx)
+            self._landing[int(i)] = (pose[0][0], pose[0][1], float(speed[i]), h)
             v = float(speed[i])
             if v and self.velocity_set:
                 # the Init speed: the body along its heading, the wheels rolling with it
@@ -95,6 +98,23 @@ class PhysxVehicleBackend:
             # was at (0, 0) until the first physics step's read-back)
             self.states[i].__init__(position=pose[0], quat=pose[1],
                                     velocity=(v if self.velocity_set else 0.0, 0.0, 0.0))
+
+    def _check_landing(self, dt):
+        """Each slot reset since the last sample is where its reset put it, by PhysX's own world
+        pose: within 1 cm across its heading and of its reset's travel along it (its speed for a
+        substep, 2 cm). A car elsewhere is an env prim whose transform reached USD after this
+        backend read it (issue 109) or a teleport PhysX never saw (issue 110): raised."""
+        bad = []
+        for i, (x, y, v, h) in self._landing.items():
+            px, py = (float(c) for c in self.states[i].position[:2])
+            dx, dy = px - x, py - y
+            along, across = dx * math.cos(h) + dy * math.sin(h), -dx * math.sin(h) + dy * math.cos(h)
+            if abs(across) > 0.01 or abs(along - v * dt) > 0.02 + abs(v) * dt:
+                bad.append((i, round(along, 3), round(across, 3)))
+        self._landing = {}
+        if bad:
+            raise RuntimeError("cars not where their resets put them, (slot, along, across) m: "
+                               f"{bad} (issues 109, 110)")
 
     def _local(self, i, p):
         """A world position in slot i's env prim's frame (its parent; translated, never rotated)."""
@@ -141,6 +161,8 @@ class PhysxVehicleBackend:
         """Every car read back after a physics step."""
         for car, st in zip(self.cars, self.states):
             car.sample(self.physx, dt, st)
+        if self._landing:
+            self._check_landing(dt)
         if len(self.trace) < self.trace_steps:
             self.trace.append(self.readback(0))
 
