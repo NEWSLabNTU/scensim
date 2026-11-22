@@ -3,7 +3,7 @@ version: 1
 datasets:
   carla-town-autoware-maps:
     repo: jerry73204/carla-town-autoware-maps
-    commit: deb23e3abdf81ad05f02cbe474196eeaf8cfb580
+    commit: 19d52699f007d53f1e2fb0a42eea7181640d202b
     take:
     - town05_ring_110kmh
     files:
