@@ -86,6 +86,10 @@ class DriftEnvCfg(ScensimEnvCfg):
     state_space: int = 0             # none (None does not survive WheeledLab's hydra round trip)
     obs_corruption: bool = True
     randomize: bool = True           # stock's DriftEventsRandomCfg (startup and interval terms)
+    # the pass bar's run (scripts/eval_drift.py, as stock's bench/p1/eval_drift.py): off track
+    # is counted there, not a termination; no penalty that reads it; fixed reward weights
+    terminate_off_track: bool = True
+    curriculum: bool = True
 
     def __post_init__(self):
         super().__post_init__()
@@ -235,6 +239,14 @@ class DriftEnv(ScensimEnv):
 
     def _get_dones(self):
         super()._get_dones()                   # the step's world (BatchRun.after_physics)
+        self.out_of_bounds = self.off_track()
+        time_out = self.episode_length_buf >= self.max_episode_length - 1
+        if not self.cfg.terminate_off_track:
+            return torch.zeros_like(self.out_of_bounds), time_out
+        return self.out_of_bounds, time_out
+
+    def off_track(self):
+        """Stock's cart_off_track: outside the outer corners' radius or inside the inner's."""
         pos = self._root()[0]
         x, y = pos[:, 0], pos[:, 1]
         st = y.abs() < STRAIGHT
@@ -243,16 +255,14 @@ class DriftEnv(ScensimEnv):
             d2 = torch.where(y > 0, (y - STRAIGHT) ** 2 + x ** 2, (y + STRAIGHT) ** 2 + x ** 2)
             return torch.where(st, (x.abs() < r) if inner else (x.abs() > r),
                                (d2 < r * r) if inner else (d2 > r * r))
-        self.out_of_bounds = outside(CORNER_OUT_RADIUS, False) | outside(CORNER_IN_RADIUS, True)
-        time_out = self.episode_length_buf >= self.max_episode_length - 1
-        return self.out_of_bounds, time_out
+        return outside(CORNER_OUT_RADIUS, False) | outside(CORNER_IN_RADIUS, True)
 
     # --- stock's curriculum (increase_reward_weight_over_time, at a reset) -----------------------
 
     def _reset_idx(self, env_ids):
         super()._reset_idx(env_ids)
         n_ep = self.common_step_counter // self.max_episode_length
-        if self.common_step_counter % self.max_episode_length == 0:
+        if self.cfg.curriculum and self.common_step_counter % self.max_episode_length == 0:
             for k, (inc, per, most) in CURRICULUM.items():
                 if n_ep // per > most:
                     continue
