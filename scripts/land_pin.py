@@ -99,6 +99,32 @@ def _dirty(cwd, label="") -> list:
     return [f"{label}{line}" for line in out.splitlines() if line and not _build_only(cwd, line)]
 
 
+def sync_deps(src, c):
+    """Component `c`'s deps/ checkouts at the commits its gitlinks name, so the gate tests the
+    landing's tree as a fresh `--recursive` clone would. A component that moves as it is (its main
+    already pins the targets, no commit of its own) kept its deps/ where they were: the gate ran
+    autoware_sim_vehicle's generator on its old sim_vehicle_spec (094 P2, land4). A commit only
+    local (a cascade commit not pushed yet) is fetched from this checkout's src/<repo>."""
+    cd = src / c
+    if not (cd / "deps").is_dir():
+        return
+    for line in git("ls-files", "-s", "deps", cwd=cd).splitlines():
+        mode, sha, _, path = line.split(None, 3)
+        if mode != "160000":
+            continue
+        dep = cd / path
+        git("submodule", "update", "-q", "--init", "--no-fetch", path, cwd=cd, check=False)
+        if ok("cat-file", "-e", f"{sha}^{{commit}}", cwd=dep):
+            git("checkout", "-q", sha, cwd=dep)
+            continue
+        name = Path(path).name
+        if (src / name).is_dir():
+            git("fetch", "-q", "--no-recurse-submodules", str(src / name), sha, cwd=dep, check=False)
+        if not ok("cat-file", "-e", f"{sha}^{{commit}}", cwd=dep):
+            git("fetch", "-q", "--no-recurse-submodules", "origin", cwd=dep)
+        git("checkout", "-q", sha, cwd=dep)
+
+
 def checkout_state(src, components) -> dict:
     """This checkout's HEAD, each landing component's checked-out commit, and what is uncommitted
     in tracked files (here or in those components), less what a build itself writes (a
@@ -299,6 +325,7 @@ def main(argv):
     git("checkout", "-q", "-B", "land-pin", base)
     for c in landing:
         git("checkout", "-q", target[c], cwd=src / c)
+        sync_deps(src, c)
         git("add", f"src/{c}")
     if not git("diff", "--cached", "--name-only"):
         if not onto:

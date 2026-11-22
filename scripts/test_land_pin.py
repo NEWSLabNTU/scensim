@@ -183,6 +183,23 @@ def test_step_2s_case_a_component_already_at_both_targets(world):
     assert world.check_pins().returncode == 0
 
 
+def test_a_component_moving_as_it_is_has_its_deps_checked_out_at_its_gitlinks(world):
+    """094 P2 (land4): C moves to its main as it is (no commit of its own), and this checkout's
+    src/C/deps/ must be at the commits C's gitlinks name, as a fresh --recursive clone's are, so
+    the gate tests the landing's tree. Before, they stayed where they were, and the gate ran C's
+    code against its old A."""
+    a2, b2 = world.advance("A"), world.advance("B")
+    world.bump_deps("C", {"A": a2, "B": b2})
+    cdir = world.super / "src" / "C"
+    assert git(cdir / "deps" / "A", "rev-parse", "HEAD") == world.sha["A"]    # the old one
+    r = world.land("A", a2, "B", b2)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert git(cdir / "deps" / "A", "rev-parse", "HEAD") == a2
+    assert git(cdir / "deps" / "B", "rev-parse", "HEAD") == b2
+    ddir = world.super / "src" / "D"                    # and a cascade commit's deps (local only)
+    assert git(ddir / "deps" / "C", "rev-parse", "HEAD") == world.pin("HEAD", "deps/C", ddir)
+
+
 def test_one_target_with_its_partner_already_landed_in_a_dependent(world):
     """The failure 083 records: landing B alone while C's main pins the new A and B. C then has to move here, and with
     it A: check_pins refuses the landing, naming A, and nothing is pushed."""
