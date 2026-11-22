@@ -6,7 +6,8 @@
 	stop once its rear is at or past the onset (a state: a lead that starts past it brakes at once). The episode is drawn per reset (leadbrake_dist.xosc);
 	the road is the task's world (scensim_batch.tasks.leadbrake: a straight 400 m lanelet, 3.5 m
 	wide, lanelet 1). 30 s, stock's time-out: a time-up the task reads as a truncation.
-	Both cars are the Tesla Model 3 (sim_vehicle_spec's catalog entry; its box is stock's lead's).
+	Both cars are the Tesla Model 3 (sim_vehicle_spec's catalog entry; its box is stock's lead's), at
+	limits above the task's (30 m/s, 15 m/s^2: the lead brakes at most at 7) and its 0.7 rad steer.
 -->
 <OpenSCENARIO>
 	<FileHeader author="scensim" date="2026-11-22T00:00:00+00:00" description="the lead car brakes ahead, straight, dry, day (094 P4)" revMajor="1" revMinor="2">
@@ -23,11 +24,25 @@
 	<RoadNetwork><LogicFile filepath="straight400" /></RoadNetwork>
 	<Entities>
 		<ScenarioObject name="ego">
-			<CatalogReference catalogName="vehicles" entryName="tesla_model3" />
+			<CatalogReference catalogName="vehicles" entryName="tesla_model3">
+				<ParameterAssignments>
+					<ParameterAssignment parameterRef="maxSpeed" value="30.0" />
+					<ParameterAssignment parameterRef="maxAcceleration" value="15.0" />
+					<ParameterAssignment parameterRef="maxDeceleration" value="15.0" />
+					<ParameterAssignment parameterRef="maxSteering" value="0.7" />
+				</ParameterAssignments>
+			</CatalogReference>
 			<ObjectController><Controller name="Autoware"><Properties><Property name="maxJerk" value="10.0" /></Properties></Controller></ObjectController>
 		</ScenarioObject>
 		<ScenarioObject name="lead">
-			<CatalogReference catalogName="vehicles" entryName="tesla_model3" />
+			<CatalogReference catalogName="vehicles" entryName="tesla_model3">
+				<ParameterAssignments>
+					<ParameterAssignment parameterRef="maxSpeed" value="30.0" />
+					<ParameterAssignment parameterRef="maxAcceleration" value="15.0" />
+					<ParameterAssignment parameterRef="maxDeceleration" value="15.0" />
+					<ParameterAssignment parameterRef="maxSteering" value="0.7" />
+				</ParameterAssignments>
+			</CatalogReference>
 		</ScenarioObject>
 	</Entities>
 	<Storyboard>
