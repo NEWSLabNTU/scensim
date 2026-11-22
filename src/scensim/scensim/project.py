@@ -766,6 +766,10 @@ def check_scenario(project: Path, sc: Scenario, settings: dict, managed: bool = 
         if not (project / "assets" / "maps" / name).is_dir():
             out.append(Finding(rel, f"map {name} is not fetched (assets/maps/{name})",
                                _map_fix(name, settings), refused=True, host=True))
+    # roadmap 092 K9d: a scenario's anchor bindings against the world's anchors (its map's
+    # resolved file and world.anchors), checked as far as they can be without a sample
+    if lf and lf.startswith(MAPS_PREFIX) and "scensim.anchor." in _text(sc.path):
+        out += _anchor_findings(project, rel, sc.path, lf[len(MAPS_PREFIX):].strip("/"))
     # roadmap 080: the scenario properties of the old name (swb.spec_hash, swb.zone.*, ...)
     # are not read by any part; each is named with its successor
     for old in sorted(set(re.findall(r'name="(swb\.[^"]+)"', _text(sc.path)))):
@@ -824,6 +828,18 @@ def check_scenario(project: Path, sc: Scenario, settings: dict, managed: bool = 
                            f" ({', '.join(e.name for e in external)}); Isaac drives one",
                            "one ego per scenario on Isaac, or simulator: carla"))
     return out
+
+
+def _anchor_findings(project: Path, rel, path: Path, map_name: str) -> list:
+    from scensim import anchors as anchorsmod   # noqa: PLC0415
+    from scensim_sampler.anchors import AnchorError   # noqa: PLC0415
+    try:
+        anchors = anchorsmod.for_map(project, map_name)
+    except AnchorError as e:
+        return [Finding(rel, str(e), "fetch the map again (scensim assets fetch), or its "
+                        "author resolves its anchors again", refused=True)]
+    return [Finding(rel, msg, fix or "", refused=True)
+            for msg, fix in anchorsmod.binding_problems(path, anchors)]
 
 
 def own_car_problems(project: Path, settings: dict) -> list:

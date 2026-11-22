@@ -163,12 +163,15 @@ def check(rec, scenario=None, bound=False):
                        "the derived values read")
     if "anchor_source" in rec:
         src = rec["anchor_source"]
+        need, may = {"map", "map_sha256", "file_sha256"}, {"dataset", "commit"}
         if not isinstance(src, list) or not src or not all(
-                isinstance(x, dict) and set(x) == {"map", "map_sha256", "file_sha256"}
+                isinstance(x, dict) and need <= set(x) <= need | may
+                and ("dataset" in x) == ("commit" in x)
                 and all(isinstance(v, str) and v for v in x.values())
                 and HEX.match(x["map_sha256"]) and HEX.match(x["file_sha256"]) for x in src):
-            out.append("anchor_source: [{map, map_sha256, file_sha256}], each a map's resolved "
-                       "anchors file read (sha256 hex)")
+            out.append("anchor_source: [{map, map_sha256, file_sha256[, dataset, commit]}], each "
+                       "a map's resolved anchors file read (sha256 hex), and the dataset revision "
+                       "it came from when the lock holds it")
     if "derived" in rec:
         d = rec["derived"]
         if not isinstance(d, list) or not all(isinstance(x, str) for x in d):
