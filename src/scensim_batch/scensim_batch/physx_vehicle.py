@@ -18,6 +18,13 @@ import math
 import numpy as np
 import torch
 
+# How far a car may be from where its reset put it, at its first sample after (m; along its
+# heading, plus a substep's travel): a car settling on its springs moved 1.2 and 1.4 cm across in
+# 094 P4's engine A smokes (1 cm refused them); the errors this is for are an env's origin (issue
+# 109, metres) or the travel since a lost reset (issue 110, tens of metres). Tighten only with
+# settling data that allows it.
+LANDING_TOLERANCE = 0.05
+
 
 class PhysxVehicleBackend:
     vectorised = False   # one car at a time through PhysX's vehicle interface (no vehicle view)
@@ -112,7 +119,8 @@ class PhysxVehicleBackend:
             px, py = (float(c) for c in self.states[i].position[:2])
             dx, dy = px - x, py - y
             along, across = dx * math.cos(h) + dy * math.sin(h), -dx * math.sin(h) + dy * math.cos(h)
-            if abs(across) > 0.05 or abs(along - v * dt) > 0.05 + abs(v) * dt:
+            if abs(across) > LANDING_TOLERANCE or \
+                    abs(along - v * dt) > LANDING_TOLERANCE + abs(v) * dt:
                 bad.append((i, round(along, 3), round(across, 3)))
         self._landing = {}
         if bad:
