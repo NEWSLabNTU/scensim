@@ -126,36 +126,47 @@ def test_reject_waits_for_the_ego_then_crosses():
 # built for NumPy 1); only these are a skip: any other failure is a broken torch, and fails
 ABI_MISMATCH = ("_ARRAY_API", "Numpy is not available", "compiled using NumPy",
                 "numpy.core.multiarray failed to import")
+HINT = ("a NumPy built for another ABI, e.g. a user-site NumPy 2 against the system torch: run "
+        "in the gate's environment, or with PYTHONNOUSERSITE=1")
+PROBE = ("import numpy, torch\n"
+         "torch.as_tensor(numpy.zeros(1))\n"
+         "print('ok', numpy.__version__, torch.__version__)\n")
+_probe_cache = []
 
 
-def _abi_mismatch(e):
-    return any(m in str(e) for m in ABI_MISMATCH)
+def probe_torch():
+    """Whether torch imports and takes NumPy's arrays, asked once per session of a separate
+    interpreter (this one's executable and environment), so a torch that fails never loads
+    here: a failed `import torch` leaves a half-initialised module behind, and touching it
+    crashes the interpreter (243's segfault). Returns (ok, the probe's output)."""
+    if not _probe_cache:
+        import subprocess
+        r = subprocess.run([sys.executable, "-c", PROBE], capture_output=True, text=True,
+                           timeout=300)
+        _probe_cache.append((r.returncode == 0, (r.stdout + r.stderr).strip()))
+    return _probe_cache[0]
+
+
+def judge_probe(ok, text):
+    """What a probe's outcome means: None (usable), or a skip or a failure. Only a missing
+    torch and the NumPy ABI mismatch skip; anything else fails, with the probe's output."""
+    if ok:
+        return None
+    if "No module named 'torch'" in text:
+        return ("skip", "no torch")
+    if any(m in text for m in ABI_MISMATCH):
+        last = text.strip().splitlines()[-1] if text.strip() else ""
+        return ("skip", f"torch does not work with this NumPy ({last}); {HINT}")
+    return ("fail", f"torch is broken (not the NumPy ABI mismatch):\n{text}")
 
 
 def usable_torch():
-    """torch, if it imports and takes this NumPy's arrays. A missing torch is a skip, and so
-    is the NumPy ABI mismatch, at import (`from torch._C import *`: "AttributeError:
-    _ARRAY_API not found", which pytest.importorskip does not catch) or at the first
-    conversion ("Numpy is not available"). Any other error fails, with its traceback."""
-    import numpy as np
-    hint = ("a NumPy built for another ABI, e.g. a user-site NumPy 2 against the system torch: "
-            "run in the gate's environment, or with PYTHONNOUSERSITE=1")
-    try:
-        import torch
-    except Exception as e:
-        if _abi_mismatch(e):
-            pytest.skip(f"torch does not import with NumPy {np.__version__} "
-                        f"({type(e).__name__}: {e}); {hint}")
-        if isinstance(e, ModuleNotFoundError) and e.name == "torch":
-            pytest.skip("no torch")
-        raise
-    try:
-        torch.as_tensor(np.zeros(1))
-    except Exception as e:
-        if not _abi_mismatch(e):
-            raise
-        pytest.skip(f"torch {torch.__version__} cannot take NumPy {np.__version__}'s arrays "
-                    f"({type(e).__name__}: {e}); {hint}")
+    """torch, imported here only if the probe passed; else a skip or a failure."""
+    verdict = judge_probe(*probe_torch())
+    if verdict is not None:
+        kind, why = verdict
+        (pytest.skip if kind == "skip" else pytest.fail)(why)
+    import torch
     return torch
 
 
@@ -180,56 +191,55 @@ def test_numpy_and_torch_agree_bit_for_bit():
     del torch
 
 
-def test_a_torch_that_fails_to_import_is_a_skip(monkeypatch):
+# the probe's verdicts, on synthetic outcomes: no real torch, no real array conversion, so
+# they read the same on every host
+
+def test_a_torch_that_fails_to_import_is_a_skip():
     """The failure 243's shell had: `import torch` itself raising AttributeError."""
-    import builtins
-    real = builtins.__import__
-
-    def broken(name, *a, **k):
-        if name == "torch" or name.startswith("torch."):
-            raise AttributeError("_ARRAY_API not found")
-        return real(name, *a, **k)
-
-    monkeypatch.delitem(sys.modules, "torch", raising=False)
-    monkeypatch.setattr(builtins, "__import__", broken)
-    with pytest.raises(pytest.skip.Exception, match="AttributeError: _ARRAY_API not found"):
-        usable_torch()
+    text = ("Traceback (most recent call last):\n  File \"<string>\", line 1\n"
+            "AttributeError: _ARRAY_API not found")
+    kind, why = judge_probe(False, text)
+    assert kind == "skip" and "_ARRAY_API not found" in why and "PYTHONNOUSERSITE=1" in why
 
 
-def test_an_unrelated_import_error_fails(monkeypatch):
+def test_a_torch_that_cannot_convert_is_a_skip():
+    kind, why = judge_probe(False, "RuntimeError: Numpy is not available")
+    assert kind == "skip" and "Numpy is not available" in why
+
+
+def test_no_torch_is_a_skip():
+    assert judge_probe(False, "ModuleNotFoundError: No module named 'torch'") == ("skip", "no torch")
+
+
+def test_an_unrelated_import_error_fails():
     """A broken torch that is not the ABI mismatch is not hidden as a skip."""
+    kind, why = judge_probe(False, "AttributeError: module 'torch._C' has no attribute "
+                                   "'_cuda_getDevice'")
+    assert kind == "fail" and "_cuda_getDevice" in why
+
+
+def test_an_unrelated_conversion_error_fails():
+    kind, why = judge_probe(False, "RuntimeError: CUDA error: an illegal memory access was "
+                                   "encountered")
+    assert kind == "fail" and "illegal memory access" in why
+
+
+def test_a_good_probe_is_usable():
+    assert judge_probe(True, "ok 1.21.5 1.8.0") is None
+
+
+def test_usable_torch_never_imports_after_a_failed_probe(monkeypatch):
+    """After a failed probe, usable_torch skips without importing torch in this interpreter."""
     import builtins
     real = builtins.__import__
 
-    def broken(name, *a, **k):
+    def guard(name, *a, **k):
         if name == "torch" or name.startswith("torch."):
-            raise AttributeError("module 'torch._C' has no attribute '_cuda_getDevice'")
+            raise AssertionError("torch imported after a failed probe")
         return real(name, *a, **k)
 
-    monkeypatch.delitem(sys.modules, "torch", raising=False)
-    monkeypatch.setattr(builtins, "__import__", broken)
-    with pytest.raises(AttributeError, match="_cuda_getDevice"):
-        usable_torch()
-
-
-def test_an_unrelated_conversion_error_fails(monkeypatch):
-    torch = usable_torch()
-
-    def bad(*a, **k):
-        raise RuntimeError("CUDA error: an illegal memory access was encountered")
-
-    monkeypatch.setattr(torch, "as_tensor", bad)
-    with pytest.raises(RuntimeError, match="illegal memory access"):
-        usable_torch()
-
-
-def test_a_torch_that_cannot_convert_is_a_skip(monkeypatch):
-    """The other form: torch imports, then the first conversion fails."""
-    torch = usable_torch()
-
-    def bad(*a, **k):
-        raise RuntimeError("Numpy is not available")
-
-    monkeypatch.setattr(torch, "as_tensor", bad)
-    with pytest.raises(pytest.skip.Exception, match="cannot take NumPy"):
+    monkeypatch.setattr(sys.modules[__name__], "_probe_cache",
+                        [(False, "AttributeError: _ARRAY_API not found")])
+    monkeypatch.setattr(builtins, "__import__", guard)
+    with pytest.raises(pytest.skip.Exception, match="_ARRAY_API"):
         usable_torch()
