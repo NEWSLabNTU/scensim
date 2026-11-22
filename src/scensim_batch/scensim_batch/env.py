@@ -59,6 +59,17 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     # where a body's asset lives (a spec's body.asset, 094 P2): its usd is under this root, and
     # engine B loads it (its sha256 checked) instead of the generated body. A host setting
     asset_root: str = ""
+    # every episode's start a sample record of its own (094 P2; start_pool.StartPool): a dict
+    # {distribution: <ParameterValueDistribution xosc>, seed: int, chunk: int (records a refill
+    # draws), log: <jsonl path or "">}. The records then come from the pool (`records` is
+    # ignored), each reset takes the next unused ones, and the log names each (slot, episode,
+    # record id). Only Init is drawn again: a storyboard reading a sampled parameter is refused
+    start_pool: dict = None
+    # the action straight to the joints, the control component bypassed (094 P2's row b, as
+    # stock): a subclass's joint_targets(actions) gives (steer [N, 2], spin [N, 4]); engine B
+    bypass_component: bool = False
+    # the ground's material: (static, dynamic, combine) or None (Isaac Lab's default plane)
+    ground_material: tuple = None
     # B on a GPU sim: BatchRun, the car model and the component on that device, nothing copied
     # to the host per step (092 K2.2c); the component must have a torch form (array_api)
     device_resident: bool = False
@@ -82,7 +93,7 @@ class ScensimEnv(DirectRLEnv):
     cfg: ScensimEnvCfg
 
     def __init__(self, cfg: ScensimEnvCfg, render_mode=None, **kwargs):
-        n = len(cfg.records)
+        n = len(cfg.records) if not cfg.start_pool else cfg.scene.num_envs
         if n != cfg.scene.num_envs:
             raise ValueError(f"{n} records for {cfg.scene.num_envs} environments: one per slot")
         if cfg.engine == "B":
@@ -113,8 +124,33 @@ class ScensimEnv(DirectRLEnv):
         from .physx_vehicle import PhysxVehicleBackend
 
         cfg = self.cfg
-        spawn_ground_plane("/World/ground", GroundPlaneCfg())
+        g = GroundPlaneCfg()
+        if cfg.ground_material is not None:
+            import isaaclab.sim as sim_utils
+            st, dy, comb = cfg.ground_material
+            g = GroundPlaneCfg(physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=st, dynamic_friction=dy, friction_combine_mode=comb,
+                restitution_combine_mode=comb))
+        spawn_ground_plane("/World/ground", g)
         world = cfg.world_factory()
+        self.pool, self._episodes, self._start_log = None, None, None
+        if cfg.start_pool:
+            from .start_pool import StartPool
+            sp = dict(cfg.start_pool)
+            dev = cfg.sim.device if cfg.device_resident else "cpu"
+            self.pool = StartPool(sp["distribution"], world, seed=int(sp.get("seed", 0)),
+                                  chunk=int(sp.get("chunk", 10000)), device=dev,
+                                  provides=cfg.provides)
+            n = cfg.scene.num_envs
+            while len(self.pool.records) < n:
+                self.pool.refill()
+            # the first reset takes rows 0..n-1: the scenario compiles on those records
+            cfg.records = [dict(r) for r in self.pool.records[:n]]
+            self.cfg.scenario = str(self.pool.scenario)
+            self._episodes = [0] * n
+            path = sp.get("log") or ""
+            self._start_log = open(path, "a") if path else None
+            self.start_log = []
         if cfg.engine not in ("A", "B"):
             raise ValueError(f"engine {cfg.engine!r}: A or B")
         dev = None
@@ -142,7 +178,9 @@ class ScensimEnv(DirectRLEnv):
             self.backend = self._engine_b(n, dev is not None)
         self.run = core.BatchRun(self.compiled, world, self.backend, component,
                                  points=cfg.route_points,
-                                 allow_loop=cfg.allow_loop, start_frames=cfg.start_frames,
+                                 # bypassed, the component never steps: its form is moot
+                                 allow_loop=cfg.allow_loop or cfg.bypass_component,
+                                 start_frames=cfg.start_frames,
                                  step_time=self.step_dt if cfg.start_frames else None,
                                  device=dev)
         self.commands = None
@@ -169,6 +207,9 @@ class ScensimEnv(DirectRLEnv):
     def _pre_physics_step(self, actions: torch.Tensor):
         """The policy's actions as the component's commands (ACTIONS[kind], in order): host
         arrays, or on a device-resident env tensors on its device."""
+        if self.cfg.bypass_component:
+            self.joint_targets_now = self.joint_targets(actions)
+            return
         if self.resident is not None:
             self.commands = self._commands_on_device(actions)
             return
@@ -188,6 +229,11 @@ class ScensimEnv(DirectRLEnv):
             c["motor"] = np.full(n, MOTOR_MODES.index(self.cfg.vesc_mode), dtype=np.int64)
             c["age"] = np.zeros(n)
         self.commands = c
+
+    def joint_targets(self, actions):
+        """The bypassed action (bypass_component): (steer [N, 2] rad, spin [N, 4]) targets."""
+        raise NotImplementedError(f"{type(self).__name__}: bypass_component needs "
+                                  "joint_targets(actions)")
 
     def _commands_on_device(self, actions):
         dev = self.resident
@@ -211,7 +257,10 @@ class ScensimEnv(DirectRLEnv):
         dt = self.physics_dt
         if self.stepped:          # the substep before this one: the cars read back
             self.backend.sample(dt)
-        self.run.before_physics(self.commands, dt)
+        if self.cfg.bypass_component:
+            self.backend.apply_joints(*self.joint_targets_now)
+        else:
+            self.run.before_physics(self.commands, dt)
         self.backend.actuate(dt)
         self.stepped = True
 
@@ -254,7 +303,30 @@ class ScensimEnv(DirectRLEnv):
                     "reset alone: a pre-roll steps every slot's physics, so only an agreement "
                     "run (every slot reset together) takes one")
             pre = self._preroll
+        if self.pool is not None:
+            self._draw_starts(env_ids, home)
         self.run.reset(mask, preroll=pre)   # merges: the other slots' observation stays this step's
+
+    def _draw_starts(self, env_ids, home):
+        """The reset slots' Init from the pool's next records, logged (094 P2)."""
+        import json
+        ids = [int(i) for i in torch.as_tensor(env_ids).flatten().tolist()]
+        rows = self.pool.take(len(ids))
+        x, y, yaw, v = self.pool.init(rows)
+        c, e = self.compiled, self.run.ego
+        it = torch.as_tensor(ids, dtype=torch.long, device=c.x.device)
+        for t, val in ((c.x, x), (c.y, y), (c.yaw, yaw), (c.speed, v)):
+            t[it, e] = val.to(t.device, t.dtype)
+        for slot, row in zip(ids, rows):
+            r = self.pool.record(row)
+            line = {"slot": slot, "episode": self._episodes[slot], "record": r["id"],
+                    "row": row, "chunk": r.get("pool_chunk")}
+            self._episodes[slot] += 1
+            self.start_log.append(line)
+            if self._start_log is not None:
+                self._start_log.write(json.dumps(line) + "\n")
+        if self._start_log is not None:
+            self._start_log.flush()
 
     def _preroll(self, run):
         """cfg.ego_preroll, as env steps of the ego alone: each action's commands, then the
