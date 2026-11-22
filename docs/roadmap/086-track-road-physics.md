@@ -9,7 +9,8 @@ approved by 133 the same day with its three decisions. C1 done 2026-11-20 (scens
 51a95b4, pins 7aad5216). C3 done 2026-11-20 (scensim_isaac_world 98a5d8c, pins 4c67e51d); the
 courses' dataset revision prepared, not published. C4 landed 2026-11-20 (scensim_isaac_world
 6177ced, scensim 82787b91); its Town01 suite waits for 139. C5 started 2026-11-23 in four
-steps ("C5's steps" below); C5a done (scensim_isaac_world ea35f35).
+steps ("C5's steps" below); C5a done (scensim_isaac_world ea35f35), C5b done
+(scensim_isaac_world b5de87b, its fixture course and checks).
 Issue 077's cause is confirmed (2026-11-20, 118): PhysX's raycast wheel query takes Town01's
 sharp curb face as the ground, and Town01 has no road layer. Its fix comes first, ahead of C5:
 recheck the sweep (066 R1's check, from C6). If the sweep no longer throws the car, aib switches
@@ -259,18 +260,18 @@ scensim_isaac_world 6177ced (pins cebb5557), scensim 82787b91; 056's steps 1-4.
   both level (C3's builder writes a level section with no lip), so they still reduce to one
   `Section` and give the same road. A per-station corridor's tile takes 0.07 s against 0.043.
 - **C5b, the ribbon from the record** (done 2026-11-23, results below). The course meshes tilt
-  each strip by bank and crown,
-  so PhysX's base road carries the cross slope, and the layer adds only what the mesh does
-  not. Check: Isaac's road height and cross slope against the record at every station (within
-  5 mm and 0.1 deg), and midway between stations against the layer's own interpolation, so the
-  mesh and the layer agree where the record says nothing. The nonzero-crown exit runs on a
-  synthetic fixture course built by the same pipeline from a fixture centreline: a stated
-  crown (2 to 3 %), a bank rising from 0 to 6 % through a bend, and a lip segment for C5c,
-  driven with haruna_down's controller and checks. Haruna's and Tsukuba's records stay level:
-  their only elevation source, GSI's 5 m DEM, cannot resolve either (one or two samples across
-  a 6.5 m carriageway, a vertical error of about 0.3 m against a crown's 6 cm or a hairpin's
-  0.4 m of superelevation). A record gains a crown or bank only from a source that resolves
-  it (a lidar point cloud, a survey), named in the record.
+  each strip by bank and crown, so PhysX's base road carries the cross slope, and the layer
+  adds only what the mesh does not. Check: Isaac's road height and cross slope against the
+  record at every station (within 5 mm and 0.1 deg), and midway between stations against the
+  layer's own interpolation, so the mesh and the layer agree where the record says nothing. The
+  nonzero-crown exit runs on a synthetic fixture course built by the same pipeline from a
+  fixture centreline: a stated crown (2 to 3 %), a bank rising from 0 to 6 % through a bend,
+  and a lip segment for C5c, driven with haruna_down's controller and checks. Haruna's and
+  Tsukuba's records stay level: their only elevation source, GSI's 5 m DEM, cannot resolve
+  either (one or two samples across a 6.5 m carriageway, a vertical error of about 0.3 m
+  against a crown's 6 cm or a hairpin's 0.4 m of superelevation). A record gains a crown or
+  bank only from a source that resolves it (a lidar point cloud, a survey), named in the
+  record.
 - **C5c, the lip and the strips.** The lip as a step in the mesh at the carriageway's edge, and
   the shoulder and run-off as surface zones from the record (C2's class table). Check: the lip
   re-entry fixtures, 5, 10 and 15 cm at 90, 45 and 30 deg. Each case's expected outcome
@@ -339,7 +340,7 @@ run on it as on Haruna. Its record is the spec below, not a measurement; the fil
 
 #### C5b's results (2026-11-23, 118, GPU0)
 
-scensim_isaac_world 086-c5b: `course/fixture.py`, `geometry.ribbon` taking the record,
+scensim_isaac_world b5de87b: `course/fixture.py`, `geometry.ribbon` taking the record,
 `course/check.py` and `course/isaac_check.py` (the geometry), `course/ego_trace.py` (a
 testbench attachment writing the ego's truth), `course/arc_drive.py` (aib's car through the
 bend without Autoware) and `course/arc_check.py` (a trace against the record), and
