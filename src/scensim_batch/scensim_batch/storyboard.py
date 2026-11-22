@@ -1149,6 +1149,11 @@ class RouteGoal:
         self.has = torch.zeros(n, dtype=torch.bool)
         self.reached = torch.zeros(n, dtype=torch.bool)
         self.points = torch.zeros(n, points, 2, dtype=torch.float64)
+        # the routes' arc lengths, made when the points change (set), not every step; and
+        # whether any slot was ever given a goal: a run with none skips the projection
+        # (094 P3: 23 % of the terminations stage on the drift task, which has no route goal)
+        self._routes = None
+        self._given = False
         self.goal = torch.zeros(n, 3, dtype=torch.float64)
         self.progress, self.remaining, self.to_goal = z.clone(), z.clone(), z.clone()
 
@@ -1176,12 +1181,21 @@ class RouteGoal:
         self.goal = torch.where(mask[:, None], g, self.goal)
         self.has = self.has | mask
         self.reached = self.reached & ~mask
+        self._routes, self._given = None, True
 
     def update(self, obs):
         """The ego's progress, from the observation; returns the route's block of it."""
         e = self.run.ego
         x, y = obs["x"][:, e], obs["y"][:, e]
-        r = npc.Routes(self.points[:, None])
+        if not self._given:          # no slot has had a goal: every value stays 0, unreached
+            now = torch.zeros_like(self.reached)
+            return {"has_goal": self.has.clone(), "points": self.points, "goal": self.goal,
+                    "progress": self.progress, "remaining": self.remaining,
+                    "to_goal": self.to_goal, "goal_reached": self.reached.clone(),
+                    "goal_reached_now": now}
+        if self._routes is None:
+            self._routes = npc.Routes(self.points[:, None])
+        r = self._routes
         s, _ = r.project(torch.stack([x, y], -1)[:, None, None])
         s = s[:, 0, 0]
         self.progress = torch.where(self.has, s, torch.zeros_like(s))

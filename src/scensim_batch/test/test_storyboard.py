@@ -376,6 +376,33 @@ class RouteGoal(unittest.TestCase):
         self.assertEqual(sorted(reached_at), [])       # 3.5 m beside the goal: never within 1 m
         self.assertAlmostEqual(float(r["remaining"][0]), 0.0, delta=1e-6)   # past the route's end
 
+    def test_without_a_goal_the_route_is_zero_and_no_route_is_built(self):
+        """094 P3: a run whose slots never get a goal (the drift task) skips the projection,
+        which rebuilt its routes every step; its route block is all zeros, unreached."""
+        p = case(story(event("e", exit_(":"), time_trigger(100))))
+        c, run = self.build(p, [{"values": {"ego_speed": 10.0}}] * 2)
+        obs = run.reset()
+        for _ in range(5):
+            obs = run.step(cmds(2, 0.0), DT)
+        r = obs["route"]
+        self.assertFalse(bool(r["has_goal"].any()))
+        self.assertFalse(bool(r["goal_reached"].any()) or bool(r["goal_reached_now"].any()))
+        for k in ("progress", "remaining", "to_goal"):
+            self.assertEqual(r[k].tolist(), [0.0, 0.0])
+        self.assertFalse(run.route._given)
+        self.assertIsNone(run.route._routes)                 # never built
+
+    def test_a_goals_routes_are_built_once_until_the_next_goal(self):
+        p = with_init(case(story(event("e", exit_(":"), time_trigger(100)))), "ego", acquire(60))
+        c, run = self.build(p, [{"values": {"ego_speed": 10.0}}])
+        run.reset()
+        run.step(cmds(1, 0.0), DT)
+        first = run.route._routes
+        self.assertIsNotNone(first)
+        for _ in range(3):
+            run.step(cmds(1, 0.0), DT)
+        self.assertIs(run.route._routes, first)              # not rebuilt per step
+
     def test_reached_latches_in_the_goals_lane(self):
         p = with_init(case(story(event("e", exit_(":"), time_trigger(100)))), "ego", acquire(60))
         c, run = self.build(p, [{"values": {"ego_speed": 10.0}}])

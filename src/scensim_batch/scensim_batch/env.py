@@ -187,9 +187,11 @@ class ScensimEnv(DirectRLEnv):
                                                         catalogs=cfg.catalogs or None)
         n = self.compiled.n
         seeds = [int(s or 0) for s in self.compiled.seeds]
+        # bypassed (row b), the component never steps: its numpy form serves a resident run
+        torch_form = dev is not None and not cfg.bypass_component
         component = ecu_batch.load_batch(cfg.component, cfg.vehicle, cfg.component_params, seeds,
-                                         array_api="torch" if dev is not None else "numpy",
-                                         device=dev)
+                                         array_api="torch" if torch_form else "numpy",
+                                         device=dev if torch_form else None)
         self.kind = component.commands
         self.resident = dev
         if cfg.engine == "A":
@@ -217,7 +219,7 @@ class ScensimEnv(DirectRLEnv):
         doc = self._body_doc
         return _LazyB(lambda: art.ArticulationBackend(asset, doc, self.scene.env_origins,
                                                       sim=None, z=self._spawn_z(),
-                                                      resident=resident))
+                                                      resident=resident, host_writes=True))
 
     def _spawn_z(self):
         # an asset spawns where its author put it (stock's MuSHR: at 0); a generated body a

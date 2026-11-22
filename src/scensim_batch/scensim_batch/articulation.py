@@ -411,10 +411,25 @@ def actuator_groups(doc):
     return groups
 
 
+ARTICULATION_SPAWN = ("solver_position_iteration_count", "solver_velocity_iteration_count",
+                      "sleep_threshold", "stabilization_threshold")
+
+
+def spawn_props(doc):
+    """The body's asset's spawn properties (sim_vehicle_spec's body.asset.spawn: what the
+    asset's own config sets over its USD), split as Isaac Lab takes them: (articulation root's,
+    rigid bodies'). Empty for a body without them (a generated body, whose USD is the spec's)."""
+    spawn = dict((doc.get("asset") or {}).get("spawn") or {})
+    root = {k: spawn.pop(k) for k in ARTICULATION_SPAWN if k in spawn}
+    return root, spawn
+
+
 def articulation_cfg(doc, usd_path, prim_path="/World/envs/env_.*/ego", z=0.0,
                      position_iterations=None, velocity_iterations=None):
-    """Isaac Lab's ArticulationCfg for the body file's USD (write_usd). Import after Isaac
-    Sim's app."""
+    """Isaac Lab's ArticulationCfg for the body file's USD (write_usd), with its asset's spawn
+    properties (spawn_props; 094 P3: the MuSHR's USD authors 32/1 solver iterations, its config
+    4/0); `position_iterations` and `velocity_iterations`, when given, over the asset's. Import
+    after Isaac Sim's app."""
     import isaaclab.sim as sim_utils
     from isaaclab.actuators import DCMotorCfg, IdealPDActuatorCfg, ImplicitActuatorCfg
     from isaaclab.assets import ArticulationCfg
@@ -423,6 +438,11 @@ def articulation_cfg(doc, usd_path, prim_path="/World/envs/env_.*/ego", z=0.0,
         vals = {n: g[k] for n, g in gains.items() if g[k] is not None}
         return vals or None
 
+    root, rigid = spawn_props(doc)
+    if position_iterations is not None:
+        root["solver_position_iteration_count"] = position_iterations
+    if velocity_iterations is not None:
+        root["solver_velocity_iteration_count"] = velocity_iterations
     actuators = {}
     for kind, (names, how, gains) in actuator_groups(doc).items():
         names = [asset_name(doc, n) for n in names]       # the asset's, where it has one
@@ -444,10 +464,9 @@ def articulation_cfg(doc, usd_path, prim_path="/World/envs/env_.*/ego", z=0.0,
         prim_path=prim_path,
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(usd_path),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(**rigid) if rigid else None,
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                enabled_self_collisions=False,
-                solver_position_iteration_count=position_iterations,
-                solver_velocity_iteration_count=velocity_iterations)),
+                enabled_self_collisions=False, **root)),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.0, z), joint_pos={asset_name(doc, n): 0.0 for n in joint_order(doc)},
             joint_vel={asset_name(doc, n): 0.0 for n in joint_order(doc)}),
@@ -464,8 +483,12 @@ class ArticulationBackend:
     the asset's device, no copy to the host per step; otherwise on the CPU (the reference)."""
     vectorised = True
 
-    def __init__(self, asset, doc, origins, sim=None, z=0.0, resident=False):
+    def __init__(self, asset, doc, origins, sim=None, z=0.0, resident=False, host_writes=False):
         self.asset, self.doc, self.sim, self.z = asset, doc, sim, z
+        # an Isaac Lab env's own step writes the scene's commands after _apply_action and
+        # updates its assets after each substep (DirectRLEnv.step): the backend then does
+        # neither itself (094 P3: each was done twice a substep, 43 % of the actions stage)
+        self.host_writes = host_writes
         self.n = asset.num_instances
         self.device = asset.device
         self.home = torch.device(self.device) if resident else torch.device("cpu")
@@ -555,7 +578,8 @@ class ArticulationBackend:
             a.set_joint_velocity_target_index(target=self._dev(spin), joint_ids=self._spin_asset)
         else:
             a.set_joint_effort_target_index(target=self._dev(spin), joint_ids=self._spin_asset)
-        a.write_data_to_sim()
+        if not self.host_writes:
+            a.write_data_to_sim()
 
     def advance(self, dt):
         import time
@@ -573,7 +597,8 @@ class ArticulationBackend:
         tm["steps"] += 1
 
     def sample(self, dt):
-        self.asset.update(dt)
+        if not self.host_writes:
+            self.asset.update(dt)
         self.dt = dt
         self._state = None
 

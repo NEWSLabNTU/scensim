@@ -427,6 +427,21 @@ class BackendTest(unittest.TestCase):
         self.assertAlmostEqual(st["yaw"][1].item(), math.pi / 2, places=6)
         self.assertAlmostEqual(st["v"][1].item(), 4.0, places=5)
 
+    def test_under_a_host_that_writes_the_backend_does_not(self):
+        """094 P3: an Isaac Lab env writes the scene and updates its assets each substep; the
+        backend's own write and update were a second of each."""
+        act = {"drive": torch.zeros(3, 4), "brake": torch.zeros(3, 4),
+               "tire_angle": torch.zeros(3)}
+        self.b.apply(act)
+        self.b.actuate(DT)
+        self.assertEqual(self.a.writes, 1)                   # standalone: it writes
+        hosted = art.ArticulationBackend(self.a, self.doc, self.origins, z=0.05,
+                                         host_writes=True)
+        hosted.apply(act)
+        hosted.actuate(DT)
+        self.assertEqual(self.a.writes, 1)                   # hosted: the host does
+        self.assertIsNotNone(self.a.pos_target)              # the targets are still set
+
     def test_actuate_writes_the_joints_by_name(self):
         n = 3
         act = {"drive": torch.tensor([[0, 0, 400.0, 400.0]] * n),
@@ -467,3 +482,23 @@ class BackendTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpawnPropsTest(unittest.TestCase):
+    """094 P3: an asset's spawn properties (sim_vehicle_spec's body.asset.spawn), split as Isaac
+    Lab takes them; a body without them has none (its USD's own stand)."""
+
+    def test_split(self):
+        doc = {"asset": {"spawn": {"solver_position_iteration_count": 4,
+                                   "solver_velocity_iteration_count": 0,
+                                   "sleep_threshold": 0.005, "max_depenetration_velocity": 100.0,
+                                   "enable_gyroscopic_forces": True}}}
+        root, rigid = art.spawn_props(doc)
+        self.assertEqual(root, {"solver_position_iteration_count": 4,
+                                "solver_velocity_iteration_count": 0, "sleep_threshold": 0.005})
+        self.assertEqual(rigid, {"max_depenetration_velocity": 100.0,
+                                 "enable_gyroscopic_forces": True})
+        self.assertEqual(art.spawn_props({}), ({}, {}))
+        self.assertEqual(art.spawn_props({"asset": {"usd": "x"}}), ({}, {}))
+        self.assertIn("spawn", doc["asset"])                 # not consumed
+
