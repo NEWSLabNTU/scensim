@@ -1,6 +1,6 @@
 # 112: a sampled-run test races its own fake pilot under load
 
-**Status:** open (the test's, 243's to fix; the product is right). **Severity:** low: a flaky
+**Status:** fixed (the test's, 243; the product is right). **Severity:** low: a flaky
 gate, about 1 in 13 under a loaded host; no run's record is wrong. **Found:** 2026-11-23, scensim
 241, in issue 106's landing gate.
 
@@ -47,3 +47,17 @@ exists, or the fake can be one that has started before readiness is declared.
 
 Evidence (a passing run, kept with its logs): 241's scratchpad
 `flake/t1/test_sampled_runs_carry_their_0/logs/proj/runs/*/timeline.jsonl`.
+
+## Resolution (2026-11-23)
+
+The patched `pilot_cmd` now appends the pilot's `run` argument to `seeds.jsonl` in the test
+process, as the run builds the command, and starts a no-op child. The run builds it once per run
+per pilot, just before it starts the pilot (`run.py`, the pilots' loop), so the record is exact.
+
+Looping the test under load found a second race in the same fixture. Its teardown waited 10 s
+for the stack keeper after SIGTERM, but the keeper's stop ladder (`stack.stop_processes`: SIGINT,
+20 s, SIGTERM, 10 s, SIGKILL, 5 s) may take 35 s. At load about 30 that wait timed out once in 8
+runs, with the test's body passed. Every `start_stack` teardown had the same fixed 10 s: 13 in
+`test_run.py`, one each in `test_knobs.py` and `test_sampled.py`. All now wait
+`_ceiling.STOP_WAIT()`, which is `ceiling(base=60)` scaled by the load per core, as the
+ready-waits are.

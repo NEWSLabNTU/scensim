@@ -13,6 +13,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scensim_sampler"))
 
 from scensim import results, run, runs, sampled  # noqa: E402
+from _ceiling import STOP_WAIT  # noqa: E402
 from test_run import fake, make, start_stack, where  # noqa: E402,F401 - the fixture
 
 import scensim_sampler  # noqa: E402
@@ -176,16 +177,18 @@ def stack_up(where, maps_hub, monkeypatch):
     real = run.pilot_argv
 
     def pilot_cmd(rec, pilot, entry, log_dir):
+        # the pilot's run argument, recorded here as the command is built: a child that wrote
+        # it could be killed by run.end's SIGTERM before it started, under load (issue 112)
         argv = real(rec, pilot, entry, log_dir)
         words = dict(w.split(":=", 1) for w in argv if ":=" in w)
-        return [sys.executable, "-c",
-                f"import json; open({str(seen)!r}, 'a').write(json.dumps("
-                f"{json.dumps(words.get('run', ''))}) + '\\n')"]
+        with open(seen, "a") as f:
+            f.write(json.dumps(words.get("run", "")) + "\n")
+        return [sys.executable, "-c", "pass"]
     monkeypatch.setattr(run, "pilot_argv", pilot_cmd)
     p, proc = start_stack(d)
     yield d, seen
     proc.send_signal(signal.SIGTERM)
-    proc.wait(timeout=10)
+    proc.wait(timeout=STOP_WAIT())
 
 
 def runs_dir(where):

@@ -110,6 +110,7 @@ import signal  # noqa: E402
 import yaml  # noqa: E402
 
 from scensim import results, run  # noqa: E402
+from _ceiling import STOP_WAIT  # noqa: E402
 from test_run import fake, start_stack, where  # noqa: E402,F401 - the fixture
 from test_sampled import SEEDED, runs_dir, sampled_project  # noqa: E402
 
@@ -190,7 +191,7 @@ def knob_stack(where, maps_hub, monkeypatch):
     p, proc = start_stack(d)
     yield d, monkeypatch
     proc.send_signal(signal.SIGTERM)
-    proc.wait(timeout=10)
+    proc.wait(timeout=STOP_WAIT())
 
 
 def _use(monkeypatch, bridge):

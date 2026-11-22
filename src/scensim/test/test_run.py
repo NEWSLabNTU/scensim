@@ -11,7 +11,7 @@ import sys
 import textwrap
 import time
 from pathlib import Path
-from _ceiling import ceiling
+from _ceiling import STOP_WAIT, ceiling
 
 import pytest
 import yaml
@@ -185,7 +185,7 @@ def live(where, maps_hub):
     p, proc = start_stack(d)
     yield d, p
     proc.send_signal(signal.SIGTERM)
-    proc.wait(timeout=10)
+    proc.wait(timeout=STOP_WAIT())
 
 
 def fake(where):
@@ -363,7 +363,7 @@ def test_not_ready_refused(where, maps_hub, capsys):
         assert "is not ready (state starting; waiting for ego, follower, lead)" in err
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
     # stopped: not running
     assert json.loads(p.stack_json.read_text())["state"] == "stopped"
     assert run.main(["scenarios/three_pilots.xosc", f"project:={d}"]) == 3
@@ -722,7 +722,7 @@ def test_run_pilot_started_and_stopped(where, maps_hub):
         assert time.time() - t < 40  # the pilot was stopped, not waited for
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
     assert r.verdict == "passed"
     argv = json.loads(seen.read_text())
     assert argv[:5] == ["play_launch", "launch", "--disable-web-ui", "--disable-diagnostics",
@@ -778,7 +778,7 @@ def test_judges_run_and_budget_refuses(where, maps_hub, monkeypatch):
         assert len(list((where["tmp"] / "logs" / "proj" / "runs").iterdir())) == 1
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
 
 
 def test_a_judges_reads_are_kept_with_the_logs(where, maps_hub, monkeypatch):
@@ -802,7 +802,7 @@ def test_a_judges_reads_are_kept_with_the_logs(where, maps_hub, monkeypatch):
         assert not (run_dir / "scratch.txt").exists()
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
 
 
 def test_capture_full_records_each_pilot_domain(live, where, monkeypatch):
@@ -1132,7 +1132,7 @@ def test_a_crash_looping_pilot_fails_the_run_fast(where, maps_hub):
         assert time.time() - t < 40   # not the readiness timeout
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
     assert r.verdict == "error"
     assert "pilot follower is not coming up: its node /command_follower crashed" in r.reason
 
@@ -1164,7 +1164,7 @@ def test_a_run_pilot_stuck_on_a_lost_load_reply_fails_the_run_fast(where, maps_h
         assert time.time() - t < 40   # not the readiness timeout
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
     assert r.verdict == "error"
     assert ("pilot follower is not coming up: its launch is stuck loading composables into "
             "/planning/behavior_planning_container (its reply to the launch's load_node was lost") in r.reason
@@ -1196,7 +1196,7 @@ def test_a_run_pilot_whose_launch_exits_fails_the_run_at_once(where, maps_hub):
         assert time.time() - t < 30   # not the readiness timeout
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
     assert r.verdict == "error"
     assert ("pilot follower is not coming up: its launch exited (code 3) before it was ready: "
             "[acb_bridge-1] [ERROR] [1795.0] [acb_bridge]: CARLA version mismatch") in r.reason
@@ -1313,7 +1313,7 @@ def test_gap_trace_per_run_judged_and_frame_metrics(where, maps_hub, monkeypatch
                         {"scenario_command": cmd, "ready_timeout": 5})
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
     run_dir = where["tmp"] / "logs" / "proj" / "runs" / r.run_id
     assert r.verdict == "passed", r.reason
     assert [x.name for x in (run_dir / "gap_trace").glob("*.jsonl")] == [
@@ -1695,7 +1695,7 @@ def test_an_attachment_runs_with_the_run_and_is_recorded(where, maps_hub, monkey
         assert "attachment.start" in events and "attachment.stop" in events
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
 
 
 def test_a_required_attachment_that_dies_makes_the_run_an_error(where, maps_hub, monkeypatch):
@@ -1719,7 +1719,7 @@ def test_a_required_attachment_that_dies_makes_the_run_an_error(where, maps_hub,
         assert res["error"]["kind"] == "attachment", res["error"]   # counted by kind (092 K4)
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
 
 
 # --- the clock (roadmap 092 K4): recorded in either mode, judged when paced -----------------
@@ -1768,7 +1768,7 @@ def test_the_clock_is_recorded_and_a_paced_run_behind_its_budget_is_an_error(
             assert "error" not in res
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
 
 
 @pytest.mark.parametrize("clock,verdict", [(None, "passed"), ("{mode: paced, max_lag_s: 0.05}", "error")])
@@ -1809,4 +1809,4 @@ def test_a_suites_real_time_factor_is_the_clocks(where, maps_hub, monkeypatch, c
             assert ck["lag_s"]["max"] == pytest.approx(0.0, abs=1e-9)
     finally:
         proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=10)
+        proc.wait(timeout=STOP_WAIT())
