@@ -625,3 +625,33 @@ def test_a_dependencys_own_deps_are_synced_too(world, monkeypatch):
     r = world.land("--onto", "feat", "A", a2)
     assert r.returncode == 0, r.stdout + r.stderr
     assert git(nested, "rev-parse", "HEAD") == a2
+
+
+def test_a_component_not_landing_is_at_the_tips_gitlink_for_the_gate(world, monkeypatch):
+    """Issue 111: src/B, which landing A does not move, was left on a local commit (a change
+    not landed yet), and the gate tested that instead of the tip's B. It is checked out at the
+    tip's gitlink before the gate, its branch kept."""
+    bdir = world.super / "src" / "B"
+    want = git(bdir, "rev-parse", "HEAD")
+    git(bdir, "checkout", "-q", "-b", "local-work")
+    commit(bdir, "B, not landed")
+    assert git(bdir, "rev-parse", "HEAD") != want
+    code_branch(world)
+    a2 = world.advance("A")
+    monkeypatch.setenv("LAND_PIN_GATE", f"test \"$(git -C src/B rev-parse HEAD)\" = {want}")
+    r = world.land("--onto", "feat", "A", a2)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert git(bdir, "rev-parse", "HEAD") == want
+    assert git(bdir, "rev-parse", "local-work") != want          # the work is still there
+
+
+def test_an_uncommitted_change_in_a_component_not_landing_refuses_by_name(world, monkeypatch):
+    bdir = world.super / "src" / "B"
+    (bdir / "f").write_text("edited, not committed\n")
+    git(bdir, "add", "f")
+    code_branch(world)
+    a2 = world.advance("A")
+    monkeypatch.setenv("LAND_PIN_GATE", "true")
+    r = world.land("--onto", "feat", "A", a2)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "src/B: " in r.stderr and "nothing pushed" in r.stderr

@@ -132,6 +132,29 @@ def sync_tree(src, cd):
         sync_tree(src, dep)
 
 
+def pin_others(src, landing):
+    """Every component under src/ that the landing does not move, checked out at this
+    checkout's HEAD gitlink for it (detached, its branches untouched); or, when any has an
+    uncommitted change (which the gate would test too), those changes, as
+    `src/<name>: <status line>`, and nothing is moved for that one (issue 111)."""
+    dirty = []
+    for name in gitmodule_components(ROOT):
+        if name in landing:
+            continue
+        cd = src / name
+        lines = _dirty(cd, f"src/{name}: ")   # the gate would test these too
+        if lines:
+            dirty += lines
+            continue
+        want = pin(ROOT, "HEAD", f"src/{name}")
+        if not want or git("rev-parse", "HEAD", cwd=cd) == want:
+            continue
+        if not ok("cat-file", "-e", f"{want}^{{commit}}", cwd=cd):
+            git("fetch", "-q", "--no-recurse-submodules", "origin", cwd=cd)
+        git("checkout", "-q", want, cwd=cd)
+    return dirty
+
+
 def tracked_branch(repo, rev, path):
     """(branch, named): the branch a submodule at `path` of `repo`'s `rev` tracks, and whether
     .gitmodules names it (else main)."""
@@ -466,6 +489,16 @@ def main(argv):
         # every component's deps/, not only the landing ones': one that does not move here was
         # still checked out on its old deps (scensim_carla_world against a stale
         # scensim_world_protocol, 094 P2's aib landing), and the build failed on code that was right
+        # and every component the landing does not move at the tip's own gitlink, as a fresh
+        # clone of it has them: a checkout left on a local branch (sim_vehicle_spec on a
+        # change not landed yet) made the gate test a tree that was not the landing's, which
+        # failed on code that was right (issue 111). An uncommitted change there refuses it.
+        stale = pin_others(src, landing)
+        if stale:
+            print("a component the landing does not move has uncommitted changes, so the gate "
+                  "cannot test the tip's tree: commit or stash them; nothing pushed\n  "
+                  + "\n  ".join(stale), file=sys.stderr)
+            return 1
         for c in sorted(p.name for p in src.iterdir() if (p / "deps").is_dir()):
             sync_deps(src, c)
         before = checkout_state(src, landing)
