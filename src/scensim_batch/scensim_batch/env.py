@@ -64,12 +64,12 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     # draws), log: <jsonl path or "">}. The records then come from the pool (`records` is
     # ignored), each reset takes the next unused ones, and the log names each (slot, episode,
     # record id). Only Init is drawn again: a storyboard reading a sampled parameter is refused
-    start_pool: dict = None
+    start_pool: dict = {}            # (empty: none; a None default would not survive hydra)
     # the action straight to the joints, the control component bypassed (094 P2's row b, as
     # stock): a subclass's joint_targets(actions) gives (steer [N, 2], spin [N, 4]); engine B
     bypass_component: bool = False
     # the ground's material: (static, dynamic, combine) or None (Isaac Lab's default plane)
-    ground_material: tuple = None
+    ground_material: tuple = ()
     # B on a GPU sim: BatchRun, the car model and the component on that device, nothing copied
     # to the host per step (092 K2.2c); the component must have a torch form (array_api)
     device_resident: bool = False
@@ -125,7 +125,7 @@ class ScensimEnv(DirectRLEnv):
 
         cfg = self.cfg
         g = GroundPlaneCfg()
-        if cfg.ground_material is not None:
+        if cfg.ground_material:
             import isaaclab.sim as sim_utils
             st, dy, comb = cfg.ground_material
             g = GroundPlaneCfg(physics_material=sim_utils.RigidBodyMaterialCfg(

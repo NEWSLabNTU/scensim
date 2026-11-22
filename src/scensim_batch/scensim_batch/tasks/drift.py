@@ -41,39 +41,37 @@ WEIGHTS = {"side_slip": 10.0, "vel": -5.0, "progress": 40.0, "tlgr": 0.0, "turn_
 CURRICULUM = {"side_slip": (20.0, 20, 10), "tlgr": (10.0, 20, 5), "term_pens": (-1000.0, 50, 5)}
 
 
-def _events(asset="ego"):
-    """Stock's DriftEventsRandomCfg without its reset term (the start pool draws the start),
-    on the asset's own body and joint names (the asset is stock's USD)."""
-    import isaaclab.envs.mdp as mdp
-    from isaaclab.managers import EventTermCfg as EventTerm
-    from isaaclab.managers import SceneEntityCfg
+import isaaclab.envs.mdp as mdp  # noqa: E402
+from isaaclab.managers import EventTermCfg as EventTerm  # noqa: E402
+from isaaclab.managers import SceneEntityCfg  # noqa: E402
 
-    @configclass
-    class DriftEvents:
-        change_wheel_friction = EventTerm(
-            func=mdp.randomize_rigid_body_material, mode="startup",
-            params={"static_friction_range": (0.3, 0.5), "dynamic_friction_range": (0.3, 0.5),
-                    "restitution_range": (0.0, 0.0), "num_buckets": 20,
-                    "asset_cfg": SceneEntityCfg(asset, body_names=".*wheel_link"),
-                    "make_consistent": True})
-        randomize_gains = EventTerm(
-            func=mdp.randomize_actuator_gains, mode="startup",
-            params={"asset_cfg": SceneEntityCfg(asset, joint_names=[".*back.*throttle"]),
-                    "damping_distribution_params": (10.0, 50.0), "operation": "abs"})
-        push_robots_hf = EventTerm(
-            func=mdp.push_by_setting_velocity, mode="interval", interval_range_s=(0.1, 0.4),
-            params={"velocity_range": {"x": (-0.1, 0.1), "y": (-0.03, 0.03),
-                                       "yaw": (-0.3, 0.3)},
-                    "asset_cfg": SceneEntityCfg(asset)})
-        push_robots_lf = EventTerm(
-            func=mdp.push_by_setting_velocity, mode="interval", interval_range_s=(0.8, 1.2),
-            params={"velocity_range": {"yaw": (-0.6, 0.6)}, "asset_cfg": SceneEntityCfg(asset)})
-        add_base_mass = EventTerm(
-            func=mdp.randomize_rigid_body_mass, mode="startup",
-            params={"asset_cfg": SceneEntityCfg(asset, body_names=["base_link"]),
-                    "mass_distribution_params": (0.3, 0.5), "operation": "add",
-                    "distribution": "uniform"})
-    return DriftEvents()
+
+@configclass
+class DriftEvents:
+    """Stock's DriftEventsRandomCfg without its reset term (the start pool draws the start), on
+    the asset's own body and joint names (the asset is stock's USD; our scene calls it ego)."""
+    change_wheel_friction = EventTerm(
+        func=mdp.randomize_rigid_body_material, mode="startup",
+        params={"static_friction_range": (0.3, 0.5), "dynamic_friction_range": (0.3, 0.5),
+                "restitution_range": (0.0, 0.0), "num_buckets": 20,
+                "asset_cfg": SceneEntityCfg("ego", body_names=".*wheel_link"),
+                "make_consistent": True})
+    randomize_gains = EventTerm(
+        func=mdp.randomize_actuator_gains, mode="startup",
+        params={"asset_cfg": SceneEntityCfg("ego", joint_names=[".*back.*throttle"]),
+                "damping_distribution_params": (10.0, 50.0), "operation": "abs"})
+    push_robots_hf = EventTerm(
+        func=mdp.push_by_setting_velocity, mode="interval", interval_range_s=(0.1, 0.4),
+        params={"velocity_range": {"x": (-0.1, 0.1), "y": (-0.03, 0.03), "yaw": (-0.3, 0.3)},
+                "asset_cfg": SceneEntityCfg("ego")})
+    push_robots_lf = EventTerm(
+        func=mdp.push_by_setting_velocity, mode="interval", interval_range_s=(0.8, 1.2),
+        params={"velocity_range": {"yaw": (-0.6, 0.6)}, "asset_cfg": SceneEntityCfg("ego")})
+    add_base_mass = EventTerm(
+        func=mdp.randomize_rigid_body_mass, mode="startup",
+        params={"asset_cfg": SceneEntityCfg("ego", body_names=["base_link"]),
+                "mass_distribution_params": (0.3, 0.5), "operation": "add",
+                "distribution": "uniform"})
 
 
 @configclass
@@ -85,6 +83,7 @@ class DriftEnvCfg(ScensimEnvCfg):
     episode_length_s: float = 5.0
     action_space: int = 2
     observation_space: int = 14
+    state_space: int = 0             # none (None does not survive WheeledLab's hydra round trip)
     obs_corruption: bool = True
     randomize: bool = True           # stock's DriftEventsRandomCfg (startup and interval terms)
 
@@ -94,13 +93,18 @@ class DriftEnvCfg(ScensimEnvCfg):
         self.sim.render_interval = 20
         self.scene.env_spacing = 0.0
         if self.randomize:
-            self.events = _events()
+            self.events = DriftEvents()
 
 
 class DriftEnv(ScensimEnv):
     cfg: DriftEnvCfg
 
     def __init__(self, cfg, render_mode=None, **kwargs):
+        from isaaclab.envs.utils.spaces import deserialize_space
+        for k in ("observation_space", "action_space", "state_space"):
+            v = getattr(cfg, k)
+            if isinstance(v, str):            # MushrDriftRLEnvCfg's (WheeledLab's hydra flow)
+                setattr(cfg, k, deserialize_space(v))
         super().__init__(cfg, render_mode, **kwargs)
         self.weights = dict(WEIGHTS)
         self.raw_actions = torch.zeros(self.num_envs, 2, device=self.device)
@@ -228,3 +232,48 @@ class DriftEnv(ScensimEnv):
         self.processed[env_ids] = 0.0
         for k in self.episode_sums:
             self.episode_sums[k][env_ids] = 0.0
+
+
+@configclass
+class MushrDriftRLEnvCfg(DriftEnvCfg):
+    """The drift task as P2 trains it: this checkout's MuSHR spec (its body WheeledLab's asset,
+    under SCENSIM_ASSET_ROOT, a host setting: WheeledLab's source/ directory), its episode
+    and start distribution, 1024 envs (stock's), the action bypassed (row b) unless
+    SCENSIM_DRIFT_COMPONENT names the component row (a)."""
+    num_envs: int = 1024
+
+    def __post_init__(self):
+        import os
+        import tempfile
+        from pathlib import Path
+
+        super().__post_init__()
+        repo = Path(__file__).resolve().parents[4]
+        project = repo / "scenarios" / "projects" / "mushr_drift"
+        from sim_vehicle_spec import articulation as gen, spec as specmod
+        sp = specmod.load(project / "vehicles" / "mushr_nano.yaml")
+        body = Path(tempfile.mkdtemp(prefix="scensim_mushr_")) / "articulation.yaml"
+        body.write_text(gen.files(sp, "MushrDriftRLEnvCfg")["articulation.yaml"])
+        self.body = str(body)
+        self.vehicle = sp.doc
+        self.asset_root = os.environ.get("SCENSIM_ASSET_ROOT", "")
+        self.start_pool = {"distribution": str(project / "scenarios" / "mushr_drift_dist.xosc"),
+                           "seed": int(os.environ.get("SCENSIM_DRIFT_POOL_SEED", "0")),
+                           "chunk": 10000, "log": os.environ.get("SCENSIM_DRIFT_STARTS", "")}
+        self.world_factory = _oval_world
+        self.component = os.environ.get("SCENSIM_DRIFT_COMPONENT", "ideal")
+        self.bypass_component = "SCENSIM_DRIFT_COMPONENT" not in os.environ
+        self.scene.num_envs = self.num_envs
+        self.sim.device = "cuda:0"
+        # WheeledLab's hydra flow updates this config from one whose spaces it serialized, and
+        # deserializes them after (replace_strings_with_env_cfg_spaces): ours start serialized
+        from isaaclab.envs.utils.spaces import serialize_space
+        for k in ("observation_space", "action_space", "state_space"):
+            v = getattr(self, k)
+            if not isinstance(v, str):
+                setattr(self, k, serialize_space(v))
+
+
+def _oval_world():
+    from ..world_lanelet import LaneletWorld
+    return LaneletWorld.from_polylines({1: [[0.8, -0.8], [0.8, 0.8]]}, width=4.0)
