@@ -195,6 +195,7 @@ corridors:
 | `water_bars` | `height` 0.06, `width` 0.25, `angle` 35, `at` (empty: spaced by grade) |
 | `rocks` | rock cover per part of the section: `carriageway` 0.002, `shoulder` 0.01, `ditch` 0.03; `embed` 0 to 0.4 of a rock's height buried; `carriageway_protrude` 0.05 m, `carriageway_d_max` 0.30 m |
 | `taper` | m over which the detail fades in and out at the ends |
+| `section_in_base` | false; true when the world's road mesh already carries the section (a course built from its record, roadmap 086 C5b): the detail adds its features only |
 
 ### The section along the road
 
@@ -220,11 +221,19 @@ array left out takes its default everywhere. The same fields go into `section` a
 a side's as a number for both sides or `{left: .., right: ..}`. `road_detail keys` lists them
 all with their defaults.
 
-Today the world server shapes the road with one symmetric section: a record that is banked,
-has a lip or an offset crown, or whose shape changes along the road or between its sides is
-refused when the world loads, naming what differs (`road_detail check` notes it and draws the
-first station's left side). The other fields (`kappa_v`, the surfaces, the barrier and the
-hazard) are carried for the rails, the surface strips and the planner.
+The world server shapes the road from the record station by station (roadmap 086 C5a): each
+field is linear between stations, the bank rolls the formation about the centreline, the crown
+falls each side of the crown line at that side's slope, and a lip drops the shoulder below the
+carriageway's edge over its face. A constant, symmetric, level section is the one section it
+always had. The other fields (`kappa_v`, the surfaces, the barrier and the hazard) are carried
+for the rails, the surface strips and the planner.
+
+A course the course builder makes from its record carries the section in its road mesh
+itself (086 C5b), so PhysX's own wheel query sees the crown and the bank; its record says
+`section_in_base: true`, and a road detail given it adds only its features. The builder's
+fixture course, `courses/fixture_c5.yaml` in `scensim_isaac_world`, is such a road: a crown,
+a bank to 6 % through a bend and a lip, with checks of the mesh, the layer and Isaac's road
+against the record (`scensim_isaac_world.course.check`, `.isaac_check`).
 
 Rocks run from 9 cm across (smaller is the `gravel` class) to 1.5 m; one buried more than
 15 %, or over 50 kg, is static, the rest are loose rigid bodies, placed per 16 m tile from
