@@ -138,9 +138,17 @@ class ScensimEnv(DirectRLEnv):
             from .start_pool import StartPool
             sp = dict(cfg.start_pool)
             dev = cfg.sim.device if cfg.device_resident else "cpu"
-            self.pool = StartPool(sp["distribution"], world, seed=int(sp.get("seed", 0)),
+            # a run-level draw (sp["run_knobs"], "module:function" of the run's seed): world
+            # knobs every record of the run reads, as stock's drift run fixes its 20 points
+            seed = int(sp["seed"]) if "seed" in sp else int(cfg.seed or 0)   # the run's, else
+            knobs = {}
+            if sp.get("run_knobs"):
+                import importlib
+                mod, fn = sp["run_knobs"].split(":")
+                knobs = getattr(importlib.import_module(mod), fn)(seed)
+            self.pool = StartPool(sp["distribution"], world, seed=seed,
                                   chunk=int(sp.get("chunk", 10000)), device=dev,
-                                  provides=cfg.provides)
+                                  provides=cfg.provides, knobs=knobs)
             n = cfg.scene.num_envs
             while len(self.pool.records) < n:
                 self.pool.refill()
@@ -151,6 +159,13 @@ class ScensimEnv(DirectRLEnv):
             path = sp.get("log") or ""
             self._start_log = open(path, "a") if path else None
             self.start_log = []
+            import json
+            run = {"run": {"seed": seed, "knobs": knobs,
+                           "distribution": str(sp["distribution"]),
+                           "run_knobs": sp.get("run_knobs") or None}}
+            self.start_log.append(run)
+            if self._start_log is not None:
+                self._start_log.write(json.dumps(run) + "\n")
         if cfg.engine not in ("A", "B"):
             raise ValueError(f"engine {cfg.engine!r}: A or B")
         dev = None
