@@ -105,6 +105,8 @@ class DriftEnv(ScensimEnv):
             v = getattr(cfg, k)
             if isinstance(v, str):            # MushrDriftRLEnvCfg's (WheeledLab's hydra flow)
                 setattr(cfg, k, deserialize_space(v))
+        if hasattr(cfg, "resolve"):           # the arguments the trainer set (MushrDriftRLEnvCfg)
+            cfg.resolve()
         super().__init__(cfg, render_mode, **kwargs)
         self.weights = dict(WEIGHTS)
         self.raw_actions = torch.zeros(self.num_envs, 2, device=self.device)
@@ -237,10 +239,20 @@ class DriftEnv(ScensimEnv):
 @configclass
 class MushrDriftRLEnvCfg(DriftEnvCfg):
     """The drift task as P2 trains it: this checkout's MuSHR spec (its body WheeledLab's asset,
-    under SCENSIM_ASSET_ROOT, a host setting: WheeledLab's source/ directory), its episode
-    and start distribution, 1024 envs (stock's), the action bypassed (row b) unless
-    SCENSIM_DRIFT_COMPONENT names the component row (a)."""
+    under SCENSIM_ASSET_ROOT, a host setting: WheeledLab's source/ directory), its episode and
+    start distribution, 1024 envs (stock's). The project settings are this config's fields,
+    so train_rl.py takes them as arguments (`env.starts=uniform`):
+
+    - starts: "stock" (20 points a run, then an index and noise per episode) or "uniform"
+      (the variant row: the point uniform along the track per episode);
+    - starts_log: a jsonl the episodes' records go to ("": none);
+    - pool_seed: the start pool's seed (-1: the run's, cfg.seed, the trainer's agent seed);
+    - drift_component: "" bypasses the control component (row b), else its name (row a)."""
     num_envs: int = 1024
+    starts: str = "stock"
+    starts_log: str = ""
+    pool_seed: int = -1
+    drift_component: str = ""
 
     def __post_init__(self):
         import os
@@ -248,8 +260,7 @@ class MushrDriftRLEnvCfg(DriftEnvCfg):
         from pathlib import Path
 
         super().__post_init__()
-        repo = Path(__file__).resolve().parents[4]
-        project = repo / "scenarios" / "projects" / "mushr_drift"
+        project = _project()
         from sim_vehicle_spec import articulation as gen, spec as specmod
         sp = specmod.load(project / "vehicles" / "mushr_nano.yaml")
         body = Path(tempfile.mkdtemp(prefix="scensim_mushr_")) / "articulation.yaml"
@@ -257,22 +268,10 @@ class MushrDriftRLEnvCfg(DriftEnvCfg):
         self.body = str(body)
         self.vehicle = sp.doc
         self.asset_root = os.environ.get("SCENSIM_ASSET_ROOT", "")
-        # the pool's seed: the run's (DirectRLEnvCfg.seed, which the trainer sets from the
-        # agent's seed), unless SCENSIM_DRIFT_POOL_SEED names one
-        self.start_pool = {"distribution": str(project / "scenarios" / "mushr_drift_dist.xosc"),
-                           "chunk": 10000, "log": os.environ.get("SCENSIM_DRIFT_STARTS", "")}
-        if os.environ.get("SCENSIM_DRIFT_STARTS_UNIFORM"):     # the variant row
-            self.start_pool["distribution"] = str(project / "scenarios" /
-                                                  "mushr_drift_uniform_dist.xosc")
-        else:                                                  # stock's: 20 points a run
-            self.start_pool["run_knobs"] = "scensim_batch.tasks.drift_start:reference_points"
-        if os.environ.get("SCENSIM_DRIFT_POOL_SEED"):
-            self.start_pool["seed"] = int(os.environ["SCENSIM_DRIFT_POOL_SEED"])
         self.world_factory = _oval_world
-        self.component = os.environ.get("SCENSIM_DRIFT_COMPONENT", "ideal")
-        self.bypass_component = "SCENSIM_DRIFT_COMPONENT" not in os.environ
         self.scene.num_envs = self.num_envs
         self.sim.device = "cuda:0"
+        self.resolve()
         # WheeledLab's hydra flow updates this config from one whose spaces it serialized, and
         # deserializes them after (replace_strings_with_env_cfg_spaces): ours start serialized
         from isaaclab.envs.utils.spaces import serialize_space
@@ -280,6 +279,39 @@ class MushrDriftRLEnvCfg(DriftEnvCfg):
             v = getattr(self, k)
             if not isinstance(v, str):
                 setattr(self, k, serialize_space(v))
+
+    def resolve(self):
+        """The fields into the env's own settings; again at the env's start, after the
+        trainer's arguments have set the fields."""
+        import os
+        for name, arg in RETIRED_ENV.items():
+            if name in os.environ:
+                raise ValueError(f"{name} is retired: a project setting, pass {arg} to "
+                                 "train_rl.py instead")
+        scen = _project() / "scenarios"
+        if self.starts == "stock":
+            self.start_pool = {"distribution": str(scen / "mushr_drift_dist.xosc"),
+                               "run_knobs": "scensim_batch.tasks.drift_start:reference_points"}
+        elif self.starts == "uniform":
+            self.start_pool = {"distribution": str(scen / "mushr_drift_uniform_dist.xosc")}
+        else:
+            raise ValueError(f"starts={self.starts!r}: stock or uniform")
+        self.start_pool.update(chunk=10000, log=self.starts_log)
+        if self.pool_seed >= 0:
+            self.start_pool["seed"] = int(self.pool_seed)
+        self.bypass_component = not self.drift_component
+        self.component = self.drift_component or "ideal"
+
+
+RETIRED_ENV = {"SCENSIM_DRIFT_STARTS_UNIFORM": "env.starts=uniform",
+               "SCENSIM_DRIFT_STARTS": "env.starts_log=<jsonl>",
+               "SCENSIM_DRIFT_POOL_SEED": "env.pool_seed=<n>",
+               "SCENSIM_DRIFT_COMPONENT": "env.drift_component=<name>"}
+
+
+def _project():
+    from pathlib import Path
+    return Path(__file__).resolve().parents[4] / "scenarios" / "projects" / "mushr_drift"
 
 
 def _oval_world():

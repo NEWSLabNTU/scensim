@@ -6,8 +6,9 @@ then runs the script as stock's run does:
     python -m wheeledlab_bench.launch ... -- <this> <WheeledLab>/source/wheeledlab_rl/scripts/train_rl.py \\
         -r SCENSIM_DRIFT_CONFIG train.log.no_wandb=True ...
 
-SCENSIM_ASSET_ROOT names WheeledLab's source/ (the MuSHR's asset); SCENSIM_DRIFT_STARTS a jsonl
-for the episodes' records."""
+SCENSIM_ASSET_ROOT (a host setting) names WheeledLab's source/ (the MuSHR's asset). The project
+settings are arguments: env.starts=stock|uniform, env.starts_log=<jsonl>, env.pool_seed=<n>,
+env.drift_component=<name> (row a; none: row b)."""
 import runpy
 import sys
 from pathlib import Path
