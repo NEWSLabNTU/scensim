@@ -37,12 +37,30 @@ class PhysxVehicleBackend:
                         np.array([((i % side) * spacing, (i // side) * spacing)
                                   for i in range(n)], dtype=np.float64))
         ensure_vehicle_scene(stage)
+        # aib writes a car's pose as its prim's own transform, relative to its parent: each env
+        # prim's place in the world, subtracted from the world poses handed to it. Isaac Lab 3.0
+        # puts env_0's prim at its origin and leaves the others at the world's (their origins
+        # live in Fabric), so a world pose put env_0's car at twice its origin (P4: its local y
+        # read as the origin's, off the road at once, reset every step)
+        self.parent = np.zeros((n, 3))
+        from pxr import UsdGeom
+        cache = UsdGeom.XformCache()
+        for i in range(n):
+            env = stage.GetPrimAtPath(f"{root}/env_{i}")
+            if env.IsValid():
+                m = cache.GetLocalToWorldTransform(env)
+                t = m.ExtractTranslation()
+                if not m.ExtractRotationMatrix().GetOrthonormalized() == \
+                        type(m.ExtractRotationMatrix())(1.0):
+                    raise RuntimeError(f"{root}/env_{i} is rotated: its cars' poses would be")
+                self.parent[i] = (t[0], t[1], t[2])
         self.cars, self.states = [], []
         for i in range(n):
             ox, oy = self.origins[i]
             path = f"{root}/env_{i}/ego"
             self.cars.append(Vehicle(stage, path, rig.vehicle, rig.make_component(),
-                                     rig.box_center, rig.box_dims, ((ox, oy, z), (1, 0, 0, 0)),
+                                     rig.box_center, rig.box_dims,
+                                     (self._local(i, (ox, oy, z)), (1, 0, 0, 0)),
                                      ground_clearance=rig.ground_clearance))
             self.states.append(State())
         self.act = None
@@ -61,7 +79,7 @@ class PhysxVehicleBackend:
             pose = ((ox + float(x[i]), oy + float(y[i]), self.z),
                     (math.cos(h / 2), 0.0, 0.0, math.sin(h / 2)))
             car = self.cars[i]
-            car.teleport(pose, self.physx)
+            car.teleport((self._local(i, pose[0]), pose[1]), self.physx)
             v = float(speed[i])
             if v and self.velocity_set:
                 # the Init speed: the body along its heading, the wheels rolling with it
@@ -77,6 +95,10 @@ class PhysxVehicleBackend:
             # was at (0, 0) until the first physics step's read-back)
             self.states[i].__init__(position=pose[0], quat=pose[1],
                                     velocity=(v if self.velocity_set else 0.0, 0.0, 0.0))
+
+    def _local(self, i, p):
+        """A world position in slot i's env prim's frame (its parent; translated, never rotated)."""
+        return tuple(float(a - b) for a, b in zip(p, self.parent[i]))
 
     def apply(self, act, velocity=None, gear=None):
         """The coming step's actuation, with each request's velocity and gear for aib's

@@ -45,6 +45,10 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
     # envelope and lag, regen blended with the friction brakes, ABS, TC, ESC, the steer rate),
     # stock's action, [-1, 1]^2 as stock's, read as its Autoware command (ecu_command)
     row: str = "joints"
+    # the engine (133): "B", the articulation car (both rows); "A", aib's PhysX vehicle (its
+    # Model 3 rig, aib's config/ego.yaml) on PhysX's CPU pipeline, through ev (the ECU row only:
+    # its wheels take a component's torques, there are no joints for stock's action law)
+    engine_name: str = "B"
 
     def __post_init__(self):
         super().__post_init__()
@@ -78,9 +82,23 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
             raise ValueError(f"train_headway {self.train_headway!r}: record or stock")
         if self.row not in ("joints", "ecu"):
             raise ValueError(f"row {self.row!r}: joints or ecu")
+        if self.engine_name not in ("A", "B"):
+            raise ValueError(f"engine_name {self.engine_name!r}: A or B")
+        if self.engine_name == "A" and self.row != "ecu":
+            raise ValueError("engine A takes a component's torques (no joints): row=ecu only")
+        self.engine = self.engine_name
         if self.row == "ecu":
             self.component, self.bypass_component, self.implicit_effort = "ev", False, ()
-            self.device_resident = True      # EvBatch's torch form on the sim's GPU
+            self.device_resident = self.engine == "B"   # EvBatch's torch form on the sim's GPU
+        if self.engine == "A":
+            from aib.rig import EgoConfig
+            self.rig = EgoConfig.load(str(LB.aib_ego())).load_rig()
+            self.vehicle = self.rig.spec            # the car as the rig resolved it
+            self.sim.device = "cpu"                 # PhysX vehicles: the CPU pipeline
+            # Fabric off: with it, a reset's teleport (aib writes the pose and velocity to USD)
+            # never reaches PhysX once the sim runs, so every episode after the first started
+            # where the last ended (measured: x 20.6 after a reset to 5.0; off, 5.45)
+            self.sim.use_fabric = False
         else:
             self.component, self.bypass_component, self.implicit_effort = "ideal", True, ("spin",)
 
@@ -95,11 +113,15 @@ class LeadBrakeEnv(ScensimEnv):
         n, dev = self.num_envs, self.device
         self.lead = self.compiled.index("lead")
         self.lead_col = self.compiled.of_role("default").index(self.lead)
-        act = self._body_doc["actuation"]
-        self.wheel_base, self.tread = float(act["wheel_base"]), float(act["wheel_tread"])
-        self.steer_max = float(act["max_steer_angle"])
-        self.brake_max = float(act["max_brake_torque"])
-        self.drive_max = float(self._body_doc["joints"]["rear_left_spin"]["drive"]["effort_limit"])
+        act = self._body_doc["actuation"] if cfg.engine == "B" else None
+        if cfg.engine == "A":            # no articulation: the steer limit is the spec's
+            self.steer_max = float(cfg.vehicle["geometry"]["max_steer_angle"])
+        else:
+            self.wheel_base, self.tread = float(act["wheel_base"]), float(act["wheel_tread"])
+            self.steer_max = float(act["max_steer_angle"])
+            self.brake_max = float(act["max_brake_torque"])
+            self.drive_max = float(
+                self._body_doc["joints"]["rear_left_spin"]["drive"]["effort_limit"])
         # FL FR RL RR (articulation.CORNERS): the driven axle's (stock's DRIVEN_JOINTS)
         self.driven = torch.tensor([0.0, 0.0, 1.0, 1.0], device=dev)
         # the ECU row's scales, from the spec's body (ecu_scales)
@@ -154,6 +176,10 @@ class LeadBrakeEnv(ScensimEnv):
     # --- what the terms read (stock's ego_s_y_yaw, gap, the lead's state) -----------------------
 
     def _ego(self):
+        if self.cfg.engine == "A":           # aib's PhysX vehicle: the backend's state
+            st = self.backend.state()
+            f = lambda k: st[k].to(self.device, torch.float32)   # noqa: E731
+            return f("x") - LB.EGO_S, f("y"), f("yaw"), f("v"), f("yaw_rate")
         a = self.scene.articulations["ego"]
         T = lambda p: p.torch if hasattr(p, "torch") else p   # noqa: E731
         d = a.data
