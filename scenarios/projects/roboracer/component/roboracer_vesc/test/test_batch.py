@@ -127,3 +127,22 @@ def test_per_car_params_equal_reference_cars_each_with_its_own():
             assert same(g, w), (i, g, w)
     one = RoboRacerVesc(CAR, per[0], 0)
     assert one.p["speed_kp"] == per[0]["speed_kp"] and isinstance(one.gear, float)
+
+
+def test_a_rear_driven_car_drives_and_reads_its_rear_wheels_only():
+    """powertrain.drive_axle rear (scensim 094 P2's MuSHR): the motor sees the rear wheels'
+    mean and its torque splits over them; the front wheels get none. The same car and command
+    on all four wheels gives the same total torque."""
+    def one(axle, wheels):
+        car = dict(CAR, powertrain={"drive_axle": axle})
+        b = RoboRacerVescBatch(car, {"latency": 0.0}, [0])
+        c = {"motor": np.array([0]), "value": np.array([3000.0]), "servo": np.array([0.5]),
+             "age": np.array([0.0]), "valid": np.array([True])}
+        s = {"valid": np.array([True]), "wheel_speeds": np.array([wheels])}
+        return b.step_batch(c, s, 0.01)["drive"][0]
+    rear = one("rear", [5.0, 5.0, 1.0, 1.0])
+    assert rear[0] == 0.0 and rear[1] == 0.0 and rear[2] == rear[3] > 0.0
+    full = one("all", [1.0, 1.0, 1.0, 1.0])
+    assert math.isclose(rear.sum(), full.sum(), rel_tol=1e-12)
+    with pytest.raises(ValueError, match="drive_axle"):
+        RoboRacerVescBatch(dict(CAR, powertrain={"drive_axle": "middle"}), {}, [0])
