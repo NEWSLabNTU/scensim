@@ -610,3 +610,18 @@ def test_an_uninitialised_component_refuses_the_landing_by_name(world):
     git(world.super, "submodule", "update", "-q", "--init", "--recursive", "src/E")
     r = world.land("A", a2)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_a_dependencys_own_deps_are_synced_too(world, monkeypatch):
+    """Issue 105: scensim_isaac_world's deps/autoware_isaac_bridge moved to aib's new commit, but
+    that checkout's own deps/sim_vehicle_spec stayed at the old spec, and the gate tested the new
+    aib against it. Here D's deps/C moves to C's cascade commit (A a2); D's deps/C/deps/A must
+    follow, as in a --recursive clone."""
+    a2 = world.advance("A")
+    nested = world.super / "src" / "D" / "deps" / "C" / "deps" / "A"
+    assert git(nested, "rev-parse", "HEAD") == world.sha["A"]      # the old one
+    code_branch(world)
+    monkeypatch.setenv("LAND_PIN_GATE", f"test \"$(git -C src/D/deps/C/deps/A rev-parse HEAD)\" = {a2}")
+    r = world.land("--onto", "feat", "A", a2)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert git(nested, "rev-parse", "HEAD") == a2

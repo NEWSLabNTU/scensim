@@ -105,7 +105,14 @@ def sync_deps(src, c):
     already pins the targets, no commit of its own) kept its deps/ where they were: the gate ran
     autoware_sim_vehicle's generator on its old sim_vehicle_spec (094 P2, land4). A commit only
     local (a cascade commit not pushed yet) is fetched from this checkout's src/<repo>."""
-    cd = src / c
+    sync_tree(src, src / c)
+
+
+def sync_tree(src, cd):
+    """`cd`'s deps/ checkouts at its gitlinks, and theirs in turn, to any depth: a test that reads
+    a dependency's own deps/ (scensim_isaac_world's of aib's sim_vehicle_spec) sees the commits
+    the landing names, as a `--recursive` clone would (issue 105: one level only, and the gate
+    tested aib's new commit against its old spec)."""
     if not (cd / "deps").is_dir():
         return
     for line in git("ls-files", "-s", "deps", cwd=cd).splitlines():
@@ -114,15 +121,15 @@ def sync_deps(src, c):
             continue
         dep = cd / path
         git("submodule", "update", "-q", "--init", "--no-fetch", path, cwd=cd, check=False)
-        if ok("cat-file", "-e", f"{sha}^{{commit}}", cwd=dep):
-            git("checkout", "-q", sha, cwd=dep)
-            continue
-        name = Path(path).name
-        if (src / name).is_dir():
-            git("fetch", "-q", "--no-recurse-submodules", str(src / name), sha, cwd=dep, check=False)
         if not ok("cat-file", "-e", f"{sha}^{{commit}}", cwd=dep):
-            git("fetch", "-q", "--no-recurse-submodules", "origin", cwd=dep)
+            name = Path(path).name
+            if (src / name).is_dir():
+                git("fetch", "-q", "--no-recurse-submodules", str(src / name), sha, cwd=dep,
+                    check=False)
+            if not ok("cat-file", "-e", f"{sha}^{{commit}}", cwd=dep):
+                git("fetch", "-q", "--no-recurse-submodules", "origin", cwd=dep)
         git("checkout", "-q", sha, cwd=dep)
+        sync_tree(src, dep)
 
 
 def tracked_branch(repo, rev, path):
