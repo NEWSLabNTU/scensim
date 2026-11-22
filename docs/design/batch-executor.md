@@ -465,7 +465,7 @@ a device run gets host arrays each step, the CPU contract. Checked against it:
 |---|---|---|
 | the VESC component (roboracer_vesc) alone, 1500 random steps, 8 and 32 cars | numpy, torch CPU, torch CUDA | bit for bit |
 | BatchRun on cs2 (a default lead, a braking storyboard), 120 steps, a point-mass backend | CPU and numpy, cuda and torch | poses within 2.8e-14 m, speeds equal, storyboard states and outcomes equal |
-| engine B through ScensimEnv, the RoboRacer body and its VESC, 4 cars, 290 steps (`scripts/check_resident.py`) | the CPU path and resident, one GPU sim | x and y equal, yaw within 1.1e-16, v 2.2e-16, outcomes equal; 97 against 188 ms a step, contended |
+| engine B through ScensimEnv, the RoboRacer body and its VESC, 4 cars, 290 steps (`scripts/check_resident.py`) | the CPU path and resident, one GPU sim | x and y equal, yaw within 1.1e-16, v 2.2e-16, outcomes equal; 97 against 188 ms a step, contended rerun 2026-11-22 with a held command aged (BatchRun.before_physics; before, the VESC timed the held command out after 0.5 s, and both paths ran a released motor from then): the same agreement, the car holding 1.28 to 1.50 m/s through the 4 s plan; 65 against 96 ms a step, contended |
 
 Engine A stays on the CPU path (PhysX's CPU pipeline).
 
