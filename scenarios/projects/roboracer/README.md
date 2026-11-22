@@ -283,65 +283,53 @@ only after the fit, and refuses logs that name another truth.
 5. **the noise**, from steady stretches.
 
 A friction whose axle never nears its limit is reported as not identified rather than fitted.
-`refine_twin.py` then runs the twin on Isaac for each candidate (W10's long-horizon error from
-matched starts). It moves both axles' stiffness and the rear friction to fit the protocol's
-quantities.
+`refine_twin.py` then runs the twin on Isaac for each candidate (W10), in two passes: each axle's
+stiffness from M5's circles below 2 m/s^2 (radius, yaw rate and the sideslip at the rear axle),
+then each axle's friction from M6 and M6b, the stiffness held. The latency and the rest stay at
+their stages: the twin's cost cannot tell the latency apart, and with stiffness and friction free
+together it slides along a valley between them. A friction the logs leave open starts at its
+lower bound, and a parameter counts as identified only if the cost rises on both sides of it.
 
-### Results (118, 2026-11-21, scensim main 3e9a9d3f)
+### Results (118, 2026-11-23, method v1)
 
-The perturbations (`protocol/perturbations/`):
-- **p1:** the mass, the tyres per axle (W8's NUC7 fit), the current limit, the speed gain, a
-  40 ms latency, the servo's offset, and motion-capture noise. All of it is in the fit's model.
-- **p2:** another car, with a 10 ms jitter on each command's 30 ms latency (the fit holds one
-  latency), and a 5 mm reference (scan matching).
+The perturbations:
+- **p1** and **p2** (`protocol/perturbations/`): the development set, on which the method was
+  tuned. p1 is all in the fit's model; p2 has a 10 ms jitter on each command's 30 ms latency
+  (the fit holds one latency) and a 5 mm reference.
+- **p3**: drawn blind by `tools/draw_perturbation.py`, sealed before any fit, its sha256
+  committed first: the held-out test.
 
-| | p1 | p2 |
-|---|---|---|
-| the unfitted twin: 5.3's bands passed | 38 of 110 | 48 of 110 |
-| the stage fit: bands passed | 69 of 110 | 84 of 110 |
-| the stage fit: values recovered within tolerance | 14 of 14, the rear friction not identified | 12 of 14, the rear friction not identified, the jitter not modelled |
-| refined on the twin: bands passed | **108 of 110** | 102 of 110 |
-| refined on the twin: values recovered | **15 of 15** | 10 of 15, the jitter not modelled |
+| | p1 | p2 | p3 (held out) |
+|---|---|---|---|
+| the unfitted twin: 5.3's bands passed | 40 of 142 | 53 of 142 | 47 of 142 |
+| the stage fit: bands passed | 100 of 142 | 102 of 142 | 89 of 142 |
+| refined: bands passed | **135 of 142** | 133 of 142 | **133 of 142** |
+| refined: values recovered | **15 of 15** | 13 of 15 | **13 of 15** |
 
-The tolerances are in `check_recovery.py`:
-- mass 3 %;
-- current limit 2 %;
-- speed loop gain 10 % (kp) and 20 % (ki);
-- latency and servo offset 5 ms and 0.003;
-- tyre stiffness 15 % and friction 5 %;
-- noise 25 %.
+Refined, against the truth:
 
-p1, refined, against the truth:
-- mass -0.4 %, current limit 0.0 %, kp -3.9 %;
-- latency +2 ms, servo offset -0.0003;
-- front stiffness +8 %, front friction -1.3 %;
-- rear stiffness +15 %, rear friction +1.2 %;
-- every noise within 4 %.
+| | front stiffness | rear stiffness | front friction | rear friction | mass | latency |
+|---|---|---|---|---|---|---|
+| p1 | -2.3 % | -0.4 % | +0.3 % | -1.9 % | -0.4 % | +4 ms |
+| p2 | +0.6 % | +1.3 % | -1.8 % | -7.9 % | -0.8 % | -10 ms |
+| p3 | -1.7 % | +2.2 % | +0.04 % | -5.7 % | -3.06 % | +4 ms |
 
-Its two failed bands are M1's launch traces. Wheelspin varies run to run more than the speed
-traces' band (1.5 times the noise-only spread of the repetitions) allows.
+The tolerances are in `check_recovery.py`: mass 3 %, current limit 2 %, speed loop gain 10 % (kp)
+and 20 % (ki), latency and servo offset 5 ms and 0.003, tyre stiffness 15 % and friction 5 %,
+noise 25 %. The misses:
+- **The rear friction on p2 and p3** (5 to 8 % low). The cost pins it, but where the twin's
+  latency is off (p2: the stage holds 20 ms, the truth 30 with jitter), M6b's brake timing bends
+  it. The friction pass's own cost says so: over 1.0 (the M6 and M6b quantities at their bands'
+  edge on average) a refined friction is reported as suspect. It was 1.28, 1.76 and 2.22 here:
+  rightly suspect on p2 and p3, falsely on p1.
+- **The latency on p2** (-10 ms) and **the mass on p3** (-3.06 % against 3 %), from the drive
+  unit's and the mass's stages, which W10 left as W23 made them.
 
-What p2 shows:
-- **The jitter biases the latency** (+6 ms, just past its 5 ms tolerance), and the other stage
-  estimates hold: mass -0.9 %, current limit -0.1 %, ki -10 %, servo offset +0.0003, noise
-  within 3 %.
-- **The front friction (-15 %)** misses. p2's front tyres are grippier (0.95), and the 5 mm
-  reference blurs the sideslip they are read from.
-- **The twin in the loop then trades parameters for behaviour.** The refinement varies only
-  the tyres, so it bends them to absorb the latency's error: the bands rise from 84 to 102, but
-  the rear stiffness moves +38 % and the rear friction -28 % from the truth. Its last steps were
-  still descending (cost 0.25 at 40 evaluations).
-
-So a model mismatch shows as passing behaviour with drifting parameters, and the stage estimates
-are the better record of the car. W10 continues from here. The refinement will vary the latency
-too, anchor each parameter to its stage estimate and that estimate's uncertainty, and run for
-longer. And it will follow the drift rule (roadmap 091): report each parameter's drift between
-the stage fit and the refined fit, and flag any parameter that moves beyond its stage interval,
-so a pass with drifted tyres is not read as a good fit.
-
-The runs, the bags, the fits and the checks are on the NAS under
-`2026 SSv2 on CARLA/2026-11-21 091 W23 synthetic stand-in (118)`. `tools/w23_regression.sh`
-makes them again.
+Before W10 this car's twin ran with a lateral slip denominator of 0.25 and a synthetic reference
+pose half a physics step ahead of the path; both are fixed (roadmap 091, W10: findings), so the
+2026-11-21 results are superseded. They stay on the NAS under `2026 SSv2 on CARLA/2026-11-21 091
+W23 synthetic stand-in (118)`; these are under `2026 SSv2 on CARLA/2026-11-23 091 W10 method v1
+(118)`. `tools/w23_regression.sh` makes them again.
 
 ## f1tenth_system drives the twin (W20)
 
