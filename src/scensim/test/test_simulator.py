@@ -736,7 +736,8 @@ def test_a_carla_deaf_to_sigterm_is_killed_after_its_keeper(tmp_path):
                               "import os, signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
                               "open({str(pidfile)!r}, 'w').write(str(os.getpid())); time.sleep(120)"],
                              start_new_session=True, preexec_fn=simulator._die_with_parent)
-        simulator.start_reaper(p.pid, grace=1.0)
+        r = simulator.start_reaper(p.pid, grace=1.0)
+        open({str(pidfile)!r} + ".reaper", "w").write(str(r.pid))
         time.sleep(120)
     """))
     root = str(Path(sim.__file__).resolve().parents[1])
@@ -747,7 +748,21 @@ def test_a_carla_deaf_to_sigterm_is_killed_after_its_keeper(tmp_path):
         time.sleep(0.05)
     assert pidfile.exists(), "the stand-in CARLA never started"
     child = int(pidfile.read_text())
-    time.sleep(1.0)   # the reaper is up
+    # the reaper is up once it holds CARLA's pidfd: a fixed 1 s raced a loaded host, whose
+    # keeper was killed before the reaper watched
+    rfile = Path(str(pidfile) + ".reaper")
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        if rfile.exists() and rfile.read_text():
+            fds = Path(f"/proc/{int(rfile.read_text())}/fd")
+            try:
+                if any(os.readlink(f) == "anon_inode:[pidfd]" for f in fds.iterdir()):
+                    break
+            except OSError:
+                pass
+        time.sleep(0.05)
+    else:
+        raise AssertionError("the reaper never watched the stand-in CARLA")
     keeper.kill()
     keeper.wait()
     deadline = time.time() + 15

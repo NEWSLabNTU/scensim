@@ -14,9 +14,28 @@ mode = sys.argv[1] if len(sys.argv) > 1 else "wait"
 if mode == "die":
     sys.exit(3)
 signal.signal(signal.SIGINT, lambda *a: sys.exit(0 if mode == "wait" else 5))
+open(os.path.join(os.environ["SCENSIM_ATTACHMENT_DIR"], "ready"), "w").close()
 while True:
     time.sleep(0.05)
 """
+
+
+def ready(run_dir, name="netsim", timeout=30.0):
+    """Wait until the watch script has its SIGINT handler (it writes `ready` after): a fixed
+    sleep raced a loaded host, whose SIGINT then found the default action (exit -2)."""
+    f = run_dir / "attachments" / name / "ready"
+    deadline = time.time() + timeout
+    while not f.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert f.exists(), "the attachment never got ready"
+
+
+def ended(r, timeout=30.0):
+    """Wait until the attachment's process has exited on its own."""
+    deadline = time.time() + timeout
+    while r.proc.poll() is None and time.time() < deadline:
+        time.sleep(0.05)
+    assert r.proc.poll() is not None, "the attachment never ended"
 
 
 def att(tmp_path, mode="wait", **kw):
@@ -60,7 +79,7 @@ def test_an_attachment_gets_its_env_is_stopped_and_recorded(tmp_path):
     seen = run_dir / "attachments" / "netsim" / "env.json"
     while not seen.is_file() and time.time() < deadline:
         time.sleep(0.05)
-    time.sleep(0.2)
+    ready(run_dir)
     at.stop(r)
     e = json.loads(seen.read_text())
     assert e["SCENSIM_RUN_DIR"] == str(run_dir) and e["SCENSIM_RUN_SEED"] == "42"
@@ -78,12 +97,12 @@ def test_an_attachment_gets_its_env_is_stopped_and_recorded(tmp_path):
 def test_an_early_exit_and_a_bad_exit_are_recorded_and_fail_only_if_required(tmp_path):
     run_dir = tmp_path / "run"
     r = at.start(att(tmp_path, "die"), at.env_for(att(tmp_path), {}, run_dir, None, {}), run_dir, tmp_path)
-    time.sleep(1.0)
+    ended(r)
     at.stop(r)
     assert r.early and r.code == 3 and "ended before the run did" in r.failed()
     assert r.record()["ended_early"] and not r.record()["required"]
     r = at.start(att(tmp_path, "bad"), at.env_for(att(tmp_path), {}, run_dir, None, {}), run_dir, tmp_path)
-    time.sleep(1.0)
+    ready(run_dir)
     at.stop(r)
     assert not r.early and r.code == 5 and "exited 5 when stopped" in r.failed()
     # a command that does not exist
