@@ -107,6 +107,8 @@ class ScensimEnv(DirectRLEnv):
 
             from . import articulation as art
             self._body_doc = art.load_body(cfg.body)
+            if not cfg.bypass_component:      # the component is the motor (row a, 094 P2)
+                self._body_doc = art.with_component_drives(self._body_doc)
             if self._body_doc.get("asset"):
                 usd = art.asset_usd(self._body_doc, cfg.asset_root)
             else:
@@ -226,7 +228,9 @@ class ScensimEnv(DirectRLEnv):
 
     def _pre_physics_step(self, actions: torch.Tensor):
         """The policy's actions as the component's commands (ACTIONS[kind], in order): host
-        arrays, or on a device-resident env tensors on its device."""
+        arrays, or on a device-resident env tensors on its device. Each step's is a new
+        message: its age 0 at the first substep, growing over the others (_apply_action)."""
+        self._cmd_age = 0.0
         if self.cfg.bypass_component:
             self.joint_targets_now = self.joint_targets(actions)
             return
@@ -280,6 +284,13 @@ class ScensimEnv(DirectRLEnv):
         if self.cfg.bypass_component:
             self.backend.apply_joints(*self.joint_targets_now)
         else:
+            # the step's command is one message, held over the step's substeps: its age grows
+            # (a component reads a command whose age did not fall as the one it has, and times
+            # it out; the next step's, at age 0, is a new one)
+            if "age" in self.commands:
+                a = self.commands["age"]
+                self.commands["age"] = (a * 0 + self._cmd_age) if hasattr(a, "shape") else a
+            self._cmd_age += dt
             self.run.before_physics(self.commands, dt)
         self.backend.actuate(dt)
         self.stepped = True
