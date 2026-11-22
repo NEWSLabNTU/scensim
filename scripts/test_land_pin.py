@@ -547,3 +547,51 @@ def test_an_unpushed_pin_is_refused_before_any_component_is_pushed(world, monkey
     assert "nothing pushed" in r.stderr
     assert git(world.work / "C", "ls-remote", "origin", "main").split()[0] == c_before
     assert world.remote_pin("A") == world.sha["A"]
+
+
+@pytest.mark.skipif(shutil.which("just") is None, reason="no just")
+def test_a_landing_components_stale_generated_files_push_nothing(world, monkeypatch):
+    """133 (aib's MuSHR rig): the gate runs each landing component's own `just check-generated`
+    where it has one; a component whose generated files are stale refuses the landing."""
+    a2 = world.advance("A")
+    cdir = world.work / "C"                 # C's main gains a check that fails
+    git(cdir, "pull", "-q", "--rebase", "origin", "main")
+    (cdir / "justfile").write_text("check-generated:\n    @echo 'stale: gen/x.yaml' && false\n")
+    git(cdir, "add", "justfile")
+    git(cdir, "commit", "-q", "-m", "C: a generator check")
+    git(cdir, "push", "-q", "origin", "main")
+    code_branch(world)
+    monkeypatch.setenv("LAND_PIN_GATE", "true")
+    r = world.land("--onto", "feat", "A", a2)
+    assert r.returncode == 1 and "C: stale: gen/x.yaml" in r.stderr, r.stdout + r.stderr
+    assert world.remote_pin("A") == world.sha["A"]           # nothing pushed
+    (cdir / "justfile").write_text("check-generated:\n    @echo ok\n")    # fixed: it lands
+    git(cdir, "commit", "-q", "-am", "C: check passes")
+    git(cdir, "push", "-q", "origin", "main")
+    git(world.super, "checkout", "-q", "-B", "feat", "origin/feat")   # the refused run's commits off
+    r = world.land("--onto", "feat", "A", a2)
+    assert r.returncode == 0 and "C: just check-generated: ok" in r.stdout, r.stdout + r.stderr
+
+
+def test_a_component_not_landing_has_its_deps_synced_before_the_gate(world, monkeypatch):
+    """094 P2's aib landing: a component the landing does not move kept a stale deps/ checkout,
+    and the gate built against it. F depends only on B; landing A moves C, D and E, not F."""
+    run("git", "init", "-q", "--bare", "-b", "main", str(world.origin / "F.git"))
+    world.component("F", ("B",))
+    s = world.super
+    git(s, "fetch", "-q", "origin")
+    git(s, "checkout", "-q", "-B", "feat", "origin/main")
+    git(s, "submodule", "add", "-q", world.url("F"), "src/F")
+    git(s, "submodule", "update", "-q", "--init", "--recursive", "src/F")
+    git(s, "commit", "-q", "-m", "super adds F")
+    git(s, "push", "-q", "origin", "feat")
+    fdep = s / "src" / "F" / "deps" / "B"
+    want = git(fdep, "rev-parse", "HEAD")
+    git(fdep, "checkout", "-q", "--detach", "HEAD")            # a stale nested checkout: a local
+    git(fdep, "commit", "-q", "--allow-empty", "-m", "stale")  # commit off F's gitlink
+    assert git(fdep, "rev-parse", "HEAD") != want
+    a2 = world.advance("A")
+    monkeypatch.setenv("LAND_PIN_GATE", f"test \"$(git -C src/F/deps/B rev-parse HEAD)\" = {want}")
+    r = world.land("--onto", "feat", "A", a2)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert git(fdep, "rev-parse", "HEAD") == want
