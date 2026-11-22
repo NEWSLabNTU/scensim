@@ -289,7 +289,7 @@ as segments, and the builder's `centreline`, `geometry`, `record`, `maps` and `s
 run on it as on Haruna. Its record is the spec below, not a measurement; the file says so.
 
 - **Frame.** An origin at (36.0, 140.0), alt 0, so the map frame and its projector work as
-  for a real course. Terrain: the road's own profile under it, flat across, 0.30 m below the
+  for a real course; the yaml names it a fixture's arbitrary datum, not a place. Terrain: the road's own profile under it, flat across, 0.30 m below the
   formation at the section's foot and blending as `geometry.terrain` does; the photo is a
   plain grey image.
 - **Plan and profile.** An open course, 510 m, a constant grade of -3 % (downhill, as
@@ -325,7 +325,9 @@ run on it as on Haruna. Its record is the spec below, not a measurement; the fil
   road height: within 5 mm and 0.1 deg of the record at every station, and of the layer's
   interpolation midway. Then the course driven with haruna_down's controller and checks
   (speed limit 40 km/h): it passes, which is C5's "haruna_down passes on a course with a
-  nonzero crown". aib's slope matrix and haruna_down on Haruna, paired against main's on GPU0.
+  nonzero crown". On the banked arc the body's measured roll and its lateral acceleration
+  along the road surface are checked against the record's, v^2/R cos(theta) - g sin(theta)
+  with theta the bank, so the tilt is shown to reach PhysX's contact, not only its mesh. aib's slope matrix and haruna_down on Haruna, paired against main's on GPU0.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
