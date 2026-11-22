@@ -256,9 +256,12 @@ data and not the code: each run is a rosbag2 (sqlite3) with the real car's topic
 table) and a `session.yaml`.
 
 **The protocol** (`protocol/protocol.yaml`) is design note 5.2's M1 to M6 as VESC commands, five
-repetitions each: 38 conditions, 190 runs, 26 minutes of driving. W23 adds M1c, a current command
-beyond any limit. Without it the drive unit's current limit is never seen: at the launch the
-wheels spin, and the speed loop never asks for full current.
+repetitions each. W23 adds M1c, a current command beyond any limit. Without it the drive unit's
+current limit is never seen: at the launch the wheels spin, and the speed loop never asks for
+full current. W10 adds M6b, a brake in a turn: on this car M6's slide is the front's, so the
+rear's limit is never seen either, and M6b brings the rear to it. M6b itself is 4 conditions
+and 20 runs, 2.5 minutes of driving (about 15 with the repositioning). The whole protocol: 42
+conditions, 210 runs, 29 minutes of driving.
 
 **The drive unit** (`component/roboracer_vesc`) is a stand-in for a user's own:
 - a VESC's speed loop, current limit, brake current, duty, and timeout;

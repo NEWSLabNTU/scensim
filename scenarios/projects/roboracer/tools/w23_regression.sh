@@ -39,7 +39,7 @@ sys "export PYTHONPATH=$AIB/src/aib:\$PYTHONPATH; cd $OUT; python3 -m aib.gen --
 cat > "$OUT/twin_eval.sh" <<EOF
 #!/usr/bin/env bash
 # refine_twin.py's --twin-cmd: twin_eval.sh FITTED RUNS
-env -i HOME="\$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" bash -c "source $AIB/src/aib/scripts/isaac_env.sh >/dev/null 2>&1; export PYTHONPATH=$AIB/src/aib:\\\$PYTHONPATH; cd $OUT; python $HERE/twin_runs.py --ego ego.yaml --out \$2 --fitted \$1 --repetitions 1 --only M1,M3,M5,M6" > "\$2.log" 2>&1
+env -i HOME="\$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" bash -c "source $AIB/src/aib/scripts/isaac_env.sh >/dev/null 2>&1; export PYTHONPATH=$AIB/src/aib:\\\$PYTHONPATH; cd $OUT; python $HERE/twin_runs.py --ego ego.yaml --out \$2 --fitted \$1 --repetitions 1 --only M1,M3,M5,M6,M6b" > "\$2.log" 2>&1
 EOF
 chmod +x "$OUT/twin_eval.sh"
 isaac "python $HERE/twin_runs.py --ego ego.yaml --out $OUT/logs/twin0 --repetitions 1" > "$OUT/twin0.log" 2>&1

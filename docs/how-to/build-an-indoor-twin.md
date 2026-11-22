@@ -158,9 +158,19 @@ the floor's state and the tyres' age with every log.
 | M4 | steering step | 1 m/s, centre to full lock and back, both sides | steering dead time and rate |
 | M5 | steady circles | tyre angles 0.1, 0.2, 0.3 rad and full lock, 1, 2 and 3 m/s | radius, yaw rate, the understeer gradient |
 | M6 | grip limit | a circle, speed raised until the car slides | lateral acceleration at the slide |
+| M6b | rear grip limit | a 6 s circle at 0.2 rad from 2.5 and 3 m/s, then 1.5 s of 20 A brake current with the steering held, both sides | the sideslip's peak and the heading's change over the brake |
 | M7 | laps | your stack, five laps at race settings | lap time, the speed along the lap, the closest wall distance |
 
 M1 to M4 fit your component. M5 and M6 fit the tyres and the floor. M7 accepts the whole twin.
+
+M6b is there for the rear tyres. A car that understeers slides at the front first in M6, so its
+logs never show the rear's limit, and the rear's friction stays unknown. Braking in a turn moves
+the load to the front and spends the rear's grip on the braking, so the rear lets go first. Its
+20 runs take about 15 minutes with the repositioning, on a clear area of about 5 by 5 m (the
+circle's radius is about 1.6 m, plus the slide). The car slides from 3 m/s at most; on a 1/10
+car the worst case is a spin. Two things to know about it:
+- it gives the rear's friction only, through the twin: the steady-turn tyre fit cannot use it;
+- the brake's force comes from M3's braking, so an error in that fit shows up in the friction.
 
 ### Your component
 

@@ -83,3 +83,12 @@ def test_the_batched_replay_is_each_slots_own_replay():
         for st, pred in zip(streams, row):
             alone = fit.replay_batch(RoboRacerVesc, car, [p], [st], protomod.MOTORS)[0][0]
             assert np.array_equal(pred, alone) and len(pred) == len(st["core_t"])
+
+
+def test_the_refinement_refines_only_what_the_logs_leave_open():
+    """W10's profile: with the stiffnesses free the twin's cost has a valley the manoeuvres cannot
+    separate, so by default only what the stages leave unidentified is refined."""
+    f = {"not_identified": [FRICTION, "vehicle.something_else"]}
+    assert refine_twin.default_params(f) == [FRICTION]
+    assert refine_twin.default_params({"not_identified": []}) == []
+    assert refine_twin.default_params({}) == []

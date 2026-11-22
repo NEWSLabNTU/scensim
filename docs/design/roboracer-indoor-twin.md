@@ -527,10 +527,14 @@ with tires at room temperature.
 | M4 | steering step | at 1 m/s, centre to full lock and back, both sides | steering dead time and rate (rad/s), from the yaw rate's rise |
 | M5 | steady circles | tire angles 0.1, 0.2 and 0.3 rad and full lock, both sides, at 1, 2 and 3 m/s | radius (m), yaw rate (rad/s); the understeer gradient (rad per m/s^2) from the angle against lateral acceleration |
 | M6 | grip limit | on a circle, speed raised slowly until the car slides | lateral acceleration at the slide (m/s^2), giving the floor's peak friction (3.3, 3) |
+| M6b | rear grip limit | a 6 s circle at 0.2 rad from 2.5 and 3 m/s, then a 20 A brake current for 1.5 s with the steering held, both sides | the sideslip's peak (rad) and the heading's change over the brake (rad), giving the rear's friction through the twin (091 W10) |
 | M7 | laps, closed loop | the user's stack, 5 laps, at the stack's race settings | lap time (s), the speed profile along the lap, minimum wall distance (m) |
 
 M1 to M4 fit the component. M5 and M6 fit the tyres and the floor: the spec's tyre stiffness,
-and the floor's friction authored in the stage. M7 is the acceptance of the whole twin, which
+and the floor's friction authored in the stage. On a car that understeers, M6's slide is the
+front's, so M6b brakes in a turn to bring the rear to its limit: the load moves forward and the
+braking spends the rear's grip. Its quantities are transient, so they feed the twin-in-the-loop
+refinement of the rear's friction, not the steady-turn tyre fit. M7 is the acceptance of the whole twin, which
 091's success sentence names.
 
 ### 5.3 Acceptance bands

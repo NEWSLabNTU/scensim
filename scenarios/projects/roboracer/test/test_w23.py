@@ -22,8 +22,9 @@ CAR = yaml.safe_load((ROOT / "vehicles" / "roboracer.yaml").read_text())
 
 
 def test_the_protocol_covers_m1_to_m6_with_five_repetitions():
+    """And M6b, the rear's grip limit (W10)."""
     runs = protomod.runs(DOC)
-    assert {r.manoeuvre for r in runs} >= {"M1", "M2", "M3", "M4", "M5", "M6"}
+    assert {r.manoeuvre for r in runs} >= {"M1", "M2", "M3", "M4", "M5", "M6", "M6b"}
     assert all(sum(1 for q in runs if q.name[:-1] == r.name[:-1]) == 5 for r in runs)
     assert len({r.name for r in runs}) == len(runs)
 
@@ -165,3 +166,29 @@ def test_recovery_reports_misses_and_what_the_logs_could_not_identify(tmp_path):
     fitted["vehicle"]["mass"] = 4.05
     f.write_text(yaml.safe_dump(fitted))
     assert check_recovery.main([str(t), str(f)]) == 0  # jitter and the rear: reported only
+
+
+def synthetic_m6b(side=1, beta_peak=0.06, r=1.5, r_brake=0.8, hz=100.0):
+    """A circle for 6 s, then the brake: the yaw rate falls and the sideslip grows to its peak."""
+    t = np.arange(0.0, 7.5, 1.0 / hz)
+    rate = np.where(t < 6.0, r, r_brake) * side
+    yaw = np.concatenate([[0.0], np.cumsum(rate[:-1]) / hz])
+    beta = np.where(t < 6.0, 0.01, 0.01 + (beta_peak - 0.01) * np.sin(np.clip(t - 6.0, 0, 1.5) / 1.5 * np.pi)) * side
+    v = np.where(t < 6.0, 3.0, 3.0 - 1.5 * (t - 6.0))
+    # each step along the direction at its midpoint, so a chord's angle is the path's
+    d, vm = (yaw + beta)[:-1] / 2 + (yaw + beta)[1:] / 2, (v[:-1] + v[1:]) / 2
+    x = np.concatenate([[0.0], np.cumsum(vm * np.cos(d)) / hz])
+    y = np.concatenate([[0.0], np.cumsum(vm * np.sin(d)) / hz])
+    streams = {"ref_t": t, "ref_x": x, "ref_y": y, "ref_yaw": yaw,
+               "core_t": t, "core_erpm": v * 4614.0}
+    session = {"manoeuvre": "M6b", "condition": {"speed": 3.0, "brake_current": 20.0, "side": side}}
+    return session, streams, yaw[-1] - np.interp(6.0, t, yaw)
+
+
+@pytest.mark.parametrize("side", [1, -1])
+def test_m6b_gives_the_sideslip_peak_and_the_heading_change_over_the_brake(side):
+    session, streams, turned = synthetic_m6b(side)
+    q = qmod.quantities(session, streams, DOC)
+    assert q["sideslip_peak"] == pytest.approx(0.06, abs=0.003)
+    assert q["heading_change_braking"] == pytest.approx(abs(turned), rel=1e-3)
+    assert q["heading_change_braking"] > 0

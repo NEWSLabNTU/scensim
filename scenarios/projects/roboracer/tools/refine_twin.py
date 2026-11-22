@@ -3,16 +3,21 @@ candidate, and the error is in the protocol's own quantities: the long-horizon e
 matched starts, since every run starts from rest at the start of its manoeuvre.
 
     python3 refine_twin.py --logs REAL_LOGS --fitted FITTED.yaml --out REFINED.yaml
-        --twin-cmd "CMD" [--only M1,M3,M5,M6] [--max-evals 80] [--params a,b] [--anchor 1]
+        --twin-cmd "CMD" [--only M1,M3,M5,M6,M6b] [--max-evals 80] [--params a,b] [--anchor 1]
 
 The fit's stages (fit_twin.py) take each parameter from the manoeuvre that shows it most
 directly, through simple models. Some parameters those models cannot reach. A rear tyre that
 never nears its lateral limit still limits the launch and the braking, and the steady
 single-track model misses some of the twin's own behaviour. Here the twin itself decides.
-Nelder-Mead runs over the logarithms of PARAMS (or `--params`, dotted names), starting from the
-fit:
-- the tyres' stiffness and friction, front and rear;
-- the drive unit's latency.
+Nelder-Mead runs over the logarithms of the parameters the logs leave open, starting from the fit:
+by default the fit's `not_identified` (a friction its axle's points never come near), or
+`--params` (dotted names, any of PARAMS). Everything else stays at its stage value. W10's profile
+showed why: with the tyres' stiffness free, the twin's cost has a long valley along the rear
+stiffness against the rear friction (p1: rear stiffness down 25 % for friction up 25 %), which
+the manoeuvres cannot separate, and a refinement slides along it (p2's rear friction to 0.717,
+below what the logs show). The stages already fix the stiffnesses (each axle's slip points) and
+the latency (the drive unit's replay) to well within that; the twin's own cost barely tells the
+latency apart and prefers one far from the stage's, making up for the tyres.
 
 The cost is the mean, over the chosen runs' quantities, of the squared difference from the
 real runs' mean in units of 5.3's band half-width. `--twin-cmd` runs the twin: a shell command
@@ -66,6 +71,11 @@ def put(d, name, value):
     for k in path:
         d = d[k]
     d[last] = value
+
+
+def default_params(fitted):
+    """The parameters the logs leave open: the fit's `not_identified`, those of PARAMS only."""
+    return [n for n in fitted.get("not_identified") or [] if n in PARAMS]
 
 
 def anchor_terms(values, stage, intervals):
@@ -142,9 +152,10 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--twin-cmd", required=True)
     ap.add_argument("--protocol", default=str(HERE.parent / "protocol" / "protocol.yaml"))
-    ap.add_argument("--only", default="M1,M3,M5,M6")
+    ap.add_argument("--only", default="M1,M3,M5,M6,M6b")
     ap.add_argument("--max-evals", type=int, default=80)
-    ap.add_argument("--params", default=",".join(PARAMS))
+    ap.add_argument("--params", default="",
+                    help="dotted names to refine (default: the fit's not_identified)")
     ap.add_argument("--anchor", type=float, default=1.0,
                     help="the stage intervals' weight in the cost; 0: unanchored")
     args = ap.parse_args(argv)
@@ -153,7 +164,11 @@ def main(argv=None):
     real = load_runs(args.logs, only)
     tg = targets(real, doc)
     base = yaml.safe_load(Path(args.fitted).read_text())
-    names = [n for n in args.params.split(",") if n]
+    names = [n for n in args.params.split(",") if n] or default_params(base)
+    if not names:
+        sys.exit("nothing to refine: the fit identifies every parameter (give --params to refine "
+                 "some anyway)")
+    print("refining " + ", ".join(names), flush=True)
     stage = {n: get(base, n) for n in names}
     ivs = base.get("intervals") or {}
     if not ivs:

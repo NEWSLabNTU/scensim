@@ -69,3 +69,10 @@ manoeuvres:
     segments:
       - {t: 2.0, motor: speed, value: 1.0, angle: 0.2}
       - {t: 18.0, motor: speed, value: 1.0, to: 7.0, angle: 0.2}
+  M6b:  # the rear's grip limit (W10's addition to 5.2): a steady circle, then a brake current
+        # with the steering held. The braking moves load to the front and uses the rear's grip,
+        # so the rear lets go first, which M6 never shows on a car that understeers
+    conditions: {speed: [2.5, 3.0], brake_current: [20.0], side: [1, -1]}
+    segments:
+      - {t: 6.0, motor: speed, value: speed, angle: 0.2}
+      - {t: 1.5, motor: brake, value: brake_current, angle: 0.2}

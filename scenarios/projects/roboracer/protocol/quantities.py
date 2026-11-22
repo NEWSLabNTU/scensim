@@ -129,6 +129,21 @@ def quantities(session, streams, protocol_doc):
         k = max(1, int(round(0.5 * IMU_HZ)))
         smooth = np.convolve(ay, np.ones(k) / k, mode="same")
         out["lateral_acceleration_at_slide"] = float(smooth.max())
+    elif m == "M6b":
+        # from the reference pose: the sideslip, the angle of the path from the heading, at its
+        # largest once the brake is on; and the heading's change over the brake
+        t0, side = starts[1], float(cond["side"])
+        rt, yaw = streams["ref_t"], np.unwrap(streams["ref_yaw"])
+        k = max(1, int(round(0.1 / np.median(np.diff(rt)))))
+        tm = (rt[k:] + rt[:-k]) / 2
+        vx = (streams["ref_x"][k:] - streams["ref_x"][:-k]) / (rt[k:] - rt[:-k])
+        vy = (streams["ref_y"][k:] - streams["ref_y"][:-k]) / (rt[k:] - rt[:-k])
+        beta = np.arctan2(vy, vx) - (yaw[k:] + yaw[:-k]) / 2
+        beta = np.arctan2(np.sin(beta), np.cos(beta)) * side
+        sel = (tm >= t0) & (np.hypot(vx, vy) > 0.3)
+        out["sideslip_peak"] = float(np.abs(beta[sel]).max()) if sel.any() else None
+        y0, y1 = np.interp([t0, rt[-1]], rt, yaw)
+        out["heading_change_braking"] = float((y1 - y0) * side)
     return out
 
 
@@ -152,6 +167,7 @@ RES = {  # a quantity's resolution: what the measurement cannot tell apart
     "steer_dead_time": 1 / IMU_HZ, "yaw_rise_time": 1 / IMU_HZ, "yaw_rate_full_lock": 0.02,
     "yaw_rate": 0.01, "radius": None, "lateral_acceleration": 0.05,
     "lateral_acceleration_at_slide": 0.1,
+    "sideslip_peak": 0.0035, "heading_change_braking": 0.0035,  # 0.2 deg: the pose's yaw
 }
 
 
