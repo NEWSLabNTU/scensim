@@ -476,9 +476,35 @@ Rules:
 - **Naming.** A scenario names a behaviour model through `ObjectController` properties:
   `model` is an entry point, and the other properties are its parameters, which can
   themselves be sampled.
-- **On seats,** a behaviour model runs as a pilot for that entity (a `command` pilot on the
-  relay), using the same interface as an ego stack. It sees the truth stream and the other
-  actors, and it commands its entity. Nothing changes in SSv2.
+- **The interface** (092 K10). A model is a class with a parameter schema (typed and ranged,
+  so the sampler can draw the `ObjectController` properties), `reset(params, state0)` and
+  `step(state, obs, dt) -> (state, action)`, written once under 092 S3's array API contract:
+  numpy on seats, torch in a batch, where `step_batch` is the same code over a slot axis. Its
+  randomness is a counter-based stream from the entity's seed in the record
+  (`seeds.pilots.<entity>`), so both forms draw the same numbers. Its observation is truth only:
+  its own pose and speed, the other actors near it (the ego always: pose, velocity, kind, box),
+  and the anchors the scenario binds (CS1's conflict point). Its action is a kinematic command
+  for its entity (speed, heading or a path target, an acceleration limit, within the catalog's
+  limits), the motion SSv2 itself gives a pedestrian. It also writes its decisions (`wait`,
+  `go`, `abort`) into the truth, for the agreement check and coverage. An OpenSCENARIO action
+  form was considered and refused: a storyboard condition cannot express a decision taken
+  against the ego's live approach.
+- **On seats,** a behaviour model runs for its entity on the truth stream, and the world, not
+  SSv2, moves the entity. Two facts decide how (found in K10's planning, 2026-11-22):
+  - SSv2 already takes a world-owned pose for any entity. The fork's
+    `API::updateEntitiesStatusInSim` applies the simulator's returned status to every entity:
+    the ego's pose and twist, and `setStatus` for every other one, a pedestrian included. So the
+    bridge returns the model's entity in its status response, as it does for
+    `simulator_autopilot` vehicles, and SSv2's conditions read the pose the world shows.
+    Nothing changes in SSv2.
+  - A `command` pilot does not see the other actors. The relay carries the agent protocol's
+    commands (reset, goal, speed limit, stop) and the agent's reports; a pilot sees its own car
+    only, over ROS on the vehicle side. The truth stream is K4's: `/scensim/truth` in the
+    scenario domain, which an attachment reads, following CARLA's tick gate when `lockstep:
+    true`. An attachment cannot command an entity, though. So the model runs as a K4
+    attachment, and the command channel back to the bridge (`entity_command`, applied to the
+    entity and returned to SSv2) is its own item, 092 K12, since learned background agents need
+    it too.
 - **In a batch,** a behaviour model is batched (`step_batch` over slots, like the control
   component of 092 S3). A model without a batched form keeps the scenario on seats, with the
   reason named.
@@ -554,8 +580,10 @@ records by category and cell. The category ids follow the taxonomy
 
 ## 8. Open questions
 
-1. **Behaviour models as pilots on seats.** Is the per-entity pilot's latency through the
-   relay acceptable for a walker's reaction (CS1)? This needs measuring.
+1. **Behaviour models on seats.** Is the latency from a truth frame to the model's command
+   taking effect acceptable for a walker's reaction (CS1)? 092 K10 measures it in both modes: a
+   free-running attachment, and a lockstep one held by the tick gate, which bounds the lag to a
+   frame on CARLA (Isaac's world server has no gate yet).
 2. **Fog and lighting.** Do they compile on Isaac Lab per slot, or only per batch? This
    decides whether R4 trains in a batch at all.
 3. **Knob profiles along the route.** Are profiles expressed in the scenario (an
