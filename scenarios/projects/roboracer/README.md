@@ -36,7 +36,7 @@ The library's defaults are the Model 3's. Each one the small car changes, and wh
 
 | setting | Model 3 | RoboRacer | why |
 |---|---|---|---|
-| PhysX's slip denominators (active, passive, lateral) | 4, 4, 1 m/s | 0.5, 0.5, 0.25 m/s | PhysX adds each one to the contact point's speed in its slip's denominator, at every speed (PhysX 5's `physxvehicle/src/tire/VhTireFunctions.cpp`: lateral `atan(v_lat / (abs(v_long) + d))`, longitudinal `(omega r - v) / (abs(v) + d)`; only its legacy passive longitudinal slip takes a max). That scales a slip by v / (v + d): with the Model 3's 4 m/s, 0.11 at 0.5 m/s and 0.67 at 8 m/s, so a car that drives at 0.5 to 8 m/s sees little slip |
+| PhysX's slip denominators (active, passive, lateral) | 4, 4, 1 m/s | 0.5, 0.5, 0.05 m/s | PhysX adds each one to the contact point's speed in its slip's denominator, at every speed (PhysX 5's `physxvehicle/src/tire/VhTireFunctions.cpp`: lateral `atan(v_lat / (abs(v_long) + d))`, longitudinal `(omega r - v) / (abs(v) + d)`; only its legacy passive longitudinal slip takes a max). That scales a slip by v / (v + d): with the Model 3's 4 m/s, 0.11 at 0.5 m/s and 0.67 at 8 m/s, so a car that drives at 0.5 to 8 m/s sees little slip. The lateral one was 0.25 until W10, which found the car's grip at 1 m/s only 0.80 of its tyre's and the stage fit's stiffness 5 to 15 % low; at 0.05 it is 0.95 |
 | the brake module's slip offset (`est_slip_offset`) | 4 m/s | 0.5 m/s | now read from the spec's `min_active_slip_denominator` (sim_vehicle_ecu 4f6cfd5); only the `ev` powertrain and components use the estimate |
 | sticky-tyre threshold speed | 0.2 m/s | 0.05 m/s | scaled with the car's speeds |
 | substep threshold speed | 5 m/s | 1 m/s | the same |

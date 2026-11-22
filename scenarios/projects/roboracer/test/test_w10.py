@@ -92,3 +92,31 @@ def test_the_refinement_refines_only_what_the_logs_leave_open():
     assert refine_twin.default_params(f) == [FRICTION]
     assert refine_twin.default_params({"not_identified": []}) == []
     assert refine_twin.default_params({}) == []
+
+
+def test_physx_lateral_is_the_michigan_tyre_with_the_denominator_added():
+    # at rest load the stiffness is lat_stiff_value * rest * s(1.5) = 0.875 of it (W8's 4.4/5.0)
+    k, rest, d = 5.0, 10.0, 0.05
+    f = fit.physx_lateral(1.0, -1e-5, rest, rest, k, 1.0, d)  # small enough that s(K) = K
+    assert f == pytest.approx(0.875 * k * rest * 1e-5 / (1.0 + d), rel=1e-4)
+    # saturated: the force is friction times load, whatever the slip
+    assert fit.physx_lateral(1.0, -2.0, rest, rest, k, 0.9, d) == pytest.approx(0.9 * rest)
+
+
+def test_a_circle_from_the_pose_gives_its_speed_and_sideslip_exactly():
+    """The chord over the window is shorter than the arc: the segment corrects it."""
+    import math
+    import numpy as np
+    v, r, beta, hz = 3.0, 2.9, -0.05, 100.0
+    t = np.arange(0.0, 8.0, 1.0 / hz)
+    yaw = r * t
+    R = v / r  # the path's radius; its tangent is the heading plus the sideslip
+    ang = yaw + beta - math.pi / 2
+    x, y = R * np.cos(ang), R * np.sin(ang)
+    session = {"manoeuvre": "M5", "condition": {"angle": 0.3, "speed": 3.0, "side": 1}}
+    streams = {"ref_t": t, "ref_x": x - x[0], "ref_y": y - y[0], "ref_yaw": yaw}
+    car = {"geometry": {"max_steer_angle": 0.36}}
+    seg = fit.axle_segments([(session, streams)], None, car)[0]
+    assert seg["v"] == pytest.approx(v, rel=1e-4)
+    assert seg["beta"] == pytest.approx(beta, abs=1e-6)
+    assert seg["r"] == pytest.approx(r, rel=1e-6)

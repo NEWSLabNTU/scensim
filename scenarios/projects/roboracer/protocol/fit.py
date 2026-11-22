@@ -455,6 +455,138 @@ SLOPE_PER_LAT_STIFF = 4.4 / 5.0
 PEAK_PER_FRICTION = 1.1 / 1.05
 
 
+# --- the tyre stage on PhysX's own tyre (W10) ------------------------------------------------
+#
+# The stage fits the spec's tyre parameters, so it inverts the tyre the twin runs: PhysX 5's
+# vehicle tyre ("Michigan" model), from NVIDIA-Omniverse/PhysX at da950a35 (2026-09-16, Apache
+# 2.0), physx/source/physxvehicle/src/tire/VhTireFunctions.cpp:
+# - computeLateralSlip: latSlip = atan(v_lat / (|v_long| + minLatSlipDenominator)), the
+#   denominator added at every speed;
+# - computeTireForceMichiganModel: latStiff = latStiffY * s(3 Fz / (latStiffX restLoad)),
+#   K = latStiff |tan latSlip| / (mu Fz), F = mu Fz s(K), with s(x) = min(1, x - x^2/3 + x^3/27).
+# aib writes latStiffY = lat_stiff_value * restLoad and latStiffX = lat_stiff_max_load, with
+# restLoad each wheel's share of the mass (aib.params.axle_loads). On a real car this fits
+# PhysX's tyre parameters, not the real tyre's: the residual is the model-form error.
+
+
+def smooth(x):
+    """PhysX's smoothingFunction1."""
+    x = np.minimum(np.asarray(x, dtype=float), 3.0)
+    return np.minimum(1.0, x - x * x / 3.0 + x ** 3 / 27.0)
+
+
+def physx_lateral(v_long, v_lat, load, rest_load, lat_stiff_value, friction, d,
+                  lat_stiff_max_load=2.0):
+    """PhysX's lateral force (N, against v_lat) of a wheel, pure lateral slip, no camber."""
+    stiff = lat_stiff_value * rest_load * smooth(3.0 * load / (lat_stiff_max_load * rest_load))
+    t = np.abs(v_lat) / (np.abs(v_long) + d)  # tan(latSlip)
+    cap = np.maximum(friction * load, 1e-9)
+    return -np.sign(v_lat) * cap * smooth(stiff * t / cap)
+
+
+def _ackermann(delta, L, tread):
+    """aib.control.ackermann: (left, right) wheel angles for a bicycle angle."""
+    if abs(delta) < 1e-5:
+        return 0.0, 0.0
+    R = L / math.tan(delta)
+    return math.atan(L / (R - tread / 2)), math.atan(L / (R + tread / 2))
+
+
+def axle_segments(runs, protocol_doc, car, offset_angle=0.0, window=0.2):
+    """The steady segments axle_points takes (M5's last 3 s, M6's ramp in windows), each as
+    {v, r, beta, delta, ay}: the reference's speed, yaw rate and sideslip, the bicycle angle."""
+    max_steer = car["geometry"]["max_steer_angle"]
+    out = []
+    for s, st in _runs(runs, ("M5", "M6")):
+        t, x, y = st["ref_t"], st["ref_x"], st["ref_y"]
+        yaw = np.unwrap(st["ref_yaw"])
+        k = max(1, int(round(window / np.median(np.diff(t)))))
+        tm = (t[k:] + t[:-k]) / 2
+        vx, vy = (x[k:] - x[:-k]) / (t[k:] - t[:-k]), (y[k:] - y[:-k]) / (t[k:] - t[:-k])
+        heading = (yaw[k:] + yaw[:-k]) / 2
+        r = (yaw[k:] - yaw[:-k]) / (t[k:] - t[:-k])
+        v = np.hypot(vx, vy)
+        beta = np.arctan2(vy, vx) - heading
+        beta = np.arctan2(np.sin(beta), np.cos(beta))
+        c = s["condition"]
+        side = float(c.get("side", 1))
+        if s["manoeuvre"] == "M5":
+            angle = max_steer if c["angle"] == "full" else float(c["angle"])
+            segs = [tm >= tm[-1] - 3.0]
+        else:
+            angle = 0.2
+            n = np.arange(len(tm))
+            segs = [(n // k == i) & (tm > 4.0) for i in range(int(n.max() // k) + 1)]
+        delta = side * angle + offset_angle
+        for sel in segs:
+            if sel.sum() < 2 or v[sel].mean() < 0.5:
+                continue
+            vm, rm, bm = float(v[sel].mean()), float(r[sel].mean()), float(beta[sel].mean())
+            # a chord over the window is shorter than the arc: sin(x) / x of the half angle swept
+            half = abs(rm) * window / 2
+            vm = vm * half / math.sin(half) if half > 1e-6 else vm
+            out.append({"v": vm, "r": rm, "beta": bm, "delta": delta, "ay": vm * rm})
+    return out
+
+
+def axle_forces(seg, car, axle, lat_stiff_value, friction, d, lat_stiff_max_load=2.0):
+    """(model, measured) lateral force of one axle at one segment, both per unit of the car's
+    weight, in the body's y. Measured: the steady turn's moment balance (the axle's share of
+    m a_y). Model: PhysX's tyre at each wheel, from the wheel's own contact velocity (the
+    reference is the rear axle's centre), its Ackermann angle, and its load, the static share
+    plus the lateral load transfer split by the axles' load (one suspension frequency)."""
+    L, tread = car["geometry"]["wheel_base"], car["geometry"]["wheel_tread"]
+    front_share = float(car["inertia"]["com_front_fraction"])
+    h = float(car["inertia"]["com_height"])
+    share = front_share if axle == "front" else 1.0 - front_share
+    rest = share / 2.0
+    transfer = share * seg["ay"] / G * h / tread  # per wheel, outer up, inner down
+    vx, vy = seg["v"] * math.cos(seg["beta"]), seg["v"] * math.sin(seg["beta"])
+    x = L if axle == "front" else 0.0
+    left, right = _ackermann(seg["delta"], L, tread) if axle == "front" else (0.0, 0.0)
+    total = 0.0
+    for yw, psi, sgn in ((tread / 2, left, -1.0), (-tread / 2, right, 1.0)):
+        wx, wy = vx - seg["r"] * yw, vy + seg["r"] * x
+        u = wx * math.cos(psi) + wy * math.sin(psi)
+        w = -wx * math.sin(psi) + wy * math.cos(psi)
+        # a left turn (a_y > 0) loads the right wheel: sgn is +1 on the right
+        load = max(rest + sgn * transfer, 1e-6)
+        total += float(physx_lateral(u, w, load, rest, lat_stiff_value, friction, d,
+                                     lat_stiff_max_load)) * math.cos(psi)
+    measured = share * seg["ay"] / G  # each axle's force over the car's weight: its load share
+    return total, measured
+
+
+def fit_axle_physx(segs, car, axle, d, lat_stiff_max_load=2.0):
+    """(lat_stiff_value, tire_friction, report) for one axle, least squares over the segments
+    of the axle's force, PhysX's tyre against the moment balance. The report has the residual
+    (rms, per unit weight: the model-form error), the highest share of the friction any segment
+    uses (`grip_used`), and the friction's lower bound when that share stays short of the
+    limit (the force seen over the load it acts on)."""
+    def resid(z):
+        k, mu = np.exp(z)
+        return [m - f for f, m in (axle_forces(sg, car, axle, k, mu, d, lat_stiff_max_load)
+                                   for sg in segs)]
+
+    def cost(z):
+        return float(np.sum(np.square(resid(z))))
+    grid = [(math.log(k), math.log(m)) for k in np.geomspace(2.0, 40.0, 16)
+            for m in np.linspace(0.3, 1.6, 14)]
+    z0 = min(grid, key=cost)
+    r = minimize(cost, np.array(z0), method="Nelder-Mead",
+                 options={"xatol": 1e-5, "fatol": 1e-12, "maxiter": 800})
+    k, mu = (float(v) for v in np.exp(r.x))
+    ff = float(car["inertia"]["com_front_fraction"])
+    share = ff if axle == "front" else 1.0 - ff
+    used = max(abs(m) / (mu * share) for _, m in
+               (axle_forces(sg, car, axle, k, mu, d, lat_stiff_max_load) for sg in segs))
+    seen = max(abs(m) / share for _, m in
+               (axle_forces(sg, car, axle, k, mu, d, lat_stiff_max_load) for sg in segs))
+    rms = float(np.sqrt(np.mean(np.square(resid(r.x)))))
+    return k, mu, {"residual_rms": round(rms, 6), "grip_used": round(float(used), 4),
+                   "friction_at_least": round(float(seen), 4), "segments": len(segs)}
+
+
 def axle_tires_of(fit_values, base_lat_stiff_max_load=None):
     """aib's axle_tires from fit_tyres' (cf, mf, cr, mr)."""
     cf, mf, cr, mr = fit_values

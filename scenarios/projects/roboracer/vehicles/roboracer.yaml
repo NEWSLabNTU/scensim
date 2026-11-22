@@ -90,7 +90,11 @@ isaac:
     # Model 3's 4 m/s a car whose speeds are 0.5 to 8 m/s keeps 0.11 to 0.67 of its slip.
     min_active_slip_denominator: 0.5
     min_passive_slip_denominator: 0.5
-    min_lateral_slip_denominator: 0.25
+    # The lateral one scales the cornering force per slip angle by v / (v + d): at 0.25 the car's
+    # grip at 1 m/s was 0.80 of its tyre's, and the stage fit read the stiffness 5 to 15 % low
+    # (W10). At 0.05 it is 0.95; rest, launch and braking are unchanged, and 240 Hz stays stable
+    # down to 0.02 (W10's sweep).
+    min_lateral_slip_denominator: 0.05
     sticky_tire_threshold_speed: 0.05  # m/s: the Model 3's 0.2, scaled
     sticky_tire_threshold_time: 1.0
     longitudinal_sticky_tire_damping: 200.0
