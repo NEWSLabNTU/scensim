@@ -2,7 +2,7 @@
 terms; random actions for a few seconds. Prints the step time, the terms' means, the episodes
 ended and the pool's numbers. Run in the Isaac Lab venv, headless:
 
-    python smoke_drift.py --spec <mushr_nano.yaml> --asset-root <WheeledLab source/> \\
+    python smoke_drift.py --spec src/sim_vehicle_spec/vehicles/mushr_nano.yaml --asset-root <WheeledLab source/> \\
         --dist <mushr_drift_dist.xosc> [--n 64] [--steps 300] [--log starts.jsonl]
 """
 import argparse
