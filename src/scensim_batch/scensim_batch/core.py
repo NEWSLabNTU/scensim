@@ -346,9 +346,18 @@ class BatchRun:
     def before_physics(self, commands, dt):
         """The ego's component on what its sensors read, its actuation handed to the backend:
         what a host that owns the physics loop (Isaac Lab's DirectRLEnv) calls before each
-        physics step, then steps the engine itself, then calls after_physics."""
+        physics step, then steps the engine itself, then calls after_physics.
+
+        A command dict passed again (the same object, as an env holds one action over its
+        decimation's substeps) is one message held: its `age` grows by each step's dt, so a
+        component that times a held command out (roboracer_vesc's 0.5 s) sees it age, and a
+        new dict, at its own age, is a new message. Without this the held one stayed at age 0,
+        read as the message the component already had, and timed out (094 P2: the MuSHR
+        stalled at 0.33 m/s)."""
         self._set_lazy()
         st = self.backend.state()
+        commands = self._held(commands, dt)
+        self._held_dt = dt
         act = self.component.step_batch(commands, self._sensors(st), dt)
         if self._lazy() and isinstance(act, dict) and torch.is_tensor(act.get("drive")):
             self._check_deferred(act)
@@ -362,6 +371,18 @@ class BatchRun:
                    for k, v in act.items()}
         self.backend.apply(act, velocity=velocity, gear=gear)
         return act
+
+    def _held(self, commands, dt):
+        """`commands` with its age grown by the time it has been held (before_physics)."""
+        if not isinstance(commands, dict) or "age" not in commands:
+            return commands
+        if commands is not getattr(self, "_held_cmd", None):
+            self._held_cmd, self._held_t = commands, 0.0
+            return commands
+        self._held_t += self._held_dt
+        out = dict(commands)
+        out["age"] = commands["age"] + self._held_t
+        return out
 
     @_on_device
     def after_physics(self, dt):
