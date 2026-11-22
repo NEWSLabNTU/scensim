@@ -250,6 +250,9 @@ class ModelTest(unittest.TestCase):
             if HAVE_PXR:      # where its stage can be read: it weighs nothing, the spec 1760 kg
                 with self.assertRaisesRegex(ValueError, "the spec is not measured from"):
                     art.asset_usd(doc, root)
+            else:             # where it cannot: the load says the check was skipped
+                with self.assertWarnsRegex(RuntimeWarning, "mass check of its asset .* skipped"):
+                    self.assertEqual(art.asset_usd(doc, root), str(p))
             self.assertEqual(art.asset_name(doc, "rear_left_spin"), "a_rear_left_spin")
             self.assertEqual(art.asset_name(doc, "front_left_wheel"), "flw")
             with self.assertRaisesRegex(ValueError, "maps no 'rear_left_wheel'"):
