@@ -125,6 +125,44 @@ def sync_deps(src, c):
         git("checkout", "-q", sha, cwd=dep)
 
 
+def tracked_branch(repo, rev, path):
+    """The branch a submodule at `path` of `repo`'s `rev` tracks (.gitmodules `branch`, else
+    main)."""
+    r = subprocess.run(["git", "-C", str(repo), "config", "--blob", f"{rev}:.gitmodules",
+                        f"submodule.{path}.branch"], capture_output=True, text=True)
+    return r.stdout.strip() or "main"
+
+
+def on_remote(checkout, sha, branch):
+    git("fetch", "-q", "--no-recurse-submodules", "origin", cwd=checkout, check=False)
+    out = git("branch", "-r", "--contains", sha, cwd=checkout, check=False)
+    return f"origin/{branch}" in out.split()
+
+
+def unpushed(rev):
+    """Every commit `rev` pins here (src/<c>) and every deps/ gitlink of those commits that is
+    not on its remote's tracked branch (`git branch -r --contains`): ["<path> <sha>: ..."]. The
+    gate may test a commit fetched from a local checkout (sync_deps); a push must not name one."""
+    out = []
+    for line in git("ls-tree", "-r", rev, "src", cwd=ROOT).splitlines():
+        mode, kind, sha, path = line.split(None, 3)
+        if kind != "commit":
+            continue
+        c = ROOT / path
+        if not on_remote(c, sha, tracked_branch(ROOT, rev, path)):
+            out.append(f"{path} {sha[:12]}: not on origin/{tracked_branch(ROOT, rev, path)}")
+            continue
+        for dl in git("ls-tree", "-r", sha, "deps", cwd=c, check=False).splitlines():
+            dmode, dkind, dsha, dpath = dl.split(None, 3)
+            if dkind != "commit":
+                continue
+            dep = c / dpath
+            branch = tracked_branch(c, sha, dpath)
+            if not (dep / ".git").exists() or not on_remote(dep, dsha, branch):
+                out.append(f"{path}/{dpath} {dsha[:12]}: not on origin/{branch}")
+    return out
+
+
 def checkout_state(src, components) -> dict:
     """This checkout's HEAD, each landing component's checked-out commit, and what is uncommitted
     in tracked files (here or in those components), less what a build itself writes (a
@@ -397,6 +435,11 @@ def main(argv):
             print(f"push of {c} failed (its main moved?): stopped before this repository's pins; pushed so "
                   f"far: {new[:new.index(c)] or 'none'}. Rerun to cascade again.", file=sys.stderr)
             return 3
+    missing = unpushed(built["."])
+    if missing:   # CLAUDE.md: never pin a commit that is only local (deps/ gitlinks too)
+        print("pinned commits not on their remote's tracked branch: this repository's pins are "
+              "not pushed\n  " + "\n  ".join(missing), file=sys.stderr)
+        return 4
     git("push", "-q", "origin", f"{built['.']}:main", capture=False)
     print(git("log", "--oneline", "-1"))
     return 0

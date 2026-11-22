@@ -471,3 +471,32 @@ def test_a_real_change_to_a_lock_during_the_gate_is_refused(world, monkeypatch):
     r = world.land("--onto", "feat", "E", e2)
     assert r.returncode == 1 and "Cargo.lock" in r.stderr, r.stdout + r.stderr
     assert world.remote_pin("E") == world.sha["E"]
+
+
+def _unpushed(world, rev="HEAD"):
+    code = ("import sys; sys.path.insert(0, 'scripts'); import land_pin, json; "
+            f"print(json.dumps(land_pin.unpushed({rev!r})))")
+    import json
+    return json.loads(run(sys.executable, "-c", code, cwd=world.super).stdout)
+
+
+def test_a_pin_or_a_deps_gitlink_not_on_its_remote_is_named(world):
+    """133: the gate may test a commit fetched from a local checkout, but this repository's pins
+    are pushed only when every commit they name, and every deps/ gitlink of those, is on its
+    remote's tracked branch."""
+    assert _unpushed(world) == []
+    a_dir = world.super / "src" / "C" / "deps" / "A"       # an A commit nobody pushed
+    a_local = commit(a_dir, "A local")
+    cdir = world.super / "src" / "C"
+    git(cdir, "add", "deps/A")
+    c_bad = commit(cdir, "C pins an unpushed A")
+    git(cdir, "push", "-q", "origin", "HEAD:main")         # C itself is on its remote
+    git(world.super, "add", "src/C")
+    commit(world.super, "super pins C")
+    assert _unpushed(world) == [f"src/C/deps/A {a_local[:12]}: not on origin/main"]
+    d_local = commit(world.super / "src" / "D", "D local")  # and a pin of a commit only local
+    git(world.super, "add", "src/D")
+    commit(world.super, "super pins D")
+    got = _unpushed(world)
+    assert f"src/D {d_local[:12]}: not on origin/main" in got and len(got) == 2, got
+    _ = c_bad
