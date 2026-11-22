@@ -80,6 +80,41 @@ as a smoke. It records the probe in the run's settings and, every few iterations
 (`sync_p50_ms`), beside the host's load and the GPU's other processes. The probe can pass on
 a GPU whose other user is busy only in bursts, so a measurement also gives `--require-idle`.
 
+### P3's throughput on a shared GPU: paired runs (fixed 2026-11-22, before the first pair)
+
+The comparison host is 243 (AMD Ryzen 9 9950X, one RTX 5090, driver 580.105.08), whose GPU
+carries another user's queue of jobs with gaps of one to five minutes, so no exclusive window
+comes. An absolute sweep there would carry that user's load. Adjacent runs of stock and ours
+share it, so P3 reports ours against stock as ratios of paired runs, decided as follows before
+the first pair.
+
+- Code: the harness at WheeledLab b491b13 for both sides, Isaac Sim 6.2.0 and Isaac Lab 3.0.0.
+  Stock is `bench/p1/run_p1.sh`'s sweep point with cameras off; ours is
+  `src/scensim_batch/scripts/run_p2.sh`'s sweep at scensim 12e0d1db, rows b and a, starts
+  stock. Each run is that script's command for the point, with the gate below in place of its
+  own.
+- Points: 256, 1024 and 4096 envs with timers sync, and 1024 with timers off, in that order.
+- Order: per point, three blocks, each one run of stock (S), ours row b (B) and ours row a (A),
+  rotated from block to block (S B A, B A S, A S B), so that each side takes every position once.
+- Gate: the continuous CPU gate on every run (`--clean-rows 40 --max-rows 160`, the CPU outside
+  the run's own tree within 0.5 x the cores), 20 warm-up iterations. Another context on the GPU
+  does not stop a run (`--allow-shared`); it is recorded instead. Each row has the harness's
+  `other_procs`, `other_mib`, `gpu_util_pct` and `sync_p50_ms` (every 10 iterations), and a
+  side log keeps the full GPU table (pid, type, memory, utilisation) every 2 s, joined to the
+  rows by time.
+- Measure: per run, the median `samples_per_s` over its clean rows, and each stage's median.
+  Per block, the ratios B/S and A/S. Per point, the geometric mean of the three block ratios,
+  a 95 % t interval on their logarithms (two degrees of freedom) and their range; the stages'
+  costs likewise.
+- Contention: the other context slows each synchronising call (above), and the two sides may
+  make different numbers of them, so a ratio under a busy GPU is not the exclusive ratio. The
+  report gives each ratio with its runs' `sync_p50_ms` and the other context's utilisation, and
+  apart for the rows where that context was idle and where it was busy.
+- A run that ends with exit 7 (no 40 clean rows in 160) is run once more in its slot; a block
+  still missing a run is reported as such, not dropped.
+
+If an exclusive window comes later, the absolute sweep runs as well, as a second table.
+
 ## Measures
 
 The same on both sides, from one harness (P0):
@@ -132,7 +167,7 @@ Isaac Lab 3.0.0 and Isaac Sim 6.2.
 | P0 | The measurement harness: stage timers around the environment step and the runner's phases, GPU memory, and the learning curve, written to one CSV schema; applied unchanged to stock and to ours. Its own overhead measured and reported | 241 | in progress: `bench/wheeledlab_bench` on the fork's `isaaclab-3.0` (7ea2873), a pip package with no WheeledLab import; hooks Isaac Lab's manager-based env and rsl_rl's PPO by class; refuses a time-sliced GPU. Overhead not yet measured on an exclusive GPU |
 | P1 | Stock: the MuSHR drift task (rsl_rl PPO, 1024 environments, the paper's headline task), ported (the NEWSLabNTU fork, branch `isaaclab-3.0`, upstream's base commit named), trained to its published result over 5 seeds; the pass bar fixed from the paper before training. F1TENTH drift afterwards as an extra | 241 | in progress: ported on upstream a5017ce (5a6861c, c98aa20), trains on Isaac Lab 3.0.0 / Isaac Sim 6.2; `WHEELEDLAB_ENABLE_CAMERAS=0` measures it without upstream's forced cameras (c3f286b); pass bar above. Seeds and sweep wait for an exclusive GPU |
 | P2 | Ours, the same task: a MuSHR spec from stock's asset, the field, the drift episode as a compiled scenario with sampled starts, the control component, truth, through K2's environment; stock's rewards and PPO settings. Trained over 5 seeds | swb 139 | in progress (plan approved by 133, 2026-11-22; step 1 and 2 landed 2026-11-22: the spec, sim_vehicle_spec's `dc_motor` drive, undriven and suspension drives and `steer_law: tan`, scensim_batch's DCMotorCfg and tan law; the body's smoke on the GPU, bypassed: 2.07 m/s for 2 m/s asked, 0.83 rad/s at d 0.3): (1) the spec, `scenarios/projects/mushr_drift/vehicles/mushr_nano.yaml`, read from stock's `mushr_nano_v2.usd` (source, commit, licence named; what stock lacks named); (2) sim_vehicle_spec's articulation gains a `dc_motor` drive (Isaac Lab's DCMotorCfg) and a `tan` steer law beside Ackermann's; (3) the episode: stock's oval (straights 0.8 m, line radius 0.8 m) as a polyline world, a 5 s time-up scenario at 50 Hz on 200 Hz physics, stock's plane material; the start a distribution in the compiled scenario (a reference point along the track, position and yaw noise as stock's), drawn again on the device at every reset, each episode its own sample record (seed, reference index, noise) so any training episode replays on seats (P5); env_spacing 0 with filtered collisions, as stock; (4) the task, a ScensimEnv subclass with stock's observations (and their corruption), rewards, curriculum and terminations, and stock's event terms through Isaac Lab's event manager, renamed to our joints and bodies; rsl_rl with stock's PPO settings; (5) two rows: the action through the car's real component (MuSHR's VESC: roboracer_vesc's batch at MuSHR's values, speed mode) and bypassed (rear spin velocity targets v/r on the DC motor, steer tan(δ), as stock); `ideal` a third row only if (a)'s cost needs explaining; 241's wheeledlab_bench gains a DirectRLEnv hook (the same stages and timers, the harness version pinned on both sides). Every difference from stock is named in the table, the renamed event terms among them. Before this: planned (133, 2026-11-21), after 092 K2.2b (engine B), K2.4 and K2.2c (the device-resident path: BatchRun and the control component's torch form on cuda, bit-close to the CPU path; 133, 2026-11-21): a MuSHR spec written from stock's `mushr_nano_v2.usd`, naming its source asset, commit and that asset's licence, any value stock lacks named; its articulation body reproduces stock's joint drives (read in the WheeledLab fork, isaaclab-3.0 a35060c: the throttle an explicit DC motor, `DCMotorCfg` damping 1000, effort 0.25, saturation 1.05, velocity 450; the 2WD variant's rear effort 0.5 and its front wheels passive; the steer a position drive, both front wheels to tan(δ), not Ackermann angles; passive suspension, stiffness 1e8), so both sides are articulations and the named differences are only ours (the control component, the compiled episode, the sampler), and the table says so; the field (stock's plane material) and track (its oval) as the episode's ground; the 5 s episode at 50 Hz (200 Hz physics) as a compiled scenario, sampled starts as stock's; stock's observations, rewards, curriculum and rsl_rl PPO settings through K2's environment. Ours measured two ways: the action through our control component, and the component bypassed (the action straight to the joints, as stock), so the component's cost and its effect on learning are separate numbers. One seed as a contended smoke; 5 seeds and rates wait for an exclusive GPU |
-| P3 | The comparison: throughput by stage, learning efficiency and cross-evaluation, stock (ported) and ours, with every difference in cost explained by stage | | open |
+| P3 | The comparison: throughput by stage, learning efficiency and cross-evaluation, stock (ported) and ours, with every difference in cost explained by stage | scensim 243 | in progress: 243 is the comparison host; throughput by paired runs on its shared GPU ("P3's throughput on a shared GPU", fixed 2026-11-22) |
 | P4 | A driving task from the case studies (for example the lead car braking, or a walker crossing) on Town01's Isaac stage, with a CaRL-style reward and the other road users on the batched behaviour. Its stock side is a hand-written Isaac Lab environment of the same task, in Isaac Lab's own style; both measured as in P3 | | open |
 | P5 | Evaluation on seats: the policies from P1 to P4, both sides, exported as pilots and run on sampled scenarios on Isaac with SSv2 and on CARLA by replay; the coverage report per cell; the batch-to-seats gap | | open |
 | P6 | Write-up: one table each for throughput, learning efficiency, cross-evaluation and evaluation on seats, stock against ours, with GPUDrive and f1tenth_gym as outside references; what our components cost and what they buy (identity, replay, cross-fidelity evaluation) | | open |
