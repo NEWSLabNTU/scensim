@@ -82,7 +82,7 @@ class RoboRacerVescBatch:
     a device (`check`, run at each reset). The latency jitter's draws are each car's own
     `random.Random`, on the host, as the single car's; only a car with jitter draws."""
     commands = "vesc"
-    driven = (True,) * 4  # the Slash 4x4: the centre gear drives both axles
+    driven = (True,) * 4  # the Slash 4x4's; an instance's from its spec's drive_axle
     truth = ()
     array_api, dtype = ("numpy", "torch"), np.float64
     per_slot_params = True   # every param an array [N]: a fit's candidates, a varied car
@@ -100,6 +100,15 @@ class RoboRacerVescBatch:
         self.jitter = host["latency_jitter"] > 0          # host: which cars draw
         g = vehicle["geometry"]
         self.r = float(g["wheel_radius"])
+        # the wheels the motor drives: the spec's powertrain.drive_axle (the Slash 4x4: all; a
+        # 2WD car, the MuSHR of scensim 094 P2: rear); the motor sees their mean, its torque
+        # splits over them
+        axle = (vehicle.get("powertrain") or {}).get("drive_axle", "all")
+        if axle not in ("all", "rear", "front"):
+            raise ValueError(f"roboracer_vesc: powertrain.drive_axle {axle!r}: all, rear or front")
+        self.axle = axle
+        self.driven = {"all": (True,) * 4, "rear": (False, False, True, True),
+                       "front": (True, True, False, False)}[axle]
         self.max_steer = float(g["max_steer_angle"])
         # the gearing: wheel rad/s per motor rad/s, from the ERPM per m/s
         motor_rad_s_per_mps = self.p["erpm_per_mps"] / self.p["erpm_per_motor_rad_s"]
@@ -219,7 +228,12 @@ class RoboRacerVescBatch:
         self._due()
         valid = xp.asarray(sensors["valid"], xp.bool)
         w = xp.where(valid[:, None], xp.asarray(sensors["wheel_speeds"], xp.float64), 0.0)
-        wheel = (((w[:, 0] + w[:, 1]) + w[:, 2]) + w[:, 3]) / 4.0  # rad/s, written out (2.6)
+        if self.axle == "all":
+            wheel = (((w[:, 0] + w[:, 1]) + w[:, 2]) + w[:, 3]) / 4.0  # rad/s, written out (2.6)
+        elif self.axle == "rear":
+            wheel = (w[:, 2] + w[:, 3]) / 2.0
+        else:
+            wheel = (w[:, 0] + w[:, 1]) / 2.0
         motor = wheel * self.gear  # rad/s
         erpm = motor * p["erpm_per_motor_rad_s"]
         mode = self.motor
@@ -244,8 +258,14 @@ class RoboRacerVescBatch:
         current = xp.maximum(-p["current_max"], xp.minimum(p["current_max"], current))
         self.current = current
         torque = current * p["kt"] * self.gear  # N m at the wheels, all four
-        drive = xp.repeat_cols(torque / 4.0, 4)
-        brake = xp.repeat_cols(brake_current * p["kt"] * self.gear / 4.0, 4)
+        brake_torque = brake_current * p["kt"] * self.gear
+        if self.axle == "all":
+            drive = xp.repeat_cols(torque / 4.0, 4)
+            brake = xp.repeat_cols(brake_torque / 4.0, 4)
+        else:   # the motor's torque, and its braking, on the driven axle's two wheels only
+            on = xp.asarray([1.0 if d else 0.0 for d in self.driven], xp.float64)[None, :]
+            drive = xp.repeat_cols(torque / 2.0, 4) * on
+            brake = xp.repeat_cols(brake_torque / 2.0, 4) * on
         # the servo
         has = ~xp.isnan(self.servo)
         target = (self.servo - p["servo_offset"]) / p["servo_gain"]

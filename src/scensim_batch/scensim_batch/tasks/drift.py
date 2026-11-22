@@ -108,6 +108,8 @@ class DriftEnv(ScensimEnv):
         if hasattr(cfg, "resolve"):           # the arguments the trainer set (MushrDriftRLEnvCfg)
             cfg.resolve()
         super().__init__(cfg, render_mode, **kwargs)
+        if not cfg.bypass_component and getattr(cfg, "vesc_gain_range", ()):
+            self._randomize_vesc_gains(cfg.vesc_gain_range)
         self.weights = dict(WEIGHTS)
         self.raw_actions = torch.zeros(self.num_envs, 2, device=self.device)
         self.processed = torch.zeros(self.num_envs, 2, device=self.device)
@@ -121,7 +123,33 @@ class DriftEnv(ScensimEnv):
         a = torch.clip(actions, -1.0, 1.0) * torch.tensor(ACTION_SCALE, device=actions.device)
         a[:, 0] = torch.clamp(a[:, 0], min=0.0)
         self.processed = a
+        if not self.cfg.bypass_component:
+            actions = self._vesc_commands(a)
         super()._pre_physics_step(actions)
+
+    def _randomize_vesc_gains(self, rng_range):
+        """Row (a)'s replacement for stock's randomize_gains (a startup term there): each env's
+        VESC speed loop kp and ki times one factor U[lo, hi], drawn once from the run's seed."""
+        lo, hi = rng_range
+        comp = self.run.component
+        g = torch.Generator().manual_seed(int(self.cfg.seed or 0))
+        f = lo + (hi - lo) * torch.rand(self.num_envs, generator=g, dtype=torch.float64)
+        for k in ("speed_kp", "speed_ki"):
+            p = comp.p[k]
+            comp.p[k] = p * comp.xp.asarray(f.numpy(), comp.xp.float64)
+        self.vesc_gain_factor = f
+
+    def _vesc_commands(self, a):
+        """Row (a): the action as MuSHR's driver sends it to its VESC (vesc_ackermann's
+        ackermann_to_vesc): ERPM = gain v (capped at its speed_max only with vesc_speed_cap),
+        servo = gain d + offset within [servo_min, servo_max]. [N, 2] (value, servo)."""
+        d = self.cfg.vesc_driver
+        erpm = a[:, 0] * d["erpm_per_mps"]
+        if self.cfg.vesc_speed_cap:
+            erpm = torch.clamp(erpm, -d["speed_max_erpm"], d["speed_max_erpm"])
+        servo = torch.clamp(a[:, 1] * d["servo_gain"] + d["servo_offset"], d["servo_min"],
+                            d["servo_max"])
+        return torch.stack([erpm, servo], -1)
 
     def joint_targets(self, actions):
         v, d = self.processed[:, 0].double(), self.processed[:, 1].double()
@@ -247,12 +275,23 @@ class MushrDriftRLEnvCfg(DriftEnvCfg):
       (the variant row: the point uniform along the track per episode);
     - starts_log: a jsonl the episodes' records go to ("": none);
     - pool_seed: the start pool's seed (-1: the run's, cfg.seed, the trainer's agent seed);
-    - drift_component: "" bypasses the control component (row b), else its name (row a)."""
+    - drift_component: "" bypasses the control component (row b), else its name or
+      "module:Class" (row a: roboracer_vesc.component:RoboRacerVesc at MuSHR's values,
+      vesc_params);
+    - vesc_speed_cap: MuSHR's driver speed cap (0.93 m/s) on row (a)'s action: off, named."""
     num_envs: int = 1024
     starts: str = "stock"
     starts_log: str = ""
     pool_seed: int = -1
     drift_component: str = ""
+    # row (a)'s: the component's parameter file (relative: the project's), and whether MuSHR's
+    # driver speed cap (its speed_max ERPM) applies to the action
+    vesc_params: str = "component/mushr_vesc.yaml"
+    vesc_speed_cap: bool = False
+    # stock's randomize_gains' replacement on row (a): the speed loop's kp and ki times one
+    # factor per env, uniform in this range: stock's damping U[10, 50] as a factor of its mean
+    # (the same shape, max / min 5); empty: none (randomize off)
+    vesc_gain_range: tuple = ()
 
     def __post_init__(self):
         import os
@@ -302,6 +341,25 @@ class MushrDriftRLEnvCfg(DriftEnvCfg):
             self.start_pool["seed"] = int(self.pool_seed)
         self.bypass_component = not self.drift_component
         self.component = self.drift_component or "ideal"
+        if ":" in self.component:             # "module:Class": a component not installed as an
+            import importlib                  # entry point (the roboracer project's VESC)
+            mod, cls = self.component.split(":")
+            self.component = getattr(importlib.import_module(mod), cls)
+        self.vesc_driver = {}
+        if self.drift_component:
+            import yaml
+            path = _project() / self.vesc_params
+            doc = yaml.safe_load(path.read_text())
+            self.component_params = dict(doc["params"])
+            self.vesc_driver = dict(doc["driver"])
+            self.vesc_mode = "speed"
+            self.device_resident = True       # the component's torch form, nothing on the host
+            # stock's randomize_gains draws its DC motor's gain (damping U[10, 50]); here the
+            # VESC is the motor and the joint an effort drive, so its replacement draws the
+            # VESC's speed loop gain the same way (DriftEnv._randomize_vesc_gains; 133)
+            if getattr(self.events, "randomize_gains", None) is not None:
+                self.events.randomize_gains = None
+                self.vesc_gain_range = (1.0 / 3.0, 5.0 / 3.0)
 
 
 RETIRED_ENV = {"SCENSIM_DRIFT_STARTS_UNIFORM": "env.starts=uniform",
