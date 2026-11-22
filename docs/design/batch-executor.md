@@ -539,4 +539,5 @@ records log's first line names them. The drift run's default is stock's start: 2
 the track drawn once a run (`tasks.drift_start.reference_points`, knobs `ref_s_0` to
 `ref_s_19`), then per episode one of them and stock's noise (`mushr_drift_dist.xosc`).
 Uniform along the track per episode is the variant row (`mushr_drift_uniform_dist.xosc`,
-`SCENSIM_DRIFT_STARTS_UNIFORM=1`).
+`env.starts=uniform`, an argument of train_rl.py like the run's other project settings:
+`env.starts_log=<jsonl>`, `env.pool_seed=<n>`, `env.drift_component=<name>` for row a).
