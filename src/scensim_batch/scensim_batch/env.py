@@ -59,6 +59,9 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     # where a body's asset lives (a spec's body.asset, 094 P2): its usd is under this root, and
     # engine B loads it (its sha256 checked) instead of the generated body. A host setting
     asset_root: str = ""
+    # engine B: joint kinds ("spin") whose effort drive is PhysX's implicit drive rather than our
+    # clipped torque (articulation.actuator_groups; 094 P4's brake as the spin joints' damping)
+    implicit_effort: tuple = ()
     # every episode's start a sample record of its own (094 P2; start_pool.StartPool): a dict
     # {distribution: <ParameterValueDistribution xosc>, seed: int, chunk: int (records a refill
     # draws), log: <jsonl path or "">}. The records then come from the pool (`records` is
@@ -74,6 +77,8 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     bypass_component: bool = False
     # the ground's material: (static, dynamic, combine) or None (Isaac Lab's default plane)
     ground_material: tuple = ()
+    # the ground plane's size (m, m) or empty (Isaac Lab's default, 100 m square)
+    ground_size: tuple = ()
     # B on a GPU sim: BatchRun, the car model and the component on that device, nothing copied
     # to the host per step (092 K2.2c); the component must have a torch form (array_api)
     device_resident: bool = False
@@ -116,7 +121,8 @@ class ScensimEnv(DirectRLEnv):
                 usd = os.path.join(tempfile.mkdtemp(prefix="scensim_body_"),
                                    f"{self._body_doc['name']}.usda")
                 art.write_usd(self._body_doc, usd)
-            cfg.scene.ego = art.articulation_cfg(self._body_doc, usd, z=self._spawn_z())
+            cfg.scene.ego = art.articulation_cfg(self._body_doc, usd, z=self._spawn_z(),
+                                                 implicit_effort=tuple(cfg.implicit_effort))
         super().__init__(cfg, render_mode, **kwargs)
         if getattr(self, "_physics_handles_decimation", False):
             # _apply_action, and the backend's sample, then run once per several substeps while
@@ -143,6 +149,8 @@ class ScensimEnv(DirectRLEnv):
             g = GroundPlaneCfg(physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=st, dynamic_friction=dy, friction_combine_mode=comb,
                 restitution_combine_mode=comb))
+        if cfg.ground_size:
+            g = g.replace(size=tuple(float(v) for v in cfg.ground_size))
         spawn_ground_plane("/World/ground", g)
         if cfg.engine == "B":
             # the car as spawned holds its asset's spawn properties, read back from the stage

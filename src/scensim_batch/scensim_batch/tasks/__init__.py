@@ -18,3 +18,16 @@ if gym is not None and "Scensim-MushrDriftRL-v0" not in gym.registry:
                 "wheeledlab_tasks.drifting.config.agents.mushr.rsl_rl_ppo_cfg:MushrPPORunnerCfg",
         },
     )
+
+# 094 P4: the lead-brake task, stock's PPO settings verbatim (WheeledLab isaaclab-3.0
+# bench/p4_leadbrake's agent.py: its package on the path, as for stock's own runs)
+if gym is not None and "Scensim-LeadBrake-v0" not in gym.registry:
+    gym.register(
+        id="Scensim-LeadBrake-v0",
+        entry_point="scensim_batch.tasks.leadbrake_env:LeadBrakeEnv",
+        disable_env_checker=True,
+        kwargs={
+            "env_cfg_entry_point": "scensim_batch.tasks.leadbrake_env:LeadBrakeEnvCfg",
+            "rsl_rl_cfg_entry_point": "p4_leadbrake.agent:LeadBrakePPORunnerCfg",
+        },
+    )

@@ -389,6 +389,14 @@ class FakeArticulation:
     def set_joint_effort_target_index(self, target, joint_ids):
         self.effort = (target.clone(), list(joint_ids))
 
+    def write_joint_damping_to_sim_index(self, damping, joint_ids):
+        self.damping_writes = getattr(self, "damping_writes", 0) + 1
+        self.damping = (damping.clone(), list(joint_ids))
+
+    def write_joint_effort_limit_to_sim_index(self, limits, joint_ids):
+        self.limit_writes = getattr(self, "limit_writes", 0) + 1
+        self.limits = (limits.clone(), list(joint_ids))
+
     def write_data_to_sim(self):
         self.writes += 1
 
@@ -461,6 +469,37 @@ class BackendTest(unittest.TestCase):
         self.assertTrue(torch.equal(got, spin.float()))
         self.b.actuate(DT)                                   # the template is reused, not mutated
         self.assertTrue(torch.equal(self.a.pos_target, tgt))
+
+    def test_the_bypassed_brake_writes_damping_and_limit_once_a_policy_step(self):
+        """094 P4: stock's brake (the spin joints' damping, the effort limit at the brake's
+        share), written when a policy step gives them, not again at each of its substeps; none
+        given (P2), none written."""
+        steer = torch.zeros(3, 2, dtype=torch.float64)
+        spin = torch.zeros(3, 4, dtype=torch.float64)
+        self.b.apply_joints(steer, spin)
+        self.b.actuate(DT)
+        self.assertEqual(getattr(self.a, "damping_writes", 0), 0)
+        damp = torch.full((3, 4), 6000.0)
+        lim = torch.full((3, 4), 1500.0)
+        for _ in range(6):                                 # one policy step's substeps
+            self.b.apply_joints(steer, spin, damp, lim)
+            self.b.actuate(DT)
+        self.assertEqual((self.a.damping_writes, self.a.limit_writes), (1, 1))
+        self.assertTrue(torch.equal(self.a.damping[0], damp))
+        self.assertEqual(self.a.damping[1], [self.b.ids[f"{c}_spin"] for c in art.CORNERS])
+        self.b.apply_joints(steer, spin, damp.clone(), lim.clone())   # the next step's
+        self.b.actuate(DT)
+        self.assertEqual((self.a.damping_writes, self.a.limit_writes), (2, 2))
+
+    def test_an_effort_spin_drive_can_be_implicit(self):
+        groups = art.actuator_groups(self.doc)
+        spin = [v for k, v in groups.items() if k.startswith("spin")]
+        self.assertTrue(spin and all(how == "explicit" for _, how, _ in spin))
+        groups = art.actuator_groups(self.doc, implicit_effort=("spin",))
+        spin = [v for k, v in groups.items() if k.startswith("spin")]
+        self.assertTrue(all(how == "implicit" for _, how, _ in spin))
+        steer = [v for k, v in groups.items() if k.startswith("steer")]
+        self.assertTrue(all(how == "implicit" for _, how, _ in steer))      # unchanged
 
     def test_actuate_writes_the_joints_by_name(self):
         n = 3

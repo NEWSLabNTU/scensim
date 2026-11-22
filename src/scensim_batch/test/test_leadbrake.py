@@ -189,5 +189,57 @@ class Lead(unittest.TestCase):
                                            atol=1e-9), f"case {k}: the speed trace")
 
 
+
+@unittest.skipIf(torch is None or not DIST.exists(), "no torch, or no leadbrake_rl project")
+class Guards(unittest.TestCase):
+    """243: the onset condition is the lead's s only on a straight lane along y = 0, the point on
+    its line, the lead on the centre line; anything else is refused at the env's start."""
+
+    SCEN = DIST.parent / "leadbrake.xosc"
+
+    def variant(self, old, new):
+        import tempfile
+        text = self.SCEN.read_text()
+        self.assertIn(old, text)
+        d = Path(tempfile.mkdtemp())
+        p = d / "leadbrake.xosc"
+        p.write_text(text.replace(old, new, 1))
+        return p
+
+    def test_the_task_as_shipped_passes(self):
+        LB.check_trigger_geometry(self.SCEN, LB.straight_world())
+
+    def test_a_shifted_point_or_an_offset_lead_or_a_bent_lane_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "not on the lane's line"):
+            LB.check_trigger_geometry(self.variant('x="-1000.0" y="0.0"', 'x="-1000.0" y="2.0"'),
+                                      LB.straight_world())
+        with self.assertRaisesRegex(ValueError, "not on the lane's line"):
+            LB.check_trigger_geometry(self.variant('x="-1000.0"', 'x="-500.0"'),
+                                      LB.straight_world())
+        lead = ('<Private entityRef="lead">\n\t\t\t\t<PrivateAction><TeleportAction><Position>'
+                '<LanePosition roadId="" laneId="1" s="$lead_s" offset="0" />')
+        with self.assertRaisesRegex(ValueError, "off the lane's centre line"):
+            LB.check_trigger_geometry(self.variant(lead, lead.replace('offset="0"',
+                                                                      'offset="0.5"')),
+                                      LB.straight_world())
+        from scensim_batch.world_lanelet import LaneletWorld
+        bent = LaneletWorld.from_polylines({1: [[0.0, 0.0], [200.0, 0.0], [400.0, 30.0]]},
+                                           width=3.5)
+        with self.assertRaisesRegex(ValueError, "not straight"):
+            LB.check_trigger_geometry(self.SCEN, bent)
+
+    def test_ackermann_is_stocks(self):
+        """Stock's mdp.ackermann, its formula: at wheel base 3.005 and tread 1.667."""
+        d = torch.tensor([-0.7, -0.2, 0.0, 1e-12, 0.3, 0.7], dtype=torch.float64)
+        left, right = LB.ackermann(d, 3.005, 1.667)
+        t = torch.tan(d)
+        want_l = torch.atan2(3.005 * t, 3.005 - 0.8335 * t)
+        want_r = torch.atan2(3.005 * t, 3.005 + 0.8335 * t)
+        small = d.abs() < 1e-9
+        self.assertTrue(torch.equal(left, torch.where(small, torch.zeros_like(d), want_l)))
+        self.assertTrue(torch.equal(right, torch.where(small, torch.zeros_like(d), want_r)))
+        self.assertGreater(float(left[4]), float(right[4]))     # the inner wheel turns more
+
+
 if __name__ == "__main__":
     unittest.main()

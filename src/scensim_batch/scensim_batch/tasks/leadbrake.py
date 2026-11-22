@@ -46,3 +46,53 @@ def episode_from_record(values):
             "headway": (float(values["lead_s"]) - EGO_S - FRONT - REAR) / v,
             "decel": float(values["decel"]),
             "onset": float(values["onset_d"]) - BEHIND - EGO_S - REAR}
+
+
+# --- the task, through K2's environment ---------------------------------------------------------
+# Isaac Lab is imported by the environment's module; this file's constants and world serve the
+# tests without it (test_leadbrake)
+
+BRAKE_DAMPING = 6000.0     # N m s/rad: stock's, the spin joints' damping while braking
+SPEC = "tesla_model3"
+BODY_NAME = "carla-0.9.16"                   # the spec's body stock's car copies
+BODY = f"articulation_{BODY_NAME}.yaml"      # its generated articulation file
+
+
+def _spec_root():
+    return Path(__file__).resolve().parents[3] / "sim_vehicle_spec"
+
+
+def check_trigger_geometry(scenario, world):
+    """243: leadbrake.xosc's onset is the lead's distance from a point BEHIND metres behind the
+    lane's start, which is its s + BEHIND only while lanelet 1 runs straight along y = 0, the
+    point lies on that line and the lead keeps to the centre line. Refuse anything else, loudly,
+    so the trigger cannot stop being s without an error. Returns nothing; raises ValueError."""
+    import xml.etree.ElementTree as ET
+    pts = world.lanelets[1]["centerline"]
+    if any(abs(float(p[1])) > 1e-12 for p in pts) or \
+            any(float(b[0]) <= float(a[0]) for a, b in zip(pts, pts[1:])):
+        raise ValueError("leadbrake: lanelet 1 is not straight along +x at y = 0: the onset "
+                         "condition is not the lead's s")
+    root = ET.parse(scenario).getroot()
+    for c in root.iter("DistanceCondition"):
+        wp = c.find("Position/WorldPosition")
+        if wp is None or abs(float(wp.get("y", "0"))) > 1e-12 or \
+                float(wp.get("x", "0")) != -BEHIND:
+            raise ValueError("leadbrake: the onset's WorldPosition is not on the lane's line, "
+                             f"{BEHIND} m behind its start")
+    for p in root.iter("Private"):
+        if p.get("entityRef") == "lead":
+            for lp in p.iter("LanePosition"):
+                if float(lp.get("offset", "0")) != 0.0:
+                    raise ValueError("leadbrake: the lead is off the lane's centre line: the "
+                                     "onset condition is not its s")
+
+
+def ackermann(delta, wheel_base, tread):
+    """Stock's (mdp.ackermann): the left and right front wheels' angles for the bicycle angle."""
+    import torch
+    t = torch.tan(delta)
+    left = torch.atan2(wheel_base * t, wheel_base - 0.5 * tread * t)
+    right = torch.atan2(wheel_base * t, wheel_base + 0.5 * tread * t)
+    return torch.where(delta.abs() < 1e-9, torch.zeros_like(delta), left), \
+        torch.where(delta.abs() < 1e-9, torch.zeros_like(delta), right)

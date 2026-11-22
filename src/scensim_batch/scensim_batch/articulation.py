@@ -387,11 +387,14 @@ def write_usd(doc, path, root="/Car"):
 
 # --- Isaac Lab -------------------------------------------------------------------------------
 
-def actuator_groups(doc):
+def actuator_groups(doc, implicit_effort=()):
     """{group: (joint names, kind, {stiffness, damping, effort_limit, velocity_limit} per
     joint)}: the drives grouped by kind, as articulation_cfg makes them actuators. Pure data,
     so a test reads what Isaac Lab will get. `kind`: "implicit" (PhysX's drive: the position
-    drives, a velocity drive) or "explicit" (an effort drive: our torque, clipped)."""
+    drives, a velocity drive) or "explicit" (an effort drive: our torque, clipped).
+    `implicit_effort`: joint kinds ("spin") whose effort drive is PhysX's drive instead, its
+    effort a feedforward and its damping and limit PhysX's, so a brake can be its damping
+    (094 P4: stock's lead-brake car, whose brake is the spin joints' implicit damping)."""
     groups = {}
     for kind in JOINT_KINDS:
         names = [n for n in joint_order(doc) if n.endswith(f"_{kind}")]
@@ -407,6 +410,8 @@ def actuator_groups(doc):
                          "saturation_effort": drives[n].get("saturation_effort")}
                      for n in these}
             how = {"effort": "explicit", "dc_motor": "dc_motor"}.get(t, "implicit")
+            if t == "effort" and kind in implicit_effort:
+                how = "implicit"
             groups[kind if len(types) == 1 else f"{kind}_{t}"] = (these, how, gains)
     return groups
 
@@ -493,7 +498,7 @@ def _schemas(prim):
 
 
 def articulation_cfg(doc, usd_path, prim_path="/World/envs/env_.*/ego", z=0.0,
-                     position_iterations=None, velocity_iterations=None):
+                     position_iterations=None, velocity_iterations=None, implicit_effort=()):
     """Isaac Lab's ArticulationCfg for the body file's USD (write_usd), with its asset's spawn
     properties (spawn_props; 094 P3: the MuSHR's USD authors 32/1 solver iterations, its config
     4/0); `position_iterations` and `velocity_iterations`, when given, over the asset's. Import
@@ -512,7 +517,7 @@ def articulation_cfg(doc, usd_path, prim_path="/World/envs/env_.*/ego", z=0.0,
     if velocity_iterations is not None:
         root["solver_velocity_iteration_count"] = velocity_iterations
     actuators = {}
-    for kind, (names, how, gains) in actuator_groups(doc).items():
+    for kind, (names, how, gains) in actuator_groups(doc, implicit_effort).items():
         names = [asset_name(doc, n) for n in names]       # the asset's, where it has one
         gains = {asset_name(doc, n): g for n, g in gains.items()}
         common = dict(joint_names_expr=names, stiffness=per(gains, "stiffness"),
@@ -624,10 +629,13 @@ class ArticulationBackend:
         `velocity` and `gear` are backend A's sticky-tire release and mean nothing here."""
         self.act, self.joint_targets = act, None
 
-    def apply_joints(self, steer, spin):
+    def apply_joints(self, steer, spin, spin_damping=None, spin_effort_limit=None):
         """The control component bypassed: the front steer joints' targets [N, 2] (rad) and the
-        spin joints' targets [N, 4] (rad/s for a velocity drive, N m for an effort drive)."""
+        spin joints' targets [N, 4] (rad/s for a velocity drive, N m for an effort drive), and
+        optionally the spin joints' PhysX damping and effort limit [N, 4] (an implicit spin
+        drive's brake, 094 P4), written when given anew (a policy step's, not each substep)."""
         self.act, self.joint_targets = None, (steer, spin)
+        self.spin_props = (spin_damping, spin_effort_limit)
 
     def actuate(self, dt):
         a, m = self.asset, self.model
@@ -667,6 +675,15 @@ class ArticulationBackend:
             self._pos_template = pos.to(torch.float32).to(self.device)
         f32 = lambda t: torch.as_tensor(t, dtype=torch.float64).to(  # noqa: E731
             self.device).to(torch.float32)
+        damping, limit = getattr(self, "spin_props", (None, None))
+        if damping is not None and damping is not getattr(self, "_damping_written", None):
+            a.write_joint_damping_to_sim_index(damping=f32(damping).contiguous(),
+                                               joint_ids=self._spin_asset)
+            self._damping_written = damping
+        if limit is not None and limit is not getattr(self, "_limit_written", None):
+            a.write_joint_effort_limit_to_sim_index(limits=f32(limit).contiguous(),
+                                                    joint_ids=self._spin_asset)
+            self._limit_written = limit
         pos_t = self._pos_template.clone()
         pos_t[:, self._steer_asset] = f32(steer)
         a.set_joint_position_target_index(target=pos_t)
