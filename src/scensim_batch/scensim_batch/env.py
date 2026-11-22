@@ -56,6 +56,9 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     # articulation_<body>.yaml), which runs on either pipeline
     engine: str = "A"
     body: str = ""
+    # where a body's asset lives (a spec's body.asset, 094 P2): its usd is under this root, and
+    # engine B loads it (its sha256 checked) instead of the generated body. A host setting
+    asset_root: str = ""
     # B on a GPU sim: BatchRun, the car model and the component on that device, nothing copied
     # to the host per step (092 K2.2c); the component must have a torch form (array_api)
     device_resident: bool = False
@@ -90,10 +93,13 @@ class ScensimEnv(DirectRLEnv):
 
             from . import articulation as art
             self._body_doc = art.load_body(cfg.body)
-            usd = os.path.join(tempfile.mkdtemp(prefix="scensim_body_"),
-                               f"{self._body_doc['name']}.usda")
-            art.write_usd(self._body_doc, usd)
-            cfg.scene.ego = art.articulation_cfg(self._body_doc, usd, z=B_SPAWN_Z)
+            if self._body_doc.get("asset"):
+                usd = art.asset_usd(self._body_doc, cfg.asset_root)
+            else:
+                usd = os.path.join(tempfile.mkdtemp(prefix="scensim_body_"),
+                                   f"{self._body_doc['name']}.usda")
+                art.write_usd(self._body_doc, usd)
+            cfg.scene.ego = art.articulation_cfg(self._body_doc, usd, z=self._spawn_z())
         super().__init__(cfg, render_mode, **kwargs)
 
     # --- the scene ----------------------------------------------------------------------------
@@ -150,7 +156,13 @@ class ScensimEnv(DirectRLEnv):
         asset = self.scene.articulations["ego"]
         doc = self._body_doc
         return _LazyB(lambda: art.ArticulationBackend(asset, doc, self.scene.env_origins,
-                                                      sim=None, z=B_SPAWN_Z, resident=resident))
+                                                      sim=None, z=self._spawn_z(),
+                                                      resident=resident))
+
+    def _spawn_z(self):
+        # an asset spawns where its author put it (stock's MuSHR: at 0); a generated body a
+        # little up, to settle on its springs
+        return 0.0 if self._body_doc.get("asset") else B_SPAWN_Z
 
     # --- the step -----------------------------------------------------------------------------
 

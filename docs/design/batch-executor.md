@@ -217,6 +217,28 @@ What makes B a different car from A (and seats), each named here and in the body
 | masses | PhysX's vehicle | the chassis box plus 0.8/0.1/0.1 (rear 0.9/0.1) of `wheels.mass` per corner at the hubs; the whole car's centre of mass the spec's |
 | physics | CPU only | CPU or GPU pipeline |
 
+A car may name the asset it is (sim_vehicle_spec's `body.asset`: the USD, its sha256, source,
+licence and a map of the generated body's joint and link names onto the asset's); engine B then
+loads that articulation, with the spec's drives, instead of building the generated body
+(`ScensimEnvCfg.asset_root`, a host setting, is where it lives; a file whose sha256 differs is
+refused, and so is an asset whose mass, as PhysX reads it, is not the spec's within 1 %). 094
+P2's MuSHR is one, because the generated body did not match stock's own within 5 %: the
+generator's measured cost (2026-11-22, stock's commands to the joints, GPU, 1/200 s, stock's
+4/0 iterations; yaw the mean over each phase's second second, the last sample in brackets):
+
+| body | straight v | turn (d 0.3) yaw | hard turn (d 0.488) yaw | turn steer, left / right of 0.309 |
+|---|---|---|---|---|
+| stock's own (WheeledLab's cfg on its USD; 241 and 139 alike) | 2.085 | 0.982 | 3.015 (2.887) | 0.152 / 0.308 |
+| generated from the spec | 2.106 | 0.829 | 3.425 | 0.306 / 0.121 |
+| generated, with stock's inertias, corner masses and rigid-body properties | 2.107 | 0.929 | 3.509 | 0.299 / 0.135 |
+| engine B on stock's asset (body.asset) | 2.088 | 0.981 (0.978) | 2.972 (3.142) | 0.153 / 0.308 |
+
+Both bodies steer their wheel joints by name and their axes agree (each front wheel's world
+heading is its joint's reading on both); the generated body's front wheel that cannot hold its
+target is the outer one, stock's the inner, for a reason not isolated (its root is a 0.1 kg
+base_footprint with fixed joints to five links, and its wheels spawn 3.7 mm into the ground).
+On stock's asset the brake from 2.7 m/s runs 1.122 m against stock's 1.084.
+
 **B measured** (139, 2026-11-21; contended: other users held the GPU at 97 % and 11.5-14 GB, so
 the timings are an upper bound). `scripts/smoke_articulation.py`, tesla_model3 (carla-0.9.16
 body), ground friction 1.0, 240 Hz: 400 N m on each rear wheel for 4 s, then 1500 N m of brake

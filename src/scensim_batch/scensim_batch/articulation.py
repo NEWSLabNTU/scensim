@@ -66,6 +66,34 @@ def check_body(doc, where="body file"):
                 raise ValueError(f"{where}: no joint {c}_{kind}")
 
 
+def asset_name(doc, name):
+    """`name` (the generated body's joint or link) as the body's asset names it (094 P2: a
+    spec's body.asset maps them); itself for a generated body."""
+    a = doc.get("asset")
+    if not a:
+        return name
+    m = a["joints"] if name in a["joints"] else a["links"]
+    if name not in m:
+        raise ValueError(f"{doc['name']}: body.asset maps no {name!r}")
+    return m[name]
+
+
+def asset_usd(doc, root):
+    """The body's asset under `root` (094 P2), its bytes checked against body.asset.sha256."""
+    import hashlib
+    import os
+    a = doc["asset"]
+    path = os.path.join(str(root), a["usd"])
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"{doc['name']}: its asset {a['usd']!r} is not under {root} "
+                                f"(source: {a['source']})")
+    h = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    if h != a["sha256"]:
+        raise ValueError(f"{doc['name']}: {path} has sha256 {h}, the spec names "
+                         f"{a['sha256']}: not the asset the spec was measured from")
+    return path
+
+
 def joint_order(doc):
     """The joints in a fixed order: the four suspensions, the two steers, the four spins."""
     return ([f"{c}_suspension" for c in CORNERS] + [f"{c}_steer" for c in CORNERS[:2]]
@@ -355,6 +383,8 @@ def articulation_cfg(doc, usd_path, prim_path="/World/envs/env_.*/ego", z=0.0,
 
     actuators = {}
     for kind, (names, how, gains) in actuator_groups(doc).items():
+        names = [asset_name(doc, n) for n in names]       # the asset's, where it has one
+        gains = {asset_name(doc, n): g for n, g in gains.items()}
         common = dict(joint_names_expr=names, stiffness=per(gains, "stiffness"),
                       damping=per(gains, "damping"), effort_limit=per(gains, "effort_limit"),
                       velocity_limit=per(gains, "velocity_limit"),
@@ -377,8 +407,8 @@ def articulation_cfg(doc, usd_path, prim_path="/World/envs/env_.*/ego", z=0.0,
                 solver_position_iteration_count=position_iterations,
                 solver_velocity_iteration_count=velocity_iterations)),
         init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0.0, z), joint_pos={n: 0.0 for n in joint_order(doc)},
-            joint_vel={n: 0.0 for n in joint_order(doc)}),
+            pos=(0.0, 0.0, z), joint_pos={asset_name(doc, n): 0.0 for n in joint_order(doc)},
+            joint_vel={asset_name(doc, n): 0.0 for n in joint_order(doc)}),
         actuators=actuators)
 
 
@@ -399,8 +429,11 @@ class ArticulationBackend:
         self.home = torch.device(self.device) if resident else torch.device("cpu")
         self.model = ArticulationModel(doc, self.n, self.home)
         self.origins = torch.as_tensor(origins, dtype=torch.float64)[:, :2].to(self.home)
-        ids, names = asset.find_joints(joint_order(doc), preserve_order=True)
-        self.ids = dict(zip(names, ids))
+        ours = joint_order(doc)
+        ids, _ = asset.find_joints([asset_name(doc, n) for n in ours], preserve_order=True)
+        self.ids = dict(zip(ours, ids))       # by the generated body's names
+        if doc.get("asset"):
+            self._check_asset(asset, doc)
         self.sus_ids = [self.ids[f"{c}_suspension"] for c in CORNERS]
         self.steer_ids = [self.ids[f"{c}_steer"] for c in CORNERS[:2]]
         self.spin_ids = [self.ids[f"{c}_spin"] for c in CORNERS]
@@ -416,6 +449,22 @@ class ArticulationBackend:
         self.dt = None
         self._state = None
         self.timing = {"actuate": 0.0, "physics": 0.0, "sample": 0.0, "steps": 0}
+
+    @staticmethod
+    def _check_asset(asset, doc, rel=0.01):
+        """The asset's mass, as PhysX reads it, is the spec's within `rel` (094 P2: the spec's
+        values are measured from the asset)."""
+        view = getattr(asset, "root_physx_view", None) or getattr(asset, "root_view", None)
+        m = view.get_masses()
+        m = m.torch if hasattr(m, "torch") else m
+        if not torch.is_tensor(m):
+            import warp as wp
+            m = wp.to_torch(m)
+        total = float(m[0].sum())
+        spec = sum(float(link["mass"]) for link in doc["links"].values())
+        if abs(total - spec) > rel * spec:
+            raise ValueError(f"{doc['name']}: its asset weighs {total:.4g} kg in PhysX, the spec "
+                             f"{spec:.4g} kg: the spec is not measured from this asset")
 
     def _dev(self, t):
         return torch.as_tensor(t, dtype=torch.float32).to(self.device)
