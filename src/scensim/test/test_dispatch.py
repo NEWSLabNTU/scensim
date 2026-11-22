@@ -186,12 +186,22 @@ FAKE_WORKER = textwrap.dedent('''\
         emit(event="retired", why="its stack did not become ready: no readiness"); sys.exit(0)
     time.sleep(plan.get("start_delay", 0))
     emit(event="ready", stack=f"stack-{seat}", proc=f"/proc-{seat}")
+    # beside the runs directory, not in it (tests count its entries)
+    open(os.path.join(os.path.dirname(root), f"up-{seat}"), "w").close()
     n = 0
     for raw in sys.stdin:
         o = json.loads(raw)
         if o.get("stop"):
             break
         n += 1
+        if n == 1 and plan.get("barrier"):
+            # hold the first run until every named seat is up, so a seat that starts late
+            # still finds the others busy (at most 120 s, then go on: the test then says so)
+            end = time.time() + 120
+            while time.time() < end and not all(
+                    os.path.exists(os.path.join(os.path.dirname(root), f"up-{s}"))
+                    for s in plan["barrier"]):
+                time.sleep(0.05)
         key = (o["spec"]["scenario"].rsplit("/", 1)[-1].removesuffix(".xosc")
                + f"_r{o['spec'].get('repetition') or 0}")
         if plan.get("die_on") == n:
@@ -259,7 +269,10 @@ def rows(suite: Path):
 
 
 def test_every_run_once_on_whichever_seat_is_free_into_one_report(tmp_path, fake):
-    d, suite, out = dispatcher(tmp_path, fake, n=6)
+    # every seat's first run waits until both are up: on a loaded host seat 0 once took all six
+    # runs before seat 1's worker started (load ~110); the test is about dispatch, not timing
+    both = {"barrier": ["0", "1"]}
+    d, suite, out = dispatcher(tmp_path, fake, n=6, plan={"0": both, "1": both})
     assert d.run() == 0
     links = sorted(p.name for p in suite.iterdir() if p.is_symlink())
     assert links == [f"s{i}_r0" for i in range(6)]
