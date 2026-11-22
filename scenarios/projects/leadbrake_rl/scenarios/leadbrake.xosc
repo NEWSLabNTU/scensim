@@ -3,7 +3,7 @@
 	094 P4: the lead car brakes ahead, CS2's family (docs/design/scenario-description.md) made
 	stock's task (WheeledLab isaaclab-3.0 bench/p4_leadbrake, fef6385): one straight lane on a dry
 	road by day, the ego at the lead's speed behind it, the lead braking at a constant rate to a
-	stop once its rear passes the onset. The episode is drawn per reset (leadbrake_dist.xosc);
+	stop once its rear is at or past the onset (a state: a lead that starts past it brakes at once). The episode is drawn per reset (leadbrake_dist.xosc);
 	the road is the task's world (scensim_batch.tasks.leadbrake: a straight 400 m lanelet, 3.5 m
 	wide, lanelet 1). 30 s, stock's time-out: a time-up the task reads as a truncation.
 	Both cars are the Tesla Model 3 (sim_vehicle_spec's catalog entry; its box is stock's lead's).
@@ -17,7 +17,7 @@
 		<ParameterDeclaration name="lead_speed" parameterType="double" value="10.0" />
 		<ParameterDeclaration name="lead_s" parameterType="double" value="29.792" />
 		<ParameterDeclaration name="decel" parameterType="double" value="5.0" />
-		<ParameterDeclaration name="onset_s" parameterType="double" value="86.98" />
+		<ParameterDeclaration name="onset_d" parameterType="double" value="1085.98" />
 	</ParameterDeclarations>
 	<CatalogLocations><VehicleCatalog><Directory path="$(env SCENSIM_VEHICLES)" /></VehicleCatalog></CatalogLocations>
 	<RoadNetwork><LogicFile filepath="straight400" /></RoadNetwork>
@@ -55,11 +55,16 @@
 						<SpeedActionDynamics dynamicsShape="linear" value="-$decel" dynamicsDimension="rate" />
 						<SpeedActionTarget><AbsoluteTargetSpeed value="0" /></SpeedActionTarget>
 					</SpeedAction></LongitudinalAction></PrivateAction></Action>
-					<StartTrigger><ConditionGroup><Condition name="onset" delay="0" conditionEdge="rising">
+					<!-- a state, as stock's `lead_s >= onset`, not a crossing: the lead's distance from a
+					     point 1000 m behind the lane's start, which on this straight lane, the lead on its
+					     centre line, is its s + 1000; so a lead that starts past the onset brakes at once
+					     (243). SSv2 runs it (a euclidean DistanceCondition to a WorldPosition) -->
+					<StartTrigger><ConditionGroup><Condition name="onset" delay="0" conditionEdge="none">
 						<ByEntityCondition><TriggeringEntities triggeringEntitiesRule="any"><EntityRef entityRef="lead" /></TriggeringEntities>
-							<EntityCondition><ReachPositionCondition tolerance="1.0"><Position>
-								<LanePosition roadId="" laneId="1" s="$onset_s" offset="0" />
-							</Position></ReachPositionCondition></EntityCondition>
+							<EntityCondition><DistanceCondition value="$onset_d" freespace="false" rule="greaterOrEqual"
+									relativeDistanceType="euclidianDistance" coordinateSystem="entity"><Position>
+								<WorldPosition x="-1000.0" y="0.0" z="0.0" h="0" p="0" r="0" />
+							</Position></DistanceCondition></EntityCondition>
 						</ByEntityCondition>
 					</Condition></ConditionGroup></StartTrigger>
 				</Event></Maneuver>

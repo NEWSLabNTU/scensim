@@ -7,9 +7,10 @@
 # and an entity's position is its origin (the rear axle; the Model 3's box: FRONT 3.812 m ahead
 # of it, REAR 0.98 m behind, length 4.792 m):
 #   lead_s  = EGO_S + headway x lead_speed + FRONT + REAR  (the lead's origin: its rear + REAR)
-#   onset_s = EGO_S + onset + REAR + 1.0                   (ReachPosition fires within its 1 m
-#             tolerance, so the lead's rear is at the onset when it does)
-# onset and headway are the drawn variables, stock's marginals exactly; lead_s and onset_s are
+#   onset_d = 1000 + EGO_S + onset + REAR  (the lead's distance from a point 1000 m behind the
+#             lane's start when its rear is at the onset: leadbrake.xosc brakes it from then on,
+#             a state as stock's `lead_s >= onset`)
+# onset and headway are the drawn variables, stock's marginals exactly; lead_s and onset_d are
 # them shifted and scaled, not draws of their own (133).
 model: 1
 header:
@@ -25,5 +26,5 @@ variables:
 derived:
   ego_speed: "lead_speed"
   lead_s: "5.0 + headway * lead_speed + 3.812 + 0.98"
-  onset_s: "5.0 + onset + 0.98 + 1.0"
+  onset_d: "1000.0 + 5.0 + onset + 0.98"
 cell: {}

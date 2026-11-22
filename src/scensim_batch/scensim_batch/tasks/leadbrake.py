@@ -23,7 +23,7 @@ RANGES = {"lead_speed": (8.0, 14.0), "headway": (1.0, 3.0), "decel": (3.0, 7.0),
 EGO_S = 5.0
 LANE_LENGTH = 400.0
 FRONT, REAR = 3.812, 0.98
-REACH_TOLERANCE = 1.0      # leadbrake.xosc's ReachPositionCondition
+BEHIND = 1000.0            # m: leadbrake.xosc's onset is a distance from (-BEHIND, 0)
 
 
 def project():
@@ -45,4 +45,4 @@ def episode_from_record(values):
     return {"lead_speed": v,
             "headway": (float(values["lead_s"]) - EGO_S - FRONT - REAR) / v,
             "decel": float(values["decel"]),
-            "onset": float(values["onset_s"]) - EGO_S - REAR - REACH_TOLERANCE}
+            "onset": float(values["onset_d"]) - BEHIND - EGO_S - REAR}

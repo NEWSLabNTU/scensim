@@ -96,7 +96,7 @@ class Compile(unittest.TestCase):
         recs = [pool.record(r) for r in rows]
         c = C.compile_scenario(pool.scenario, recs, LB.straight_world(), catalogs=CATALOGS)
         sb = c.storyboard
-        self.assertEqual(sb.params_live, {"onset_s", "decel"})
+        self.assertEqual(sb.params_live, {"onset_d", "decel"})
         pool.check_storyboard(sb)                                  # nothing compiled in
         ego, lead = c.index("ego"), c.index("lead")
         for k, r in enumerate(recs):
@@ -112,6 +112,81 @@ class Compile(unittest.TestCase):
         for (_, a), (_, b) in zip(sb._rebinds, c2.storyboard._rebinds):
             for x, y in zip(a, b):
                 self.assertTrue(torch.equal(x, y))
+
+
+
+def stock_lead(rear0, v0, decel, onset, steps, dt):
+    """Stock's lead (mdp.py LeadCommand._update_command), from its reset: per policy step, it
+    brakes when its rear is at or past the onset, then steps its speed and its rear."""
+    s, v, vs, first = rear0, v0, [], None
+    for k in range(steps):
+        braking = s >= onset and v > 0.0
+        if braking and first is None:
+            first = k
+        a = -decel if braking else 0.0
+        v = max(v + a * dt, 0.0)
+        s = s + v * dt
+        vs.append(v)
+    return vs, first
+
+
+@unittest.skipIf(torch is None or not DIST.exists(), "no torch, or no leadbrake_rl project")
+class Lead(unittest.TestCase):
+    """243: the lead as SSv2's default vehicle under the storyboard against stock's own lead:
+    the brake's rate and sign, and its first step, at stock's 20 Hz policy step; one lead starts
+    past its onset (stock brakes it at once), one a step short of it."""
+
+    CASES = [  # (lead_speed, headway, decel, onset)
+        (10.0, 2.0, 5.0, 80.0),
+        (14.0, 3.0, 3.0, 40.0),        # its rear starts at 45.8 m: past the onset
+        (12.0, 2.5, 7.0, 34.2),        # 33.81 m: a step's travel (0.6 m) short of it
+        (8.0, 1.0, 6.5, 119.0),
+    ]
+
+    def test_it_brakes_on_stocks_step_at_stocks_rate(self):
+        from scensim_batch import core
+        from sim_vehicle_ecu import batch as ecu_batch
+        from test_core import Accel, PointMass, cmds
+        recs = []
+        for v, hw, dec, on in self.CASES:
+            recs.append({"values": {"lead_speed": v, "ego_speed": v, "decel": dec,
+                                    "lead_s": LB.EGO_S + hw * v + LB.FRONT + LB.REAR,
+                                    "onset_d": LB.BEHIND + LB.EGO_S + on + LB.REAR}})
+        world = LB.straight_world()
+        pool = SP.StartPool(DIST, world, seed=1, chunk=4, background=False, catalogs=CATALOGS)
+        c = C.compile_scenario(pool.scenario, recs, world, catalogs=CATALOGS)
+        c.y[:, c.index("ego")] = 3.5          # beside the lane: the lead sees nothing ahead
+        comp = ecu_batch.load_batch(Accel, {}, {}, [1] * len(recs))
+        run = core.BatchRun(c, world, PointMass(c.n), comp, route_length=LB.LANE_LENGTH)
+        lead = c.index("lead")
+        dt, steps = 1.0 / 20.0, 600          # stock's 30 s episode
+        run.reset()
+        vs = []
+        for _ in range(steps):
+            obs = run.step(cmds(c.n, 0.0), dt)
+            vs.append(obs["v"][:, lead].clone())
+        vs = torch.stack(vs).double()
+        for k, (v, hw, dec, on) in enumerate(self.CASES):
+            want, first = stock_lead(LB.FRONT + hw * v, v, dec, on, steps, dt)
+            ours = vs[:, k]
+            fall = torch.nonzero(ours[1:] < ours[:-1] - 1e-9).flatten()
+            got = int(fall[0]) + 1 if len(fall) else (0 if float(ours[0]) < v - 1e-9 else None)
+            self.assertIsNotNone(got, f"case {k}: never braked")
+            # a lead that starts past its onset: stock brakes it in the first step, ours a step
+            # later, as SSv2 (its storyboard's first evaluation is a step after startNpcLogic,
+            # 092 K2.4); a lead that reaches it, on stock's step
+            late = 1 if LB.FRONT + hw * v >= on else 0
+            self.assertEqual(got, first + late, f"case {k}: the first braking step")
+            drops = (ours[:-1] - ours[1:])[got:]
+            braking = drops[drops > 1e-9]
+            # the rate, its sign: dec x dt a step until the last, partial one; never back up
+            self.assertTrue(torch.allclose(braking[:-1], torch.full_like(braking[:-1], dec * dt),
+                                           atol=1e-9), f"case {k}")
+            self.assertTrue(bool((ours[1:] <= ours[:-1] + 1e-12).all()), f"case {k}: reaccelerated")
+            self.assertEqual(float(ours[-1]), 0.0)
+            want = [v] * late + want[:steps - late]
+            self.assertTrue(torch.allclose(ours, torch.tensor(want, dtype=torch.float64),
+                                           atol=1e-9), f"case {k}: the speed trace")
 
 
 if __name__ == "__main__":
