@@ -22,7 +22,7 @@ def main(argv=None):
     ap.add_argument("--n", type=int, default=4)
     ap.add_argument("--steps", type=int, default=120)
     ap.add_argument("--fabric", choices=("default", "on", "off"), default="default",
-                    help="override the env's use_fabric")
+                    help="override the env's use_fabric (engine A refuses on: issue 110)")
     a = ap.parse_args(argv)
 
     from isaaclab.app import AppLauncher
@@ -99,6 +99,29 @@ def main(argv=None):
     if not reached:
         raise SystemExit("the actuation did not reach PhysX (wheels on the ground, steer, tire "
                          "force or speed)")
+    # issue 109: every slot's car where its slot says, slot 0's too (N > 1): PhysX's own pose,
+    # less the slot's origin, is the reported local pose, near the lane's centre
+    be = env.backend
+    st = be.state()
+    bad = []
+    for i in range(a.n):
+        w = be.physx.get_rigidbody_transformation(be.cars[i].path)["position"]
+        lx, ly = float(w[0]) - be.origins[i][0], float(w[1]) - be.origins[i][1]
+        if abs(lx - float(st["x"][i])) > 0.05 or abs(ly - float(st["y"][i])) > 0.05:
+            bad.append((i, round(lx, 2), round(ly, 2), round(float(st["x"][i]), 2)))
+    print(json.dumps({"slots_where_asked": not bad, "bad": bad}), flush=True)
+    if bad:
+        raise SystemExit(f"cars away from their slots' poses (issue 109): {bad}")
+    # issue 110: a reset mid-run lands where asked (Fabric would drop its teleport)
+    asked = env.compiled.x[:, env.compiled.index("ego")].double().cpu()
+    env.reset()
+    env.step(torch.zeros(a.n, 3))
+    x = env.backend.state()["x"]
+    off = (x - asked).abs()
+    print(json.dumps({"reset_landed": bool((off < 1.0).all()), "off_m": off.tolist()}),
+          flush=True)
+    if not bool((off < 1.0).all()):
+        raise SystemExit(f"a mid-run reset did not land where asked (issue 110): {off.tolist()}")
     env.close()
     app.close()
 

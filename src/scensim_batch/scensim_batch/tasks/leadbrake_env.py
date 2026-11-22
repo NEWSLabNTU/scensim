@@ -95,10 +95,12 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
             self.rig = EgoConfig.load(str(LB.aib_ego())).load_rig()
             self.vehicle = self.rig.spec            # the car as the rig resolved it
             self.sim.device = "cpu"                 # PhysX vehicles: the CPU pipeline
-            # Fabric off: with it, a reset's teleport (aib writes the pose and velocity to USD)
-            # never reaches PhysX once the sim runs, so every episode after the first started
-            # where the last ended (measured: x 20.6 after a reset to 5.0; off, 5.45)
-            self.sim.use_fabric = False
+            # Fabric off by default, once, when the cfg first turns to engine A (issue 110: a
+            # reset's teleport never reaches PhysX under it); a later use_fabric=True stays, and
+            # ScensimEnv refuses it by name, nothing forced silently
+            if not getattr(self, "_engine_a_defaults", False):
+                self.sim.use_fabric = False
+                self._engine_a_defaults = True
         else:
             self.component, self.bypass_component, self.implicit_effort = "ideal", True, ("spin",)
 

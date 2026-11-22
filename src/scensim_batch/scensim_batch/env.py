@@ -98,6 +98,15 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     observation_space: int = 8
 
 
+    def __post_init__(self):
+        sup = getattr(super(), "__post_init__", None)
+        if sup is not None:
+            sup()
+        if self.engine == "A":
+            # issue 110: a reset's teleport under Fabric never reaches PhysX (ScensimEnv refuses it)
+            self.sim.use_fabric = False
+
+
 class ScensimEnv(DirectRLEnv):
     cfg: ScensimEnvCfg
 
@@ -105,6 +114,11 @@ class ScensimEnv(DirectRLEnv):
         n = len(cfg.records) if not cfg.start_pool else cfg.scene.num_envs
         if n != cfg.scene.num_envs:
             raise ValueError(f"{n} records for {cfg.scene.num_envs} environments: one per slot")
+        if cfg.engine == "A" and cfg.sim.use_fabric:
+            raise ValueError("engine A with sim.use_fabric=True: aib's teleport writes a car's pose "
+                             "and velocity to USD, which Fabric never hands to PhysX once the sim "
+                             "runs, so every reset after the first is lost (issue 110); set "
+                             "use_fabric False (engine A's default)")
         if cfg.engine == "B":
             # Isaac Lab 3.0 builds and clones a scene's assets from its config: the body's
             # articulation is declared there before the scene exists
