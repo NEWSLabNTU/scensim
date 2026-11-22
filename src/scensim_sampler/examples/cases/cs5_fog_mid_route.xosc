@@ -3,11 +3,19 @@
      `scensim-sample compilable` (docs/design/compilable-subset.md), not a tuned scenario. -->
 <OpenSCENARIO>
   <FileHeader revMajor="1" revMinor="3" date="2026-11-21T00:00:00" author="scensim"
-              description="fog rolls in mid-route"/>
+              description="fog rolls in mid-route">
+    <Properties>
+      <Property name="scensim.category" value="R4.visibility.fog_mid_route"/>
+      <!-- the fog is a knob profile along the route (092 K9): visibility 1000 m until fog_start,
+           falling linearly to visibility_min at fog_end, applied by the bridge each frame -->
+      <Property name="scensim.knob.visibility"
+                value="s(route_n): 0 1000; $fog_start 1000; $fog_end $visibility_min"/>
+    </Properties>
+  </FileHeader>
   <ParameterDeclarations>
     <ParameterDeclaration name="ego_speed" parameterType="double" value="16"/>
     <ParameterDeclaration name="fog_start" parameterType="double" value="200"/>
-    <ParameterDeclaration name="fog_ramp" parameterType="double" value="100"/>
+    <ParameterDeclaration name="fog_end" parameterType="double" value="300"/>
     <ParameterDeclaration name="visibility_min" parameterType="double" value="80"/>
   </ParameterDeclarations>
   <CatalogLocations/>
@@ -31,20 +39,15 @@
 
     </Actions></Init>
     <Story name="main"><Act name="act">
-      <ManeuverGroup name="fog" maximumExecutionCount="1">
+      <ManeuverGroup name="drive" maximumExecutionCount="1">
         <Actors selectTriggeringEntities="false"><EntityRef entityRef="ego"/></Actors>
-        <Maneuver name="fog"><Event name="fog" priority="override" maximumExecutionCount="1">
-          <Action name="fog"><GlobalAction><EnvironmentAction><Environment name="fog">
-            <TimeOfDay animation="false" dateTime="2026-11-21T14:00:00"/>
-            <Weather><Fog visualRange="$visibility_min"/></Weather>
-            <RoadCondition frictionScaleFactor="1.0"/>
-          </Environment></EnvironmentAction></GlobalAction></Action>
-          <StartTrigger><ConditionGroup><Condition name="fog" delay="0" conditionEdge="rising">
-            <ByEntityCondition><TriggeringEntities triggeringEntitiesRule="any">
-              <EntityRef entityRef="ego"/></TriggeringEntities><EntityCondition>
-              <ReachPositionCondition tolerance="1"><Position>
-                <LanePosition roadId="" laneId="34513" s="$fog_start" offset="0"/></Position></ReachPositionCondition>
-            </EntityCondition></ByEntityCondition>
+        <Maneuver name="drive"><Event name="hold" priority="override" maximumExecutionCount="1">
+          <Action name="hold"><PrivateAction><LongitudinalAction><SpeedAction>
+            <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
+            <SpeedActionTarget><AbsoluteTargetSpeed value="$ego_speed"/></SpeedActionTarget>
+          </SpeedAction></LongitudinalAction></PrivateAction></Action>
+          <StartTrigger><ConditionGroup><Condition name="t1" delay="0" conditionEdge="rising">
+            <ByValueCondition><SimulationTimeCondition value="1" rule="greaterThan"/></ByValueCondition>
           </Condition></ConditionGroup></StartTrigger>
         </Event></Maneuver>
       </ManeuverGroup>

@@ -196,7 +196,8 @@ def knob_stack(where, maps_hub, monkeypatch):
 def _use(monkeypatch, bridge):
     real = run.apply_knobs
     monkeypatch.setattr(run, "apply_knobs",
-                        lambda rec, spec, ps, call=None: real(rec, spec, ps, call=bridge))
+                        lambda rec, spec, ps, call=None, project=None:
+                        real(rec, spec, ps, call=bridge, project=project))
 
 
 def _suite(d, n):
@@ -326,3 +327,185 @@ def test_world_anchors_are_checked():
     assert W.anchor_problems({"exit_n": {"kind": "lane", "lanelet": 102}}) == []
     assert "a lanelet's id, an integer" in " ".join(
         m for _, m in W.anchor_problems({"exit_n": {"kind": "lane", "lanelet": 1.5}}))
+
+
+# --- knob profiles (092 K9) -----------------------------------------------------------------
+
+PROFILE_WORLD = {"visibility": {"profile": True, "sets": "fog_visual_range", "range": [50, 1000],
+                                "default": 1000}}
+PROFILED = """<?xml version="1.0"?><OpenSCENARIO>
+  <FileHeader revMajor="1" revMinor="3" date="2026-11-21T00:00:00" author="t" description="t">
+    <Properties>
+      <Property name="scensim.knob.visibility" value="BINDING"/>
+    </Properties></FileHeader>
+  <ParameterDeclarations>
+    <ParameterDeclaration name="fog_start" parameterType="double" value="10"/>
+    <ParameterDeclaration name="vmin" parameterType="double" value="80"/>
+  </ParameterDeclarations>
+  <RoadNetwork><LogicFile filepath="$(env SCENSIM_MAPS)/town_street"/></RoadNetwork>
+  <Entities/><Storyboard/></OpenSCENARIO>"""
+
+
+class ProfileBridge(Bridge):
+    """Bridge, with set_knob_profiles: it keeps the JSON it is sent."""
+
+    def __init__(self, refuse=None):
+        super().__init__()
+        self.profiles, self.refuse = [], refuse
+
+    def __call__(self, rec, argv):
+        if argv[3] == K.SET_KNOB_PROFILES:
+            self.profiles.append(json.loads(yaml.safe_load(argv[-1])["profiles"])["profiles"])
+            if self.refuse:
+                return (f"response:\nSetKnobProfiles_Response(success=False, "
+                        f"message='{self.refuse}')"), ""
+            return "response:\nSetKnobProfiles_Response(success=True, message='1')", ""
+        return super().__call__(rec, argv)
+
+
+def _profiled(tmp_path, binding="time: 0 1000; $fog_start 1000; 20 $vmin"):
+    p = tmp_path / "f.xosc"
+    p.write_text(PROFILED.replace("BINDING", binding))
+    return p
+
+
+def test_a_profile_knob_is_declared_with_a_range_and_a_field():
+    assert K.problems(PROFILE_WORLD) == []
+    bad = K.problems({"a": {"profile": True, "sets": "fog", "range": [5, 1], "default": 9,
+                            "values": {}},
+                      "b": {"profile": True, "sets": "sun_elevation", "range": [0, 1],
+                            "default": 2, "step": 0}})
+    text = " ".join(m for _, m in bad)
+    for want in ("values: a profile knob has", "one of fog_visual_range", "low below high",
+                 "a number in its range", "a positive number"):
+        assert want in text, want
+
+
+def test_a_runs_profiles_go_to_the_bridge_with_the_runs_values(tmp_path):
+    ps = {"world": {"knobs": PROFILE_WORLD}}
+    b = ProfileBridge()
+    blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(_profiled(tmp_path),
+                                                              {"fog_start": 12.0}), ps, call=b)
+    assert not why and blk["ok"]
+    (p,) = b.profiles[-1]
+    assert (p["knob"], p["field"], p["coordinate"]) == ("visibility", "fog_visual_range", "time")
+    assert p["points"] == [[0.0, 1000.0], [12.0, 1000.0], [20.0, 80.0]]
+    assert p["step"] == pytest.approx(9.5)                 # 1 % of the range
+    assert p["min_interval"] == K.PROFILE_MIN_INTERVAL      # a send a second, at most
+    assert blk["_profile_plan"][0]["knob"] == "visibility"
+    # a run of the same testbench binding none still sends: an empty list
+    (tmp_path / "p.xosc").write_text(PLAIN)
+    blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(tmp_path / "p.xosc"), ps, call=b)
+    assert not why and b.profiles[-1] == []
+
+
+def test_profiles_the_world_cannot_take_are_refused_before_the_run(tmp_path):
+    ps = {"world": {"knobs": PROFILE_WORLD}}
+    cases = (
+        ("time: 0 1000; 20 10", "carla", "outside its range [50, 1000]"),
+        ("s(exit_n): 0 1000; 20 80", "carla", "no resolved lane exit_n"),
+        ("time: 0 1000; 20 80", "nowhere", "cannot apply and read back"),
+    )
+    for binding, sim, why_want in cases:
+        blk, why = run.apply_knobs({"simulator": sim}, _Spec(_profiled(tmp_path, binding)), ps,
+                                   call=ProfileBridge(), project=tmp_path)
+        assert why_want in why and not blk["ok"], (binding, why)
+    # Isaac has no cloud read-back
+    clouds = {"overcast": {"profile": True, "sets": "cloud_cover_oktas", "range": [0, 8]}}
+    p = _profiled(tmp_path, "time: 0 0; 20 8").read_text().replace("visibility", "overcast")
+    (tmp_path / "c.xosc").write_text(p)
+    blk, why = run.apply_knobs({"simulator": "isaac"}, _Spec(tmp_path / "c.xosc"),
+                               {"world": {"knobs": clouds}}, call=ProfileBridge())
+    assert "carla only" in why
+    # a fixed binding on a profile knob, and a bridge that refuses
+    blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(_profiled(tmp_path, "$vmin")), ps,
+                               call=ProfileBridge())
+    assert "bound to a profile" in why
+    blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(_profiled(tmp_path)), ps,
+                               call=ProfileBridge(refuse="no ENVIRONMENT_APPLIED"))
+    assert "set_knob_profiles refused" in why and "no ENVIRONMENT_APPLIED" in why
+
+
+def test_a_profile_and_an_environment_action_on_the_same_part_are_refused(tmp_path):
+    p = _profiled(tmp_path)
+    p.write_text(p.read_text().replace("<Storyboard/>", "<Storyboard><Init><Actions>"
+                 "<GlobalAction><EnvironmentAction><Environment name='e'><Weather>"
+                 "<Fog visualRange='100'/></Weather></Environment></EnvironmentAction>"
+                 "</GlobalAction></Actions></Init></Storyboard>"))
+    blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(p), {"world": {"knobs": PROFILE_WORLD}},
+                               call=ProfileBridge())
+    assert "EnvironmentAction sets Fog too" in why
+
+
+def test_a_lane_profile_carries_the_lanes_centreline(tmp_path):
+    from scensim_sampler import anchors as A
+    md = tmp_path / "assets" / "maps" / "town_street"
+    md.mkdir(parents=True)
+    (md / "lanelet2_map.osm").write_text("<osm/>")
+    lane = {"kind": "lane", "lanelets": [{"id": 7, "from_s": 0.0, "to_s": 30.0}], "length": 30.0,
+            "speed_limit": 13.9, "start_x": 0.0, "start_y": 0.0, "end_x": 30.0, "end_y": 0.0,
+            "heading_s": [0.0, 30.0], "heading": [0.0, 0.0], "heading_max_error": 0.0,
+            "x": [0.0, 30.0], "y": [0.0, 0.0]}
+    doc = {"format": A.FORMAT, "version": A.VERSION, "map": "town_street",
+           "map_sha256": A.map_digest(md), "anchors": {"exit_n": lane}}
+    (md / A.RESOLVED).write_text(json.dumps(doc))
+    b = ProfileBridge()
+    blk, why = run.apply_knobs({"simulator": "carla"},
+                               _Spec(_profiled(tmp_path, "s(exit_n): 0 1000; 20 80")),
+                               {"world": {"knobs": PROFILE_WORLD}}, call=b, project=tmp_path)
+    assert not why, why
+    c = b.profiles[-1][0]["coordinate"]
+    assert (c["lane"], c["s"], c["x"], c["y"]) == ("exit_n", [0.0, 30.0], [0.0, 30.0], [0.0, 0.0])
+    # resolved before the centreline was added: refused, naming the fix
+    del lane["x"], lane["y"]
+    (md / A.RESOLVED).write_text(json.dumps(doc))
+    blk, why = run.apply_knobs({"simulator": "carla"},
+                               _Spec(_profiled(tmp_path, "s(exit_n): 0 1000; 20 80")),
+                               {"world": {"knobs": PROFILE_WORLD}}, call=ProfileBridge(),
+                               project=tmp_path)
+    assert "without the lane's centreline" in why
+
+
+def test_the_summary_reads_the_trace_and_judges_the_read_back():
+    class L:
+        def __init__(self, f, c, a, s):
+            self.knob, self.frame, self.commanded, self.applied, self.sent = "visibility", f, c, a, s
+    plan = [{"knob": "visibility", "field": "fog_visual_range", "step": 9.5, "min_interval": 1.0,
+             "coordinate": "time", "points": [[0, 1000], [20, 80]]}]
+    # the first read-back is the world's weather before (not judged); a later one may show the
+    # send before it (lagged: CARLA applies at its next tick)
+    good = [L(1, 1000.0, 950.0, True), L(2, 995.0, 1000.0, False), L(3, 990.0, 990.0004, True),
+            L(4, 980.0, 990.0, True)]
+    s = K.profile_summary(PROFILE_WORLD, plan, good)["visibility"]
+    assert (s["frames"], s["sent"], s["unread"], s["lagged"], s["ok"]) == (4, 3, 0, 1, True)
+    assert s["max_deviation"] == pytest.approx(0.0004)
+    assert s["max_lag"] == pytest.approx(10.0)      # frame 4: 980 commanded, 990 shown
+    assert (s["first_read_back"], s["commanded"], s["min_interval"]) == (950.0, [980.0, 1000.0],
+                                                                         1.0)
+    off = good + [L(5, 970.0, 900.0, True)]
+    s = K.profile_summary(PROFILE_WORLD, plan, off)["visibility"]
+    assert not s["ok"] and s["off_frames"] == [5]
+    unread = [L(1, 1000.0, None, True)]
+    assert not K.profile_summary(PROFILE_WORLD, plan, unread)["visibility"]["ok"]
+    assert not K.profile_summary(PROFILE_WORLD, plan, [])["visibility"]["ok"]
+
+
+def test_a_ramp_the_world_trails_by_much_warns_naming_the_interval_that_fits():
+    world = {"visibility": {"profile": True, "sets": "fog_visual_range", "range": [50, 1000],
+                            "default": 1000},
+             "quick": {"profile": True, "sets": "fog_visual_range", "range": [50, 1000],
+                       "default": 1000, "min_interval": 0.25}}
+    ramp = ("time", None, [(0.0, 1000.0), (60.0, 50.0)])     # 15.8 m/s
+    notes = K.lag_notes(world, {"visibility": ramp})
+    assert len(notes) == 1 and "knob visibility" in notes[0]
+    assert "by up to 31.7" in notes[0] and "min_interval: 0.39" in notes[0]
+    # 2 x 0.25 x 15.8 = 7.9 m, within 25 % of 50 m
+    assert K.lag_notes(world, {"quick": ramp}) == []
+    # a held value and a short segment (its change bounds the lag) do not warn
+    assert K.lag_notes(world, {"visibility": ("time", None, [(0.0, 1000.0), (10.0, 1000.0)])}) == []
+    assert K.lag_notes(world, {"visibility": ("time", None, [(0.0, 100.0), (0.1, 90.0)])}) == []
+    # along a lane: per metre times the lane's speed; without a speed it is not judged
+    lane = ("s", "route_n", [(0.0, 1000.0), (100.0, 50.0)])  # 9.5 per m
+    assert K.lag_notes(world, {"visibility": lane}) == []
+    n = K.lag_notes(world, {"visibility": lane}, {"route_n": 10.0})
+    assert len(n) == 1 and "at 10 m/s" in n[0] and "0 -> 100 m" in n[0]

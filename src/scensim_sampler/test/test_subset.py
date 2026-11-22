@@ -135,11 +135,15 @@ class CaseStudies(unittest.TestCase):
         self.assertTrue(v.compiles)
         self.assertEqual(v.counts.get("batch", 0) >= 1, True)
 
-    def test_cs5_compiles_only_with_a_fog_renderer(self):
+    def test_cs5s_fog_profile_runs_on_seats_only(self):
+        """CS5's fog is a knob profile (092 K9), which the bridge applies each frame: a batch
+        has no per-slot renderer for it, refused by name."""
         v = self.verdict("cs5_fog_mid_route")
-        self.assertTrue(v.compiles)
-        self.assertTrue(any(c.startswith("Fog: a slot camera, and a renderer with fog")
-                            for c in v.conditions))
+        self.assertFalse(v.compiles)
+        r = v.refusals[0]
+        self.assertEqual((r["class"], r["construct"]), ("seats", "world knob visibility as a "
+                                                                 "profile"))
+        self.assertIn("applied by the bridge each frame", r["reason"])
 
 
 

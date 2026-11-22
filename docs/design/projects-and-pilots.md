@@ -248,6 +248,41 @@ server yet), and fails the stack (exit 2, the message in `stack.json`'s `error`)
 600 s. A world server restarted later keeps the preset (the bridge's argument) but not the
 parameters. Isaac has no weather service, so `world.weather` is refused on Isaac.
 
+A knob may instead change over the run (roadmap 092 K9): `profile: true`, a `range`, the one
+scenario-environment field it `sets` (`fog_visual_range`, `sun_elevation`, `sun_azimuth`,
+`precipitation_intensity`, `cloud_cover_oktas`; CARLA takes all five, Isaac all but clouds), a
+`default`, an optional `step` (1 % of the range) and an optional `min_interval` (1 s): the
+least scenario time between two sends. A scenario binds it to a profile,
+`<Property name="scensim.knob.visibility" value="s(west_street): 0 1000; $fog_start 1000;
+$fog_end $visibility_min"/>`: breakpoints along the simulation time (`time:`) or the ego's
+lane position on a resolved lane (`s(<lane>):`), linear between them. Every run of a testbench
+that declares a profile knob sends its profiles to the bridge (`set_knob_profiles`, an empty
+list when it binds none); each frame the bridge sends the value as `SetEnvironment` when it
+has moved by the step and `min_interval` has passed, or at once when it has crossed a
+breakpoint, and the gap trace records the commanded value and the world's read-back. A send
+costs the frame it is sent in: on CARLA (Town01, 20 vehicles, 2026-11-22) a send every frame
+took the frame time's 95th percentile from 1 to 5 ms to 21 to 222 ms, one a second left it at
+1 to 4 ms, and one every 0.25 s gave 3 to 12 ms. So the world trails the profile:
+
+```text
+worst lag ~ 2 x min_interval x rate      (rate per s; along a lane, per m x the ego's speed)
+```
+
+one interval held between sends, and one more when the world shows a send a tick late. Fog
+ramping 15.8 m/s trails by about 31 m at 1 s, which matters near 50 m. `scensim testbench
+check` warns, scenario by scenario, of a ramp whose worst lag exceeds 25 % of its end value,
+naming the `min_interval` that would keep it within (an `s(<lane>)` ramp at its lane's speed
+limit; the warning does not fail the check).
+`result.json`'s `knobs.profiles` gives per knob its field, coordinate, breakpoints, step,
+`min_interval`, frames, sends, the range commanded, the largest difference between a send and
+its read-back (`max_deviation`), how far the world trailed the profile (`max_lag`), and `ok`.
+A world may show a send one tick late (CARLA applies a weather at its next tick): a read-back
+that equals the send before counts as `lagged`, not as a difference. One off by more than its
+tolerance, or missing, is an error run (`knob_profile`). Refused before the run: a value outside the range, a field the simulator
+cannot read back, a lane the world lacks or resolved without its centreline, a scenario whose
+EnvironmentAction sets the same part, and SSv2's own distribution of a profiled scenario. A
+batch refuses a profile by name (`scensim-sample compilable`).
+
 `world.knobs` says what each world knob's values mean on this world (093 D7 gap 1;
 scenario-description.md section 3; a world.yaml may carry it later): a value maps to weather
 parameters (the world server's names, through `set_weather`) and/or a named surface map, with
@@ -634,7 +669,7 @@ window's (an upper bound on the run's); `tick_*` the same for the tick; `frame_w
 `frame_count`, `frames_over_budget`, `ticks_over_budget`. A run's last partial window is
 not logged, so a run under 200 frames has no frame metrics.
 
-`sample` and `replay` (above, "Sampled runs"), and `knobs` (above, `world.knobs`: per bound knob its `value`, the read-back `applied`, `ok`, and `ok` over all, `sent`, `notes`), and `anchors` (above: per bound parameter its `value`, `anchor` and resolved `source`) were added to `swb.result/1` without a new version.
+`sample` and `replay` (above, "Sampled runs"), and `knobs` (above, `world.knobs`: per bound knob its `value`, the read-back `applied`, `ok`, and `ok` over all, `sent`, `notes`), and `anchors` (above: per bound parameter its `value`, `anchor` and resolved `source`), and `knobs.profiles` (above, knob profiles) were added to `swb.result/1` without a new version.
 Only a sampled run or a replay has them, and the readers of results are scensim's own, changed
 with the validator in the same commit.
 

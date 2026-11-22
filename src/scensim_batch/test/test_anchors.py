@@ -73,6 +73,12 @@ class Resolve(unittest.TestCase):
                                 for x, b in zip(a["heading_s"], a["heading_s"][1:])))
             self.assertLess(doc["heading_max_error"], 1e-3)
             self.assertAlmostEqual(a["end_x"], 30.0, delta=1e-6)
+            # the centreline at heading_s (092 K9): on the straight y = 0, x = s
+            self.assertEqual(len(a["x"]), len(a["heading_s"]))
+            for s, x, y in zip(a["heading_s"], a["x"], a["y"]):
+                if s <= 20.0:
+                    self.assertAlmostEqual(x, s, delta=1e-6)
+                    self.assertAlmostEqual(y, 0.0, delta=1e-9)
             self.assertAlmostEqual(a["end_y"], 10.0, delta=1e-6)
 
     def test_the_sampler_reads_it_within_its_stated_error(self):

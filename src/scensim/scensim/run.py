@@ -1172,7 +1172,49 @@ def _ros_call(rec, argv, timeout=20.0):
     return p.stdout, ""
 
 
-def apply_knobs(rec, spec, psettings, call=_ros_call):
+def _profiles_argv(profiles: list) -> list:
+    return ["ros2", "service", "call", knobsmod.SET_KNOB_PROFILES,
+            "scensim_interfaces/srv/SetKnobProfiles",
+            yaml.safe_dump({"profiles": json.dumps({"profiles": profiles})},
+                           default_flow_style=True, width=10 ** 9).strip()]
+
+
+def apply_profiles(rec, spec, psettings, project=None, call=_ros_call):
+    """`(plan, why the run cannot go on or "")` for a run's knob profiles (092 K9): every run of
+    a testbench that declares a profile knob sends its profiles to the bridge, an empty list
+    when it binds none, so no run inherits another's; nothing for a testbench without any."""
+    world = psettings.get("world") or {}
+    declared = [k for k, d in (world.get("knobs") or {}).items() if knobsmod.is_profile_knob(d)]
+    try:
+        bound = knobsmod.bound_profiles(spec.scenario, spec.parameters)
+    except (knobsmod.KnobError, ValueError) as e:
+        return None, f"knobs: {e}"
+    if not declared and not bound:
+        return None, ""
+    if bound and getattr(spec, "distribution", False):
+        return None, ("knobs: the scenario binds a knob profile, which SSv2's own distribution "
+                      "cannot set per run: draw it with a suite's sample: instead")
+    if bound and not (psettings.get("logging") or {}).get("gap_trace", True):
+        return None, ("knobs: a knob profile's applied values are read from the gap trace, "
+                      "which logging.gap_trace: false turns off")
+    try:
+        anchors = (anchorsmod.for_map(project, scenario_map(Path(spec.scenario)))
+                   if project is not None and any(c != "time" for c, _l, _p in bound.values())
+                   else {})
+        plan = knobsmod.profile_plan(world.get("knobs"), bound, rec.get("simulator") or "",
+                                     anchors, knobsmod.environment_weather(spec.scenario))
+    except (knobsmod.KnobError, ValueError) as e:
+        return None, f"knobs: {e}"
+    out, err = call(rec, _profiles_argv(plan))
+    ok = "success=True" in out
+    if not ok:
+        m = re.search(r"message='([^']*)'", out)
+        return None, ("knobs: the bridge's set_knob_profiles refused or did not answer: "
+                      f"{(m.group(1) if m else '') or err or 'no answer'}")
+    return plan, ""
+
+
+def apply_knobs(rec, spec, psettings, call=_ros_call, project=None):
     """`(result.json knobs or None, why the run cannot go on or "")` for a run's bound knobs:
     the testbench's weather baseline merged with the knobs' parameters, sent absolutely through
     the bridge's set_weather, then read back with get_weather and compared."""
@@ -1186,6 +1228,10 @@ def apply_knobs(rec, spec, psettings, call=_ros_call):
     # in the last knobbed run's (243)
     if not bound and not world.get("knobs"):
         return None, ""
+    # 092 K9: the run's knob profiles first, so a refusal stops it before any weather is sent
+    plan_p, why = apply_profiles(rec, spec, psettings, project, call)
+    if why:
+        return {"ok": False, "knobs": {}, "refused": why[len("knobs: "):]}, why
     baseline = ((rec.get("weather") or {}).get("parameters")
                 or (world.get("weather") or {}).get("parameters") or {})
     try:
@@ -1229,6 +1275,8 @@ def apply_knobs(rec, spec, psettings, call=_ros_call):
         block["baseline_not_applied"] = off
     if plan["notes"]:
         block["notes"] = plan["notes"]
+    if plan_p:
+        block["_profile_plan"] = plan_p     # summarised from the gap trace after the run
     if not block["ok"]:
         bad = [k for k, e in block["knobs"].items() if not e["ok"]] + off
         return block, (f"knobs: the world did not apply {', '.join(bad)} as the run asked "
@@ -1457,7 +1505,9 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
         # (093 D7 gap 1): a knob the world cannot honour, or a read-back that differs from
         # the run's value, makes it an error run
         if not infra and sc is not None:
-            knob_block, why_not = (ctx.apply_knobs or apply_knobs)(rec, spec, psettings)
+            knob_block, why_not = ((ctx.apply_knobs or apply_knobs)(rec, spec, psettings)
+                                   if ctx.apply_knobs else
+                                   apply_knobs(rec, spec, psettings, project=project))
             if knob_block is not None:
                 run_events.append({"t_wall": time.time(), "event": "knobs.applied",
                                    "ok": knob_block["ok"]})
@@ -1572,6 +1622,27 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                 "clock_lag", f"the paced clock fell {lag * 1000:.0f} ms behind wall time, beyond "
                 f"its {cs['max_lag_s'] * 1000:.0f} ms budget ({clock_block['frames_over']} of "
                 f"{clock_block['frames']} frames over)"))
+    # 092 K9: each knob profile's commanded and read-back values, from the gap trace's knob
+    # lines; one the world did not follow within its tolerance makes it an error run
+    profile_plan = (knob_block or {}).pop("_profile_plan", None)
+    if profile_plan:
+        try:
+            lines = [k for t in truthmod.load(run_dir) for k in t.knobs]
+        except Exception as e:  # noqa: BLE001 -- an unreadable trace: the profiles unverified
+            lines = []
+            run_events.append({"t_wall": time.time(), "event": "knobs.unread", "why": str(e)})
+        summary = knobsmod.profile_summary((psettings.get("world") or {}).get("knobs"),
+                                           profile_plan, lines)
+        knob_block["profiles"] = summary
+        bad = [k for k, e in summary.items() if not e["ok"]]
+        if bad and ssv2 is not None:
+            knob_block["ok"] = False
+            e = summary[bad[0]]
+            why = ("no knob line in the gap trace" if not e["frames"] else
+                   f"{e['unread']} send(s) not read back" if e["unread"] else
+                   f"its read-back off by {e['max_deviation']:.4g}, beyond {e['tolerance']:.4g} "
+                   f"(frames {', '.join(map(str, e['off_frames'][:5]))})")
+            infra.append(results.Infra("knob_profile", f"knob profile {bad[0]}: {why}"))
     verdict, reason = results.verdict_from(
         junit if junit.is_file() else None, infra,
         hint="" if junit.is_file() else results.ssv2_hint(logs / "scenario"))

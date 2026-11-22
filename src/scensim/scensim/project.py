@@ -877,14 +877,58 @@ def _package_installed(name: str) -> bool:
 
 def project_notes(path) -> list:
     """Warnings for the project at ``path`` that do not stop it (a host path in testbench.yaml;
-    an Autoware the car's Autoware packages support but were not tested on)."""
+    an Autoware the car's Autoware packages support but were not tested on; a knob ramp the
+    world will trail by much)."""
     try:
         settings = config.project_settings(config.find_project(path))
     except config.ConfigError:
         return []
     return (overlaysmod.notes(settings) + autoware_side_notes(settings)
             + componentmod.notes(config.find_project(path), settings)
-            + stagemod.notes(config.find_project(path)))
+            + stagemod.notes(config.find_project(path))
+            + profile_lag_notes(config.find_project(path), settings))
+
+
+def profile_lag_notes(project: Path, settings: dict) -> list:
+    """Each scenario's knob ramps (roadmap 092 K9) the world will trail by more than a quarter
+    of their end value, at their declared defaults (knobs.lag_notes). A scenario that cannot be
+    read, or whose profile does not evaluate, is check_scenario's to report."""
+    from scensim import knobs as knobsmod   # noqa: PLC0415
+    world_knobs = ((settings.get("world") or {}).get("knobs")
+                   if isinstance(settings.get("world"), dict) else None) or {}
+    if not any(knobsmod.is_profile_knob(d) for d in world_knobs.values()
+               if isinstance(d, dict)):
+        return []
+    files, _ = collect_scenarios(project)
+    out = []
+    for f in files:
+        if "scensim.knob." not in _text(Path(f)):
+            continue
+        try:
+            profiles = knobsmod.bound_profiles(Path(f), {})
+        except Exception:   # noqa: BLE001 -- check_scenario reports it
+            continue
+        if not profiles:
+            continue
+        speeds = {}
+        lanes = {lane for coord, lane, _ in profiles.values() if coord != "time"}
+        if lanes:
+            try:
+                sc = read_scenario(f)
+                lf = sc.logic_file or ""
+                if lf.startswith(MAPS_PREFIX):
+                    from scensim import anchors as anchorsmod   # noqa: PLC0415
+                    a = anchorsmod.for_map(project, lf[len(MAPS_PREFIX):].strip("/"))
+                    for lane in lanes:
+                        v = ((a.get(lane) or {}).get("speed_limit")
+                             if isinstance(a, dict) else None)
+                        if isinstance(v, (int, float)) and v > 0:
+                            speeds[lane] = float(v)
+            except Exception:   # noqa: BLE001 -- the anchor check reports it
+                pass
+        rel = _rel(project, f)
+        out += [f"{rel}: {n}" for n in knobsmod.lag_notes(world_knobs, profiles, speeds)]
+    return out
 
 
 def autoware_side_problems(settings: dict, env=None, share=None) -> list:

@@ -407,6 +407,14 @@ def check(path, ego="policy"):
         if name.startswith("scensim.knob."):
             knob = name[len("scensim.knob."):]
             where = f"/OpenSCENARIO/FileHeader/Properties/Property[@name='{name}']"
+            from .profiles import is_profile
+            if is_profile(prop.get("value")):
+                # 092 K9: the bridge applies a profile each frame; a batch has no per-slot
+                # renderer to apply one to
+                v.add(SEATS, where, f"world knob {knob} as a profile",
+                      "a knob profile is applied by the bridge each frame, and a batch has no "
+                      "per-slot renderer for it yet")
+                continue
             cls, reason = WORLD_KNOBS.get(knob, UNKNOWN_KNOB)
             v.add(cls, where, f"world knob {knob} (bound to {prop.get('value')})", reason)
     for obj in root.findall("Entities/ScenarioObject"):

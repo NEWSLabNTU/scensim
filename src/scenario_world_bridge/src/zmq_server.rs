@@ -87,6 +87,13 @@ impl ZmqServer {
                 WorldCommand::LoadMap(path, reply) => {
                     let _ = reply.send(self.load_map(&path));
                 }
+                WorldCommand::SetKnobProfiles(json, reply) => {
+                    let _ = reply.send(
+                        self.coordinator
+                            .set_knob_profiles(&json)
+                            .map_err(|e| e.to_string()),
+                    );
+                }
             }
         }
         self.world_commands = Some(rx);

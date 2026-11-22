@@ -479,6 +479,25 @@ class SchemaTwo(unittest.TestCase):
             gt.load_trace(lines(bad))
         self.assertEqual(e.exception.field, "sim_id")
 
+    def test_knob_lines_read_and_round_trip(self):
+        """092 K9: a knob profile's line per frame, its read-back null before the first."""
+        k0 = {"type": "knob", "frame": 1, "sim_time_ns": 1_000_050_000_000, "knob": "visibility",
+              "commanded": 1000.0, "applied": None, "sent": True}
+        k1 = dict(k0, frame=2, sim_time_ns=1_000_100_000_000, commanded=990.0, applied=1000.0,
+                  sent=False)
+        trace = gt.load_trace(lines(SAMPLE2[:-1] + [k0, k1, SAMPLE2[-1]]))
+        self.assertEqual(trace.knobs, [gt.Knob(1, 1_000_050_000_000, "visibility", 1000.0, None,
+                                               True),
+                                       gt.Knob(2, 1_000_100_000_000, "visibility", 990.0,
+                                               1000.0, False)])
+        self.assertEqual(gt.load_trace(gt.dumps(trace).splitlines()), trace)
+        bad = dict(k1, applied="most")
+        with self.assertRaises(gt.TraceError) as e:
+            gt.load_trace(lines(SAMPLE2[:-1] + [bad, SAMPLE2[-1]]))
+        self.assertEqual(e.exception.field, "applied")
+        with self.assertRaises(gt.TraceError):        # schema 1 has none
+            gt.load_trace(lines(SAMPLE[:-1] + [k0, SAMPLE[-1]]))
+
     def test_a_signal_in_schema_1_is_unknown(self):
         with self.assertRaises(gt.TraceError) as e:
             gt.load_trace(lines(SAMPLE[:-1] + [SIGNAL, SAMPLE[-1]]))

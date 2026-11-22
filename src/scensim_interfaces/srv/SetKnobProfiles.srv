@@ -1,0 +1,13 @@
+# The run's knob profiles (roadmap 092 K9): world knobs whose values change over the run, along
+# the simulation time or the ego's lane position on a lane anchor, piecewise linear between
+# breakpoints. scensim run sends every run's (an empty list for a run with none) before SSv2
+# starts; the bridge applies them each frame as SetEnvironment and records each knob's
+# commanded and read-back value in the gap trace. JSON, as scenario_world_bridge's
+# backend/remote/profiles.rs reads it:
+#
+#   {"profiles": [{"knob": "visibility", "field": "fog_visual_range", "step": 9.5,
+#                  "coordinate": "time", "points": [[0, 1000], [12, 1000], [20, 80]]}]}
+string profiles
+---
+bool success
+string message

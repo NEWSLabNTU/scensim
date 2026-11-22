@@ -38,9 +38,10 @@ STACK_ERROR = "stack.error"
 # usable JUnit; `scenario`: the scenario cannot be read or run here; `knob_refused`,
 # `knob_mismatch`: a bound knob the world cannot honour, or one whose read-back differs
 # (093 D7); `attachment`: a required attachment failed; `clock_lag`: a paced run fell behind
-# wall time by more than its budget.
+# wall time by more than its budget; `knob_profile`: a knob profile the world did not follow
+# within its tolerance, or whose read-back the gap trace lacks (092 K9).
 ERROR_KINDS = ("stack", "pilot", "ssv2", "scenario", "knob_refused", "knob_mismatch",
-               "attachment", "clock_lag")
+               "attachment", "clock_lag", "knob_profile")
 
 
 class Infra(str):

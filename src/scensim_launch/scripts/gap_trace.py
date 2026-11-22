@@ -192,6 +192,21 @@ class Contact:
 
 
 @dataclass(frozen=True)
+class Knob:
+    """Schema 2, additive (scensim roadmap 092 K9): a knob profile's value at a frame, one per
+    profile knob per frame: what the profile asked for, what the world last read back (None
+    before the first read-back, or from a server without one), and whether the bridge sent it
+    that frame."""
+
+    frame: int
+    sim_time_ns: int
+    knob: str
+    commanded: float
+    applied: object  # float or None
+    sent: bool
+
+
+@dataclass(frozen=True)
 class Signal:
     """Schema 2: a signal's colour changed (the bridge set it). Events, not repeated per
     frame: a reader keeps the last colour per signal."""
@@ -220,6 +235,7 @@ class Trace:
     end: object = None  # End, or None for a trace cut short (require_end=False)
     headers: list = field(default_factory=list)  # every EntityHeader, in order
     signals: list = field(default_factory=list)  # Signal, in order (schema 2)
+    knobs: list = field(default_factory=list)  # Knob, in order (schema 2, 092 K9)
 
     def records(self):
         """All records in an order that reads back to the same trace."""
@@ -227,6 +243,7 @@ class Trace:
         headers = list(self.headers)
         contacts = list(self.contacts)
         signals = list(self.signals)
+        knobs = list(self.knobs)
         for frame in self.frames:
             while headers and headers[0].frame <= frame.frame:
                 yield headers.pop(0)
@@ -234,10 +251,13 @@ class Trace:
                 yield contacts.pop(0)
             while signals and signals[0].frame < frame.frame:
                 yield signals.pop(0)
+            while knobs and knobs[0].frame < frame.frame:
+                yield knobs.pop(0)
             yield frame
         yield from headers
         yield from contacts
         yield from signals
+        yield from knobs
         if self.end is not None:
             yield self.end
 
@@ -481,6 +501,19 @@ def _signal(ln):
     )
 
 
+def _knob(ln):
+    o = ln.obj
+    applied = ln.get(o, "applied", "applied")
+    return Knob(
+        frame=ln.int_(o, "frame", minimum=0),
+        sim_time_ns=ln.int_(o, "sim_time_ns", minimum=0),
+        knob=ln.str_(o, "knob"),
+        commanded=ln.num(o, "commanded"),
+        applied=None if applied is None else ln.number_(applied, "applied"),
+        sent=ln.boolean(ln.get(o, "sent", "sent"), "sent"),
+    )
+
+
 def _end(ln):
     o = ln.obj
     return End(
@@ -546,13 +579,15 @@ def iter_records(source, require_end=True):
             yield _contact(ln)
         elif kind == "signal" and schema >= 2:
             yield _signal(ln)
+        elif kind == "knob" and schema >= 2:
+            yield _knob(ln)
         elif kind == "end":
             seen_end = True
             yield _end(ln)
         else:
             raise ln.error(
                 "type", f"unknown record type {kind!r} (episode, entity, frame, contact, "
-                        f"{'signal, ' if schema >= 2 else ''}end)"
+                        f"{'signal, knob, ' if schema >= 2 else ''}end)"
             )
     if not seen_episode:
         raise TraceError(name, number + 1, "type", "no episode record: the trace is empty")
@@ -575,6 +610,8 @@ def load_trace(source, require_end=True):
             trace.contacts.append(r)
         elif isinstance(r, Signal):
             trace.signals.append(r)
+        elif isinstance(r, Knob):
+            trace.knobs.append(r)
         elif isinstance(r, End):
             trace.end = r
     return trace
@@ -675,6 +712,16 @@ def to_json(record, schema=SCHEMA):
             "sim_time_ns": record.sim_time_ns,
             "opendrive_id": record.opendrive_id,
             "colour": record.colour,
+        }
+    if isinstance(record, Knob):
+        return {
+            "type": "knob",
+            "frame": record.frame,
+            "sim_time_ns": record.sim_time_ns,
+            "knob": record.knob,
+            "commanded": record.commanded,
+            "applied": record.applied,
+            "sent": record.sent,
         }
     if isinstance(record, End):
         return {

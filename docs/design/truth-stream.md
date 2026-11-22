@@ -49,6 +49,7 @@ world frame moved by `map_origin`) as `[x, y, z, roll, pitch, yaw]`, metres and 
 | `frame` | each SSv2 step | `frame`, `sim_time`, `sim_time_ns` (the time SSv2 is told: the world server's, else the bridge's), `sim_frame`, `wall_ns` (the bridge's monotonic clock when the world's state arrived, ns since the episode began; the paced clock's lag, `time-and-ticking.md`), `npc_logic_started` (SSv2's, in the entity status that staged the frame: the frames before the first true one are S, the frames before `startNpcLogic`, which a batch replay takes as `start_frames`; `scensim.truth.start_frames`), `entities {name: state}` |
 | `contact` | each contact | `frame`, `sim_frame`, `sim_time`, `ego_id`, `subject`, `other_id`, `name`, `other_type`, `other_kind`, `impulse` |
 | `signal` | each change | `frame`, `sim_time_ns`, `opendrive_id`, `colour` (`off`, `red`, `amber`, `green`: what the bridge set) |
+| `knob` | each frame, per knob profile | `frame`, `sim_time_ns`, `knob`, `commanded` (the profile's value), `applied` (the world's last read-back; null before the first), `sent` (the bridge sent it this frame); a `time` profile runs on SSv2's scenario time (roadmap 092 K9) |
 | `end` | last line | `frame`, `sim_time`, `frames`, `dropped_frames`, `complete` |
 
 An entity's state in a frame: `ssv2` (SSv2's pose), `sim_pose` (the simulator's pose: the

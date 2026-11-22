@@ -29,7 +29,7 @@ centroid `x`, `y`, and for each of the file's lanes that enters it once, `from_<
 A lane resolves to its `length` (m: the sum of its lanelets' SSv2 splines, world_lanelet's
 Catmull-Rom, so an s here is an s in a LanePosition), `speed_limit` (m/s, the lowest of its
 lanelets'), `start_x`, `start_y`, `end_x`, `end_y`, its lanelets with their s ranges, and
-`heading` (rad, the map frame) at `heading_s`: every `HEADING_STEP` m within each lanelet, and
+`heading` (rad, the map frame) and the centreline's `x` and `y` at `heading_s`: every `HEADING_STEP` m within each lanelet, and
 each lanelet's start and end, so a join between two lanelets is listed twice (the end of the
 one before, then the start of the one after: their splines meet at an angle, and no interval
 straddles it), and likewise each boundary between the curves of a lanelet's spline (SSv2's
@@ -182,10 +182,14 @@ def resolve_lane(world, name, spec):
     first, last = world.spline(ids[0]), world.spline(ids[-1])
     x0, y0, _ = first.point(0.0)
     x1, y1, _ = last.point(last.length)
+    # the centreline at the same s (092 K9's knob profiles along a lane: the ego is placed on
+    # the lane by projecting it onto this polyline)
+    xy = [_lane_point(world, {"lanelets": spans}, q) for q in ss]
     return {"kind": "lane", "lanelets": spans, "length": length,
             "speed_limit": min(float(world.lanelets[i]["speed_limit"]) for i in ids),
             "start_x": x0, "start_y": y0, "end_x": x1, "end_y": y1,
-            "heading_s": ss, "heading": heading, "heading_max_error": err}
+            "heading_s": ss, "heading": heading, "heading_max_error": err,
+            "x": [p[0] for p in xy], "y": [p[1] for p in xy]}
 
 
 def _lane_point(world, lane, s):

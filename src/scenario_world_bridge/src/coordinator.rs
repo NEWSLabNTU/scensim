@@ -287,6 +287,11 @@ impl Coordinator {
     }
 
     /// `~/load_map`: the map's world now (the caller checked no scenario is running).
+    /// `~/set_knob_profiles` (roadmap 092 K9): the run's knob profiles, replacing the last.
+    pub fn set_knob_profiles(&mut self, json: &str) -> Result<String, BackendError> {
+        self.backend.set_knob_profiles(json)
+    }
+
     pub fn load_map(&mut self, lanelet2_map_path: &str) -> Result<String, BackendError> {
         self.backend.load_map(lanelet2_map_path)
     }

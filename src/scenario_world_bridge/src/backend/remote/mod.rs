@@ -51,7 +51,7 @@ use crate::config::{BridgeConfig, NpcMotion};
 use crate::contact_report::{self, ContactReport, RawCollision, ReportContact};
 use crate::coordinate_conversion::quaternion_to_euler;
 use crate::entity_manager::EntityType;
-use crate::environment::{PrecipitationType, ScenarioWeather};
+use crate::environment::{Precipitation, PrecipitationType, ScenarioWeather, Sun, Wind};
 use crate::gap_trace::{self, GapTrace};
 use crate::map_resolver::{load_map_origin, map_dir_of};
 use crate::npc_tracking::{self, TrackingStats};
@@ -62,6 +62,7 @@ use crate::proto::traffic_simulator_msgs::{ActionStatus, BoundingBox};
 use crate::weather::{wire_form, WeatherReply, WeatherRequest};
 use scensim_core::world_client::{self, CallError, Client};
 
+pub(crate) mod profiles;
 mod signals;
 pub(crate) mod spec_check;
 mod tracking;
@@ -721,6 +722,8 @@ pub struct RemoteBackend {
     /// The stack's state directory (`state_dir`, roadmap 076 A9): a map's signal table is
     /// read from `<state_dir>/<map dir name>/` before the map directory.
     state_dir: Option<PathBuf>,
+    /// The run's knob profiles (roadmap 092 K9), applied each frame.
+    profiles: Vec<profiles::Active>,
     /// The drives the last `Apply` carried, by handle, for the tests.
     #[cfg(test)]
     sent: BTreeMap<u32, wire::EntityPose>,
@@ -764,6 +767,7 @@ impl RemoteBackend {
             agent_link: None,
             catalog_hashes: None,
             state_dir: None,
+            profiles: Vec::new(),
             #[cfg(test)]
             sent: BTreeMap::new(),
         }
@@ -783,6 +787,61 @@ impl RemoteBackend {
     /// Publish the truth stream on `truth`'s topics (roadmap 092 K4).
     pub fn set_truth(&mut self, truth: crate::truth_topic::TruthTopic) {
         self.truth = Some(truth);
+    }
+
+    /// This frame's knob profiles (roadmap 092 K9): each profile's commanded value, one
+    /// `SetEnvironment` with the fields that moved by their step since their last send, its
+    /// read-back stored, and a gap-trace `knob` line per profile.
+    fn apply_profiles(&mut self, sim_time_ns: i64, scenario_time: f64) -> Result<(), BackendError> {
+        if self.profiles.is_empty() {
+            return Ok(());
+        }
+        let ego = self
+            .entities
+            .values()
+            .find(|e| e.entity_type == EntityType::Ego)
+            .and_then(|e| e.pose.position.as_ref().map(|p| [p.x, p.y]));
+        // a `time` profile runs on SSv2's scenario time (UpdateFrame's), not the world's
+        // clock, which carries the 1000 s base
+        let sim_time = scenario_time;
+        let mut weather = ScenarioWeather::default();
+        let mut sent = Vec::with_capacity(self.profiles.len());
+        let mut commanded = Vec::with_capacity(self.profiles.len());
+        for a in &mut self.profiles {
+            let (v, send) = a.commanded(sim_time, ego);
+            if send {
+                a.profile.field.write(v, &mut weather);
+            }
+            sent.push(send);
+            commanded.push(v);
+        }
+        if sent.iter().any(|s| *s) {
+            let reply = self.call(
+                "SetEnvironment",
+                wire::request::Request::SetEnvironment(wire::SetEnvironment {
+                    weather: Some(wire_weather(&weather)),
+                    time_of_day: None,
+                }),
+                self.request_timeout,
+            )?;
+            let applied = match reply.reply {
+                Some(wire::reply::Reply::Environment(e)) => e.applied.as_ref().map(core_weather),
+                _ => None,
+            };
+            for ((a, v), s) in self.profiles.iter_mut().zip(&commanded).zip(&sent) {
+                if *s {
+                    a.mark_sent(*v, scenario_time);
+                    a.applied = applied.as_ref().and_then(|w| a.profile.field.read(w));
+                }
+            }
+        }
+        if self.gap_trace.recording() {
+            for ((a, v), s) in self.profiles.iter().zip(&commanded).zip(&sent) {
+                self.gap_trace
+                    .knob(self.frame, sim_time_ns, &a.profile.knob, *v, a.applied, *s);
+            }
+        }
+        Ok(())
     }
 
     /// Whether each step's reply must carry every body's state: for the truth file or topic.
@@ -1412,6 +1471,32 @@ fn wire_weather(w: &ScenarioWeather) -> wire::ScenarioWeather {
     }
 }
 
+/// `wire_weather` backwards: a world server's read-back in the bridge's terms.
+fn core_weather(w: &wire::ScenarioWeather) -> ScenarioWeather {
+    use wire::scenario_weather::PrecipitationType as P;
+    ScenarioWeather {
+        cloud_cover_oktas: w.cloud_cover.map(|c| c.oktas.min(9) as u8),
+        sun: w.sun.map(|s| Sun {
+            azimuth: s.azimuth,
+            elevation: s.elevation,
+            illuminance: s.illuminance,
+        }),
+        fog_visual_range: w.fog.map(|f| f.visual_range),
+        precipitation: w.precipitation.map(|p| Precipitation {
+            kind: match P::try_from(p.r#type).unwrap_or(P::Dry) {
+                P::Dry => PrecipitationType::Dry,
+                P::Rain => PrecipitationType::Rain,
+                P::Snow => PrecipitationType::Snow,
+            },
+            intensity: p.intensity,
+        }),
+        wind: w.wind.map(|x| Wind {
+            direction: x.direction,
+            speed: x.speed,
+        }),
+    }
+}
+
 fn unsupported(what: &str, needs: wire::Capability, sim: &str) -> BackendError {
     BackendError::Unsupported(format!(
         "{what}: the {sim} world server does not offer {}",
@@ -1560,6 +1645,38 @@ impl RemoteBackend {
 }
 
 impl BridgeBackend for RemoteBackend {
+    fn set_knob_profiles(&mut self, json: &str) -> Result<String, BackendError> {
+        let parsed = profiles::parse(json).map_err(BackendError::Failed)?;
+        if !parsed.is_empty() && !self.offers(wire::Capability::EnvironmentApplied) {
+            return Err(unsupported(
+                "Knob profiles",
+                wire::Capability::EnvironmentApplied,
+                self.sim(),
+            ));
+        }
+        let names: Vec<String> = parsed
+            .iter()
+            .map(|p| {
+                format!(
+                    "{} ({:?}, {} breakpoint(s))",
+                    p.knob,
+                    p.field,
+                    p.points.len()
+                )
+            })
+            .collect();
+        tracing::info!(
+            "Knob profiles: {}",
+            if names.is_empty() {
+                "none".into()
+            } else {
+                names.join(", ")
+            }
+        );
+        self.profiles = parsed.into_iter().map(profiles::Active::new).collect();
+        Ok(format!("{} knob profile(s)", self.profiles.len()))
+    }
+
     fn load_map(&mut self, lanelet2_map_path: &str) -> Result<String, BackendError> {
         tracing::info!(
             "Loading the world of map {lanelet2_map_path} on {} between scenarios (load_map)",
@@ -1699,8 +1816,7 @@ impl SimBackend for RemoteBackend {
         type Measured = Option<([f64; 3], [f64; 3])>;
         // And the command an ego ran, where the server reports it (092 K2.4).
         type Taken = Option<gap_trace::TakenCommand>;
-        let mut trace_states: BTreeMap<u32, (gap_trace::Pose6, Measured, Taken)> =
-            BTreeMap::new();
+        let mut trace_states: BTreeMap<u32, (gap_trace::Pose6, Measured, Taken)> = BTreeMap::new();
         for state in &step.states {
             let Some(pose) = state.pose.as_ref() else {
                 continue;
@@ -1787,11 +1903,13 @@ impl SimBackend for RemoteBackend {
                 t.publish_frame(msg);
             }
         }
-        Ok(if step.sim_time_ns != 0 {
+        let sim_time_ns = if step.sim_time_ns != 0 {
             step.sim_time_ns
         } else {
             (self.sim_time * 1e9).round() as i64
-        })
+        };
+        self.apply_profiles(sim_time_ns, current_simulation_time)?;
+        Ok(sim_time_ns)
     }
 
     fn update_step_time(&mut self, step_time: f64) -> Result<(), BackendError> {

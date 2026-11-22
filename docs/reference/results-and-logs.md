@@ -132,6 +132,7 @@ class a report can count (`scensim runs coverage` lists the error runs by kind).
 | `knob_refused`, `knob_mismatch` | a bound knob the world cannot honour, or whose read-back differs |
 | `attachment` | a required attachment failed |
 | `clock_lag` | a paced run fell behind wall time by more than its budget |
+| `knob_profile` | a knob profile the world did not follow within its tolerance, or whose read-back the gap trace lacks |
 
 `clock` is the run's clock ([`clock:`](project-file.md#the-clock)): its `mode`, the frames
 measured, and their lag behind wall time in seconds, `lag_s: {max, p50, p99, final}`, with

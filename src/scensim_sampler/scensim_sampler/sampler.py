@@ -199,8 +199,21 @@ class Sampler:
             # a lane position the draw put off its lane (092 K9b): a rejection, named
             return ({k: env[k] for k in itertools.chain(values, derived)}, derived, {}, 0.0,
                     [_lane_why(str(e))])
-        # the parameters bound to the world's anchors (scensim.anchor.<parameter>, 092 K9b)
         sc = self.scenario
+        # a knob profile's breakpoints from this draw's values must increase (092 K9)
+        if sc.knob_profiles:
+            from . import profiles as P
+            vals = {k: v for k, (_t, v) in sc.parameters.items()}
+            vals.update({k: env[k] for k in env if k in sc.parameters})
+            for knob, (_c, _l, points) in sc.knob_profiles.items():
+                try:
+                    P.evaluate(points, vals, f"scensim.knob.{knob}")
+                except P.ProfileError as e:
+                    if "do not increase" not in str(e):
+                        raise SpecError(str(e)) from None
+                    return ({k: env[k] for k in itertools.chain(values, derived)}, derived, {},
+                            0.0, [f"knob profile {knob}: breakpoints out of order"])
+        # the parameters bound to the world's anchors (scensim.anchor.<parameter>, 092 K9b)
         if sc.anchor_bindings:
             vals = {k: v for k, (_t, v) in sc.parameters.items()}
             vals.update({k: env[k] for k in env if k in sc.parameters})

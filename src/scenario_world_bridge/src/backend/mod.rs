@@ -15,6 +15,9 @@ pub trait BridgeBackend: SimBackend {
     /// between scenarios, as an `Initialize` would, so the vehicle stacks started next find
     /// it; what was loaded, for the reply.
     fn load_map(&mut self, lanelet2_map_path: &str) -> Result<String, BackendError>;
+    /// `~/set_knob_profiles` (roadmap 092 K9): the run's knob profiles, JSON
+    /// (`remote::profiles`), replacing the last run's; what was set, for the reply.
+    fn set_knob_profiles(&mut self, json: &str) -> Result<String, BackendError>;
 }
 
 /// The fake loads a map as it initializes, at the default step.
@@ -27,5 +30,9 @@ impl BridgeBackend for fake::FakeBackend {
             lanelet2_map_path: lanelet2_map_path.to_string(),
         })?;
         Ok(format!("loaded {lanelet2_map_path}"))
+    }
+    fn set_knob_profiles(&mut self, json: &str) -> Result<String, BackendError> {
+        let p = remote::profiles::parse(json).map_err(BackendError::Failed)?;
+        Ok(format!("{} knob profile(s)", p.len()))
     }
 }

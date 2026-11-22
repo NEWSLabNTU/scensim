@@ -129,13 +129,28 @@ class Scenario:
         self.entities = [o.get("name") for o in root.findall("Entities/ScenarioObject")
                          if o.get("name")]
         self.knobs = {}
+        # a knob whose value changes over the run (092 K9): {knob: (coordinate, lane, points)}
+        self.knob_profiles = {}
+        from . import profiles as P
         for k, v in self.properties.items():
             if not k or not k.startswith(KNOB):
                 continue
             knob, v = k[len(KNOB):], (v or "").strip()
+            if knob and P.is_profile(v):
+                try:
+                    prof = P.parse(v, f"{path}: FileHeader {k}")
+                except P.ProfileError as e:
+                    raise SpecError(str(e)) from None
+                bad = [p for p in P.parameters(prof[2]) if p not in self.parameters]
+                if bad:
+                    raise SpecError(f"{path}: FileHeader {k}: ${bad[0]} is not a declared "
+                                    "parameter")
+                self.knob_profiles[knob] = prof
+                continue
             if not knob or not v.startswith("$") or v[1:] not in self.parameters:
                 raise SpecError(f"{path}: FileHeader {k} = {v!r}: a knob is bound to a declared "
-                                "parameter, as $<name> (scenario-description.md section 3)")
+                                "parameter, as $<name>, or to a profile, `time: <x> <value>; "
+                                "...` or `s(<lane>): ...` (scenario-description.md section 3)")
             self.knobs[knob] = v[1:]
         # scensim.anchor.<parameter> = <anchor>.<attribute>[(<arg>)] (092 K9b): that parameter
         # takes the world's anchor value before SSv2 starts

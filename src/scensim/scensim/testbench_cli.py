@@ -326,6 +326,8 @@ def check(target=None, live=False, logs=None, out=None) -> int:
     settings = config.project_settings(d)
     for n in projectmod.not_applied_notes(d, settings):
         out.write(f"note: {n}\n")
+    for n in projectmod.profile_lag_notes(d, settings):
+        out.write(f"warning: {n}\n")
     for n in projectmod.autoware_side_notes(settings):
         out.write(f"note (this host): {n}\n")
     if not pkg and not here:

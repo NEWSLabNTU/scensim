@@ -8,6 +8,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetWeather.srv"
   "srv/GetWeather.srv"
   "srv/LoadMap.srv"
+  "srv/SetKnobProfiles.srv"
   "msg/TruthEntity.msg"
   "msg/TruthEntities.msg"
   "msg/TruthContact.msg"

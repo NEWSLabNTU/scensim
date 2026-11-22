@@ -3,6 +3,7 @@
 //!   /scenario_world_bridge/set_weather  scensim_interfaces/srv/SetWeather
 //!   /scenario_world_bridge/get_weather  scensim_interfaces/srv/GetWeather
 //!   /scenario_world_bridge/load_map     scensim_interfaces/srv/LoadMap (roadmap 077)
+//!   /scenario_world_bridge/set_knob_profiles  scensim_interfaces/srv/SetKnobProfiles (092 K9)
 //!
 //! and, with `truth_topic:=true`, the truth stream's publishers (roadmap 092 K4,
 //! [`crate::truth_topic`]), which the world-owning thread publishes on.
@@ -32,6 +33,9 @@ use futures::channel::oneshot;
 use rclrs::{CreateBasicExecutor, IntoPrimitiveOptions};
 use scensim_interfaces::srv::get_weather::{GetWeather_Request, GetWeather_Response};
 use scensim_interfaces::srv::load_map::{LoadMap_Request, LoadMap_Response};
+use scensim_interfaces::srv::set_knob_profiles::{
+    SetKnobProfiles_Request, SetKnobProfiles_Response,
+};
 use scensim_interfaces::srv::set_weather::{SetWeather_Request, SetWeather_Response};
 
 use scensim_interfaces::msg::{TruthEntities, TruthFrame};
@@ -42,6 +46,7 @@ use crate::weather::{self, WeatherRequest};
 pub const SET_WEATHER: &str = "~/set_weather";
 pub const GET_WEATHER: &str = "~/get_weather";
 pub const LOAD_MAP: &str = "~/load_map";
+pub const SET_KNOB_PROFILES: &str = "~/set_knob_profiles";
 
 /// The Lanelet2 file a map directory holds, as SSv2 names it.
 pub const LANELET2_FILE: &str = "lanelet2_map.osm";
@@ -52,6 +57,8 @@ pub enum WorldCommand {
     GetWeather(oneshot::Sender<WeatherReply>),
     /// A map directory or Lanelet2 file; what was loaded, or why not.
     LoadMap(String, oneshot::Sender<Result<String, String>>),
+    /// The run's knob profiles, JSON (092 K9); what was set, or why not.
+    SetKnobProfiles(String, oneshot::Sender<Result<String, String>>),
 }
 
 /// The Lanelet2 file of `path`: a map directory's `lanelet2_map.osm`, or the file itself.
@@ -140,6 +147,13 @@ pub fn start(
                         move |req: LoadMap_Request| load_map(tx.clone(), req),
                     )?
                 };
+                let profiles = {
+                    let tx = tx.clone();
+                    node.create_async_service::<scensim_interfaces::srv::SetKnobProfiles, _>(
+                        SET_KNOB_PROFILES,
+                        move |req: SetKnobProfiles_Request| set_knob_profiles(tx.clone(), req),
+                    )?
+                };
                 // The truth topics (roadmap 092 K4): created here, published from the
                 // world-owning thread.
                 let truth = if truth {
@@ -158,7 +172,14 @@ pub fn start(
                 } else {
                     None
                 };
-                Ok((executor, (node, config_param), set, get, load, truth))
+                Ok((
+                    executor,
+                    (node, config_param),
+                    set,
+                    get,
+                    (load, profiles),
+                    truth,
+                ))
             })();
             let (mut executor, _node, _set, _get, _load) = match setup {
                 Ok((executor, node, set, get, load, truth)) => {
@@ -258,6 +279,29 @@ async fn load_map(tx: mpsc::Sender<WorldCommand>, req: LoadMap_Request) -> LoadM
     };
     tracing::info!("{LOAD_MAP} {:?} -> {message}", req.map_path);
     LoadMap_Response { success, message }
+}
+
+async fn set_knob_profiles(
+    tx: mpsc::Sender<WorldCommand>,
+    req: SetKnobProfiles_Request,
+) -> SetKnobProfiles_Response {
+    let (reply_tx, reply_rx) = oneshot::channel();
+    let reply = if tx
+        .send(WorldCommand::SetKnobProfiles(req.profiles, reply_tx))
+        .is_err()
+    {
+        Err("the bridge is shutting down".to_string())
+    } else {
+        reply_rx
+            .await
+            .unwrap_or_else(|_| Err("the bridge dropped the request".into()))
+    };
+    let (success, message) = match reply {
+        Ok(m) => (true, m),
+        Err(m) => (false, m),
+    };
+    tracing::info!("{SET_KNOB_PROFILES} -> {message}");
+    SetKnobProfiles_Response { success, message }
 }
 
 #[cfg(test)]

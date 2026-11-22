@@ -453,6 +453,14 @@ Rules:
   value differs from its record's is an error run, excluded from rates.
 - **Knobs carry physical values** (μ, visibility), so the sampler can apply constraints (CS2).
 - **A knob with `profile: true`** accepts a value along time or route position (CS5).
+- *Built, K9 (roadmap 092):* knob profiles. A profile knob declares a range and the one
+  environment field it sets; a scenario binds it to breakpoints along `time` or a resolved lane
+  (`s(<lane>)`), each a number or a `$parameter`. The bridge evaluates it each frame and sends
+  the world a `SetEnvironment` when it has moved by its step or crossed a breakpoint; the world
+  servers answer with what they show (`ENVIRONMENT_APPLIED`), and the gap trace's `knob` lines
+  keep both, so `result.json` judges the world against the profile. CS5's fog is such a profile
+  along its route; the batch refuses it by name. The sampler rejects a draw whose breakpoints
+  do not increase.
 - **The world's map and the pilot's maps are separate entries** (CS3).
 - **`testbench check` refuses** a scenario that names an anchor or knob the world lacks, or a
   value outside the knob's declared values. The refusal names the scenario, the parameter and

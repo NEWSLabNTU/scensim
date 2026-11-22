@@ -632,6 +632,84 @@ fn the_weather_and_time_of_day_go_to_a_server_offering_them() {
     assert_eq!(seen.lock().unwrap().len(), n);
 }
 
+const APPLIED_LIKE: &[wire::Capability] = &[
+    wire::Capability::TrackedMotion,
+    wire::Capability::Environment,
+    wire::Capability::EnvironmentApplied,
+];
+
+#[test]
+fn knob_profiles_are_sent_when_they_move_and_read_back() {
+    // a server that shows fog to the nearest 10 m and answers with it (ENVIRONMENT_APPLIED)
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = seen.clone();
+    let mut inner = honest_with(APPLIED_LIKE, "applied");
+    let mut b = backend(&server(Box::new(move |req| {
+        if let Some(wire::request::Request::SetEnvironment(e)) = &req.request {
+            let v = e.weather.as_ref().and_then(|w| w.fog).unwrap().visual_range;
+            log.lock().unwrap().push(v);
+            let shown = (v / 10.0).round() * 10.0;
+            return Some(ok(Some(wire::reply::Reply::Environment(
+                wire::EnvironmentReply {
+                    applied: Some(wire::ScenarioWeather {
+                        fog: Some(wire::scenario_weather::Fog {
+                            visual_range: shown,
+                        }),
+                        ..Default::default()
+                    }),
+                },
+            ))));
+        }
+        // the world's clock carries the 1000 s base, as the real servers' does: a time profile
+        // runs on SSv2's scenario time, not on it
+        let mut reply = inner(req)?;
+        if let Some(wire::reply::Reply::Step(st)) = reply.reply.as_mut() {
+            st.sim_time += 1000.0;
+        }
+        Some(reply)
+    })));
+    b.initialize(&episode()).unwrap();
+    let json = r#"{"profiles": [{"knob": "visibility", "field": "fog_visual_range",
+        "step": 50, "coordinate": "time", "points": [[0, 1000], [1, 1000], [2, 500]]}]}"#;
+    assert_eq!(b.set_knob_profiles(json).unwrap(), "1 knob profile(s)");
+    for k in 1..=60 {
+        b.update_frame(f64::from(k) * 0.05).unwrap();
+    }
+    let sent = seen.lock().unwrap().clone();
+    // the first frame, then every >= 50 m of the ramp (25 m a frame), and the ramp's end (a
+    // breakpoint crossed) though within a step of the last send
+    assert_eq!(sent[0], 1000.0);
+    assert!(
+        sent[..sent.len() - 1]
+            .windows(2)
+            .all(|w| (w[0] - w[1]).abs() >= 50.0 - 1e-9),
+        "{sent:?}"
+    );
+    assert!(sent.len() > 5, "the profile moved: {sent:?}");
+    assert!((sent.last().unwrap() - 500.0).abs() < 1e-6);
+    assert_eq!(b.profiles[0].applied, Some(500.0));
+    // replaced by the next run's: an empty list sends nothing more
+    b.set_knob_profiles(r#"{"profiles": []}"#).unwrap();
+    let n = seen.lock().unwrap().len();
+    b.update_frame(3.05).unwrap();
+    assert_eq!(seen.lock().unwrap().len(), n);
+}
+
+#[test]
+fn knob_profiles_need_a_server_that_reads_back() {
+    let mut b = backend(&server(honest()));
+    b.initialize(&episode()).unwrap();
+    let e = b
+        .set_knob_profiles(
+            r#"{"profiles": [{"knob": "v", "field": "fog_visual_range", "step": 1,
+                "coordinate": "time", "points": [[0, 1]]}]}"#,
+        )
+        .unwrap_err();
+    assert!(e.to_string().contains("ENVIRONMENT_APPLIED"), "{e}");
+    // none at all is accepted from any server
+    assert!(b.set_knob_profiles(r#"{"profiles": []}"#).is_ok());
+}
+
 #[test]
 fn nothing_is_sent_when_a_part_is_not_offered() {
     use crate::environment::TimeOfDay;
