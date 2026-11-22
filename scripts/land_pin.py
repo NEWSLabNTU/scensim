@@ -153,10 +153,13 @@ def on_remote(checkout, sha, branch, explicit):
         git("tag", "--contains", sha, cwd=checkout, check=False))
 
 
-def unpushed(rev):
+def unpushed(rev, pending=()):
     """Every commit `rev` pins here (src/<c>) and every deps/ gitlink of those commits that is
     not on its remote's tracked branch (`git branch -r --contains`): ["<path> <sha>: ..."]. The
-    gate may test a commit fetched from a local checkout (sync_deps); a push must not name one."""
+    gate may test a commit fetched from a local checkout (sync_deps); a push must not name one.
+    `pending`: the commits land_pin itself is about to push (the cascade's), passed over, so the
+    check can run before any push. For a third-party pin it proves only that the commit exists
+    upstream; that it is a release or a commit chosen on purpose stays a review matter."""
     out = []
     for line in git("ls-tree", "-r", rev, "src", cwd=ROOT).splitlines():
         mode, kind, sha, path = line.split(None, 3)
@@ -164,7 +167,7 @@ def unpushed(rev):
             continue
         c = ROOT / path
         branch, named = tracked_branch(ROOT, rev, path)
-        if not on_remote(c, sha, branch, named):
+        if sha not in pending and not on_remote(c, sha, branch, named):
             out.append(f"{path} {sha[:12]}: not on its remote "
                        f"({'origin/' + branch if named or ours(c) else 'no branch or tag'})")
             continue
@@ -174,6 +177,8 @@ def unpushed(rev):
                 continue
             dep = c / dpath
             dbranch, dnamed = tracked_branch(c, sha, dpath)
+            if dsha in pending:
+                continue
             if not (dep / ".git").exists() or not on_remote(dep, dsha, dbranch, dnamed):
                 out.append(f"{path}/{dpath} {dsha[:12]}: not on its remote "
                            f"(origin/{dbranch})")
@@ -446,6 +451,13 @@ def main(argv):
             f"{k}: built {short(built[k])}, now {short(now[k])}" for k in built if now[k] != built[k]),
             file=sys.stderr)
         return 1
+    # before any push: every pin is on its remote but the cascade's own commits, so a refusal
+    # leaves no component's main moved (133); the final check below sees them pushed
+    missing = unpushed(built["."], pending={built[c] for c in new})
+    if missing:
+        print("pinned commits not on their remote's tracked branch: nothing pushed\n  "
+              + "\n  ".join(missing), file=sys.stderr)
+        return 4
     for c in new:  # dependency order: a component's deps are on their remotes before it is
         r = subprocess.run(["git", "-C", str(src / c), "push", "-q", "origin", f"{built[c]}:main"])
         if r.returncode:
