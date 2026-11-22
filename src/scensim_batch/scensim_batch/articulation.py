@@ -575,6 +575,8 @@ class ArticulationBackend:
         self._sus, self._steer, self._spin = (ix(q, self.home) for q in
                                               (self.sus_ids, self.steer_ids, self.spin_ids))
         self._spin_asset = ix(self.spin_ids, self.device)
+        self._steer_asset = ix(self.steer_ids, self.device)
+        self._pos_template = None      # the bypassed path's position targets: the suspension's
         self.act = None
         self.joint_targets = None
         self.prev_vb = None
@@ -599,14 +601,19 @@ class ArticulationBackend:
         vel = torch.stack([v * torch.cos(h), v * torch.sin(h), zeros, zeros, zeros, zeros], -1)
         env_ids = ids.to(self.device)
         a = self.asset
-        a.write_root_pose_to_sim_index(root_pose=self._dev(pose), env_ids=env_ids)
-        a.write_root_velocity_to_sim_index(root_velocity=self._dev(vel), env_ids=env_ids)
         nj = a.num_joints
         jpos = torch.zeros(len(ids), nj, device=self.home)
         jvel = torch.zeros(len(ids), nj, device=self.home)
         jvel[:, self.spin_ids] = (v / self.model.r)[:, None].float()   # the wheels rolling
-        a.write_joint_position_to_sim_index(position=self._dev(jpos), env_ids=env_ids)
-        a.write_joint_velocity_to_sim_index(velocity=self._dev(jvel), env_ids=env_ids)
+        # one copy to the asset's device, each part cast to float32 where it was made, as
+        # _dev did part by part (094 P3: four copies were a quarter of the reset)
+        both = torch.cat([pose.to(torch.float32), vel.to(torch.float32), jpos, jvel], -1)
+        both = both.to(self.device)
+        pose32, vel32, jpos32, jvel32 = torch.split(both, [7, 6, nj, nj], -1)
+        a.write_root_pose_to_sim_index(root_pose=pose32, env_ids=env_ids)
+        a.write_root_velocity_to_sim_index(root_velocity=vel32, env_ids=env_ids)
+        a.write_joint_position_to_sim_index(position=jpos32, env_ids=env_ids)
+        a.write_joint_velocity_to_sim_index(velocity=jvel32, env_ids=env_ids)
         self.model.reset(mask)
         if self.prev_vb is not None:     # a reset slot starts with no acceleration
             self.prev_vb[ids] = torch.stack([v, zeros], -1)
@@ -625,27 +632,48 @@ class ArticulationBackend:
     def actuate(self, dt):
         a, m = self.asset, self.model
         nj = a.num_joints
+        if self.joint_targets is not None:
+            self._actuate_joints(*self.joint_targets)
+            return
         pos_t = torch.zeros(self.n, nj, dtype=torch.float64, device=self.home)
         pos_t[:, self._sus] = m.suspension_targets()
-        if self.joint_targets is not None:
-            steer, spin = (torch.as_tensor(t, dtype=torch.float64).to(self.home)
-                           for t in self.joint_targets)
-        else:
-            steer = m.steer_targets(self.act["tire_angle"])
-            omega = a.data.joint_vel.torch.detach().to(self.home)[:, self._spin].double()
-            q = a.data.joint_pos.torch.detach().to(self.home)[:, self._sus].double()
-            st = self.state()
-            # each hub's speed along the car's x: v - yaw_rate y (the steer's cosine ignored:
-            # a steered wheel reads as sliding sooner, which only brakes it on its own inertia)
-            hub = st["v"][:, None] - st["yaw_rate"][:, None] * m.hub_y
-            spin = m.spin_efforts(self.act["drive"], self.act["brake"], omega, dt,
-                                  grip=m.grip(q, omega, hub))
+        steer = m.steer_targets(self.act["tire_angle"])
+        omega = a.data.joint_vel.torch.detach().to(self.home)[:, self._spin].double()
+        q = a.data.joint_pos.torch.detach().to(self.home)[:, self._sus].double()
+        st = self.state()
+        # each hub's speed along the car's x: v - yaw_rate y (the steer's cosine ignored:
+        # a steered wheel reads as sliding sooner, which only brakes it on its own inertia)
+        hub = st["v"][:, None] - st["yaw_rate"][:, None] * m.hub_y
+        spin = m.spin_efforts(self.act["drive"], self.act["brake"], omega, dt,
+                              grip=m.grip(q, omega, hub))
         pos_t[:, self._steer] = steer
         a.set_joint_position_target_index(target=self._dev(pos_t))
         if m.spin_type in ("velocity", "dc_motor"):     # a velocity target (rad/s)
             a.set_joint_velocity_target_index(target=self._dev(spin), joint_ids=self._spin_asset)
         else:
             a.set_joint_effort_target_index(target=self._dev(spin), joint_ids=self._spin_asset)
+        if not self.host_writes:
+            a.write_data_to_sim()
+
+    def _actuate_joints(self, steer, spin):
+        """The bypassed path (apply_joints): the targets made in float32 on the asset's device,
+        from where they are, the suspension's from a template made once. Each value is the
+        float32 cast of the same float64 one as before (094 P3: the targets went to the host
+        and back each substep, for a cast that rounds alike on either device)."""
+        a, m = self.asset, self.model
+        if self._pos_template is None:
+            pos = torch.zeros(self.n, a.num_joints, dtype=torch.float64, device=self.home)
+            pos[:, self._sus] = m.suspension_targets()
+            self._pos_template = pos.to(torch.float32).to(self.device)
+        f32 = lambda t: torch.as_tensor(t, dtype=torch.float64).to(  # noqa: E731
+            self.device).to(torch.float32)
+        pos_t = self._pos_template.clone()
+        pos_t[:, self._steer_asset] = f32(steer)
+        a.set_joint_position_target_index(target=pos_t)
+        if m.spin_type in ("velocity", "dc_motor"):     # a velocity target (rad/s)
+            a.set_joint_velocity_target_index(target=f32(spin), joint_ids=self._spin_asset)
+        else:
+            a.set_joint_effort_target_index(target=f32(spin), joint_ids=self._spin_asset)
         if not self.host_writes:
             a.write_data_to_sim()
 

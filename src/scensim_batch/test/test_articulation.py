@@ -442,6 +442,26 @@ class BackendTest(unittest.TestCase):
         self.assertEqual(self.a.writes, 1)                   # hosted: the host does
         self.assertIsNotNone(self.a.pos_target)              # the targets are still set
 
+    def test_the_bypassed_targets_are_the_float32_casts_of_the_same_values(self):
+        """094 P3's optimised path: made on the asset's device from a template, each target the
+        float32 cast of the float64 one the old path cast on the host."""
+        steer = torch.tensor([[0.1, 0.1], [0.2, 0.2], [-0.3, -0.3]], dtype=torch.float64) / 3
+        spin = torch.tensor([[0, 0, 7.0, 7.0]] * 3, dtype=torch.float64) / 3
+        self.b.apply_joints(steer, spin)
+        self.b.actuate(DT)
+        tgt = self.a.pos_target
+        self.assertEqual(tgt.dtype, torch.float32)
+        ids = self.b.ids
+        for k, c in enumerate(("front_left", "front_right")):
+            self.assertTrue(torch.equal(tgt[:, ids[f"{c}_steer"]], steer[:, k].float()))
+        want = self.doc["joints"]["rear_left_suspension"]["drive"]["target"]
+        self.assertEqual(tgt[0, ids["rear_left_suspension"]].item(),
+                         torch.tensor(want, dtype=torch.float64).float().item())
+        got = self.a.vel_target[0] if self.a.vel_target is not None else self.a.effort[0]
+        self.assertTrue(torch.equal(got, spin.float()))
+        self.b.actuate(DT)                                   # the template is reused, not mutated
+        self.assertTrue(torch.equal(self.a.pos_target, tgt))
+
     def test_actuate_writes_the_joints_by_name(self):
         n = 3
         act = {"drive": torch.tensor([[0, 0, 400.0, 400.0]] * n),
