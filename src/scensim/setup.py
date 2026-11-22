@@ -5,9 +5,10 @@ package_name = 'scensim'
 setup(
     name=package_name,
     version='0.1.0',
-    packages=[package_name],
+    packages=[package_name, package_name + '.behaviour'],
     # `project new`'s starters, read from beside scensim/project.py
-    package_data={package_name: ['templates/*/*', 'templates/*/*/*', 'autoware_env.bash', 'overlay_env.bash']},
+    package_data={package_name: ['templates/*/*', 'templates/*/*/*', 'autoware_env.bash', 'overlay_env.bash'],
+                  package_name + '.behaviour': ['sets/*.yaml']},
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),

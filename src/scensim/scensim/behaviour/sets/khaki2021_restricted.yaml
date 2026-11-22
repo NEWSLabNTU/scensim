@@ -1,0 +1,46 @@
+# A pedestrian gap-acceptance parameter set for scensim.behaviour:gap_acceptance_walker
+# (roadmap 092 K10). Copied from the source below; change nothing here: a new source is a new
+# set. A run's record names the set and this file's sha256.
+name: khaki2021_restricted
+form: binary_logit            # P(accept a presented gap) = 1 / (1 + exp(-U)), U linear below
+source:
+  authors: [Ali Mansour Khaki, Amin Mohammadnazar]
+  title: A probabilistic model for pedestrian gap acceptance behavior at uncontrolled midblock crosswalks
+  id: arXiv:2101.10903
+  year: 2021
+  licence: CC0-1.0
+  where: Table 3 (restricted model) and equations (2) and (3)
+  data: >-
+    one uncontrolled midblock crosswalk in Tehran, three lanes, 11 m, 90 min of video on a
+    weekday (16:30-18:00); 277 pedestrians, 1359 gap events (760 accepted, 599 rejected);
+    model fitted in SAS 9.4, verified on a held-out quarter (92.35 % correct)
+cross_check:
+  source: >-
+    Theofilatos, Ziakopoulos, Oviedo-Trespalacios and Timmis (2021), To cross or not to cross?
+    Review and meta-analysis of pedestrian gap acceptance decisions at midblock street
+    crossings, doi:10.1016/j.jth.2021.101108 (14 binary-logit studies)
+  gap_odds_ratio_per_s: 7.22     # from its abstract; beta = ln 7.22 = 1.977, against GAP's 2.021
+coefficients:                    # Table 3, restricted model (coefficient, standard error)
+  intercept: {beta: -14.153, se: 1.273}
+  PS:    {beta: 1.817, se: 0.472}    # pedestrian speed, m/s
+  GR:    {beta: -0.604, se: 0.259}   # in a group: 0 alone, 1 group
+  TIME:  {beta: -0.089, se: 0.015}   # waiting time before crossing, s
+  ROLL:  {beta: 0.797, se: 0.368}    # uses rolling gaps: 0 no, 1 yes
+  GAP:   {beta: 2.021, se: 0.152}    # temporal gap, s
+  LAG:   {beta: 1.158, se: 0.293}    # the gap is a lag (the first vehicle's): 0 no, 1 yes
+  YIELD: {beta: 1.854, se: 0.341}    # the driver yields: 0 no, 1 yes
+  LANE:  {beta: 1.593, se: 0.208}    # the conflict's lane: 1 near, 2 far, 3 farther
+  RATE:  {beta: 4.846, se: 0.868}    # conflict flow rate, veh/s/ln (the paper's equation 1)
+ranges:                          # Table 2: the sample's minimum, maximum and mean
+  PS:   {min: 0.84, max: 2.90, mean: 1.37}
+  TIME: {min: 0.0, max: 56.0, mean: 5.29}
+  RATE: {min: 0.077, max: 1.52, mean: 0.462}
+  GAP:  {min: 0.32, max: 22.0, mean: 3.29}
+caveats:
+  - a preprint from one site; not peer-reviewed
+  - RATE is the conflict flow over the walker's wait; it has no meaning for a single vehicle,
+    so the model's conflict_rate defaults to the sample mean, and a value outside the sample's
+    range is an extrapolation
+  - age, gender, running, vehicle speed and type were not significant in the full model, so a
+    walker's type enters only through its speed (PS)
+  - one decision per presented gap, as fitted; a hesitation or abort is not the paper's
