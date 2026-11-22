@@ -253,6 +253,18 @@ What W10's first runs showed, on W23's stand-ins (p1, p2), and what changed beca
      it: probed at -/+10 % around the best, the cost must rise on both sides by more than the
      search's resolution. A friction that fails is reported as at least its lower bound, with
      the note that M6b did not constrain it.
+8. **Method v1, frozen for p3 (2026-11-22).** p3 is fitted with exactly what is committed. Two
+   known gaps, recorded before its fit:
+   - The drive unit's stage can put the latency 10 ms short (p2: 20 ms, truth 30, with jitter
+     the model does not hold). The refinement holds the latency, so the gap stays.
+   - A biased friction minimum. The probe tells a pinned parameter from a flat cost, not a
+     biased minimum from the true one: p2's rear friction is pinned at 0.92 (truth 1.0), most
+     likely bent by the latency gap through M6b's brake timing. The warning sign is the friction
+     pass's residual, its best cost: above 1.0 (the M6 and M6b quantities on average at their
+     band's edge), a refined friction is reported as suspect. p1 at 1.52 (its rear friction stuck
+     at the stage's value, before the lower-bound start) and p2 at 1.76 are both above.
+   Fixing the latency stage is method v2, tested on a newly sealed p4, so p3 stays a clean test
+   of v1.
 
 The exit (133, 2026-11-20):
 - The fit recovers each deliberate perturbation within a stated tolerance: the tyre per axle,
