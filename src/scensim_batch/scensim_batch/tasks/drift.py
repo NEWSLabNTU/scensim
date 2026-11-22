@@ -260,13 +260,14 @@ class MushrDriftRLEnvCfg(DriftEnvCfg):
         from pathlib import Path
 
         super().__post_init__()
-        project = _project()
         from sim_vehicle_spec import articulation as gen, spec as specmod
-        sp = specmod.load(project / "vehicles" / "mushr_nano.yaml")
+        sp = specmod.load(Path(__file__).resolve().parents[3] / "sim_vehicle_spec" / "vehicles" /
+                          "mushr_nano.yaml")       # the car's one source (sim_vehicle_spec)
         body = Path(tempfile.mkdtemp(prefix="scensim_mushr_")) / "articulation.yaml"
         body.write_text(gen.files(sp, "MushrDriftRLEnvCfg")["articulation.yaml"])
         self.body = str(body)
         self.vehicle = sp.doc
+        self.catalogs = {"vehicles": str(sp.path.parent.parent / "catalogs" / "vehicles.xosc")}
         self.asset_root = os.environ.get("SCENSIM_ASSET_ROOT", "")
         self.world_factory = _oval_world
         self.scene.num_envs = self.num_envs

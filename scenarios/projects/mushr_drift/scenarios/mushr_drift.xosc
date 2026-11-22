@@ -17,18 +17,18 @@
 		<ParameterDeclaration name="start_y" parameterType="double" value="0.0" />
 		<ParameterDeclaration name="start_h" parameterType="double" value="1.5707963267948966" />
 	</ParameterDeclarations>
+	<CatalogLocations><VehicleCatalog><Directory path="$(env SCENSIM_VEHICLES)" /></VehicleCatalog></CatalogLocations>
 	<RoadNetwork><LogicFile filepath="oval" /></RoadNetwork>
 	<Entities>
 		<ScenarioObject name="ego">
-			<Vehicle name="mushr_nano" vehicleCategory="car">
-				<BoundingBox><Center x="0.1531" y="0.0" z="0.116" /><Dimensions width="0.271" height="0.232" length="0.44" /></BoundingBox>
-				<Performance maxSpeed="3.0" maxAcceleration="10.0" maxDeceleration="10.0" />
-				<Axles>
-					<FrontAxle maxSteering="0.488" wheelDiameter="0.105" trackWidth="0.23" positionX="0.2965" positionZ="0.0525" />
-					<RearAxle maxSteering="0.0" wheelDiameter="0.105" trackWidth="0.23" positionX="0.0" positionZ="0.0525" />
-				</Axles>
-				<Properties />
-			</Vehicle>
+			<CatalogReference catalogName="vehicles" entryName="mushr_nano">
+				<ParameterAssignments>
+					<ParameterAssignment parameterRef="maxSpeed" value="3.0" />
+					<ParameterAssignment parameterRef="maxAcceleration" value="10.0" />
+					<ParameterAssignment parameterRef="maxDeceleration" value="10.0" />
+					<ParameterAssignment parameterRef="maxSteering" value="0.488" />
+				</ParameterAssignments>
+			</CatalogReference>
 			<ObjectController><Controller name="Autoware"><Properties><Property name="maxJerk" value="10.0" /></Properties></Controller></ObjectController>
 		</ScenarioObject>
 	</Entities>

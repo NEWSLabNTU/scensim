@@ -64,6 +64,9 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     # draws), log: <jsonl path or "">}. The records then come from the pool (`records` is
     # ignored), each reset takes the next unused ones, and the log names each (slot, episode,
     # record id). Only Init is drawn again: a storyboard reading a sampled parameter is refused
+    # {catalog name: file or directory}, searched before the scenario's CatalogLocations
+    # (compile_scenario's `catalogs`): a task naming the car's catalog needs no SCENSIM_VEHICLES
+    catalogs: dict = {}
     start_pool: dict = {}            # (empty: none; a None default would not survive hydra)
     # the action straight to the joints, the control component bypassed (094 P2's row b, as
     # stock): a subclass's joint_targets(actions) gives (steer [N, 2], spin [N, 4]); engine B
@@ -148,7 +151,8 @@ class ScensimEnv(DirectRLEnv):
                 knobs = getattr(importlib.import_module(mod), fn)(seed)
             self.pool = StartPool(sp["distribution"], world, seed=seed,
                                   chunk=int(sp.get("chunk", 10000)), device=dev,
-                                  provides=cfg.provides, knobs=knobs)
+                                  provides=cfg.provides, knobs=knobs,
+                                  catalogs=cfg.catalogs)
             n = cfg.scene.num_envs
             while len(self.pool.records) < n:
                 self.pool.refill()
@@ -177,7 +181,8 @@ class ScensimEnv(DirectRLEnv):
         with core._OnDevice(dev):
             self.compiled = compilemod.compile_scenario(cfg.scenario, cfg.records, world,
                                                         provides=cfg.provides,
-                                                        device=dev or "cpu")
+                                                        device=dev or "cpu",
+                                                        catalogs=cfg.catalogs or None)
         n = self.compiled.n
         seeds = [int(s or 0) for s in self.compiled.seeds]
         component = ecu_batch.load_batch(cfg.component, cfg.vehicle, cfg.component_params, seeds,
