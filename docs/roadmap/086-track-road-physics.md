@@ -282,6 +282,51 @@ C5's exit is 086's row. aib's slope matrix and haruna_down run against main's ba
 same host and GPU, so "unchanged" is a paired comparison. Every Isaac run is on 118's GPU0;
 GPU1 stays with 094's training seeds.
 
+#### C5b's fixture course (spec written 2026-11-23, before it is built)
+
+A course with no OSM, DEM or photo: `courses/fixture_c5.yaml` names its centreline and section
+as segments, and the builder's `centreline`, `geometry`, `record`, `maps` and `scenario` steps
+run on it as on Haruna. Its record is the spec below, not a measurement; the file says so.
+
+- **Frame.** An origin at (36.0, 140.0), alt 0, so the map frame and its projector work as
+  for a real course. Terrain: the road's own profile under it, flat across, 0.30 m below the
+  formation at the section's foot and blending as `geometry.terrain` does; the photo is a
+  plain grey image.
+- **Plan and profile.** An open course, 510 m, a constant grade of -3 % (downhill, as
+  haruna_down is). 2 lanes of 3.25 m, a 0.75 m shoulder, as Haruna's.
+
+  | s (m) | plan | bank | crown, left / right | crown line | lip (right) |
+  |---|---|---|---|---|---|
+  | 0-150 | straight | 0 | 2.5 % / 2.5 % | centre | none |
+  | 150-210 | clothoid, curvature 0 to 1/60 m | 0 to 6 %, linear | 2.5 % to 0, linear | centre | none |
+  | 210-300 | arc, R 60 m, left (86 deg) | 6 % (inside, left, low) | 0 / 0 | centre | none |
+  | 300-360 | clothoid, 1/60 m to 0 | 6 % to 0, linear | 0 to 2 % / 0 to 3 %, linear | 0 to +0.5 m (left), linear | none |
+  | 360-510 | straight | 0 | 2.0 % / 3.0 % | +0.5 m | 0.10 m at 90 deg over s 420-480, its height ramped over 2 m at each end |
+
+  So the course holds a symmetric crown, a superelevation runoff through a bend, a full
+  bank, an offset and asymmetric crown, and one lip. C5c's lip fixtures (5, 10, 15 cm at 90,
+  45, 30 deg) are their own courses or lanes, not this one.
+- **Stations.** The record has a station at every centreline point (0.5 m, `centreline.STEP`),
+  its values linear in s between the table's rows. Midway is the point between two stations.
+- **Mesh.** `geometry.ribbon` takes the record: each row of the road ribbon at offset v is
+  lifted by the record's section height at (u, v), with breaklines (rows) at the crown line,
+  at the carriageway's edge and, where there is a lip, at both ends of its face, besides the
+  0.5 m strips. The map's `road_detail.yaml` says the mesh carries the section, so the layer
+  adds only what the mesh does not (its features and zones), not the section a second time.
+  Haruna and Tsukuba, level records, give the same mesh as today (a vertex check).
+- **Checks, offline (no GPU).** On the mesh's triangles, across the paved width every
+  0.25 m and 2 cm each side of every breakline, at every station and every midway point:
+  height within 5 mm of the record's section (`StationSection.height_uv`, the layer's own
+  interpolation), and the cross slope of each half carriageway within 0.1 deg. Points on a
+  lip's face (within 1 cm of it in plan) are left out of the height check. The same grid
+  against the road layer's tiles for the record (C5a's 2e-3 m tile check, now on a banked
+  record).
+- **Checks, Isaac (GPU0).** PhysX scene queries straight down on the same grid give Isaac's
+  road height: within 5 mm and 0.1 deg of the record at every station, and of the layer's
+  interpolation midway. Then the course driven with haruna_down's controller and checks
+  (speed limit 40 km/h): it passes, which is C5's "haruna_down passes on a course with a
+  nonzero crown". aib's slope matrix and haruna_down on Haruna, paired against main's on GPU0.
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
