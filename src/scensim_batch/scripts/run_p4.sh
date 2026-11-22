@@ -4,7 +4,8 @@
 # bench/p4_leadbrake/run_p4.sh runs P4-LeadBrake-v0: the same stages, sizes, iterations,
 # timers, warm-up and evaluation schedule.
 #
-#   run_p4.sh <stage: smoke|seeds|seed|evals|sweep> <out dir> [headway: stock|record]
+#   run_p4.sh <stage: smoke|seeds|seed|evals|sweep> <out dir> [headway: stock|record] \
+#             [row: joints|ecu] [engine: B|A]
 #   (seed: the one seed SEED names, into the seeds stage's directory; evals: SEED's evaluation
 #   grid completed for a seed already trained, the iterations its evals.jsonl lacks)
 #
@@ -25,16 +26,29 @@
 # WAIT_IDLE, CLEAN_ROWS and MAX_ROWS (the continuous gate), THREADS, ALLOW_DIRTY=1.
 set -euo pipefail
 stage=${1:?stage: smoke|seeds|seed|sweep}; out=${2:?out dir}; headway=${3:-stock}
+# the row (LeadBrakeEnvCfg.row): joints (the comparable row, stock's action law on the joints) or
+# ecu (the car's own drive unit and ECU, ev); the engine: B (the articulation car, GPU) or A (aib's
+# PhysX vehicle, the CPU pipeline; ecu only). Each row its own out dir, as each is its own table.
+row=${4:-joints}; engine=${5:-B}
 FORK=${FORK:?FORK: the WheeledLab checkout}; OV=${OV:?OV: the Isaac Lab overlay python}
 ISAACLAB=${ISAACLAB:?ISAACLAB: the Isaac Lab checkout, e.g. /var/tmp/aeon/isaaclab-3.0.0/src}
 GPU=${GPU:-0}
 case $headway in stock|record) ;; *) echo "headway: stock|record" >&2; exit 2 ;; esac
+case $row in joints|ecu) ;; *) echo "row: joints|ecu" >&2; exit 2 ;; esac
+case $engine in B|A) ;; *) echo "engine: B|A" >&2; exit 2 ;; esac
+[ "$engine" = A ] && [ "$row" != ecu ] && { echo "engine A takes the ecu row only" >&2; exit 2; }
+# the form a run records: the comparable row keeps its name; the others name engine and row
+form="scensim-b-$headway"
+[ "$row" != joints ] || [ "$engine" != B ] && form="scensim-$engine-$row-$headway"
+rowargs=(env.row="$row" env.engine_name="$engine")
+evalargs=(--row "$row" --engine "$engine")
+dev=(); [ "$engine" = A ] && dev=(--device cpu)    # train.py sets the sim's device from it
 here=$(cd "$(dirname "$0")" && pwd)          # scensim_batch/scripts
 repo=$(cd "$here/../../.." && pwd)
 out=$(realpath -m "$out")
 export OMNI_KIT_ACCEPT_EULA=YES PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=$GPU
 export VK_ICD_FILENAMES=${VK_ICD_FILENAMES:-/usr/share/vulkan/icd.d/nvidia_icd.json}
-export PYTHONPATH=$FORK/bench:$FORK/bench/p4_leadbrake:$repo/src/sim_vehicle_ecu:$repo/src/sim_vehicle_spec:$repo/src/scensim_sampler:$repo/src/scensim_batch
+export PYTHONPATH=$FORK/bench:$FORK/bench/p4_leadbrake:$repo/src/autoware_isaac_bridge/src/aib:$repo/src/sim_vehicle_ecu:$repo/src/sim_vehicle_spec:$repo/src/scensim_sampler:$repo/src/scensim_batch
 gate=(--require-idle --max-load "${MAX_LOAD:-0.5}" --wait-idle "${WAIT_IDLE:-1800}")
 [ "${SHARED:-0}" = 1 ] && gate=(--allow-shared)
 if [ -n "${CLEAN_ROWS:-}" ] && [ "${SHARED:-0}" != 1 ]; then
@@ -62,12 +76,12 @@ run() {
         echo "$name: done already"; return 0
     fi
     mkdir -p "$d"
-    echo "$name: headway=$headway timers=$timers seed=$seed envs=$n iterations=$iters ($(date -Is))"
-    (cd "$d" && env -u DISPLAY "$OV" -m wheeledlab_bench.launch --out "$d" --form "scensim-b-$headway" \
+    echo "$name: headway=$headway row=$row engine=$engine timers=$timers seed=$seed envs=$n iterations=$iters ($(date -Is))"
+    (cd "$d" && env -u DISPLAY "$OV" -m wheeledlab_bench.launch --out "$d" --form "$form" \
         --timers "$timers" --warmup "$warmup" --seed "$seed" --gpu "$GPU" "${gate[@]}" "${hooks[@]}" "${prov[@]}" \
         -- "$here/train_leadbrake.py" "${thr[@]}" "$ISAACLAB/scripts/reinforcement_learning/train.py" \
         "${kit[@]}" --rl_library rsl_rl --task Scensim-LeadBrake-v0 --num_envs "$n" \
-        --max_iterations "$iters" --seed "$seed" env.train_headway="$headway" \
+        --max_iterations "$iters" --seed "$seed" "${dev[@]}" env.train_headway="$headway" "${rowargs[@]}" \
         env.starts_log="$d.starts.jsonl" > "$d.log" 2>&1)
 }
 
@@ -76,7 +90,7 @@ evaluate() {
     local name=$1 it=$2 ck d="$out/${out_stage:-$stage}"
     ck=$(ls "$d/$name"/logs/rsl_rl/p4_leadbrake/*/model_"$it".pt 2>/dev/null | head -1)
     [ -n "$ck" ] || { echo "{\"iteration\": $it, \"missing\": true}"; return 0; }
-    env -u DISPLAY "$OV" "$here/eval_leadbrake.py" --checkpoint "$ck" "${kit[@]}" \
+    env -u DISPLAY "$OV" "$here/eval_leadbrake.py" --checkpoint "$ck" "${kit[@]}" "${evalargs[@]}" "${dev[@]}" \
         --out "$d/$name.eval$it.json" > "$d/$name.eval$it.log" 2>&1
     grep '^{' "$d/$name.eval$it.log" | sed "s/^{/{\"iteration\": $it, /"
 }

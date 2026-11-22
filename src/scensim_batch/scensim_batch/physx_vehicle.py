@@ -101,15 +101,18 @@ class PhysxVehicleBackend:
 
     def _check_landing(self, dt):
         """Each slot reset since the last sample is where its reset put it, by PhysX's own world
-        pose: within 1 cm across its heading and of its reset's travel along it (its speed for a
-        substep, 2 cm). A car elsewhere is an env prim whose transform reached USD after this
-        backend read it (issue 109) or a teleport PhysX never saw (issue 110): raised."""
+        pose: within 5 cm across its heading and of its reset's travel along it (its speed for a
+        substep). A car elsewhere is an env prim whose transform reached USD after this backend
+        read it (issue 109: off by its env's origin, metres) or a teleport PhysX never saw (issue
+        110: off by its travel since, tens of metres): raised. 5 cm, not 1: a car settling on its
+        springs in its first substep after a reset moved 1.2 and 1.4 cm across (094 P4's engine A
+        smoke, 64 and 16 envs: one slot each), which 1 cm refused."""
         bad = []
         for i, (x, y, v, h) in self._landing.items():
             px, py = (float(c) for c in self.states[i].position[:2])
             dx, dy = px - x, py - y
             along, across = dx * math.cos(h) + dy * math.sin(h), -dx * math.sin(h) + dy * math.cos(h)
-            if abs(across) > 0.01 or abs(along - v * dt) > 0.02 + abs(v) * dt:
+            if abs(across) > 0.05 or abs(along - v * dt) > 0.05 + abs(v) * dt:
                 bad.append((i, round(along, 3), round(across, 3)))
         self._landing = {}
         if bad:
