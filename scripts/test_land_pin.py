@@ -520,3 +520,30 @@ def test_a_third_party_pin_on_its_default_branch_is_on_its_remote(world):
     commit(world.super, "super pins a local T")
     assert [x.split()[0] for x in _unpushed(world)] == ["src/T"]
     _ = sha
+
+
+def test_an_unpushed_pin_is_refused_before_any_component_is_pushed(world, monkeypatch):
+    """133: the guard runs before any push too (the cascade's own commits passed over), so a
+    landing that would be refused leaves every component's main where it was."""
+    a2 = world.advance("A")
+    s = world.super
+    git(s, "fetch", "-q", "origin")
+    git(s, "checkout", "-q", "-B", "feat", "origin/main")
+    run("git", "init", "-q", "--bare", "-b", "main", str(world.origin / "T.git"))
+    t = world.work / "T"                                   # a repository nothing depends on
+    run("git", "clone", "-q", world.url("T"), str(t))
+    git(t, "checkout", "-q", "-B", "main")
+    commit(t, "T 1")
+    git(t, "push", "-q", "origin", "main")
+    git(s, "submodule", "add", "-q", world.url("T"), "src/T")
+    t_local = commit(s / "src" / "T", "T local")          # a pin of a commit nobody pushed
+    git(s, "add", "src/T", ".gitmodules")
+    git(s, "commit", "-q", "-m", "code pinning a local T")
+    git(s, "push", "-q", "origin", "feat")
+    c_before = git(world.work / "C", "ls-remote", "origin", "main").split()[0]
+    monkeypatch.setenv("LAND_PIN_GATE", "true")
+    r = world.land("--onto", "feat", "A", a2)
+    assert r.returncode == 4 and f"src/T {t_local[:12]}" in r.stderr, r.stdout + r.stderr
+    assert "nothing pushed" in r.stderr
+    assert git(world.work / "C", "ls-remote", "origin", "main").split()[0] == c_before
+    assert world.remote_pin("A") == world.sha["A"]
