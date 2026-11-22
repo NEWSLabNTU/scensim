@@ -322,6 +322,16 @@ class ScensimEnv(DirectRLEnv):
             self._draw_starts(env_ids, home)
         self.run.reset(mask, preroll=pre)   # merges: the other slots' observation stays this step's
 
+    def close(self):
+        """The start pool's numbers (records drawn, taken, refill cost, stalls) as the records
+        log's last line, then Isaac Lab's close."""
+        if getattr(self, "pool", None) is not None and getattr(self, "_start_log", None):
+            import json
+            self._start_log.write(json.dumps({"pool": self.pool.stats()}) + "\n")
+            self._start_log.close()
+            self._start_log = None
+        super().close()
+
     def _draw_starts(self, env_ids, home):
         """The reset slots' Init from the pool's next records, logged (094 P2)."""
         import json
