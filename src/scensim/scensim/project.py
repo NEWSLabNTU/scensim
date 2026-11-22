@@ -1053,6 +1053,19 @@ def check_project(path, scenarios: bool = True) -> list:
             out.append(Finding(config.PROJECT_FILE, f"maps: {m} is not fetched (assets/maps/{m})",
                                _map_fix(m, settings), refused=True, host=True))
     sim = settings.get("simulator") if isinstance(settings.get("simulator"), str) else ""
+    if sim == "carla":
+        # a carla.root that is set but no CARLA install (an old path after a move or a cleanup):
+        # refused by name here, not only when the stack comes to start CARLA from it (133)
+        from scensim import simulator as simmod
+        try:
+            root = (config.host_settings(project).get("carla") or {}).get("root")
+        except config.ConfigError:
+            root = None
+        if root and not simmod.layout(root):
+            out.append(Finding("host settings", f"carla.root {root} is not a CARLA install "
+                               f"(no {' or '.join(r[0] for r in simmod.LAYOUTS)})",
+                               "set carla.root in ~/.config/scensim/host.yaml to this host's CARLA "
+                               "(or remove it)", refused=True, host=True))
     if sim == "carla" and isinstance(maps, list):
         from scensim import simulator as simmod
         try:
