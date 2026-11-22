@@ -26,6 +26,9 @@ export PYTHONPATH=$FORK/source/wheeledlab:$FORK/source/wheeledlab_tasks:$FORK/so
 # MAX_LOAD x the cores, waited for up to WAIT_IDLE s (wheeledlab_bench refuses with exit 6 after)
 gate=(--require-idle --max-load "${MAX_LOAD:-0.5}" --wait-idle "${WAIT_IDLE:-1800}")
 [ "${SHARED:-0}" = 1 ] && gate=(--allow-shared)
+# Kit's own GPU: CUDA_VISIBLE_DEVICES pins CUDA (the run's cuda:0 is GPU), but Kit enumerates
+# GPUs itself, so its renderer is pinned to the same card, multi-GPU off (118's GPU1, 133)
+kit=("--kit_args=--/renderer/activeGpu=$GPU --/renderer/multiGpu/enabled=false")
 hooks=(--sample-hook scensim_batch.start_pool:StartPool.refill --sample-hook scensim_batch.start_pool:StartPool.take)
 # the harness records its commit and the task package's (wheeledlab_bench >= 5de128c), and
 # refuses either dirty unless --allow-dirty (ALLOW_DIRTY=1, recorded)
@@ -43,7 +46,7 @@ run() {
     echo "$name: row=$row starts=$starts timers=$timers seed=$seed envs=$n iterations=$iters ($(date -Is))"
     env -u DISPLAY "$OV" -m wheeledlab_bench.launch --out "$d" --form "scensim-$row-$starts" \
         --timers "$timers" --warmup "$warmup" --seed "$seed" --gpu "$GPU" "${gate[@]}" "${hooks[@]}" "${prov[@]}" \
-        -- "$here/train_drift.py" source/wheeledlab_rl/scripts/train_rl.py -r SCENSIM_DRIFT_CONFIG \
+        -- "$here/train_drift.py" source/wheeledlab_rl/scripts/train_rl.py "${kit[@]}" -r SCENSIM_DRIFT_CONFIG \
         train.log.no_wandb=True train.log.video=False agent.seed="$seed" \
         train.num_iterations="$iters" env_setup.num_envs="$n" env.starts="$starts" \
         env.starts_log="$d.starts.jsonl" "${comp[@]}" \
