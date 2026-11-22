@@ -91,7 +91,26 @@ def asset_usd(doc, root):
     if h != a["sha256"]:
         raise ValueError(f"{doc['name']}: {path} has sha256 {h}, the spec names "
                          f"{a['sha256']}: not the asset the spec was measured from")
+    check_asset_mass(doc, path)
     return path
+
+
+def check_asset_mass(doc, path, rel=0.01):
+    """The asset's authored mass (its rigid bodies' physics:mass, as PhysX spawns it, before a
+    task's randomisation) is the spec's within `rel` (094 P2: the spec is measured from the
+    asset). Skipped without pxr (an asset is loaded only where Isaac's is)."""
+    try:
+        from pxr import Usd, UsdPhysics
+    except ImportError:
+        return None
+    stage = Usd.Stage.Open(path)
+    total = sum(float(p.GetAttribute("physics:mass").Get() or 0.0) for p in stage.Traverse()
+                if p.HasAPI(UsdPhysics.MassAPI))
+    spec = sum(float(link["mass"]) for link in doc["links"].values())
+    if abs(total - spec) > rel * spec:
+        raise ValueError(f"{doc['name']}: its asset's bodies weigh {total:.4g} kg, the spec "
+                         f"{spec:.4g} kg: the spec is not measured from this asset")
+    return total
 
 
 def joint_order(doc):
@@ -432,8 +451,7 @@ class ArticulationBackend:
         ours = joint_order(doc)
         ids, _ = asset.find_joints([asset_name(doc, n) for n in ours], preserve_order=True)
         self.ids = dict(zip(ours, ids))       # by the generated body's names
-        if doc.get("asset"):
-            self._check_asset(asset, doc)
+
         self.sus_ids = [self.ids[f"{c}_suspension"] for c in CORNERS]
         self.steer_ids = [self.ids[f"{c}_steer"] for c in CORNERS[:2]]
         self.spin_ids = [self.ids[f"{c}_spin"] for c in CORNERS]
@@ -449,22 +467,6 @@ class ArticulationBackend:
         self.dt = None
         self._state = None
         self.timing = {"actuate": 0.0, "physics": 0.0, "sample": 0.0, "steps": 0}
-
-    @staticmethod
-    def _check_asset(asset, doc, rel=0.01):
-        """The asset's mass, as PhysX reads it, is the spec's within `rel` (094 P2: the spec's
-        values are measured from the asset)."""
-        view = getattr(asset, "root_physx_view", None) or getattr(asset, "root_view", None)
-        m = view.get_masses()
-        m = m.torch if hasattr(m, "torch") else m
-        if not torch.is_tensor(m):
-            import warp as wp
-            m = wp.to_torch(m)
-        total = float(m[0].sum())
-        spec = sum(float(link["mass"]) for link in doc["links"].values())
-        if abs(total - spec) > rel * spec:
-            raise ValueError(f"{doc['name']}: its asset weighs {total:.4g} kg in PhysX, the spec "
-                             f"{spec:.4g} kg: the spec is not measured from this asset")
 
     def _dev(self, t):
         return torch.as_tensor(t, dtype=torch.float32).to(self.device)
