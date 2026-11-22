@@ -50,7 +50,7 @@ class StartPool:
     """Sample records of one distribution, compiled to the ego's Init, taken one per reset."""
 
     def __init__(self, distribution, world, seed, chunk=10000, low_water=None, device="cpu",
-                 provides=(), background=True, sampler=None, knobs=None):
+                 provides=(), background=True, sampler=None, knobs=None, catalogs=None):
         from scensim_sampler.sampler import Sampler
         # `knobs`: the run's own draw (stock's 20 reference points of a drift run, say), the
         # distribution's world knobs for every record of this run; the run's log records them
@@ -64,6 +64,7 @@ class StartPool:
                             ", which a record sets: a start pool draws only Init again per reset "
                             "(the compiled storyboard holds each slot's values)")
         self.world, self.provides = world, tuple(provides)
+        self.catalogs = dict(catalogs or {})       # compile_scenario's
         self.seed, self.chunk = int(seed), int(chunk)
         self.low_water = int(low_water if low_water is not None else chunk // 2)
         self.device = torch.device(device)
@@ -90,7 +91,8 @@ class StartPool:
         if not recs:
             raise PoolError(f"{self.scenario.name}: chunk {k} drew no records "
                             f"({batch.summary()})")
-        c = compilemod.compile_scenario(self.scenario, recs, self.world, provides=self.provides)
+        c = compilemod.compile_scenario(self.scenario, recs, self.world, provides=self.provides,
+                                        catalogs=self.catalogs or None)
         e = c.of_role("ego")[0]
         cols = [t[:, e].to(self.device, torch.float64) for t in (c.x, c.y, c.yaw, c.speed)]
         with self._lock:
