@@ -21,10 +21,12 @@ def check(tmp_path, text):
 
 
 def test_the_catalog_has_every_spec():
+    # the MuSHR (094 P2) has no CARLA body (no model3d): in the catalog, not among the bodies
     assert cs.entries() == {"vehicle.tesla.model3": "tesla_model3",
                             "vehicle.ford.mustang": "drift_mustang"}
     assert lint.catalog_parameters() == {name: {p for p, _, _ in cs.ASSIGNED}
-                                         for name in ("tesla_model3", "drift_mustang")}
+                                         for name in ("tesla_model3", "drift_mustang",
+                                                      "mushr_nano")}
 
 
 def test_rewrite_makes_a_reference_assigning_the_scenarios_values():
