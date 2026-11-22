@@ -185,6 +185,15 @@ def unpushed(rev, pending=()):
     return out
 
 
+def gitmodule_components(root):
+    """The names of `root`'s submodules under src/, from its .gitmodules."""
+    r = subprocess.run(["git", "-C", str(root), "config", "-f", ".gitmodules", "--get-regexp",
+                        r"^submodule\..*\.path$"], capture_output=True, text=True)
+    paths = [line.split(None, 1)[1] for line in r.stdout.splitlines() if " " in line]
+    return sorted(p.split("/", 1)[1] for p in paths
+                  if p.startswith("src/") and "/" not in p.split("/", 1)[1])
+
+
 def component_checks(src, components):
     """Each landing component's own `just check-generated`, where its justfile has one: this
     repository's gate does not run a component's suite, so a component whose generator was not
@@ -269,7 +278,17 @@ def main(argv):
     dry, pairs, note = parsed
     trailer = "\n\n" + os.environ["LAND_PIN_TRAILER"] if os.environ.get("LAND_PIN_TRAILER") else ""
     src = ROOT / "src"
-    comps = sorted(p.name for p in src.iterdir() if (p / ".git").exists())
+    # the components are this repository's submodules under src/ (.gitmodules), not the
+    # checkouts that happen to be initialised: an uninitialised one was left out of the cascade
+    # and its pins out of the check, silently (issue 101)
+    comps = gitmodule_components(ROOT)
+    missing = [c for c in comps if not (src / c / ".git").exists()]
+    if missing:
+        print("not initialised, so the landing cannot see their deps/ pins: "
+              + ", ".join(f"src/{c}" for c in missing)
+              + "\n  git submodule update --init --recursive "
+              + " ".join(f"src/{c}" for c in missing), file=sys.stderr)
+        return 2
     for repo, _ in pairs:
         if repo not in comps:
             print(f"no submodule src/{repo}", file=sys.stderr)

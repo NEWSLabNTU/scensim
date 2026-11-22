@@ -55,6 +55,10 @@ def check(rev="HEAD", root=ROOT):
     for url, (path, commit) in sorted(ours.items()):
         component = root / path
         if not (component / ".git").exists():
+            # an uninitialised submodule's deps/ pins cannot be read, and skipping it passed a
+            # tree with scensim_carla_world and acb not checked out at all (issue 101)
+            bad.append(f"{path}: not initialised, so its deps/ pins cannot be checked: "
+                       f"`git submodule update --init --recursive {path}`, then run this again")
             continue
         known = _git("-C", str(component), "cat-file", "-e",
                      f"{commit}^{{commit}}").returncode == 0

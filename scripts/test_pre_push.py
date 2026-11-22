@@ -178,3 +178,28 @@ def test_the_installed_stub_runs_each_worktrees_hook_and_survives_a_removed_one(
     out = subprocess.run(["bash", str(wt / "scripts/install_hooks.sh")], capture_output=True,
                          text=True)
     assert "left alone" in out.stderr and stub.read_text() == "#!/bin/sh\nexit 0\n"
+
+
+def test_an_uninitialised_submodule_refuses_the_push_by_name(tmp_path):
+    """Issue 101: check_pins took its components from the checkouts that exist, so a worktree
+    with a submodule not initialised (scensim_carla_world, acb) passed with its deps/ pins
+    unread. It is refused now, by name."""
+    sup, wt, comp = _superproject(tmp_path)
+    other = tmp_path / "other"
+    other.mkdir()
+    _git("init", "-q", "-b", "main", cwd=other)
+    _git("config", "user.email", "t@example.invalid", cwd=other)
+    _git("config", "user.name", "t", cwd=other)
+    (other / "g").write_text("x\n")
+    _git("add", "g", cwd=other)
+    _git("commit", "-qm", "o", cwd=other)
+    _git("submodule", "add", "-q", str(other), "src/other", cwd=sup)
+    _git("commit", "-qm", "pin other", cwd=sup)
+    sha = _git("rev-parse", "main", cwd=sup)
+    _git("checkout", "-q", "--detach", sha, cwd=wt)
+    _git("submodule", "update", "-q", "--init", "src/component", cwd=wt)   # src/other left out
+    r = _push(wt, sha)
+    assert r.returncode == 1 and "src/other: not initialised" in r.stderr, r.stderr
+    _git("submodule", "update", "-q", "--init", "src/other", cwd=wt)
+    r = _push(wt, sha)
+    assert r.returncode == 0, r.stderr
