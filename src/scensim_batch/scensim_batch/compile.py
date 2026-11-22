@@ -83,11 +83,54 @@ def _number(text):
         return None
 
 
+class _Reads:
+    """Which parameters the storyboard's compile reads, and how (094 P4). A read inside a live
+    frame (a `floats` called by the compiler itself, or a position the compiler resolves) made
+    tensors the storyboard keeps as they are: their recompute is registered, and a reset writes
+    the slot's new values into them (Storyboard.rebind). Any other read was baked into the
+    compiled structure (a lane name, an execution count, a parameter condition): fixed, and a
+    start pool refuses to draw it per episode."""
+
+    def __init__(self):
+        self.frames = []           # [(kind, names)]: the open frames, innermost last
+        self.fixed = set()
+        self.live = set()
+        self.entries = []          # [(recompute(P) -> tuple of tensors, the tensors)]
+
+    def read(self, name):
+        if self.frames:
+            self.frames[-1][1].add(name)
+        else:
+            self.fixed.add(name)
+
+    def frame(self, kind, fn, recompute=None):
+        """fn() inside a frame; a live frame that read a parameter registers its outputs."""
+        self.frames.append((kind, set()))
+        try:
+            out = fn()
+        finally:
+            _, names = self.frames.pop()
+        if names:
+            if self.frames:                       # nested: the outer frame owns the reads
+                self.frames[-1][1].update(names)
+            elif kind == "fixed":
+                self.fixed.update(names)
+            else:
+                outs = out if isinstance(out, tuple) else (out,)
+                if not all(isinstance(o, torch.Tensor) for o in outs if o is not None):
+                    self.fixed.update(names)      # not tensors: baked
+                else:
+                    self.live.update(names)
+                    self.entries.append((recompute, outs))
+        return out
+
+
 class _Params:
     def __init__(self, declared, records):
         self.declared, self.records = declared, records
         self.n = len(records)
         self.cache = {}
+        self.reads = None          # a _Reads while the storyboard compiles
 
     def value(self, text, where):
         """An attribute: a literal, or `$name` per slot. Returns a list of N."""
@@ -104,6 +147,8 @@ class _Params:
             return [repr(-v) for v in nums]
         if text.startswith("$"):
             name = text[1:]
+            if self.reads is not None:
+                self.reads.read(name)
             if name in self.cache:
                 return self.cache[name]
             if name not in self.declared:
@@ -118,6 +163,13 @@ class _Params:
         return [text] * self.n
 
     def floats(self, text, where):
+        if self.reads is not None and not self.reads.frames:
+            # called by the storyboard's compiler itself: its tensor is kept as it is
+            return self.reads.frame("live", lambda: self._floats(text, where),
+                                    recompute=lambda P: (P._floats(text, where),))
+        return self._floats(text, where)
+
+    def _floats(self, text, where):
         vals = self.value(text, where)
         out = [_number(v) for v in vals]
         if any(v is None for v in out):
@@ -406,9 +458,13 @@ class _StoryInfo:
         return self.names.index(name)
 
     def position(self, pos, where):
+        return self.position_with(self.P, pos, where)
+
+    def position_with(self, P, pos, where):
+        """position() with another slot set's parameters (a reset's records, Storyboard.rebind)."""
         if pos is None:
             raise CompileError(f"{where}: missing")
-        return _position(pos, where, self.P, self.world, self.names, self.x, self.y, self.yaw,
+        return _position(pos, where, P, self.world, self.names, self.x, self.y, self.yaw,
                          self.placed)
 
 

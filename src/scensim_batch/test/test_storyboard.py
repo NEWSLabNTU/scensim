@@ -169,6 +169,68 @@ class Episodes(unittest.TestCase):
         # the deceleration limit is SSv2's default again once the speed passed the target
         self.assertTrue(bool((run.vehicles.c.max_deceleration == 10.0).all()))
 
+    def run_cs2(self, c, run, steps):
+        lead = c.index("lead")
+        run.reset()
+        x, v, a = [], [], []
+        for _ in range(steps):
+            obs = run.step(cmds(2, 0.0), DT)
+            x.append(obs["x"][:, lead].clone())
+            v.append(obs["v"][:, lead].clone())
+            a.append(run.vehicles.a[:, 0].clone())
+        return torch.stack(x), torch.stack(v), torch.stack(a)
+
+    def test_a_reset_gives_each_slot_its_records_onset_and_rate_without_a_compile(self):
+        """094 P4: the storyboard's parameter reads are per-slot tensors a reset overwrites from
+        the slot's new record (Storyboard.rebind); compiled with one pair of records, rebound to
+        another, each lead brakes at its new onset within its new limit, and the run is the one
+        a compile of the new records makes, bit for bit."""
+        old = [{"values": {"onset_s": 60.0, "decel": 6.5}},
+               {"values": {"onset_s": 90.0, "decel": 3.0}}]
+        new = [{"values": {"onset_s": 110.0, "decel": 3.0}},
+               {"values": {"onset_s": 45.0, "decel": 6.5}}]
+        c, run = self.build(CASES / "cs2_lead_brakes_wet_night.xosc", old)
+        sb = c.storyboard
+        self.assertEqual(sb.params_live, {"onset_s", "decel"})
+        self.assertEqual(sb.params_fixed & {"onset_s", "decel"}, set())
+        sb.rebind(new, [0, 1])
+        x, v, a = self.run_cs2(c, run, int(32 / DT))
+        for s, r in enumerate(new):
+            onset, decel = r["values"]["onset_s"], r["values"]["decel"]
+            fall = int(torch.nonzero(v[1:, s] < v[:-1, s] - 1e-9)[0]) + 1
+            self.assertLess(abs(float(x[fall - 1, s]) - onset), 1.0 + float(v[fall, s]) * DT)
+            self.assertGreaterEqual(float(a[:, s].min()), -decel - 1e-9)
+            self.assertLess(float(a[:, s].min()), -decel + 1e-6)          # the new rate, reached
+            self.assertEqual(float(v[-1, s]), 0.0)
+        c2, run2 = self.build(CASES / "cs2_lead_brakes_wet_night.xosc", new)
+        x2, v2, a2 = self.run_cs2(c2, run2, int(32 / DT))
+        self.assertTrue(torch.equal(x, x2) and torch.equal(v, v2) and torch.equal(a, a2))
+
+    def test_one_slot_rebound_leaves_the_other_as_compiled(self):
+        recs = [{"values": {"onset_s": 60.0, "decel": 6.5}},
+                {"values": {"onset_s": 90.0, "decel": 3.0}}]
+        c, run = self.build(CASES / "cs2_lead_brakes_wet_night.xosc", recs)
+        c.storyboard.rebind([{"values": {"onset_s": 120.0, "decel": 4.0}}], [1])
+        x, v, _ = self.run_cs2(c, run, int(32 / DT))
+        c0, run0 = self.build(CASES / "cs2_lead_brakes_wet_night.xosc", recs)
+        x0, v0, _ = self.run_cs2(c0, run0, int(32 / DT))
+        self.assertTrue(torch.equal(x[:, 0], x0[:, 0]) and torch.equal(v[:, 0], v0[:, 0]))
+        self.assertFalse(torch.equal(v[:, 1], v0[:, 1]))
+
+    def test_a_compiled_in_parameter_is_fixed(self):
+        """An execution count (maximumExecutionCount="$n") is compiled into the structure: fixed,
+        and a start pool refuses to draw it (StartPool.check_storyboard)."""
+        p = case(story(event("e", exit_(":"), time_trigger(1))))
+        p.write_text(p.read_text().replace('maximumExecutionCount="1"',
+                                           'maximumExecutionCount="$n"', 1).replace(
+            "</ParameterDeclarations>", '<ParameterDeclaration name="n" parameterType="int" '
+            'value="1"/></ParameterDeclarations>'))
+        c, _ = self.build(p, [{"values": {"ego_speed": 10.0}}])
+        if "$n" not in p.read_text():
+            self.skipTest("the case has no maximumExecutionCount to parameterise")
+        self.assertIn("n", c.storyboard.params_fixed)
+        self.assertNotIn("n", c.storyboard.params_live)
+
     def test_exit_success_and_failure_end_their_slots_at_their_time(self):
         p = case(story(event("ok", exit_("exitSuccess"), time_trigger("$t_ok")),
                        event("bad", exit_("exitFailure"), time_trigger("$t_bad"))),

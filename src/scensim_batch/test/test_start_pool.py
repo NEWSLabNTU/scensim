@@ -72,11 +72,13 @@ class StartPoolTest(unittest.TestCase):
         p._thread.join()
         self.assertEqual(len(p.records), 40)
 
-    def test_a_storyboard_reading_a_sampled_parameter_is_refused(self):
-        """The drift episode with its time-up at $start_x: a sampled parameter the compiled
-        storyboard would hold per slot, so a pool that draws only Init again refuses it."""
+    def test_a_storyboard_reading_a_sampled_parameter_live_is_accepted_compiled_in_refused(self):
+        """094 P4: the drift episode with its time-up at $start_x, a value the storyboard reads
+        live (a reset sets it per slot, Storyboard.rebind): the pool takes it. A parameter the
+        compiled storyboard holds in its structure (params_fixed) is refused by name."""
         import shutil
         import tempfile
+        import types
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             shutil.copytree(DRIFT.parent, d / "scenarios")
@@ -86,9 +88,18 @@ class StartPoolTest(unittest.TestCase):
             x.write_text(text.replace('SimulationTimeCondition value="5"',
                                       'SimulationTimeCondition value="$start_x"'))
             self.assertIn("start_x", SP.storyboard_parameters(x))
-            with self.assertRaisesRegex(SP.PoolError, "its storyboard reads start_x"):
-                SP.StartPool(d / "scenarios" / DRIFT.name, StraightWorld(), seed=1, chunk=5,
+            p = SP.StartPool(d / "scenarios" / DRIFT.name, StraightWorld(), seed=1, chunk=5,
                              background=False, catalogs=CATALOGS)
+            from scensim_batch import compile as C
+            rows = p.take(2)
+            c = C.compile_scenario(p.scenario, [p.record(r) for r in rows], StraightWorld(),
+                                   catalogs=CATALOGS)
+            self.assertIn("start_x", c.storyboard.params_live)
+            p.check_storyboard(c.storyboard)                       # live: accepted
+            fixed = types.SimpleNamespace(params_fixed={"start_x"}, params_live=set())
+            with self.assertRaisesRegex(SP.PoolError, "its storyboard compiles in start_x"):
+                p.check_storyboard(fixed)
+            p.check_storyboard(None)
 
     def test_stocks_20_points_a_run_then_an_index_per_episode(self):
         from scensim_batch.tasks.drift_start import TRACK_LENGTH, reference_points

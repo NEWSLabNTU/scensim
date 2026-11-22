@@ -8,8 +8,9 @@ logged with the slot and episode that ran it, and replayable on seats unchanged.
     rows = pool.take(env_ids)          # one record each, never one used before
     x, y, yaw, speed = pool.init(rows) # the ego's Init on the device
 
-Only Init is drawn again: a scenario whose storyboard reads a sampled parameter (a trigger at
-`$onset_s`, say) is refused, since its compiled storyboard holds each slot's values. The pool
+A record sets its slot's Init and, through Storyboard.rebind, every storyboard value it reads
+live (a trigger at `$onset_s`, a SpeedAction's `-$decel`; 094 P4); a storyboard that compiled in
+a sampled parameter (a lane name, an execution count) is refused (check_storyboard). The pool
 never reuses a record: when it runs dry the reset waits for the refill, and the wait is counted
 (`stalls`, `stall_s`). `refill` and `take` are what 094's harness times as its `sample` stage
 (wheeledlab_bench `--sample-hook scensim_batch.start_pool:StartPool.refill` and
@@ -57,12 +58,7 @@ class StartPool:
         self.knobs = dict(knobs or {})
         self.sampler = sampler or Sampler.from_file(distribution, knobs=self.knobs)
         self.scenario = Path(self.sampler.scenario.path)
-        sampled = set(self.sampler.scenario.parameters)
-        reads = storyboard_parameters(self.scenario) & sampled
-        if reads:
-            raise PoolError(f"{self.scenario.name}: its storyboard reads {', '.join(sorted(reads))}"
-                            ", which a record sets: a start pool draws only Init again per reset "
-                            "(the compiled storyboard holds each slot's values)")
+        self.sampled = set(self.sampler.scenario.parameters)
         self.world, self.provides = world, tuple(provides)
         self.catalogs = dict(catalogs or {})       # compile_scenario's
         self.seed, self.chunk = int(seed), int(chunk)
@@ -119,6 +115,20 @@ class StartPool:
             self.refill()
 
     # --- per reset ---------------------------------------------------------------------------
+
+    def check_storyboard(self, storyboard):
+        """Refuse a storyboard that compiled in a parameter a record sets (a lane name, an
+        execution count, a parameter condition: Storyboard.params_fixed): a reset could not
+        give a slot its record's value. The parameters it reads live (its conditions' and
+        actions' values, its positions) a reset sets per slot (Storyboard.rebind; 094 P4)."""
+        if storyboard is None:
+            return
+        fixed = set(storyboard.params_fixed) & self.sampled
+        if fixed:
+            raise PoolError(f"{self.scenario.name}: its storyboard compiles in "
+                            f"{', '.join(sorted(fixed))}, which a record sets: a reset could not "
+                            "give a slot its record's value (only a value, a condition's or an "
+                            "action's, or a position is set per reset)")
 
     def take(self, n):
         """`n` rows, each a record no episode has run; waits (and counts it) when the pool is

@@ -245,6 +245,31 @@ class Storyboard:
         # host about the others (a sync each time, until they settle)
         self.host_nodes = [x for x in self.nodes if x.action is not None and x.action.host]
         self.settled = set()
+        # set by compile_storyboard (094 P4): the parameters a reset may set per slot, those
+        # compiled in, and the recompute of every tensor a live parameter made
+        self.params_live, self.params_fixed = set(), set()
+        self._rebinds, self._declared = [], {}
+
+    def rebind(self, records, ids):
+        """Slots `ids` take `records` (one each, in order) as their parameters: every tensor the
+        compile made from a live parameter is recomputed for those records and written into
+        those slots in place (the closures hold the same tensors), nothing compiled again.
+        A record that sets a fixed parameter to a value its slot was not compiled with is the
+        caller's to refuse (StartPool.check_storyboard)."""
+        if not self._rebinds:
+            return
+        from .compile import _Params
+        P = _Params(self._declared, list(records))
+        for recompute, outs in self._rebinds:
+            dev = next(o.device for o in outs if o is not None)
+            from .core import _OnDevice
+            with _OnDevice(None if dev.type == "cpu" else dev):    # as the compile ran
+                new = recompute(P)
+            for o, v in zip(outs, new):
+                if o is None:
+                    continue
+                at = torch.as_tensor(ids, dtype=torch.long, device=o.device)
+                o[at] = torch.as_tensor(v).to(o.device, o.dtype)
 
     def _index(self, x):
         self.nodes.append(x)
@@ -694,8 +719,21 @@ class SpeedAction(Action):
 
 def compile_storyboard(sb_el, ctx_info):
     """The Storyboard of a scenario's <Storyboard> element. `ctx_info`: the compile step's
-    parameters, entities, world and position resolver (compile._StoryInfo)."""
-    return _Compiler(ctx_info).storyboard(sb_el)
+    parameters, entities, world and position resolver (compile._StoryInfo). Its
+    `params_live` are the parameters a reset can set per slot (rebind), `params_fixed` those
+    compiled in (094 P4)."""
+    from .compile import _Reads
+    P = ctx_info.P
+    P.reads = reads = _Reads()
+    try:
+        sb = _Compiler(ctx_info).storyboard(sb_el)
+    finally:
+        P.reads = None
+    sb.params_fixed = set(reads.fixed)
+    sb.params_live = set(reads.live) - sb.params_fixed
+    sb._rebinds = reads.entries
+    sb._declared = P.declared
+    return sb
 
 
 class _Compiler:
@@ -772,7 +810,9 @@ class _Compiler:
         return Node("action", el.get("name"), action=self.action_body(el, here, actors))
 
     def int_(self, text, where):
-        v = self.i.P.floats(text, where)
+        reads = self.i.P.reads
+        v = (reads.frame("fixed", lambda: self.i.P._floats(text, where)) if reads is not None
+             else self.i.P.floats(text, where))     # an execution count is compiled in
         if not bool((v == v[0]).all()):
             raise _pending(where, "a maximumExecutionCount that differs between slots")
         return int(v[0])
@@ -914,11 +954,17 @@ class _Compiler:
     def position(self, pos, where):
         """A story-time position: world or lane coordinates. One relative to an entity would be
         resolved at compile time against the entity's Init pose, not where it is when the
-        condition or action runs: refused."""
+        condition or action runs: refused. Live: a position from sampled parameters (a lane's
+        `$onset_s`) is resolved again for a reset slot's record (094 P4)."""
         if pos is not None and next(iter(pos), None) is not None and \
                 next(iter(pos)).tag.startswith("Relative"):
             raise _pending(where, f"a {next(iter(pos)).tag} at story time")
-        return self.i.position(pos, where)
+        i = self.i
+        reads = i.P.reads
+        if reads is None:
+            return i.position(pos, where)
+        return reads.frame("live", lambda: tuple(i.position(pos, where)),
+                           recompute=lambda P: tuple(i.position_with(P, pos, where)))
 
     def waypoints(self, el, where, story):
         return routing_waypoints(el, where, self.position if story else self.i.position)

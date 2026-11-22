@@ -530,8 +530,16 @@ into the reset slots, and logs (slot, episode, record id, row, chunk), so any tr
 replays on seats from its record unchanged. A record is never reused: a dry pool makes the
 reset wait for the refill, and counts it (`stalls`, `stall_s`).
 
-Only Init is drawn again. A scenario whose storyboard (its stories or StopTrigger) reads a
-sampled parameter is refused, since the compiled storyboard holds each slot's values. Its
+A record also sets its slot's storyboard (094 P4). The storyboard's compile tracks every
+parameter it reads: a value a condition or an action keeps (a SpeedAction's `-$decel`, a
+trigger's time or distance) or a position it resolves (a ReachPositionCondition at a lane's
+`$onset_s`) is live, its tensor kept as compiled and its recompute registered; a reset
+recomputes those for the reset slots' records and writes them in place
+(`Storyboard.rebind`), compiling nothing again. A read compiled into the structure (a lane
+name, an execution count, a ParameterCondition) is fixed, and a pool whose records set one is
+refused by name (`StartPool.check_storyboard`). Measured on CS2: compiled with onsets 60 and
+90 m, rebound to 110 and 45 m at other rates, each lead brakes at its new onset within its new
+limit, and the run is bit for bit the one a compile of the new records makes. The pool's
 cost counts on our side of 094's comparison: 241's harness times `StartPool.refill` and
 `StartPool.take` as its `sample` stage (`--sample-hook`), on whatever thread they run, and
 stock's is 0, as it draws on the device.

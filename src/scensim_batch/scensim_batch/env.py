@@ -63,7 +63,8 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     # {distribution: <ParameterValueDistribution xosc>, seed: int, chunk: int (records a refill
     # draws), log: <jsonl path or "">}. The records then come from the pool (`records` is
     # ignored), each reset takes the next unused ones, and the log names each (slot, episode,
-    # record id). Only Init is drawn again: a storyboard reading a sampled parameter is refused
+    # record id). A record sets its slot's Init and the storyboard values it reads live
+    # (Storyboard.rebind); a storyboard that compiled in a sampled parameter is refused
     # {catalog name: file or directory}, searched before the scenario's CatalogLocations
     # (compile_scenario's `catalogs`): a task naming the car's catalog needs no SCENSIM_VEHICLES
     catalogs: dict = {}
@@ -200,6 +201,8 @@ class ScensimEnv(DirectRLEnv):
                                                         provides=cfg.provides,
                                                         device=dev or "cpu",
                                                         catalogs=cfg.catalogs or None)
+        if self.pool is not None:      # a storyboard that compiled in a sampled parameter
+            self.pool.check_storyboard(self.compiled.storyboard)
         n = self.compiled.n
         seeds = [int(s or 0) for s in self.compiled.seeds]
         # bypassed (row b), the component never steps: its numpy form serves a resident run
@@ -368,6 +371,16 @@ class ScensimEnv(DirectRLEnv):
         it = torch.as_tensor(ids, dtype=torch.long, device=c.x.device)
         for t, val in ((c.x, x), (c.y, y), (c.yaw, yaw), (c.speed, v)):
             t[it, e] = val.to(t.device, t.dtype)
+        # and every storyboard value the records set (its triggers' and actions' parameters,
+        # its positions): written into those slots, nothing compiled again (094 P4)
+        records = [self.pool.record(row) for row in rows]
+        if c.storyboard is not None:
+            c.storyboard.rebind(records, ids)
+        for name, vals in c.params.items():
+            if isinstance(vals, torch.Tensor):
+                for k, r in zip(ids, records):
+                    if name in (r.get("values") or {}):
+                        vals[k] = float(r["values"][name])
         for slot, row in zip(ids, rows):
             r = self.pool.record(row)
             line = {"slot": slot, "episode": self._episodes[slot], "record": r["id"],
