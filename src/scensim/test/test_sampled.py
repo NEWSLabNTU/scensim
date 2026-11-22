@@ -484,3 +484,76 @@ def test_ssv2s_own_distribution_of_a_bound_scenario_is_refused(tmp_path):
     spec = run.RunSpec(dist, {}, distribution=True)
     with pytest.raises(run.Refused, match="draw it with a suite's sample: instead"):
         run.bind_anchors(spec, tmp_path)
+
+
+def test_a_resolved_sources_names_the_locks_dataset_revision(tmp_path):
+    """092 K9d: a record's anchor_source names the dataset and commit the map came from, when
+    the project's scensim.lock holds the resolved file with the digest read; a host's own copy
+    that differs names none."""
+    from scensim_sampler import anchors as A
+    from scensim import assets as assetsmod
+    _cs7_on_a_resolved_exit(tmp_path)
+    f = tmp_path / "assets" / "maps" / "town_street" / A.RESOLVED
+    digest = assetsmod.sha256(f)
+    commit = "c" * 40
+    (tmp_path / "scensim.lock").write_text(yaml.safe_dump({"version": 1, "datasets": {
+        "maps": {"repo": "someone/maps", "commit": commit, "take": ["town_street"],
+                 "files": {f"town_street/{A.RESOLVED}": f"sha256:{digest}"}}}}))
+    dist = tmp_path / "cs7_cyclist_low_sun_dist.xosc"
+    got = run._anchors_for(tmp_path, dist)
+    assert got["exit_n"]["source"]["dataset"] == "someone/maps"
+    assert got["exit_n"]["source"]["commit"] == commit
+    assert "source" not in got["approach_n"]                 # stated
+    drawn = sampled.draw([{"distribution": dist.name, "n": 2, "seed": 2}],
+                         lambda x: tmp_path / x, "suite",
+                         anchors=lambda d: run._anchors_for(tmp_path, d))
+    for rec, _ in drawn:
+        assert rec["anchor_source"][0]["commit"] == commit
+        assert scensim_sampler.check(rec) == []
+        bad = dict(rec, anchor_source=[{k: v for k, v in rec["anchor_source"][0].items()
+                                        if k != "commit"}])
+        assert any(p.startswith("anchor_source:") for p in scensim_sampler.check(bad))
+    # the host's copy differs from the lock's: no revision claimed
+    (tmp_path / "scensim.lock").write_text(yaml.safe_dump({"version": 1, "datasets": {
+        "maps": {"repo": "someone/maps", "commit": commit, "take": ["town_street"],
+                 "files": {f"town_street/{A.RESOLVED}": "sha256:" + "0" * 64}}}}))
+    assert "commit" not in run._anchors_for(tmp_path, dist)["exit_n"]["source"]
+
+
+def test_testbench_check_refuses_a_binding_the_world_cannot_satisfy(tmp_path):
+    """092 K9d: testbench check reads a scenario's anchor bindings against its map's resolved
+    anchors and world.anchors, and refuses what no run could satisfy, naming scenario,
+    binding and the world's anchors."""
+    from scensim import anchors as anchorsmod
+    sc = _cs7_on_a_resolved_exit(tmp_path)
+    an = run._anchors_for(tmp_path, sc)
+    assert anchorsmod.binding_problems(sc, an) == []
+    for old, new, want in (
+            ('value="exit_n.lanelet_at($cyclist_s)"', 'value="ghost.lanelet_at($cyclist_s)"',
+             "the world has no such anchor (its anchors: approach_n, exit_n)"),
+            ('value="approach_n.lanelet"', 'value="approach_n.lanelet_at(3)"',
+             "a stated anchor has numbers only"),
+            ('value="approach_n.lanelet"', 'value="exit_n.heading"',
+             "is read at a lane position"),
+            ('value="approach_n.lanelet"', 'value="exit_n.lanelet_at(40)"',
+             "outside the lane"),
+            ('value="approach_n.lanelet"', 'value="approach_n.length"',
+             "no anchor attribute anchor.approach_n.length")):
+        text = sc.read_text()
+        sc.write_text(text.replace(old, new))
+        got = anchorsmod.binding_problems(sc, an)
+        assert len(got) == 1 and want in got[0][0], (new, got)
+        sc.write_text(text)
+    # through testbench check: a refusal on the scenario's file
+    from scensim import project
+    text = sc.read_text()
+    sc.write_text(text.replace('value="approach_n.lanelet"', 'value="approach_n.length"'))
+    s = project.read_scenario(sc)
+    f = project.check_scenario(tmp_path, s, {"simulator": "carla"})
+    hits = [x for x in f if "approach_n.length" in x.what]
+    assert hits and hits[0].refused and hits[0].file.endswith("cs7_cyclist_low_sun.xosc")
+    sc.write_text(text)
+    # a resolved file of other map bytes is refused there too
+    (tmp_path / "assets" / "maps" / "town_street" / "lanelet2_map.osm").write_text("<osm><x/></osm>")
+    f = project.check_scenario(tmp_path, project.read_scenario(sc), {"simulator": "carla"})
+    assert any("not the map in use" in x.what and x.refused for x in f)

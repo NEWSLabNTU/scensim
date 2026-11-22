@@ -297,7 +297,9 @@ A map's own anchors come with the map: `assets/maps/<map>/anchors.resolved.json`
 author makes from the map's `anchors.yaml` ([Maps and assets](../reference/maps-and-assets.md)).
 A distribution on that map reads them beside `world.anchors`, a name in both refused. A resolved
 lane's heading is read at an arc position, `anchor.<lane>.heading(s)`, and the record names the
-file it came from (`anchor_source`: the map, its digest, the file's digest).
+file it came from (`anchor_source`: the map, its digest, the file's digest, and the dataset
+and commit of the project's lock that holds that file). `testbench check` refuses a scenario
+whose bindings the world cannot satisfy (scenario-description.md section 3).
 
 A scenario binds a parameter to an anchor in its FileHeader, `<Property
 name="scensim.anchor.<parameter>" value="exit_n.lanelet_at($cyclist_s)"/>` (or

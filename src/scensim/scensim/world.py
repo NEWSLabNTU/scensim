@@ -70,7 +70,7 @@ SIM_OWNED = {
 
 # a world anchor's kinds and the attributes a derived expression may read from each (093 gap 7;
 # the rest of anchors, their derivation from the map and their binding, is 092 K9)
-ANCHOR_KINDS = {"lane": ("heading", "length", "speed_limit"), "point": ("x", "y")}
+ANCHOR_KINDS = {"lane": ("heading", "length", "speed_limit", "lanelet"), "point": ("x", "y")}
 
 
 def anchor_problems(anchors, where="world.anchors"):
@@ -94,6 +94,8 @@ def anchor_problems(anchors, where="world.anchors"):
                 out.append((at, f"{a}: a {d['kind']} anchor has {', '.join(allowed)}"))
             elif isinstance(v, bool) or not isinstance(v, (int, float)):
                 out.append((f"{at}.{a}", f"a number, not {v!r}"))
+            elif a == "lanelet" and (not float(v).is_integer() or v < 0):
+                out.append((f"{at}.{a}", f"a lanelet's id, an integer, not {v!r}"))
         if len(d) == 1:
             out.append((at, f"no attributes (a {d['kind']} anchor has {', '.join(allowed)})"))
     return out

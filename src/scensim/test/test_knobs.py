@@ -317,7 +317,12 @@ def test_world_anchors_are_checked():
                              "c": {"kind": "lane", "heading": "north"},
                              "d": {"kind": "point"}, "e-f": {"kind": "lane", "heading": 0}})
     text = " ".join(m for _, m in bad)
-    for want in ("kind: one of lane, point", "x: a lane anchor has heading, length, speed_limit",
+    for want in ("kind: one of lane, point",
+                 "x: a lane anchor has heading, length, speed_limit, lanelet",
                  "a number, not 'north'", "no attributes", "an anchor's name is an identifier"):
         assert want in text, want
     assert W.anchor_problems([1]) and W.anchor_problems("x")
+    # a stated lane's lanelet (092 K9b), which a LanePosition binds: an id
+    assert W.anchor_problems({"exit_n": {"kind": "lane", "lanelet": 102}}) == []
+    assert "a lanelet's id, an integer" in " ".join(
+        m for _, m in W.anchor_problems({"exit_n": {"kind": "lane", "lanelet": 1.5}}))

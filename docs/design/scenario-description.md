@@ -477,6 +477,15 @@ Rules:
   along the turn and 55.1 m along the through lane, at (92.39, -131.19); the turn's bend, a
   left turn of pi/2 over 21.4 m, mean radius 13.6 m; the junction, 380.6 m2. Points stay
   stated (`world.anchors`).
+- *Built, K9d (roadmap 092):* the check and the provenance. `testbench check` reads each
+  scenario's bindings against its map's resolved file and `world.anchors` and refuses, on the
+  scenario's file, what no run could satisfy: an anchor or attribute the world lacks (naming
+  the world's anchors), a function on a stated anchor, a bare heading on a resolved lane, a
+  constant s off its lane, and a resolved file of other map bytes. A `$parameter` anchor or
+  argument is checked per draw and per run (K9b). A resolved anchor's `anchor_source` names,
+  beside the map's and the file's digests, the dataset and commit the project's `scensim.lock`
+  fetched it from, when the lock holds that file with the digest read; a host's own copy that
+  differs claims none.
 - *Built, K9b (roadmap 092):* binding. A FileHeader Property `scensim.anchor.<parameter>` with
   the value `<anchor>.<attribute>` or `<anchor>.<function>(<number or $parameter>)` sets that
   declared parameter from the world before SSv2 starts; `<anchor>` may be `$<parameter>`, a

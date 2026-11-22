@@ -61,6 +61,7 @@ from scensim import episodes as episodesmod, frames as framesmod, ssv2 as ssv2mo
 from scensim import crashloop, launcher as launchermod, signals as signalsmod, world as worldmod
 from scensim import attachments as attachmentsmod, knobs as knobsmod, sampled as sampledmod
 from scensim import truth as truthmod
+from scensim import anchors as anchorsmod
 from scensim import stage as stagemod
 from scensim import simulator as simmod, testbenches
 from scensim.findings import ros_args
@@ -359,26 +360,14 @@ def _expand(target: Path, project: Path, repeat: int = None, params: dict = None
 
 def _world_anchors(project: Path):
     """The project's world anchors (testbench.yaml world.anchors; 093 gap 7), or None."""
-    p = Path(project) / config.PROJECT_FILE
-    if not p.is_file():
-        return None
-    world = (config.read_yaml(p) or {}).get("world") or {}
-    return world.get("anchors") if isinstance(world, dict) else None
+    return anchorsmod.world_anchors(project)
 
 
 def _anchors_for(project: Path, dist: Path):
     """A distribution's anchors (092 K9a): the project's `world.anchors` and its map's resolved
     file (`assets/maps/<map>/anchors.resolved.json`, refused when resolved on another map),
-    merged by name."""
-    from scensim_sampler import anchors as A   # noqa: PLC0415
-    name = scenario_map(Path(dist))
-    resolved = None
-    if name:
-        md = stackmod.map_dir(project, name)
-        f = md / A.RESOLVED
-        if f.is_file():
-            resolved = A.load_resolved(f, map_dir=md)
-    return A.merge(_world_anchors(project), resolved)
+    merged by name; a resolved anchor's source names the lock's dataset and commit (K9d)."""
+    return anchorsmod.for_map(project, scenario_map(Path(dist)))
 
 
 def sample_spec(record, scenario: Path, replay_of=None, **kw) -> "RunSpec":
