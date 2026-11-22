@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!--
+	094 P2: WheeledLab's MuSHR drift episode as a compiled scenario. The car alone on stock's oval
+	(two 1.6 m straights on x = +-0.8, two semicircles of radius 0.8 about (0, +-0.8): stock's
+	LINE_RADIUS and STRAIGHT), its start drawn per episode (mushr_drift_dist.xosc), 5 s
+	(stock's episode_length_s) and the episode ends: a time-up the task reads as a truncation.
+	The track's bounds, the rewards and the terminations are the task's (scensim_batch's drift
+	task), as stock's are its environment's.
+-->
+<OpenSCENARIO>
+	<FileHeader author="scensim" date="2026-11-22T00:00:00+00:00" description="MuSHR drift on stock's oval (094 P2)" revMajor="1" revMinor="2">
+		<License name="BSD-3-Clause" text="The task is WheeledLab's (The Wheeled Lab Project Developers)" />
+		<Properties><Property name="scensim.category" value="R5.low_grip.drift_oval" /></Properties>
+	</FileHeader>
+	<ParameterDeclarations>
+		<ParameterDeclaration name="start_x" parameterType="double" value="0.8" />
+		<ParameterDeclaration name="start_y" parameterType="double" value="0.0" />
+		<ParameterDeclaration name="start_h" parameterType="double" value="1.5707963267948966" />
+	</ParameterDeclarations>
+	<RoadNetwork><LogicFile filepath="oval" /></RoadNetwork>
+	<Entities>
+		<ScenarioObject name="ego">
+			<Vehicle name="mushr_nano" vehicleCategory="car">
+				<BoundingBox><Center x="0.1531" y="0.0" z="0.116" /><Dimensions width="0.271" height="0.232" length="0.44" /></BoundingBox>
+				<Performance maxSpeed="3.0" maxAcceleration="10.0" maxDeceleration="10.0" />
+				<Axles>
+					<FrontAxle maxSteering="0.488" wheelDiameter="0.105" trackWidth="0.23" positionX="0.2965" positionZ="0.0525" />
+					<RearAxle maxSteering="0.0" wheelDiameter="0.105" trackWidth="0.23" positionX="0.0" positionZ="0.0525" />
+				</Axles>
+				<Properties />
+			</Vehicle>
+			<ObjectController><Controller name="Autoware"><Properties><Property name="maxJerk" value="10.0" /></Properties></Controller></ObjectController>
+		</ScenarioObject>
+	</Entities>
+	<Storyboard>
+		<Init><Actions><Private entityRef="ego"><PrivateAction><TeleportAction><Position>
+			<WorldPosition x="$start_x" y="$start_y" z="0.0" h="$start_h" p="0" r="0" />
+		</Position></TeleportAction></PrivateAction></Private></Actions></Init>
+		<Story name="drift"><Act name="drift_act"><ManeuverGroup maximumExecutionCount="1" name="episode">
+			<Actors selectTriggeringEntities="false"><EntityRef entityRef="ego" /></Actors>
+			<Maneuver name="time_limit"><Event name="time_up" priority="parallel">
+				<Action name="done"><UserDefinedAction><CustomCommandAction type="exitSuccess" /></UserDefinedAction></Action>
+				<StartTrigger><ConditionGroup><Condition name="five_s" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="5" rule="greaterThan" /></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+			</Event></Maneuver>
+		</ManeuverGroup></Act></Story>
+		<StopTrigger />
+	</Storyboard>
+</OpenSCENARIO>

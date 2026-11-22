@@ -513,3 +513,22 @@ a group.
 
 At 4 cars the resident path is no faster than the CPU path (184 against 65 ms a step, the GPU
 contended): every masked step is a kernel launch. Its case is a large N, which P2 measures.
+
+## 10. Episode starts from sample records (094 P2)
+
+`ScensimEnvCfg.start_pool` gives every training episode a sample record of its own: a pool
+(`start_pool.StartPool`) that the scenario's own Sampler fills on the host, a chunk at a time
+(chunk k drawn at seed + k, in the background when it runs low), each record compiled to its
+Init (the ego's pose and speed). Each reset takes the next unused records, writes their Init
+into the reset slots, and logs (slot, episode, record id, row, chunk), so any training episode
+replays on seats from its record unchanged. A record is never reused: a dry pool makes the
+reset wait for the refill, and counts it (`stalls`, `stall_s`).
+
+Only Init is drawn again. A scenario whose storyboard (its stories or StopTrigger) reads a
+sampled parameter is refused, since the compiled storyboard holds each slot's values. Its
+cost counts on our side of 094's comparison: 241's harness times `StartPool.refill` and
+`StartPool.take` as its `sample` stage (`--sample-hook`), on whatever thread they run, and
+stock's is 0, as it draws on the device.
+
+Measured on the MuSHR drift episode (2026-11-22; 64 envs, 300 steps, random actions,
+contended GPU): 1000 records drawn and compiled in 0.093 s, 93 us a record; 251 taken, no stall.
