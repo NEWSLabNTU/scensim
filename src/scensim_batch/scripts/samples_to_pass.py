@@ -13,11 +13,17 @@ Every evaluated checkpoint's line goes to <out>.jsonl (iteration, passed, share_
 slip_deg_median, speed_mean, phase), the result to <out>.json. A line already in the jsonl is
 not evaluated again, so a rerun after the run has saved more checkpoints goes on.
 
-    python samples_to_pass.py --run-path <run dir> --out <prefix> [--row b|a] [--starts stock]
-        [--envs-train 1024] [--steps-per-env 128] [--coarse 250] -- <python> [launcher args]
+    python samples_to_pass.py --run-path <run dir> --out <prefix> [--eval <eval_drift.py>]
+        [--eval-arg=--row --eval-arg=a ...] [--envs-train 1024] [--steps-per-env 128]
+        [--coarse 250] -- <python> [launcher args]
 
-Everything after `--` is how to run eval_drift.py (the Isaac Lab python and its environment are
-the caller's, as for train_drift.py).
+`--eval`: the evaluator (default scensim_batch's eval_drift.py; stock's P1 passes its
+bench/p1/eval_drift.py, so both sides run this one search). Each call is
+`<python> [launcher args] <eval> --headless --run-path <run> --checkpoint <N> --out <json>
+[eval args]`; the evaluator writes a JSON with passed, share_clean, slip_deg_median,
+speed_mean and laps_median, as both eval_drift.py do. `--eval-arg` (repeatable) goes to it
+as given: ours takes --row and --starts, stock's --run-config. Everything after `--` is how to
+run the evaluator (the Isaac Lab python and its environment are the caller's).
 """
 import argparse
 import glob
@@ -44,8 +50,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-path", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--row", default="b")
-    ap.add_argument("--starts", default="stock")
+    ap.add_argument("--eval", default=str(HERE / "eval_drift.py"))
+    ap.add_argument("--eval-arg", action="append", default=[])
     ap.add_argument("--envs-train", type=int, default=1024)
     ap.add_argument("--steps-per-env", type=int, default=128)
     ap.add_argument("--coarse", type=int, default=250)
@@ -63,9 +69,8 @@ def main(argv=None):
         if it in done:
             return done[it]["passed"]
         js = f"{a.out}.ckpt{it}.json"
-        cmd = runner + [str(HERE / "eval_drift.py"), "--headless", "--run-path", a.run_path,
-                        "--checkpoint", str(it), "--row", a.row, "--starts", a.starts,
-                        "--out", js]
+        cmd = runner + [a.eval, "--headless", "--run-path", a.run_path,
+                        "--checkpoint", str(it), "--out", js] + a.eval_arg
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0 or not os.path.exists(js):
             tail = (r.stdout + r.stderr)[-2000:]
@@ -102,7 +107,8 @@ def main(argv=None):
             if evaluate(it, "back-fill"):
                 first = it
                 break
-    out = {"run_path": os.path.abspath(a.run_path), "row": a.row, "starts": a.starts,
+    out = {"run_path": os.path.abspath(a.run_path), "eval": os.path.abspath(a.eval),
+           "eval_args": a.eval_arg,
            "iterations_saved": final, "final_passed": final_passed,
            "first_pass_iteration": first,
            "samples_to_pass": None if first is None
