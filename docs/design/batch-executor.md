@@ -541,3 +541,15 @@ the track drawn once a run (`tasks.drift_start.reference_points`, knobs `ref_s_0
 Uniform along the track per episode is the variant row (`mushr_drift_uniform_dist.xosc`,
 `env.starts=uniform`, an argument of train_rl.py like the run's other project settings:
 `env.starts_log=<jsonl>`, `env.pool_seed=<n>`, `env.drift_component=<name>` for row a).
+
+Row (a) of 094 P2 drives the MuSHR through its VESC: roboracer_vesc at MuSHR's values
+(`scenarios/projects/mushr_drift/component/mushr_vesc.yaml`, each value cited to MuSHR's
+`racecar-uw-nano/vesc.yaml`, its sensorless VESC configuration and VESC firmware 3.67's speed
+loop), the action mapped as MuSHR's driver maps it (ERPM = 3500 v, servo = 0.8 d + 0.5 within
+[0.15, 0.85]), the driven wheels on the spec's `component_spin_drive` (an effort drive: the
+VESC is the motor). Not MuSHR's, named: the torque constant (kt gear 1/60 N m/A, stock's
+0.5 N m a wheel at the speed loop's 60 A; the motor's kV is not published), the driver's
+0.93 m/s speed cap (not applied: the task asks 3 m/s, as stock's action), and stock's
+randomize_gains (its DC motor's gain) replaced by the speed loop's kp and ki times U[1/3, 5/3]
+per env. The env ages a command over its step's substeps, so a component reads each step's
+as a new message and never times out a held one.
