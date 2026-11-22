@@ -26,9 +26,11 @@ export PYTHONPATH=$FORK/source/wheeledlab:$FORK/source/wheeledlab_tasks:$FORK/so
 # MAX_LOAD x the cores, waited for up to WAIT_IDLE s (wheeledlab_bench refuses with exit 6 after)
 gate=(--require-idle --max-load "${MAX_LOAD:-0.5}" --wait-idle "${WAIT_IDLE:-1800}")
 [ "${SHARED:-0}" = 1 ] && gate=(--allow-shared)
-# Kit's own GPU: CUDA_VISIBLE_DEVICES pins CUDA (the run's cuda:0 is GPU), but Kit enumerates
-# GPUs itself, so its renderer is pinned to the same card, multi-GPU off (118's GPU1, 133)
-kit=("--kit_args=--/renderer/activeGpu=$GPU --/renderer/multiGpu/enabled=false")
+# Kit's renderer on the run's GPU: CUDA_VISIBLE_DEVICES pins CUDA (the run's cuda:0 is GPU),
+# but Kit enumerates GPUs itself. Its renderer is selected by CUDA index, as Isaac Lab 3.0's
+# kit_launcher does for a single-GPU run (activeCudaGpus, the trailing comma keeps it a string):
+# index 0 under the mask, which is GPU (241; 118's GPU1, 133)
+kit=("--kit_args=--/renderer/multiGpu/activeCudaGpus=0,")
 hooks=(--sample-hook scensim_batch.start_pool:StartPool.refill --sample-hook scensim_batch.start_pool:StartPool.take)
 # the harness records its commit and the task package's (wheeledlab_bench >= 5de128c), and
 # refuses either dirty unless --allow-dirty (ALLOW_DIRTY=1, recorded)
