@@ -40,6 +40,11 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
     # stock's evaluator's --samples-out file: its episodes replayed as the records, in env order
     # (eval_leadbrake.py --conditions-from); none: the pool's draws
     conditions_from: str = ""
+    # the row (133): "joints", the comparable row, stock's CarAction on the joints (the component
+    # bypassed); "ecu", the car's own drive unit and ECU (sim_vehicle_ecu's `ev`: the motor's
+    # envelope and lag, regen blended with the friction brakes, ABS, TC, ESC, the steer rate),
+    # stock's action, [-1, 1]^2 as stock's, read as its Autoware command (ecu_command)
+    row: str = "joints"
 
     def __post_init__(self):
         super().__post_init__()
@@ -71,6 +76,13 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
         LB.check_trigger_geometry(scen / "leadbrake.xosc", LB.straight_world())
         if self.train_headway not in ("record", "stock"):
             raise ValueError(f"train_headway {self.train_headway!r}: record or stock")
+        if self.row not in ("joints", "ecu"):
+            raise ValueError(f"row {self.row!r}: joints or ecu")
+        if self.row == "ecu":
+            self.component, self.bypass_component, self.implicit_effort = "ev", False, ()
+            self.device_resident = True      # EvBatch's torch form on the sim's GPU
+        else:
+            self.component, self.bypass_component, self.implicit_effort = "ideal", True, ("spin",)
 
 
 class LeadBrakeEnv(ScensimEnv):
@@ -90,6 +102,8 @@ class LeadBrakeEnv(ScensimEnv):
         self.drive_max = float(self._body_doc["joints"]["rear_left_spin"]["drive"]["effort_limit"])
         # FL FR RL RR (articulation.CORNERS): the driven axle's (stock's DRIVEN_JOINTS)
         self.driven = torch.tensor([0.0, 0.0, 1.0, 1.0], device=dev)
+        # the ECU row's scales, from the spec's body (ecu_scales)
+        self.a_drive, self.a_brake = LB.ecu_scales(cfg.vehicle)
         self.raw = torch.zeros(n, 2, device=dev)
         self.proc = torch.zeros(n, 2, device=dev)
         self.s_prev = torch.zeros(n, device=dev)
@@ -120,6 +134,10 @@ class LeadBrakeEnv(ScensimEnv):
     def _pre_physics_step(self, actions):
         self.raw = actions.clone()
         self.proc = torch.clamp(actions, -1.0, 1.0)
+        if self.cfg.row == "ecu":
+            _, _, _, v, _ = self._ego()
+            actions = LB.ecu_command(self.proc, v, self.a_drive, self.a_brake, self.steer_max,
+                                     self.step_dt)
         super()._pre_physics_step(actions)
 
     def joint_targets(self, actions):
