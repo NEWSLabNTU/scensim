@@ -504,7 +504,10 @@ def test_carla_root_gives_carla_basic_its_agents(where, maps_hub):
     d = make(where, maps_hub=maps_hub)
     sysf = where["tmp"] / "system" / "host.yaml"
     h = yaml.safe_load(sysf.read_text())
-    h["carla"] = {"root": str(where["tmp"] / "CARLA_0.9.16"), "start": "external"}
+    root = where["tmp"] / "CARLA_0.9.16"
+    root.mkdir(exist_ok=True)
+    (root / "CarlaUE4.sh").write_text("#!/bin/sh\n")   # an install: project check refuses none
+    h["carla"] = {"root": str(root), "start": "external"}
     sysf.write_text(yaml.safe_dump(h))
     p = stack.plan(project_arg=str(d), map_name="Town01")
     assert p.record["pilot_contract"]["carla_pythonapi"] == str(
