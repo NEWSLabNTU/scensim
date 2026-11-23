@@ -509,6 +509,51 @@ the control to 5 deg at 10 cm and 7 deg at 15 cm.
 - **Next, beside 066 R8's edge force: a speed sweep** around 15.6 m/s for the lips at 90 deg
   (both wheel queries), to find where the outcome changes. Not run in C5c.
 
+#### C5d's maps (spec written 2026-11-23, before they are built)
+
+What there is: the course builder's `maps` step (`course/maps.py`, 058 C7) samples the point
+cloud from `meshes.npz`, which since C5b carries the record's section, so the cloud already
+sees the crown, the bank and the lip. The lanelets do not: every bound node's `ele` is the
+centreline's height, at the carriageway's edges too. On fixture_c5's 6 % bank that puts an
+edge bound 0.20 m off the road, and a 2.5 % crown 0.08 m. Haruna's and Tsukuba's records are
+level, so their lanelets are right today. The cloud is one PCD; Haruna's divided map (issue
+072: 100 m tiles and `pointcloud_map_metadata.yaml`, which the profile loads dynamically) was
+divided by hand for the dataset, not by the builder.
+
+- **Lanelet heights from the record.** Each bound node's `ele` is the record's height at its
+  (u, v): the centreline's z plus `StationSection.height_uv(u, v)`, v the bound's offset
+  (the lane edges at +-half_width, the centre line at 0). A level record gives the heights of
+  today exactly (a test). The builder's `record` step runs before `maps`, so the record is
+  there; a course without one is refused by name, as `record.load` does.
+- **The cloud divided when large.** Over `DIVIDE_POINTS` (1,000,000) points the builder writes
+  `pointcloud_map.pcd/` as 100 m tiles named `<course>_<i>_<j>.pcd` with
+  `pointcloud_map_metadata.yaml`, issue 072's layout, every point kept; at or under it, one
+  PCD as today. fixture_c5 (1.32 M points) and Haruna (about 15 M) are divided, so both runs
+  below load dynamically, the path 072 proved on Haruna.
+- **Checks, offline.** Every lanelet bound node's `ele`, and the point midway between each
+  two consecutive nodes of a bound (linear, as Lanelet2 reads it), within 5 mm of the road
+  mesh's height there (`check.mesh_height`, the triangles' barycentric height), on fixture_c5
+  (banked, crowned, offset crown) and fixture_c5c (the lips: the right bound runs along the
+  lip's top). The divided cloud holds the same points as the undivided one (count and each
+  point once), each tile's points inside its 100 m cell, and the metadata names every tile.
+- **Checks, Autoware on Isaac** (GPU0, `--capture standard`, each map rebuilt by the branch's
+  builder):
+  - `fixture_c5_down` (the nonzero crown course): the scenario passes, and the nvtl judge's
+    rule (058 C9): NDT's nearest voxel transformation likelihood, its 5th percentile after
+    the first 10 s, at least 2.5, over at least 50 m. Reported beside it, not judged: the
+    localization's horizontal error against the truth (`/localization/kinematic_state`
+    against the ego_trace attachment's pose, matched by simulation time), its 95th
+    percentile and maximum.
+  - `haruna_down` on Haruna rebuilt by the builder (lanelets unchanged, the record level;
+    the cloud divided by the builder in place of by hand): the scenario passes, NVTL as
+    above. Its lap time and contacts set beside issue 072's run on the dataset's map
+    (382.4 s, 0 contacts).
+- **Not in C5d.** Publishing a dataset revision with the rebuilt maps (the user's call);
+  driving Tsukuba (its record is level, so its lanelets do not change; a rebuild divides its
+  cloud by the same rule, untested by a run here); C5's exit pairing (aib's
+  slope matrix and haruna_down against main's baseline, on the same host and GPU0), which
+  follows C5d.
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
