@@ -777,6 +777,102 @@ def test_a_carla_deaf_to_sigterm_is_killed_after_its_keeper(tmp_path):
     raise AssertionError("a CARLA that ignores SIGTERM outlived its SIGKILLed keeper")
 
 
+def _fake_carlas():
+    """pids of fake CARLA engines (fake_carla.py) alive on this host, zombies aside."""
+    out = set()
+    for d in Path("/proc").iterdir():
+        if not d.name.isdigit():
+            continue
+        try:
+            argv = (d / "cmdline").read_bytes().split(b"\0")
+            state = (d / "stat").read_text().rsplit(")", 1)[1].split()[0]
+        except OSError:
+            continue
+        if state != "Z" and any(a.endswith(b"/fake_carla.py") for a in argv):
+            out.add(int(d.name))
+    return out
+
+
+@pytest.fixture(autouse=True)
+def no_fake_carla_outlives_its_test():
+    """Issue 133: a fixture's CARLA that outlives its test is a failure, and is ended."""
+    before = _fake_carlas()
+    yield
+    left = set()
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        left = _fake_carlas() - before
+        if not left:
+            return
+        time.sleep(0.1)
+    for pid in left:
+        try:
+            os.kill(pid, 9)
+        except ProcessLookupError:
+            pass
+    raise AssertionError(f"fake CARLA {sorted(left)} outlived its test (issue 133)")
+
+
+def test_the_engine_under_the_launcher_dies_with_a_sigkilled_keeper(tmp_path):
+    """Issue 133: CarlaUE4.sh runs the engine as its child, and a fork clears the parent-death
+    signal, so the launcher dies with the keeper and the engine does not: the reaper ends the
+    engine, though its launcher is gone before the reaper sees the keeper go."""
+    import subprocess as sp
+    root = fake_root(tmp_path)
+    script = tmp_path / "keeper.py"
+    script.write_text(textwrap.dedent(f"""
+        import time
+        from scensim import simulator
+        c = simulator.Carla({{"root": {str(root)!r}, "host": "127.0.0.1",
+                              "port": {free_port()}}}, {str(tmp_path / "proc")!r})
+        c.start()
+        open({str(tmp_path / "reaper")!r}, "w").write(str(c.reaper.pid))
+        time.sleep(120)
+    """))
+    src = str(Path(sim.__file__).resolve().parents[1])
+    keeper = sp.Popen([sys.executable, str(script)],
+                      env=dict(os.environ, PYTHONPATH=src + os.pathsep + os.environ.get("PYTHONPATH", "")))
+    started, rfile = root / "started.json", tmp_path / "reaper"
+    deadline = time.time() + ceiling()
+    while time.time() < deadline:   # the engine up, and the reaper watching it
+        if started.exists() and rfile.exists() and rfile.read_text():
+            try:
+                fds = [os.readlink(f) for f in Path(f"/proc/{rfile.read_text()}/fd").iterdir()]
+            except OSError:
+                fds = []
+            if "anon_inode:[pidfd]" in fds:
+                break
+        time.sleep(0.05)
+    else:
+        keeper.kill()
+        raise AssertionError("the fake CARLA never started under a watching reaper")
+    engine = json.loads(started.read_text())["pid"]
+    keeper.kill()
+    keeper.wait()
+    assert gone(engine, within=15), "the engine outlived its SIGKILLed keeper (issue 133)"
+
+
+def test_a_group_whose_members_ended_is_never_signalled(monkeypatch):
+    """Issue 133: once CARLA's members have all ended, its process group id may be any
+    process's: the reaper signals only the processes it holds, never the group by its id."""
+    import subprocess as sp
+    carla = sp.Popen([sys.executable, "-c", "import time; time.sleep(0.5)"],
+                     start_new_session=True)
+    members = sim._Members(carla.pid)
+    assert members.scan() and carla.pid in members.fds
+    carla.wait()
+    sent = []
+    monkeypatch.setattr(os, "killpg", lambda *a: sent.append(("killpg",) + a))
+    monkeypatch.setattr(os, "kill", lambda *a: sent.append(("kill",) + a))
+    monkeypatch.setattr(sim.signal, "pidfd_send_signal",
+                        lambda *a: sent.append(("pidfd",) + a))
+    assert not members.scan() and members.fds == {}
+    members.signal(sim.signal.SIGKILL)
+    assert sent == []
+    # and the reaper of such a group leaves at once, its keeper alive
+    assert sim.reap(carla.pid, os.getppid()) == 0 and sent == []
+
+
 def test_the_reaper_leaves_with_a_carla_its_keeper_stopped(tmp_path):
     import subprocess as sp
     carla = sp.Popen([sys.executable, "-c", "import time; time.sleep(60)"])

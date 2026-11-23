@@ -772,9 +772,9 @@ class Carla:
             return True
         if self.proc is None or self.failed:
             return False
-        code = self.proc.poll()
-        if code is not None:
-            _kill_group(self.proc.pid, signal.SIGKILL)  # what the launcher left of it
+        if _exit_pending(self.proc):
+            _end_group(self.proc, signal.SIGKILL)  # what the launcher left of it
+            code = self.proc.wait()
             if self.rec.get("state") == READY:
                 self.rec.update(state=STARTING, pid=None, ready_at=None,
                                 restarts=int(self.rec.get("restarts") or 0) + 1)
@@ -820,16 +820,21 @@ class Carla:
         proc, self.proc = self.proc, None
         if proc is None:
             return
-        live = proc.poll() is None
+        live = not _exit_pending(proc)
         for sig, wait in ((signal.SIGINT, grace), (signal.SIGTERM, 10.0), (signal.SIGKILL, 5.0)):
             if not live:
                 break
-            _kill_group(proc.pid, sig)
+            _end_group(proc, sig)
             deadline = time.time() + wait
-            while time.time() < deadline and proc.poll() is None:
+            while time.time() < deadline and not _exit_pending(proc):
                 time.sleep(0.05)
-            live = proc.poll() is None
-        _kill_group(proc.pid, signal.SIGKILL)  # the Shipping binary under the launcher's shell
+            live = not _exit_pending(proc)
+        _end_group(proc, signal.SIGKILL)  # the Shipping binary under the launcher's shell
+        if proc.returncode is None:
+            try:
+                proc.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                pass
         self.rec.update(state=STOPPED, pid=None)
         self.events("carla.stop", pid=proc.pid)
 
@@ -847,10 +852,11 @@ REAP_GRACE = 20.0   # a CARLA whose keeper died: SIGTERM, this long, then SIGKIL
 
 def start_reaper(pid, grace=REAP_GRACE):
     """A watcher for the CARLA at ``pid`` that ends it when the keeper dies. The parent-death
-    signal gives CARLA SIGTERM, but UE's graceful exit can hang, and play_launch SIGKILLs the
-    keeper seconds after SIGTERM, before its own SIGKILL to CARLA: the watcher, in its own
-    session (play_launch's stop does not reach it), escalates instead. None if it cannot
-    start (CARLA then has only its parent-death signal)."""
+    signal reaches only the launcher (CarlaUE4.sh runs the engine as its child, and a fork
+    clears that signal), UE's graceful exit can hang, and play_launch SIGKILLs the keeper
+    seconds after SIGTERM, before its own SIGKILL to CARLA: the watcher, in its own session
+    (play_launch's stop does not reach it), ends every process of CARLA's group instead (issue
+    133). None if it cannot start (CARLA then has only its parent-death signal)."""
     try:
         return subprocess.Popen([sys.executable, "-m", "scensim.simulator", "reap", str(pid),
                                  "--grace", str(grace), "--parent", str(os.getpid())],
@@ -860,37 +866,124 @@ def start_reaper(pid, grace=REAP_GRACE):
         return None
 
 
-def reap(pid: int, parent: int, grace: float = REAP_GRACE, poll: float = 1.0) -> int:
-    """Wait while ``parent`` lives; then SIGTERM CARLA (its process group too), wait
-    ``grace`` seconds, SIGKILL. Through a pidfd: a pid used again is never signalled. Returns
-    at once when CARLA ends first (its keeper stopped it)."""
-    import select
+def _pgid_of(pid, proc="/proc"):
     try:
-        fd = os.pidfd_open(pid)
-    except (ProcessLookupError, OSError):
-        return 0
-    gone = {"now": False}
-    signal.signal(signal.SIGTERM, lambda *_: gone.update(now=True))
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+        with open(f"{proc}/{pid}/stat") as f:
+            return int(f.read().rsplit(")", 1)[1].split()[2])
+    except (OSError, IndexError, ValueError):
+        return None
 
-    def ended(timeout):
-        return bool(select.select([fd], [], [], timeout)[0])
 
-    def send(sig):
+def _ended(fd) -> bool:
+    import select
+    return bool(select.select([fd], [], [], 0)[0])
+
+
+class _Members:
+    """The processes of CARLA's process group, each held by a pidfd (issue 133).
+
+    A process group id is a pid: once the group's last member ends, it may name any process's
+    group, so CARLA is never signalled by its group id. A member is held when its pidfd is
+    open, its /proc stat names the group, and the pidfd still shows it alive after that read
+    (so the stat read was of the process the pidfd holds). Only held members are signalled,
+    each through its pidfd: a member that ended is never signalled, nor anything after it."""
+
+    def __init__(self, pgid, proc="/proc"):
+        self.pgid = int(pgid)
+        self.proc = proc
+        self.fds = {}   # pid -> pidfd
+
+    def scan(self) -> bool:
+        """Hold the group's new members, drop the ended ones; True while any is held."""
         try:
-            signal.pidfd_send_signal(fd, sig)
-        except ProcessLookupError:
-            return
-        if not ended(0):
-            _kill_group(pid, sig)   # the engine under a launcher script, in CARLA's session
-    while not gone["now"] and os.getppid() == parent:
-        if ended(poll):
+            pids = [int(d) for d in os.listdir(self.proc) if d.isdigit()]
+        except OSError:
+            pids = []
+        for pid in pids:
+            if pid in self.fds or _pgid_of(pid, self.proc) != self.pgid:
+                continue
+            try:
+                fd = os.pidfd_open(pid)
+            except OSError:
+                continue
+            if _pgid_of(pid, self.proc) == self.pgid and not _ended(fd):
+                self.fds[pid] = fd
+            else:
+                os.close(fd)
+        for pid, fd in list(self.fds.items()):
+            if _ended(fd):
+                os.close(fd)
+                del self.fds[pid]
+        return bool(self.fds)
+
+    def signal(self, sig):
+        for fd in list(self.fds.values()):
+            try:
+                signal.pidfd_send_signal(fd, sig)
+            except ProcessLookupError:
+                pass
+
+    def wait(self, timeout):
+        """Until any held member ends, or ``timeout`` seconds."""
+        import select
+        if self.fds:
+            select.select(list(self.fds.values()), [], [], timeout)
+        else:
+            time.sleep(timeout)
+
+    def close(self):
+        for fd in self.fds.values():
+            os.close(fd)
+        self.fds = {}
+
+
+def reap(pid: int, parent: int, grace: float = REAP_GRACE, poll: float = 1.0) -> int:
+    """Wait while ``parent`` (the keeper) lives; then SIGTERM every process of CARLA's group
+    (``pid``'s), wait ``grace`` seconds, SIGKILL those left. Each held by a pidfd (_Members):
+    a pid or group id used again is never signalled. Returns at once when CARLA's group ends
+    first (its keeper stopped it), though its launcher ending alone is not that (issue 133:
+    the launcher dies of the parent-death signal before the engine under it)."""
+    members = _Members(pid)
+    try:
+        if not members.scan():
             return 0
-    send(signal.SIGTERM)
-    if ended(grace):
+        gone = {"now": False}
+        signal.signal(signal.SIGTERM, lambda *_: gone.update(now=True))
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        while not gone["now"] and os.getppid() == parent:
+            members.wait(poll)
+            if not members.scan():
+                return 0
+        if not members.scan():
+            return 0
+        members.signal(signal.SIGTERM)
+        deadline = time.time() + grace
+        while time.time() < deadline:
+            members.wait(min(0.2, max(0.0, deadline - time.time())))
+            if not members.scan():
+                return 0
+        members.signal(signal.SIGKILL)
         return 0
-    send(signal.SIGKILL)
-    return 0
+    finally:
+        members.close()
+
+
+def _exit_pending(proc) -> bool:
+    """True when ``proc`` (the launcher, our child) has exited, leaving it unreaped: its pid,
+    the id of CARLA's process group, stays taken, so the group may still be signalled by it
+    (issue 133). A launcher already reaped is ended too, and its group is not signalled."""
+    if proc.returncode is not None:
+        return True
+    try:
+        return os.waitid(os.P_PID, proc.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+    except ChildProcessError:
+        return proc.poll() is not None
+
+
+def _end_group(proc, sig):
+    """Signal CARLA's group by its id only while the unreaped launcher holds that id."""
+    if proc.returncode is None:
+        _kill_group(proc.pid, sig)
 
 
 def _kill_group(pgid, sig):
