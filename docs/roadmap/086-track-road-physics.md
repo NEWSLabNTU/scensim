@@ -12,7 +12,8 @@ courses' dataset revision prepared, not published. C4 landed 2026-11-20 (scensim
 steps ("C5's steps" below); C5a done (scensim_isaac_world ea35f35), C5b done
 (scensim_isaac_world b5de87b, its fixture course and checks), C5c done (scensim_isaac_world
 7eb96cc, the lip fixtures and the strips as zones), C5d done with one failed check
-(scensim_isaac_world 33c6aae: the maps pass, the fixture's localization fails; C5d2 follows).
+(scensim_isaac_world 33c6aae: the maps pass, the fixture's localization fails), C5d2 done
+(scensim_isaac_world 086-c5d2: the fixture with guardrails and trees passes).
 Issue 077's cause is confirmed (2026-11-20, 118): PhysX's raycast wheel query takes Town01's
 sharp curb face as the ground, and Town01 has no road layer. Its fix comes first, ahead of C5:
 recheck the sweep (066 R1's check, from C6). If the sweep no longer throws the car, aib switches
@@ -624,6 +625,35 @@ checks pass and land. The fixture's localization becomes its own step, C5d2.
   (`course.check`) and Isaac's road (`isaac_check`) within C5b's limits, and the lanelets
   within 5 mm.
 - Not started until C5d lands.
+
+#### C5d2's results (2026-11-23, 118, GPU0)
+
+scensim_isaac_world 086-c5d2 (41a0102: the fixture's `barrier_offset_*` columns, `photo:
+forest`, `courses/fixture_c5d2.yaml`). Logs and data: NAS "2026-11-23 086 C5d2 fixture with
+lateral features (118)". Run on 118 in `/mnt/renegade/aeon/isaac-ex/c5d2`.
+
+- **The course**: C5b's road with 340 guardrail segments (1020 m, both sides at 4.5 m) and
+  1398 trees; the cloud 6,011,964 points in 16 tiles (C5d's 1,320,500 without them).
+- **Kept from C5b**: the mesh against the record 0.000 mm at the stations; Isaac's road by
+  97968 rays, 0 missing, passes; the lanelets within 0.42 mm (nodes) and 0.88 mm (midway).
+- **Autoware on Isaac** (Model 3, the scensim profile, C5d's fixture scenario with the map's
+  name changed: the builder's own names the drift Mustang; run 2026-11-23T12-03-03):
+
+  | | scenario | NVTL p05 (>= 2.5) | pose error p95 (<= 0.2 m) | median | max (reported) |
+  |---|---|---|---|---|---|
+  | fixture_c5d2_down | passed, 127.4 s, 0 contacts | 3.08 over 451 m | **0.103, passes** | 0.054 | 0.127 |
+  | C5d's fixture_c5_down, no rails or trees | passed | 3.31 over 451 m | 1.33, fails | 0.75 | 1.38 |
+
+- **Finding: with lateral features NDT holds the pose on the crowned, banked course**, within
+  the rule set before the runs and with more margin than Haruna (0.103 against 0.183 m). So
+  C5d's failure was the fixture's, as its A/B said, and C5's exit "haruna_down passes on a
+  course with a nonzero crown" is met here on a course that has what a real road has beside
+  it. NVTL was lower with the features (3.08 against 3.31) while the pose was right: a high
+  NVTL on a featureless map is no sign of a held pose.
+- As built: the guardrails stand at the centreline's height (`props.guardrails`, as on every
+  course), so on the 6 % bank a rail is up to about 0.27 m off the ground at 4.5 m; NDT needed
+  them only beside the road. The commit's message lost "`photo: forest`" to the shell (it was
+  already pushed to the branch; no force-push).
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
