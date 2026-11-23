@@ -205,18 +205,18 @@ def _commanded_trace(tmp_path, cmd_frames, counts=None, name="20261123T000000.00
 
 
 def test_commands_lag_one_under_lockstep_is_ok(tmp_path):
-    traces = _commanded_trace(tmp_path, [0, 1, 2, 3, 4],
+    traces = _commanded_trace(tmp_path, [0, 101, 102, 103, 104],
                               {"unknown_entity": 0, "gate_misses": 0, "malformed": 0})
     c = truth.commands(traces, lockstep=True)
     assert c["ok"] and c["mode"] == "lockstep"
     w = c["entities"]["walker"]
     assert w == {"commanded_frames": 4, "uncommanded_frames": 1, "lost_frames": 0,
-                 "lag_frames": {"p50": 1, "p95": 1, "max": 1}}
+                 "unmatched_frames": 0, "lag_frames": {"p50": 1, "p95": 1, "max": 1}}
     assert (c["unknown_entity"], c["gate_misses"], c["malformed"]) == (0, 0, 0)
 
 
 def test_commands_a_late_command_fails_lockstep_and_is_a_record_free_running(tmp_path):
-    traces = _commanded_trace(tmp_path, [0, 1, 1, 3, 4],
+    traces = _commanded_trace(tmp_path, [0, 101, 101, 103, 104],
                               {"unknown_entity": 2, "gate_misses": 1, "malformed": 0})
     c = truth.commands(traces, lockstep=True)
     assert not c["ok"]
@@ -226,10 +226,18 @@ def test_commands_a_late_command_fails_lockstep_and_is_a_record_free_running(tmp
 
 
 def test_commands_a_lost_command_fails_lockstep(tmp_path):
-    c = truth.commands(_commanded_trace(tmp_path, [0, 1, 0, 3]), lockstep=True)
+    c = truth.commands(_commanded_trace(tmp_path, [0, 101, 0, 103]), lockstep=True)
     assert not c["ok"] and c["entities"]["walker"]["lost_frames"] == 1
 
 
 def test_commands_is_none_without_a_commanded_entity(tmp_path):
     write(tmp_path, [EP, entity("ego", "ego", 0), frame(1, {"ego": (0, 0, 0)}), END])
     assert truth.commands(truth.load(tmp_path)) is None
+
+
+def test_commands_lag_counts_truth_frames_through_sim_frame(tmp_path):
+    # cmd_frame is the world's frame (sim_frame = 100 + frame here): 3 world ticks a step would
+    # not change the lag, which is counted in truth frames; a world frame no truth frame names
+    # is unmatched, and fails lockstep
+    c = truth.commands(_commanded_trace(tmp_path, [0, 101, 102, 57]), lockstep=True)
+    assert c["entities"]["walker"]["unmatched_frames"] == 1 and not c["ok"]

@@ -44,8 +44,10 @@ or exits other than 0 or by the SIGINT it was sent, makes the run an error run, 
 leave out (a V2X study whose network simulator died mid-run must not count that run).
 """
 import json
+import math
 import os
 import signal
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -57,6 +59,7 @@ MODEL_CONTROLLER = "model"
 # numbers at most 24 characters bound it to 10 entities (scensim_carla_world's tick gate).
 MAX_COMMANDED = 10
 MAX_NAME = 64
+MAX_DATAGRAM = 1472
 LIFETIMES = ("run",)
 DEFAULT_STOP_TIMEOUT = 10.0
 DIR = "attachments"
@@ -190,6 +193,7 @@ def env_for(a: dict, base: dict, run_dir: Path, seed, roles: dict, tick_gate=Non
     })
     if a.get("commands"):
         env["SCENSIM_COMMANDS"] = json.dumps(a["commands"])
+        env["SCENSIM_LOCKSTEP"] = "1" if a.get("lockstep") else "0"
     if (a.get("lockstep") or a.get("commands")) and tick_gate:
         env["SCENSIM_TICK_GATE"] = tick_gate
     return env
@@ -283,3 +287,76 @@ def roles(entities, pilots) -> dict:
         else:
             out[e.name] = "scenario"
     return out
+
+
+class CommandGate:
+    """A commanding attachment's side of the tick gate (roadmap 092 K12): its entities' kinematic
+    commands, one datagram per truth frame it answers.
+
+        with CommandGate() as gate:                  # SCENSIM_TICK_GATE, _COMMANDS, _LOCKSTEP
+            for frame in truth:                      # each truth frame, in order
+                gate.send(frame.sim_frame, {"walker": (speed, heading, accel_limit)})
+
+    ``send`` answers the truth frame whose world frame is ``frame`` (its ``sim_frame``): under
+    lockstep as ``DONE`` (the world holds its next tick for it), else as ``CMD`` (never waited
+    for). Speed in m/s (not negative), heading in rad in SSv2's map frame, the acceleration limit
+    in m/s^2 (positive); each number in its shortest round-trip form. An entity this attachment
+    does not command, a bad number, or a datagram over ``MAX_DATAGRAM`` bytes raises ValueError
+    here, rather than being dropped whole by the world. Under lockstep it joins the gate at once
+    (``HELLO``) and leaves on ``close`` (``BYE``)."""
+
+    def __init__(self, address=None, entities=None, lockstep=None):
+        address = address or os.environ.get("SCENSIM_TICK_GATE", "")
+        host, _, port = address.rpartition(":")
+        if not host or not port.isdigit():
+            raise ValueError(f"tick gate address {address!r}: expected host:port "
+                             "(SCENSIM_TICK_GATE)")
+        self.entities = list(entities if entities is not None
+                             else json.loads(os.environ.get("SCENSIM_COMMANDS", "[]")))
+        self.lockstep = (lockstep if lockstep is not None
+                         else os.environ.get("SCENSIM_LOCKSTEP", "1") == "1")
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.connect((host, int(port)))
+        if self.lockstep:
+            self.sock.send(b"HELLO")
+
+    def datagram(self, frame: int, commands: dict) -> bytes:
+        """The datagram ``send`` would send."""
+        if isinstance(frame, bool) or not isinstance(frame, int) or frame < 0:
+            raise ValueError(f"frame {frame!r}: a non-negative integer (the truth's sim_frame)")
+        words = ["DONE" if self.lockstep else "CMD", str(frame)]
+        for name, cmd in commands.items():
+            if name not in self.entities:
+                raise ValueError(f"{name!r}: not an entity this attachment commands "
+                                 f"({', '.join(self.entities) or 'none'})")
+            speed, heading, limit = (float(x) for x in cmd)
+            if not all(math.isfinite(x) for x in (speed, heading, limit)):
+                raise ValueError(f"{name!r}: {cmd!r}: every number must be finite")
+            if speed < 0 or limit <= 0:
+                raise ValueError(f"{name!r}: speed {speed} must not be negative and the "
+                                 f"acceleration limit {limit} must be positive")
+            words += [name, repr(speed), repr(heading), repr(limit)]
+        data = " ".join(words).encode()
+        if len(data) > MAX_DATAGRAM:
+            raise ValueError(f"{len(data)} bytes: over the gate's {MAX_DATAGRAM}")
+        return data
+
+    def send(self, frame: int, commands: dict) -> None:
+        self.sock.send(self.datagram(frame, commands))
+
+    def close(self) -> None:
+        if self.sock is None:
+            return
+        if self.lockstep:
+            try:
+                self.sock.send(b"BYE")
+            except OSError:
+                pass
+        self.sock.close()
+        self.sock = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()

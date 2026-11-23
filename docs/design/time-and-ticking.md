@@ -104,6 +104,21 @@ it has run the network up to the next frame's time, so the world never runs ahea
 network. A follower outside scensim's network namespace needs the gate bound on an address it
 can reach (`SCENSIM_TICK_GATE=0.0.0.0:7410`).
 
+**Commands on the gate** (roadmap 092 K12). A follower that moves entities (an attachment with
+`commands:`, a behaviour model on the truth stream) appends their commands to its
+acknowledgement: `DONE <frame> [<entity> <speed> <heading> <accel_limit>]...`, `<frame>` the
+truth frame's `sim_frame` it answers, speed in m/s, heading in rad in SSv2's map frame, the
+acceleration limit in m/s^2. Free-running it sends the same list as `CMD <frame> ...`, which
+joins nothing and is never waited for. Commands are in the world server before the tick that
+follows the frame they answer, so under lockstep an entity is moved at frame k+1 by the command
+that answered frame k: a lag of one frame, by construction, which the truth file records
+(`cmd_frame`) and `result.json`'s `commands` checks (`command_lag` otherwise). A datagram is at
+most 1472 bytes and a name at most 64, so a scenario commands at most 10 entities; a datagram
+over either bound, or one that does not parse, is dropped whole and counted. Before each tick
+the world server integrates each commanded entity's newest command, as the batch does
+(`scensim_batch.core.Models`), and poses it with physics off. `scensim.attachments.CommandGate`
+is the follower's side.
+
 ## Tick granularity
 
 ```

@@ -189,3 +189,74 @@ def test_a_commanding_attachment_gets_the_gate_its_entities_and_the_scenario(tmp
     assert json.loads(env["SCENSIM_COMMANDS"]) == ["walker"]
     assert env["SCENSIM_SCENARIO"] == str(tmp_path / "cs1.xosc")
     assert json.loads(env["SCENSIM_PARAMETERS"]) == {"walk_speed": 1.4}
+
+
+def _gate_socket():
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind(("127.0.0.1", 0))
+    s.settimeout(ceiling())
+    return s, f"127.0.0.1:{s.getsockname()[1]}"
+
+
+def test_command_gate_lockstep_says_hello_done_with_commands_and_bye():
+    srv, addr = _gate_socket()
+    with at.CommandGate(addr, entities=["walker"], lockstep=True) as gate:
+        assert srv.recv(2048) == b"HELLO"
+        gate.send(5021, {"walker": (1.4, 1.5707963267948966, 2.0)})
+        assert srv.recv(2048) == b"DONE 5021 walker 1.4 1.5707963267948966 2.0"
+        gate.send(5022, {})
+        assert srv.recv(2048) == b"DONE 5022"
+    assert srv.recv(2048) == b"BYE"
+
+
+def test_command_gate_free_running_sends_cmd_and_reads_its_environment(monkeypatch):
+    srv, addr = _gate_socket()
+    monkeypatch.setenv("SCENSIM_TICK_GATE", addr)
+    monkeypatch.setenv("SCENSIM_COMMANDS", '["walker"]')
+    monkeypatch.setenv("SCENSIM_LOCKSTEP", "0")
+    gate = at.CommandGate()
+    gate.send(7, {"walker": (0, -3.0, 0.5)})
+    assert srv.recv(2048) == b"CMD 7 walker 0.0 -3.0 0.5"
+    gate.close()
+    srv.settimeout(0.2)
+    import socket
+    try:
+        srv.recv(2048)
+        raise AssertionError("a free-running gate sends no BYE")
+    except socket.timeout:
+        pass
+
+
+def test_command_gate_refuses_what_the_world_would_drop():
+    _, addr = _gate_socket()
+    gate = at.CommandGate(addr, entities=["walker"], lockstep=False)
+    for frame, cmds, want in ((3, {"other": (1, 0, 1)}, "not an entity"),
+                              (3, {"walker": (-1, 0, 1)}, "must not be negative"),
+                              (3, {"walker": (1, 0, 0)}, "must be positive"),
+                              (3, {"walker": (1, float("nan"), 1)}, "finite"),
+                              (-1, {}, "non-negative integer")):
+        try:
+            gate.datagram(frame, cmds)
+            raise AssertionError(cmds)
+        except ValueError as e:
+            assert want in str(e), (cmds, e)
+    gate.close()
+
+
+def test_ten_commands_at_the_bounds_fit_one_datagram():
+    # as scensim_carla_world's tick gate test: 10 names of 64 bytes, numbers of 24 characters
+    names = [f"{i:02d}" + "w" * 62 for i in range(10)]
+    _, addr = _gate_socket()
+    gate = at.CommandGate(addr, entities=names, lockstep=True)
+    heading, positive = -1.2345678901234567e-300, 1.2345678901234567e+300
+    assert (len(repr(heading)), len(repr(positive))) == (24, 23)   # the longest forms
+    d = gate.datagram(2 ** 64 - 1, {n: (positive, heading, positive) for n in names})
+    assert len(d) <= at.MAX_DATAGRAM
+    try:
+        at.CommandGate(addr, entities=names + ["x" * 64], lockstep=True).datagram(
+            2 ** 64 - 1, {n: (positive, heading, positive) for n in names + ["x" * 64]})
+        raise AssertionError("eleven fit")
+    except ValueError as e:
+        assert "over the gate's 1472" in str(e)
+    gate.close()

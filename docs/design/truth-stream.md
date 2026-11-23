@@ -70,9 +70,11 @@ Superseded commands are expected whenever the stack's control rate exceeds the f
 vehicle interface.
 
 An entity of role `model` (controller `model`: a pedestrian the world server moves on a
-behaviour model's kinematic commands, roadmap 092 K12) also has `cmd_frame`: the frame whose
-command moved it in the step that ended at this frame, 0 before its first command. Its command
-lag is the frame minus `cmd_frame`: 1 under lockstep, by construction.
+behaviour model's kinematic commands, roadmap 092 K12) also has `cmd_frame`: the world's frame
+(a truth frame's `sim_frame`, as the tick gate's `DONE` names it) whose command moved it in the
+step that ended at this frame, 0 before its first command. Its command lag is this frame's
+number minus that of the truth frame whose `sim_frame` is `cmd_frame`: 1 under lockstep, by
+construction (`scensim.truth.commands`).
 
 Schema 2 names the simulator's values neutrally. Schema 1 (CARLA only) named them `carla`
 (`sim_pose`), `carla_frame` (`sim_frame`), `actor_id` (`sim_id`), `blueprint` (`asset`) and

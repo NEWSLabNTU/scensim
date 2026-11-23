@@ -97,14 +97,15 @@ three corrections, and the spec is written around them:
   refuses it: Isaac today, by name. Its follow-up, named and not part of K12: a tick gate and
   `READS_BACK` for the Isaac world server.
 - **D4, the channel.** The tick gate's datagram, extended: a follower acknowledges a frame with
-  `DONE <frame> [<entity> <speed> <heading> <accel_limit>]...` (SSv2's frame, radians, SI
-  units). Free-running (`lockstep: false`), the follower sends the same list as `CMD <frame>
-  ...` to the same port and is not waited for. The world server applies each entity's latest
-  command at the next tick. A frame's commands fit one datagram, bounded so it never fragments
-  on an Ethernet link (the gate may be bound off the loopback, as for ns-3): at most 1472 bytes,
-  each number in its shortest round-trip form (at most 24 characters), an entity's name at most
-  64 bytes, so at most **10 commanded entities** per scenario. `scensim run` refuses a scenario
-  over either bound by name, before SSv2 starts; nothing is split or dropped.
+  `DONE <frame> [<entity> <speed> <heading> <accel_limit>]...` (`<frame>` as `DONE`'s: the truth
+  frame's `sim_frame`; radians, SI units). Free-running (`lockstep: false`), the follower sends
+  the same list as `CMD <frame> ...` to the same port and is not waited for. The world server
+  applies each entity's latest command at the next tick. A frame's commands fit one datagram,
+  bounded so it never fragments on an Ethernet link (the gate may be bound off the loopback, as
+  for ns-3): at most 1472 bytes, each number in its shortest round-trip form (at most 24
+  characters), an entity's name at most 64 bytes, so at most **10 commanded entities** per
+  scenario. `scensim run` refuses a scenario over either bound by name, before SSv2 starts;
+  nothing is split or dropped.
 - **D5, the motion.** Before each tick the world server integrates each commanded entity as the
   batch does (`scensim_batch.core.Models`): `v += clamp(speed - v, +-accel_limit dt)`, the yaw
   set to the heading, the position moved `v dt` along it; then sets the actor's transform with

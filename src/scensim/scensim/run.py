@@ -1662,7 +1662,8 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                                        "cmd_frame, so the commands' lag is unknown"))
         elif not commands_block["ok"]:
             bad = {n: e for n, e in commands_block["entities"].items()
-                   if e.get("lost_frames") or e.get("uncommanded_frames", 0) > 1
+                   if e.get("lost_frames") or e.get("unmatched_frames")
+                   or e.get("uncommanded_frames", 0) > 1
                    or (e.get("lag_frames") or {}).get("max", 1) != 1
                    or (e.get("lag_frames") or {}).get("p50", 1) != 1}
             n, e = next(iter(bad.items())) if bad else ("?", {})

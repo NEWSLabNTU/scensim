@@ -209,8 +209,11 @@ def clock(traces, mode="lockstep", max_lag_s=None, rtf=1.0) -> dict:
 def commands(traces, lockstep=True) -> dict:
     """The result's ``commands`` (roadmap 092 K12, D7), or None when no entity is commanded.
 
-    Per commanded entity (role ``model``): the frames it was moved by a command, its lag (the
-    frame minus ``cmd_frame``: p50, p95, max) and the frames before its first command; from the
+    Per commanded entity (role ``model``): the frames it was moved by a command, its lag in
+    frames (p50, p95, max) and the frames before its first command. ``cmd_frame`` is the world's
+    frame the command answered (a truth frame's ``sim_frame``, as the gate's ``DONE``), so the
+    lag is this frame's number minus that truth frame's; a ``cmd_frame`` no truth frame names is
+    ``unmatched``. From the
     world server's counts, the commands naming an unknown entity, the gate's misses and the
     dropped datagrams (each episode's last frame). Under lockstep ``ok`` holds when every frame
     after an entity's first has lag 1 (its first frame precedes any answer): else the run is an
@@ -218,6 +221,7 @@ def commands(traces, lockstep=True) -> dict:
     per, counts, seen = {}, {"unknown_entity": 0, "gate_misses": 0, "malformed": 0}, False
     for t in traces:
         models = [n for n, h in t.entities.items() if h.role == "model"]
+        by_sim = {f.sim_frame: f.frame for f in t.frames if f.sim_frame is not None}
         last = None
         for f in t.frames:
             if f.commands is not None:
@@ -227,14 +231,16 @@ def commands(traces, lockstep=True) -> dict:
                 if s is None or s.cmd_frame is None:
                     continue
                 seen = True
-                e = per.setdefault(n, {"lags": [], "uncommanded": 0})
+                e = per.setdefault(n, {"lags": [], "uncommanded": 0, "unmatched": 0})
                 if s.cmd_frame == 0:
                     if e["lags"]:
                         e["lags"].append(None)   # a command lost after the first: no answer
                     else:
                         e["uncommanded"] += 1
+                elif s.cmd_frame in by_sim:
+                    e["lags"].append(f.frame - by_sim[s.cmd_frame])
                 else:
-                    e["lags"].append(f.frame - s.cmd_frame)
+                    e["unmatched"] += 1
         if last is not None:
             seen = True
             for k in counts:
@@ -246,11 +252,12 @@ def commands(traces, lockstep=True) -> dict:
         lags = sorted(x for x in e["lags"] if x is not None)
         lost = sum(x is None for x in e["lags"])
         rec = {"commanded_frames": len(lags), "uncommanded_frames": e["uncommanded"],
-               "lost_frames": lost}
+               "lost_frames": lost, "unmatched_frames": e["unmatched"]}
         if lags:
             rec["lag_frames"] = {"p50": _rank(lags, 0.5), "p95": _rank(lags, 0.95),
                                  "max": lags[-1]}
-        if lockstep and (e["uncommanded"] > 1 or lost or any(x != 1 for x in lags)):
+        if lockstep and (e["uncommanded"] > 1 or lost or e["unmatched"]
+                         or any(x != 1 for x in lags)):
             ok = False
         out["entities"][n] = rec
     out.update(counts)
