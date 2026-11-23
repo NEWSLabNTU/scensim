@@ -32,14 +32,16 @@ def main(argv=None):
     import omni.usd
     from isaacsim.core.api import World
 
+    from aib.isaac import ground
+
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     from scensim_batch.physx_vehicle import PhysxVehicleBackend
 
     rows = []
     for n in a.n:
         world = World(stage_units_in_meters=1.0, physics_dt=a.dt, rendering_dt=a.dt)
-        world.scene.add_default_ground_plane()
         stage = omni.usd.get_context().get_stage()
+        ground.add_ground_plane(stage)  # local: no asset root (scensim issue 117)
         physx = omni.physx.get_physx_interface()
         be = PhysxVehicleBackend(world, stage, physx, rig, n, spacing=60.0)
         world.reset()
