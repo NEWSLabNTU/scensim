@@ -50,3 +50,84 @@ From the design's section 10.
 | K12 | Truth-fed pilots: a command channel from a K4 attachment back to the bridge (`entity_command`: an entity's kinematic command, applied by the world and returned to SSv2 in the status response, which the fork's `updateEntitiesStatusInSim` applies to any entity), under lockstep held to one frame; for K10's behaviour models and learned background agents | component | K4 | | open (243 to review) |
 | K11 | 093 D4's search (purpose B): an adaptive search over cells that writes the record's reserved `search` | component | K1, K7 | | open |
 | E1 | Examples | examples | the above | | open |
+
+## K12's spec (draft, 2026-11-23, 243; for 133's review, before any code)
+
+K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
+background agent reads the truth stream and commands its entity, the world server moves it, and
+SSv2 adopts the pose the world shows. Read against the code at main 8a78f4f4 (the bridge, the
+CARLA and Isaac world servers, the world protocol, the SSv2 fork), the row's sentence above needs
+three corrections, and the spec is written around them:
+
+1. **SSv2 needs a change.** `API::updateEntitiesStatusInSim` does apply the returned status to
+   every entity (`setStatus` for a non-ego), but that is upstream SSv2 (2025-02-20), and SSv2
+   then runs the entity's behaviour in the same frame. A pedestrian's controller name is loaded
+   as a behaviour plugin (`PedestrianEntity`, pluginlib), so CS1's `walker_model` fails to load
+   on seats, and the default plugin would move the walker on after the world's pose was set.
+   Vehicles already have the fork's answer, `SimulatorDrivenVehicleEntity` (controllers
+   `simulator_autopilot` and `agent`: no behaviour, the returned pose adopted); pedestrians have
+   none, and their spawn request carries no behaviour, so the bridge cannot tell. So
+   scenario-description.md section 4's "Nothing changes in SSv2" does not hold.
+2. **The command goes to the world server, not the bridge.** In a frame SSv2 sends
+   UpdateEntityStatus (the world's Apply) before UpdateStepTime (its Step), and CARLA's tick
+   gate waits inside Step. An attachment answers frame k after Apply(k+1) has gone out, so a
+   command through the bridge would take effect at k+2. Carried with the gate's acknowledgement,
+   it is in the world server before the tick of k+1: one frame, by construction.
+3. **The world protocol has no kinematic command.** `EntityPose` carries poses; the world
+   server must integrate the command itself.
+
+### Decisions
+
+- **D1, which entities.** An entity whose `ObjectController` has a `model` property (the
+  batch's role `model`) is commanded on seats. Its controller is named `model` (CS1's
+  `walker_model` renamed). `scensim run` reads the commanded entities from the scenario and
+  each attachment's new key `commands: [<entity>, ...]`; it refuses, by name, a commanded entity
+  no attachment claims, one claimed twice, a claim on an entity without `model`, and a misc
+  object. `attachments.roles` gains the role `model`.
+- **D2, SSv2 (the fork).** `drives()` gains `model` for vehicles; a
+  `SimulatorDrivenPedestrianEntity` does the same for pedestrians: no behaviour plugin, the
+  returned pose and twist adopted, route, lane change and speed actions on it semantic errors.
+  `SpawnPedestrianEntityRequest` gains `string behavior = 4`, as the vehicle's field 6.
+- **D3, the bridge.** A `model` entity is `Mover::Simulator`, spawned with a new `Motion`
+  `COMMANDED`, and read back like the ego. A world server without `READS_BACK` and a tick gate
+  refuses it: Isaac today, by name.
+- **D4, the channel.** The tick gate's datagram, extended: a follower acknowledges a frame with
+  `DONE <frame> [<entity> <speed> <heading> <accel_limit>]...` (SSv2's frame, radians, SI
+  units). Free-running (`lockstep: false`), the follower sends the same list as `CMD <frame>
+  ...` to the same port and is not waited for. The world server applies each entity's latest
+  command at the next tick. A frame's commands fit one datagram; more is a refusal.
+- **D5, the motion.** Before each tick the world server integrates each commanded entity as the
+  batch does (`scensim_batch.core.Models`): `v += clamp(speed - v, +-accel_limit dt)`, the yaw
+  set to the heading, the position moved `v dt` along it; then sets the actor's transform with
+  physics off, its z from the ground as for a kinematic NPC. The command is clamped to the
+  catalog entry's maximum speed and acceleration, and each clamp counted. Before its first
+  command an entity stands at its spawn; afterwards it keeps its last command.
+- **D6, decisions.** A model's decisions (`wait`, `go`, `abort`) are not part of the channel:
+  the attachment writes them per frame into `$SCENSIM_ATTACHMENT_DIR`, where K10's agreement
+  check reads them.
+- **D7, the latency, measured.** The truth file gains, per commanded entity and frame, the
+  frame the applied command answered (`cmd_frame`). `result.json` gains `commands`: per
+  entity the commands applied, the lag in frames (p50, p95, max), clamps, commands naming an
+  unknown entity, and gate misses. Under lockstep the lag is 1 at every frame or the run is an
+  error run (`error.kind: command_lag`); free-running it is reported (093's open question 1).
+  SSv2 sees the tick of k+1 in UpdateEntityStatus of k+2, as for every world-owned entity:
+  stated, not changed.
+
+### Exit checks
+
+1. The world server's integrator against `Models` on the same command sequence: equal within
+   float64 rounding.
+2. CS1 on CARLA 0.9.16 with the walker as a lockstep attachment: lag 1 at every frame, no gate
+   miss; SSv2's conditions on the walker (its start trigger, a ReachPositionCondition) fire at
+   the frame the truth shows; the run once free-running, its lag reported.
+3. The fork: a pedestrian with controller `model` runs no plugin and adopts the returned pose
+   (a traffic_simulator test); a spawn's `behavior` reaches the bridge.
+4. Each refusal of D1 and D3, by name.
+
+### For 133
+
+- The controller name `model`, or another.
+- Vehicles in scope now (learned background agents), or pedestrians only first.
+- Commands carried in the gate's datagram (D4), or a separate command socket with the frame
+  in each command and the gate unchanged (one frame still holds if the follower sends the
+  command before `DONE`, but two sockets can reorder).
