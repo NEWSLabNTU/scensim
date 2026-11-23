@@ -660,7 +660,7 @@ course is synthetic, not a measured road, and its guardrails stand at the centre
   them only beside the road. The commit's message lost "`photo: forest`" to the shell (it was
   already pushed to the branch; no force-push).
 
-#### C5's exit pairing (2026-11-23, 118, GPU0; in progress)
+#### C5's exit pairing (2026-11-23, 118, GPU0)
 
 A = scensim main 8965a06a, the last main before C5a's pin; B = main f98f1cd1, after C5d. Both
 full builds on 118 (A on the root disk, `/var/tmp/aeon/pair-a`: `/mnt/renegade` was 99 % full),
@@ -679,12 +679,20 @@ sim_vehicle_ecu (ef6bfd8 to 99505b0) and sim_vehicle_spec (21bf3dc to 9ceb8cb).
   |---|---|---|---|---|---|
   | B, 2026-11-23T12-23-52 | f98f1cd1 | passed, 383.5 s, 0 contacts | 3.12 | 0.178 m | 0.2025 m |
   | A, 2026-11-23T12-31-00 | 8965a06a | passed, 385.5 s, 0 contacts | 3.12 | 0.115 m | 0.155 m |
+  | B2, 2026-11-23T12-39-00 | f98f1cd1 | passed, 406.6 s, 0 contacts | 3.12 | 0.183 m | 0.2024 m |
+  | A2, 2026-11-23T12-46-32 | 8965a06a | passed, 383.5 s, 0 contacts | 3.12 | 0.114 m | 0.151 m |
 
   **The rule for the repeats (133, written before B2 and A2 finished):** if both repeat pairs
   keep a p95 gap of about 0.05 m or more, B above A in each, the shift is real, and the
   below-C5 pins are bisected as its own issue (its number asked of 133 first); otherwise it is
   run-to-run spread. Either way: Haruna's p95 has little margin to the 0.2 m rule (B's maximum
   0.2025 m, C5d's rebuilt-map run 0.183 m p95).
+- **Result: a real shift, not from C5.** Both pairs keep the gap, B above A: 0.063 m and
+  0.069 m at the p95 (0.178 and 0.183 m against 0.115 and 0.114 m), by the rule above. All four
+  runs pass every check (NVTL 3.12, 0 contacts). Since no C5 code acts on this map, the cause is
+  below C5 (aib, sim_vehicle_ecu or sim_vehicle_spec between A and B); its bisection is its own
+  issue. For C5's exit: aib's slope matrix is unchanged, and haruna_down passes on main after
+  C5 as before it, with the pose error shift recorded and handed on.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
