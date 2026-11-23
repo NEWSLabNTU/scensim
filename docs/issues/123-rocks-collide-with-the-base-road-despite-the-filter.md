@@ -111,3 +111,15 @@ first question.
 3. **Tests**: a unit test with a stand-in for pxr of the order of the group edits; live, in the
    server's order, the rock touching its tile alone, one warning at the load, loose_15's travel
    recorded.
+
+## Step 1: the world server's order (approved by 133; prediction before the run)
+
+`fixture_drive --server-order` (siw after 17aa0d9): `world.reset`, `world.play`, then the world's
+USD, then the road (as `world.py`'s start and `load`), loose_15, raycast, tiles on, the groups as
+today (made at the road's load). Read: what the rock touches, and the warnings.
+
+- **118's prediction:** the rock touches the base here too. The map's ground is parsed by PhysX at
+  the first physics step after the USD is added (`load` steps once after the road, issue 039),
+  but the road's load sets `roadBase` after that USD is already in the stage; whether one step
+  separates them or not, the rock pool's prims and the groups are edited in the same frames as in
+  `fixture_drive`, where the filter did not hold.

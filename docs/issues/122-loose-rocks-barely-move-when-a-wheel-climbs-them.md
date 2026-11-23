@@ -191,3 +191,10 @@ aib 3cd2b7d, siw fe69aa9's tree, GPU0; NAS "2026-11-23 issue 122 spike pre-108 (
 moved 0.1 cm (0.19 m/s at most, push peak 17.5 kN), against 0.2 cm on today's plant; loose_8
 12.9 cm (10 cm today). **The prediction holds: issue 108 does not explain it.** The bisect (a)
 follows: R4's spike from swb_isaac_world 61bb368 forward, each with its own aib, on loose_15.
+
+## Part of the pinning was issue 123's double contact (133)
+
+In issue 123's test (iv), with the base contact gone (the groups made before the simulation
+starts), loose_15 moved 6.5 cm instead of 1.5 cm (raycast): the rock resting on its tile and on
+the base road at once (issue 123) held it more than its tile alone. loose_15 is rerun under both
+queries after 123's fix and recorded; this issue's close waits for it.
