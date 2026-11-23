@@ -1,7 +1,7 @@
 # 108: the Isaac Model 3 brakes about 7 % harder than its tyre's mu allows
 
-**Status:** open (measured; the source audit points to PhysX's load filter; the one-wheel test
-to confirm).
+**Status:** open (cause found: PhysX's default load filter, confirmed by the restLoad-doubling
+stop; the fix to plan).
 **Severity:** medium: every braking comparison of Isaac against CARLA, or against a real car,
 carries it. **Found:** 2026-11-23, scensim 241, in issue 106's low-grip sweep (133 asked for it
 to be measured).
@@ -142,6 +142,33 @@ the wheel's rotation and the sticky-tyre state do not read it.
   shipped and 7.5 / mu doubled, both over 3 for mu <= 1.
 - **omni.physx:** the plugin is not open source. It computes the automatic restLoad, and the
   control run covers that.
+
+### The restLoad-doubling stop: result (2026-11-23)
+
+The run used aib origin/main 3cd2b7d plus a test-only field `tire_rest_load_scale`, never
+landed. It was a locked `limit_brake` (ABS off) on GPU1, beside the P4 seeds. The deceleration is
+measured as above. The analysis reproduces the earlier locked runs: 0.955, 0.477 and 0.192 mu g,
+against the table's 0.959, 0.478 and 0.193.
+
+| run | decel / g | / mu | mean slip | predicted (filter) | wheel weight / abscissa |
+|---|---|---|---|---|---|
+| mu 1.0, restLoad x 1 (control) | 0.955 | 0.955 | -0.87 | 0.953 | 0.86 / 0.83 |
+| mu 0.5, restLoad x 2 | 0.572 | 1.145 | -0.88 | 1.14 | 0.86 / 0.83 |
+| mu 1.0, restLoad x 2 | 1.215 | 1.215 | -0.30 | above the request | 0.86 / 0.83 |
+
+- **The control** gives the same stop as Isaac's own restLoad, so the explicit path changes
+  nothing.
+- **Doubling restLoad** raises the locked stop at mu 0.5 by the factor the filter predicts:
+  1.385 x frictionVsSlip, against 1.154 x. Neither other candidate moves.
+- **At mu 1.0, doubled,** the wheels no longer lock (slip -0.30). The car stops at the
+  requested -12 m/s^2, 1.22 g, because its grip is now above the request. That is past both
+  other candidates' ceilings too.
+- **Yaw** stays under 0.003 rad/s, so the lower lateral stiffness did not enter.
+
+**Candidate 2 is confirmed:** PhysX's default load filter, (0, 0.2308) to (3, 3), which
+omni.physx applies and Isaac's schema does not expose, gives the car 1.154 times its friction.
+Data: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-23 issue 106 and 108 (241)/restload`, with
+the script, the analysis and the test-only diff.
 
 ### If it is the filter
 
