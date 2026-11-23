@@ -760,10 +760,13 @@ into its section before its runs, and its rule set before them:
   manoeuvre suite and aib's slope matrix unchanged on smooth road (paired, A/B as above).
 - **C6d. Sensors and Autoware on the rough record road (R7).** Autoware on C6b's Haruna with
   rocks, its lanelets and cloud from C5d's builder (the lanelet map R4 lacked): motion BVH on,
-  the lidar following the chassis, `scan_ground_filter` over the washboard and ruts. Check:
-  the scenario passes; NVTL p05 at least 2.5 and the pose error p95 at most 0.2 m (C5d's rule;
-  Haruna's margin is thin, so three runs, judged on all three); false stops reported per km,
-  rock and pothole detection range reported.
+  the lidar following the chassis, `scan_ground_filter` over the washboard and ruts. Check,
+  paired (133, 2026-11-23: Haruna's pose error p95 already scatters between about 0.12 and
+  0.18 m with maxima over 0.2 m on smooth road, so an absolute 0.2 m could fail for reasons
+  that are not the rocks): three runs with rocks against three without, the same build, a
+  testbench workspace per side. The rocks fail if their mean pose error p95 rises by 0.05 m or
+  more, or if any run fails its scenario or NVTL p05 2.5. The absolute values are reported
+  beside it, with false stops per km and the rock and pothole detection range.
 
 C6's exit is 066's acceptance as these four steps hold it, plus aib's slope matrix and
 haruna_down unchanged on smooth road, paired as C5's were. C6a's own spec (the fixture course's
