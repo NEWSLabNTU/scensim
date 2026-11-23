@@ -159,6 +159,8 @@ hits' mean. `test/test_issue_137.py`:
 - the same with the rear left's last hit at the origin: the same base as before.
 - four wheels on the ground 350 m out: each wheel's base is the old plane's to 1e-9 m and passes
   through its hit. Not bit for bit: about the centre, the sums are taken in another order.
+  133 asked for both a centred plane and a bit-identical four-hit case; the two cannot both
+  hold, and 133 accepted 1e-9 m, the centred plane mattering more.
 - fewer than three hits keep the plane and still record the hits; a wheel never on the ground
   takes the hits' mean.
 
