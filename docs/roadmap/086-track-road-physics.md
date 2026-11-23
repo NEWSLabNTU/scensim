@@ -772,6 +772,63 @@ C6's exit is 066's acceptance as these four steps hold it, plus aib's slope matr
 haruna_down unchanged on smooth road, paired as C5's were. C6a's own spec (the fixture course's
 table, the reference's numbers per lane, the runs) is written next, before its first run.
 
+#### C6a's fixtures (spec written 2026-11-23, before any run; for 133's approval)
+
+- **The course, `fixture_c6a`.** One straight, level fixture course (C5b's builder): 2 x
+  3.25 m lanes, 0.75 m shoulders, a 2 % crown, the record's section in the base road as in
+  C5b, and R0's fixtures as the road layer's features on the record's corridor, written into
+  the course's `road_detail.yaml`:
+
+  | s (m) | fixture | R0's lane | under |
+  |---|---|---|---|
+  | 100 | cleat 5 cm high, 0.2 m long, vertical edges | `cleat_05` | both tracks |
+  | 200 | cleat 10 cm | `cleat_10` | both tracks |
+  | 300 | cleat 15 cm | `cleat_15` | both tracks |
+  | 400 | pothole 8 cm deep, 0.5 m long, 0.8 m wide, vertical edges | `pothole` | the left track |
+  | 500-530 | washboard 2 cm peak to peak, 0.7 m pitch, no skew | `washboard` | both tracks |
+
+  The road layer has no box-edged cleat (its water bars are cos^2 ridges) and places
+  potholes at random: C6a adds `cleats` (u, height, length) and fixed potholes (u, depth,
+  length, width, lateral centre) as road-detail features. R0's kicker (base geometry over
+  5 m, which a one-grade fixture cannot hold), boulder and loose rock (rocks: C6b) are not in
+  C6a.
+- **The drive, `course.fixture_drive`.** aib's Model 3 with no Autoware, as `lip_drive` drives
+  (the rig, a straight-line pursuit, a speed hold), the road layer built as the world server
+  builds it (`road_layer.load` on the course's `road_detail.yaml`, `RoadLayer.before_substep`:
+  R5's contact), on GPU0. Per PhysX step: each wheel's load from our contact, the body's
+  height, pitch and vertical acceleration. Cases: cleat_05, cleat_10, cleat_15, pothole and
+  washboard at 10 m/s; cleat_10 and washboard at 20 m/s; cleat_10 at 20 m/s from five start
+  offsets 0.07 m apart (R0's question 1). A case starts at rest 60 m before its fixture and is
+  checked at speed 10 m before it (C5c's start check: within 0.1 m/s and 5 cm).
+- **The reference**, R0's quarter car at 4 kHz (`fixture_course.reference`, the rig's sprung
+  413.6 kg, 41.8 kN/m, 3.74 kN s/m, travel 0.20 m, sag 0.097 m, a 0.37 m tire), computed before
+  the runs; the front-left wheel:
+
+  | case | peak load | body rise | first rise from the face | airborne | load min-max |
+  |---|---|---|---|---|---|
+  | cleat_05, 10 m/s | 13.3 kN | 2.6 cm | -0.18 m | 0.04 s | |
+  | cleat_10, 10 m/s | 20.2 kN | 7.8 cm | -0.24 m | 0.12 s | |
+  | cleat_10, 20 m/s | 24.0 kN | 5.1 cm | -0.24 m | 0.09 s | |
+  | cleat_15, 10 m/s | 26.6 kN | 20.2 cm | -0.28 m | 0.30 s | |
+  | pothole, 10 m/s | 10.1 kN | 0.2 cm | +0.38 m | 0.02 s | |
+  | washboard, 10 m/s | | | | | 1.16-7.36 kN |
+  | washboard, 20 m/s | | | | | 1.43-8.24 kN |
+
+- **The check** (066's first acceptance item, less wheel hop, which is C6c's):
+  - each cleat's peak load and body rise within 30 % of the reference's, and its load rising
+    ahead of the hub (the first rise at a negative distance from the cleat's face);
+  - the pothole: the left front wheel unloads (under 30 % of static) over the hole, then its
+    far-edge peak within 0.5 s, the peak within 30 % of the reference's;
+  - each landing after a wheel leaves the ground (load 0) spread over 10-30 ms (from the first
+    load back to the landing's peak);
+  - washboard: the load's minimum and maximum each within 30 % of the reference's;
+  - cleat_10 at 20 m/s: no start offset misses the cleat (a peak at least twice static) or
+    throws the car (body rise over three times the reference's, or pitch over 20 deg).
+  - Reported, not judged (judged in C6b's budget): R1's cost line, frame p50 and p95 with 1, 2
+    and 4 vehicles driving the course, PhysX's query and our contact.
+- Not in C6a: the corner's wheel hop (C6c), and any A/B: C6a measures one build against the
+  reference.
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
