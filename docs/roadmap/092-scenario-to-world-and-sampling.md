@@ -108,15 +108,17 @@ three corrections, and the spec is written around them:
 - **D5, the motion.** Before each tick the world server integrates each commanded entity as the
   batch does (`scensim_batch.core.Models`): `v += clamp(speed - v, +-accel_limit dt)`, the yaw
   set to the heading, the position moved `v dt` along it; then sets the actor's transform with
-  physics off, its z from the ground as for a kinematic NPC. The command is clamped to the
-  catalog entry's maximum speed and acceleration, and each clamp counted. Before its first
+  physics off, its z from the ground as for a kinematic NPC. Nothing is clamped to the catalog:
+  OpenSCENARIO's Pedestrian has no Performance element, so a pedestrian entry names no maximum
+  speed or acceleration. The world server refuses a command whose numbers are not finite, whose
+  speed is negative or whose accel_limit is not positive, with the whole datagram. Before its first
   command an entity stands at its spawn; afterwards it keeps its last command.
 - **D6, decisions.** A model's decisions (`wait`, `go`, `abort`) are not part of the channel:
   the attachment writes them per frame into `$SCENSIM_ATTACHMENT_DIR`, where K10's agreement
   check reads them.
 - **D7, the latency, measured.** The truth file gains, per commanded entity and frame, the
   frame the applied command answered (`cmd_frame`). `result.json` gains `commands`: per
-  entity the commands applied, the lag in frames (p50, p95, max), clamps, commands naming an
+  entity the commands applied, the lag in frames (p50, p95, max), commands naming an
   unknown entity, and gate misses. Under lockstep the lag is 1 at every frame or the run is an
   error run (`error.kind: command_lag`); free-running it is reported (093's open question 1).
   SSv2 sees the tick of k+1 in UpdateEntityStatus of k+2, as for every world-owned entity:
