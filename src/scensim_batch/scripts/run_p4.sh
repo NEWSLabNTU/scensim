@@ -4,13 +4,15 @@
 # bench/p4_leadbrake/run_p4.sh runs P4-LeadBrake-v0: the same stages, sizes, iterations,
 # timers, warm-up and evaluation schedule.
 #
-#   run_p4.sh <stage: smoke|seeds|seed|evals|sweep> <out dir> [headway: stock|record] \
+#   run_p4.sh <stage: smoke|repro|seeds|seed|evals|sweep> <out dir> [headway: stock|record] \
 #             [row: joints|ecu] [engine: B|A]
 #   (seed: the one seed SEED names, into the seeds stage's directory; evals: SEED's evaluation
 #   grid completed for a seed already trained, the iterations its evals.jsonl lacks)
 #
 # stages (each writes under <out dir>/<stage>/):
 #   smoke   3 iterations at 64 envs
+#   repro   issue 113: engine A, N envs (1024), ITERS iterations (20), every reset's landing
+#           logged to <name>.landings.jsonl and a miss not raised
 #   seeds   5 seeds (1-5) at 1024 envs, 1500 iterations, a checkpoint every 50; then each
 #           seed's checkpoints evaluated (eval_leadbrake.py, stock's bar) on the whole grid,
 #           100 to 1400 by 100 and 1499, as stock's curves (133: not stopped at the first pass)
@@ -25,7 +27,7 @@
 # Isaac Lab python), ISAACLAB (its source checkout), GPU (default 0), SHARED=1, MAX_LOAD,
 # WAIT_IDLE, CLEAN_ROWS and MAX_ROWS (the continuous gate), THREADS, ALLOW_DIRTY=1.
 set -euo pipefail
-stage=${1:?stage: smoke|seeds|seed|sweep}; out=${2:?out dir}; headway=${3:-stock}
+stage=${1:?stage: smoke|repro|seeds|seed|evals|sweep}; out=${2:?out dir}; headway=${3:-stock}
 # the row (LeadBrakeEnvCfg.row): joints (the comparable row, stock's action law on the joints) or
 # ecu (the car's own drive unit and ECU, ev); the engine: B (the articulation car, GPU) or A (aib's
 # PhysX vehicle, the CPU pipeline; ecu only). Each row its own out dir, as each is its own table.
@@ -76,13 +78,15 @@ run() {
         echo "$name: done already"; return 0
     fi
     mkdir -p "$d"
+    land=(); [ "$engine" = A ] && land=(env.landing_log="$d.landings.jsonl"   # issue 113
+                                        env.landing_raise="${LANDING_RAISE:-true}")
     echo "$name: headway=$headway row=$row engine=$engine timers=$timers seed=$seed envs=$n iterations=$iters ($(date -Is))"
     (cd "$d" && env -u DISPLAY "$OV" -m wheeledlab_bench.launch --out "$d" --form "$form" \
         --timers "$timers" --warmup "$warmup" --seed "$seed" --gpu "$GPU" "${gate[@]}" "${hooks[@]}" "${prov[@]}" \
         -- "$here/train_leadbrake.py" "${thr[@]}" "$ISAACLAB/scripts/reinforcement_learning/train.py" \
         "${kit[@]}" --rl_library rsl_rl --task Scensim-LeadBrake-v0 --num_envs "$n" \
         --max_iterations "$iters" --seed "$seed" "${dev[@]}" env.train_headway="$headway" "${rowargs[@]}" \
-        env.starts_log="$d.starts.jsonl" > "$d.log" 2>&1)
+        env.starts_log="$d.starts.jsonl" "${land[@]}" > "$d.log" 2>&1)
 }
 
 # evaluate one checkpoint: <name> <iteration>; prints the evaluator's JSON line
@@ -113,6 +117,9 @@ seed_run() {
 
 case $stage in
 smoke) run smoke sync 1 64 3 1 ;;
+repro)   # issue 113: engine A's landings logged, a miss not raised; N envs, ITERS iterations
+    [ "$engine" = A ] || { echo "repro: engine A only" >&2; exit 2; }
+    LANDING_RAISE=false run "repro-n${N:-1024}" sync 1 "${N:-1024}" "${ITERS:-20}" 1 ;;
 seeds) for s in 1 2 3 4 5; do seed_run "$s"; done ;;
 seed) s=${SEED:?SEED: the seed}; out_stage=seeds; seed_run "$s" ;;
 evals) s=${SEED:?SEED: the seed}; out_stage=seeds; evals_run "$s" ;;

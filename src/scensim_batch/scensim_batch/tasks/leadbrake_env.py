@@ -101,6 +101,10 @@ class LeadBrakeEnvCfg(ScensimEnvCfg):
             if not getattr(self, "_engine_a_defaults", False):
                 self.sim.use_fabric = False
                 self._engine_a_defaults = True
+            # its slots apart by their route boxes (issue 113: its cars collide across envs);
+            # the drive 25 % over the ECU row's scale, a margin on the motor's peak
+            a_drive, _ = LB.ecu_scales(self.vehicle)
+            self.route_box = LB.route_box(1.25 * a_drive, self.decimation * self.sim.dt)
         else:
             self.component, self.bypass_component, self.implicit_effort = "ideal", True, ("spin",)
 

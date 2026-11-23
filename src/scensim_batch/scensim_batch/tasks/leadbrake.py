@@ -23,7 +23,22 @@ RANGES = {"lead_speed": (8.0, 14.0), "headway": (1.0, 3.0), "decel": (3.0, 7.0),
 EGO_S = 5.0
 LANE_LENGTH = 400.0
 FRONT, REAR = 3.812, 0.98
+WIDTH = 1.9                # m: the Model 3's box's width (route_box's corner only)
 BEHIND = 1000.0            # m: leadbrake.xosc's onset is a distance from (-BEHIND, 0)
+
+
+def route_box(a_drive, step_s, v0_max=None):
+    """Engine A's route box (issue 113): (x0, x1, half_width) m about a slot's origin, all its car
+    can reach in an episode. The car's fastest is v0_max (stock's fastest start, the lead's) plus
+    full drive (`a_drive`, m/s^2) over the route: v^2 = v0^2 + 2 a ROUTE. It is past its bounds
+    for at most one policy step (`step_s`) before the off-road or route-done reset: that far at
+    its fastest, the corner of its box (spun any way) further. Along x, from its start back by
+    that much (it never reverses: the ECU row's speed is never below 0) to its route's end on."""
+    v0 = RANGES["lead_speed"][1] if v0_max is None else v0_max
+    v_max = (v0 * v0 + 2.0 * a_drive * ROUTE) ** 0.5
+    over = v_max * step_s
+    corner = (FRONT ** 2 + (WIDTH / 2) ** 2) ** 0.5
+    return (EGO_S - over - corner, EGO_S + ROUTE + over + corner, OFF_ROAD + over + corner)
 
 
 def project():

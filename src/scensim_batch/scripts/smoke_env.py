@@ -61,6 +61,7 @@ def main(argv=None):
     cfg.allow_loop = True
     cfg.provides = ("world knob illumination=night",)
     cfg.scene.num_envs = a.n
+    cfg.route_box = (-10.0, 150.0, 6.0)   # issue 113: engine A's slots laid out apart by it
     if a.fabric != "default":
         cfg.sim.use_fabric = a.fabric == "on"
     print(json.dumps({"use_fabric": cfg.sim.use_fabric,

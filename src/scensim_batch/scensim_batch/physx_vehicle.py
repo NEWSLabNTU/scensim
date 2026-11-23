@@ -19,11 +19,23 @@ import numpy as np
 import torch
 
 # How far a car may be from where its reset put it, at its first sample after (m; along its
-# heading, plus a substep's travel): a car settling on its springs moved 1.2 and 1.4 cm across in
-# 094 P4's engine A smokes (1 cm refused them); the errors this is for are an env's origin (issue
-# 109, metres) or the travel since a lost reset (issue 110, tens of metres). Tighten only with
-# settling data that allows it.
+# heading, plus a substep's travel). The errors this is for are an env's origin (issue 109,
+# metres) or the travel since a lost reset (issue 110, tens of metres). Misses of 1.2 and 1.4 cm
+# across (094 P4's engine A smokes) and 5.2 cm across (seed 1 at 1024 envs, iteration 187) are
+# unexplained, under investigation in issue 113: one substep (1/120 s) after a reset they are
+# 1.4 to 6 m/s sideways, not a car settling (243). Do not widen it before 113 finds the cause.
 LANDING_TOLERANCE = 0.05
+# How far a car's PhysX velocity may be from its reset's, at the same sample (m/s, along and
+# across the reset's heading): a reset that kept the car's old motion, or lost its Init speed
+# (issue 113), at any speed, which the pose check sees only as u * dt.
+LANDING_VELOCITY_TOLERANCE = 0.5
+# and its yaw rate's from 0 (rad/s): a reset that kept the car's old turn (issue 113)
+LANDING_YAW_RATE_TOLERANCE = 0.2
+# Two cars' bodies overlap when their centres are this close (m; a Model 3 is 4.7 m by 1.9 m)
+CLOSE_M = 2.0
+# engine A's runs warn when two cars come closer than this (m; issue 113's layout keeps every
+# pair a route gap plus the boxes' margins apart)
+SEPARATION_WARN = 5.0
 
 
 class PhysxVehicleBackend:
@@ -62,7 +74,16 @@ class PhysxVehicleBackend:
                                        "written relative to it, would be too (issue 109)")
                 t = m.ExtractTranslation()
                 self.parent[i] = (t[0], t[1], t[2])
-        self._landing = {}   # slot -> its reset's world (x, y, speed, yaw): checked at its sample
+        self._landing = {}   # slot -> its reset's world (x, y, speed, yaw, before): checked at its sample
+        self.landing_log = None   # a file: one JSON line per reset, at its first sample (issue 113)
+        self.landing_raise = True  # False: log a miss and carry on (issue 113's reproduction only)
+        # the smallest distance between two cars (of different envs: one each), every
+        # `separation_every` samples (the env's decimation: once a policy step), its minimum over
+        # `separation_window` of those printed and warned of under SEPARATION_WARN (133, issue 113)
+        self.separation_every, self.separation_window = 1, 24
+        self._sep = {"samples": 0, "checks": 0, "min": math.inf, "pair": None, "window": 0}
+        self.landing_max = {"pose_across": 0.0, "pose_along": 0.0, "v_across": 0.0, "v_along": 0.0,
+                            "resets": 0}
         self.cars, self.states = [], []
         for i in range(n):
             ox, oy = self.origins[i]
@@ -88,8 +109,12 @@ class PhysxVehicleBackend:
             pose = ((ox + float(x[i]), oy + float(y[i]), self.z),
                     (math.cos(h / 2), 0.0, 0.0, math.sin(h / 2)))
             car = self.cars[i]
+            # before: the car as its last sample read it (world position, PhysX velocity)
+            before = (None if car.last is None else
+                      (tuple(car.last[0][:2]), tuple(car.last[2][:2]),
+                       float(self.states[i].angular_velocity[2])))
             car.teleport((self._local(i, pose[0]), pose[1]), self.physx)
-            self._landing[int(i)] = (pose[0][0], pose[0][1], float(speed[i]), h)
+            self._landing[int(i)] = (pose[0][0], pose[0][1], float(speed[i]), h, before)
             v = float(speed[i])
             if v and self.velocity_set:
                 # the Init speed: the body along its heading, the wheels rolling with it
@@ -108,24 +133,166 @@ class PhysxVehicleBackend:
 
     def _check_landing(self, dt):
         """Each slot reset since the last sample is where its reset put it, by PhysX's own world
-        pose: within 5 cm across its heading and of its reset's travel along it (its speed for a
-        substep). A car elsewhere is an env prim whose transform reached USD after this backend
-        read it (issue 109: off by its env's origin, metres) or a teleport PhysX never saw (issue
-        110: off by its travel since, tens of metres): raised. 5 cm, not 1: a car settling on its
-        springs in its first substep after a reset moved 1.2 and 1.4 cm across (094 P4's engine A
-        smoke, 64 and 16 envs: one slot each), which 1 cm refused."""
+        pose and velocity, in its reset's heading frame: within LANDING_TOLERANCE across and of
+        its reset's travel along (its speed for a substep), and its velocity within
+        LANDING_VELOCITY_TOLERANCE of its reset's speed along and of 0 across. A car elsewhere is
+        an env prim whose transform reached USD after this backend read it (issue 109: off by its
+        env's origin, metres) or a teleport PhysX never saw (issue 110: off by its travel since,
+        tens of metres); a car moving otherwise is a reset that kept or lost a velocity (issue
+        113). Raised. Every reset is logged to `landing_log` (one JSON line: the reset, the car
+        before it, the miss), and the largest misses kept in `landing_max`."""
+        import json
         bad = []
-        for i, (x, y, v, h) in self._landing.items():
+        m = self.landing_max
+        # every car's world (x, y) at this sample: the nearest other car to each reset one (243:
+        # another env's car on the reset spot, if the envs' collision filter misses aib's cars)
+        xy = np.array([st.position[:2] for st in self.states], dtype=np.float64)
+        for i, (x, y, v, h, before) in self._landing.items():
             px, py = (float(c) for c in self.states[i].position[:2])
-            dx, dy = px - x, py - y
-            along, across = dx * math.cos(h) + dy * math.sin(h), -dx * math.sin(h) + dy * math.cos(h)
-            if abs(across) > LANDING_TOLERANCE or \
-                    abs(along - v * dt) > LANDING_TOLERANCE + abs(v) * dt:
-                bad.append((i, round(along, 3), round(across, 3)))
+            c, s_ = math.cos(h), math.sin(h)
+            frame = lambda wx, wy: (wx * c + wy * s_, -wx * s_ + wy * c)  # noqa: E731
+            along, across = frame(px - x, py - y)
+            last = self.cars[i].last
+            vw = (float(last[2][0]), float(last[2][1])) if last is not None else (0.0, 0.0)
+            v_along, v_across = frame(*vw)
+            yaw_rate = float(self.states[i].angular_velocity[2])
+            m["resets"] += 1
+            m["pose_across"] = max(m["pose_across"], abs(across))
+            m["pose_along"] = max(m["pose_along"], abs(along - v * dt))
+            m["v_across"] = max(m["v_across"], abs(v_across))
+            m["v_along"] = max(m["v_along"], abs(v_along - v))
+            m["yaw_rate"] = max(m.get("yaw_rate", 0.0), abs(yaw_rate))
+            fail = (abs(across) > LANDING_TOLERANCE or
+                    abs(along - v * dt) > LANDING_TOLERANCE + abs(v) * dt or
+                    abs(v_across) > LANDING_VELOCITY_TOLERANCE or
+                    abs(v_along - v) > LANDING_VELOCITY_TOLERANCE or
+                    abs(yaw_rate) > LANDING_YAW_RATE_TOLERANCE)
+            if self.landing_log is not None or fail:
+                line = {"slot": int(i), "v": round(v, 4), "yaw": round(h, 5),
+                        "along": round(along, 4), "across": round(across, 4),
+                        "v_along": round(v_along, 4), "v_across": round(v_across, 4),
+                        "yaw_rate": round(yaw_rate, 4), "usd": self._usd_velocity(i),
+                        # the first substep's steer and the body's height, its vertical speed
+                        "tire_angle": round(float(self.cars[i].tire_angle), 4),
+                        "z": round(float(self.states[i].position[2]), 4),
+                        "v_z": round(float(last[2][2]) if last is not None else 0.0, 4)}
+                d = np.hypot(xy[:, 0] - px, xy[:, 1] - py)
+                d[i] = np.inf
+                k = int(np.argmin(d))
+                line["nearest"] = [k, round(float(d[k]), 3)]
+                if before is not None:
+                    bp, bv, bw = before
+                    line["before_yaw_rate"] = round(bw, 4)
+                    line["before_v_along"], line["before_v_across"] = (round(a, 4)
+                                                                       for a in frame(*bv))
+                    line["before_from_reset"] = [round(a, 3) for a in frame(bp[0] - x, bp[1] - y)]
+                if fail:
+                    line["fail"] = True
+                    bad.append(line)
+                if self.landing_log is not None:
+                    self.landing_log.write(json.dumps(line) + "\n")
         self._landing = {}
-        if bad:
-            raise RuntimeError("cars not where their resets put them, (slot, along, across) m: "
-                               f"{bad} (issues 109, 110)")
+        if self.landing_log is not None:
+            self.landing_log.flush()
+        if bad and self.landing_raise:
+            raise RuntimeError("cars not where or not moving as their resets put them (reset "
+                               f"frame; m, m/s): {bad} (issues 109, 110, 113)")
+
+    def _separation(self):
+        """The cars' smallest distance apart, once every `separation_every` samples; each
+        `separation_window` checks its minimum printed (and logged), with a warning under
+        SEPARATION_WARN (issue 113: engine A's layout keeps them apart, or the run is wrong)."""
+        sp = self._sep
+        sp["samples"] += 1
+        if self.n < 2 or sp["samples"] % max(1, self.separation_every):
+            return
+        from .layout import min_separation
+        d, pair = min_separation([st.position[:2] for st in self.states])
+        if d < sp["min"]:
+            sp["min"], sp["pair"] = d, pair
+        sp["checks"] += 1
+        if sp["checks"] % self.separation_window:
+            return
+        sp["window"] += 1
+        msg = (f"[scensim] engine A: cars at least {sp['min']:.2f} m apart over policy steps "
+               f"{sp['checks'] - self.separation_window}..{sp['checks'] - 1} (slots {sp['pair']})")
+        print(msg + (f" WARNING: under {SEPARATION_WARN} m (issue 113)"
+                     if sp["min"] < SEPARATION_WARN else ""), flush=True)
+        m = self.landing_max
+        m["separation_min"] = min(m.get("separation_min", math.inf), sp["min"])
+        if sp["min"] < SEPARATION_WARN:
+            import warnings
+            warnings.warn(msg + f": under {SEPARATION_WARN} m (issue 113)", stacklevel=2)
+        sp["min"], sp["pair"] = math.inf, None
+
+    def _count_close(self):
+        """Pairs of cars (of different envs: each env holds one) closer than CLOSE_M at this
+        sample, counted over the run (`landing_max`), each new pair logged once (issue 113: cars
+        of different envs passing through each other, if their collisions are not filtered)."""
+        import json
+        xy = np.array([st.position[:2] for st in self.states], dtype=np.float64)
+        d = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1])
+        pairs = list(zip(*np.nonzero(np.triu(d < CLOSE_M, 1))))
+        m = self.landing_max
+        m["close_samples"] = m.get("close_samples", 0) + len(pairs)
+        seen = self.__dict__.setdefault("_close_seen", set())
+        for a, b in pairs:
+            if (a, b) not in seen:
+                seen.add((a, b))
+                m["close_pairs"] = m.get("close_pairs", 0) + 1
+                self.landing_log.write(json.dumps({"close": [int(a), int(b)], "d": round(float(
+                    np.hypot(*(xy[a] - xy[b]))), 3)}) + "\n")
+
+    def _usd_velocity(self, i):
+        """Slot i's body velocity attributes as USD holds them (world (x, y) m/s, yaw rate deg/s,
+        USD's unit): beside PhysX's, whether a reset's writes reached USD and PhysX alike."""
+        from pxr import UsdPhysics
+        body = UsdPhysics.RigidBodyAPI(self.stage.GetPrimAtPath(self.cars[i].path))
+        lin, ang = body.GetVelocityAttr().Get(), body.GetAngularVelocityAttr().Get()
+        return [None if lin is None else [round(float(lin[0]), 4), round(float(lin[1]), 4)],
+                None if ang is None else round(float(ang[2]), 4)]
+
+    def open_landing_log(self, path):
+        """Every reset's landing to `path` (jsonl), after a header line with the physics settings
+        that decide whether PhysX writes its velocities back to USD (issue 113)."""
+        import json
+        import carb
+        st = carb.settings.get_settings()
+        keys = ("/physics/updateToUsd", "/physics/updateVelocitiesToUsd",
+                "/physics/outputVelocitiesLocalSpace", "/physics/fabricEnabled")
+        self.landing_log = open(path, "a")
+        self.landing_log.write(json.dumps({"settings": {k: st.get(k) for k in keys},
+                                           "n": self.n, "groups": self.collision_groups()}) + "\n")
+        self.landing_log.flush()
+
+    def collision_groups(self, slots=None):
+        """Which of Isaac Lab's per-env collision groups (/World/collisions, inverted filtering:
+        cars of different groups do not collide) hold each car's colliders (243, issue 113): for
+        `slots` (default the first two and the last), each collider prim of the car and the
+        groups whose colliders collection includes it. A car in no group, or in another env's,
+        collides with other envs' cars."""
+        from pxr import Usd, UsdPhysics
+        root = self.stage.GetPrimAtPath("/World/collisions")
+        out = {"exists": bool(root and root.IsValid())}
+        scene = [p for p in self.stage.Traverse() if p.IsA(UsdPhysics.Scene)]
+        if scene:
+            a = scene[0].GetAttribute("physxScene:invertCollisionGroupFilter")
+            out["invert"] = a.Get() if a and a.IsValid() else None
+        if not out["exists"]:
+            return out
+        groups = []
+        for g in root.GetChildren():
+            col = Usd.CollectionAPI(g, "colliders")
+            groups.append((g.GetName(), col.ComputeMembershipQuery()))
+        out["n_groups"] = len(groups)
+        slots = slots if slots is not None else sorted({0, min(1, self.n - 1), self.n - 1})
+        for i in slots:
+            car = self.stage.GetPrimAtPath(self.cars[i].path)
+            cols = [p for p in Usd.PrimRange(car) if p.HasAPI(UsdPhysics.CollisionAPI)]
+            out[f"slot{i}"] = {str(p.GetPath()).rsplit("/", 1)[-1]:
+                               [n for n, q in groups if q.IsPathIncluded(p.GetPath())]
+                               for p in cols}
+        return out
 
     def _local(self, i, p):
         """A world position in slot i's env prim's frame (its parent; translated, never rotated)."""
@@ -172,6 +339,10 @@ class PhysxVehicleBackend:
         """Every car read back after a physics step."""
         for car, st in zip(self.cars, self.states):
             car.sample(self.physx, dt, st)
+        self._separation()
+        if self.landing_log is not None and \
+                self._sep["samples"] % max(1, self.separation_every) == 0:
+            self._count_close()      # once a policy step, as the separation
         if self._landing:
             self._check_landing(dt)
         if len(self.trace) < self.trace_steps:

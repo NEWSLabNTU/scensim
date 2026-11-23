@@ -13,6 +13,7 @@ step before (`sample`) and actuates them through the component (`BatchRun.before
 after the last, `_get_observations` reads them and moves the NPCs (`after_physics`). Isaac Lab
 v3.0.0-EA (scripts/isaaclab_overlay.sh). Not exercised yet on 139's GPU: K2.2's smoke.
 """
+import numpy as np
 import torch
 
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
@@ -55,6 +56,14 @@ class ScensimEnvCfg(DirectRLEnvCfg):
     # the sim device "cpu"); "B", the articulation car from `body` (sim_vehicle_spec's
     # articulation_<body>.yaml), which runs on either pipeline
     engine: str = "A"
+    landing_log: str = ""            # engine A: every reset's landing, a jsonl (issue 113), or none
+    landing_raise: bool = True       # False: a landing miss is logged, not raised (113's reproduction)
+    # engine A's slots' route boxes (issue 113): (x0, x1, half_width) m about a slot's origin, the
+    # region its car can reach in an episode; engine A lays its slots out by it (layout.py) so no
+    # car reaches another's (its cars are in no per-env collision group), and refuses N > 1
+    # without one. Isaac Lab's env origins are not engine A's.
+    route_box: tuple = ()
+    route_gap: float = 3.0           # m, at least, between two slots' route boxes
     body: str = ""
     # where a body's asset lives (a spec's body.asset, 094 P2): its usd is under this root, and
     # engine B loads it (its sha256 checked) instead of the generated body. A host setting
@@ -244,7 +253,11 @@ class ScensimEnv(DirectRLEnv):
         if cfg.engine == "A":
             self.backend = PhysxVehicleBackend(None, omni.usd.get_context().get_stage(),
                                                omni.physx.get_physx_interface(), cfg.rig, n,
-                                               origins=self.scene.env_origins.cpu().numpy())
+                                               origins=self._engine_a_origins(n))
+            self.backend.separation_every = int(cfg.decimation)
+            if cfg.landing_log:
+                self.backend.open_landing_log(cfg.landing_log)
+            self.backend.landing_raise = bool(cfg.landing_raise)
         else:
             self.backend = self._engine_b(n, dev is not None)
         self.run = core.BatchRun(self.compiled, world, self.backend, component,
@@ -257,6 +270,16 @@ class ScensimEnv(DirectRLEnv):
         self.commands = None
         self.stepped = False
         self.obs = None
+
+    def _engine_a_origins(self, n):
+        """Engine A's slots' places (issue 113): its cars collide across envs (no per-env
+        collision group: layout.py says why), so with more than one slot they are laid out by
+        their route boxes, `route_gap` apart on the ground, and refused without a route box or
+        when two boxes come closer. Every term reads the car relative to these (the backend's
+        state), never Isaac Lab's env origins."""
+        from . import layout
+        cfg = self.cfg
+        return layout.engine_a_origins(n, cfg.route_box, cfg.ground_size, cfg.route_gap)
 
     def _engine_b(self, n, resident):
         """Engine B: the body's articulation (the scene's `ego`, one per env); its backend
@@ -388,6 +411,12 @@ class ScensimEnv(DirectRLEnv):
             self._start_log.write(json.dumps({"pool": self.pool.stats()}) + "\n")
             self._start_log.close()
             self._start_log = None
+        log = getattr(getattr(self, "backend", None), "landing_log", None)
+        if log is not None:
+            import json
+            log.write(json.dumps({"max": self.backend.landing_max}) + "\n")
+            log.close()
+            self.backend.landing_log = None
         super().close()
 
     def _draw_starts(self, env_ids, home):
