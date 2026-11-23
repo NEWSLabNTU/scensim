@@ -1,6 +1,6 @@
 # 117: every Isaac run needs NVIDIA's S3 at start
 
-**Status:** open (doc first; the fix chosen with 133 before any code). **Severity:** medium: a
+**Status:** fixed, B (aib e9fea7f, scensim_isaac_world 9ad8b98, scensim_batch's smoke script). **Severity:** medium: a
 run on a host whose network is slow or down fails before its first step, and every Isaac run
 we have takes this path. **Found:** 2026-11-23, scensim 241, in issue 108's fix check.
 
@@ -126,3 +126,53 @@ and the world server and runner want those anyway.
 Before code: a test that fails today, run with no network (no route to the bucket) through
 aib's steptest on a flat world. Then the change. Then the same test, the world server's
 suite, and one vehicle_check run, before and after, compared.
+
+## The fix (B, approved by 133 on 2026-11-23)
+
+- **aib:** `aib.isaac.ground.add_ground_plane(stage, path, z)` builds the plane with pxr's own
+  `PhysicsSchemaTools.addGroundPlane`: an infinite collision plane (axis Z) under a visible
+  grey square 2 km across. A physics material carries Isaac's values (0.5, 0.5, 0.8) and is
+  bound to the collider. The default path is `/World/defaultGroundPlane`. `runner` and
+  `steptest` use it on a flat world.
+- **scensim_isaac_world:** the world server and the five spikes use it.
+- **scensim:** so does `scensim_batch/scripts/smoke_physx_vehicle.py`.
+- **runner.ensure_light:** no change. It adds its sun and sky to a stage with no light, and the
+  flat ground now brings none.
+
+Tests, each failing before the change:
+- aib `test_ground` and scensim_isaac_world `test_no_asset_root` scan the sources for
+  `add_default_ground_plane(` and `get_assets_root_path(` calls. Before, they named
+  `runner.py:217` and `steptest.py:415`, then `world.py:205` and the five spikes.
+- `python -m aib.ground_check` runs under Isaac with the asset root at a port nothing answers
+  (`--online` keeps Isaac's; `--isaac-default` builds Isaac's plane, the state before). It
+  builds the flat world as the runner does, `ensure_light` after, and checks:
+  - the plane is built;
+  - a 1 m box dropped from 3 m rests at 0.5 m;
+  - the bound material is (0.5, 0.5, 0.8);
+  - a camera at (60, 40, 1.8) without auto exposure is not dark (mean RGB at least 25 of 255).
+
+| ground | network | built | light added | material | box at rest | camera mean RGB | pass |
+|---|---|---|---|---|---|---|---|
+| Isaac's default | none | no: the RuntimeError above | | | | | no |
+| Isaac's default | S3 | yes | no (the sphere light) | 0.5, 0.5, 0.8 | 0.500 m | **0.0** | no |
+| aib's | none | yes | yes | 0.5, 0.5, 0.8 | 0.500 m | 226.7 | yes |
+
+Logs: `~/nas/home/aeon/issue117/{default-offline,default-online,aib-offline}.log`.
+
+## What changes in a picture on a flat world
+
+Earlier camera results on a flat world are to be read with this:
+- **aib's runner (`just isaac-ego` with no world, vehicle_check):** a camera away from the
+  origin was black. The only light was the default environment's sphere light, 2.5 m above the
+  origin (camera mean 0.0 at 72 m). It is now lit by the runner's sun and sky. The ego camera
+  has auto exposure and would have read black too: nothing lit it.
+- **The world server on a flat world:** it had its sun and sky plus the sphere light near the
+  origin, over a grid texture. It now has its sun and sky over plain grey. Roadmap 044's walker
+  line-up shots (2026-10-25, all 52 walkers on the ground plane) were taken that way. They were
+  judged by eye for bodies, poses and textures, which this does not change; the ground behind
+  them is now grey, with no grid.
+- **No measurement in the docs reads a flat-world camera image** (searched: docs citing a
+  camera with a ground plane, a flat world, or `isaac-ego`). The lidar is unchanged: the plane
+  has no class label either way.
+- **Physics is unchanged:** the same collider kind and contact values, and the tyres read
+  neither.
