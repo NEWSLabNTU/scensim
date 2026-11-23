@@ -1391,6 +1391,56 @@ unchanged. The runner now accepts a provenance whose commit has the landed main'
   minutes between every pair of runs, about 4 hours for the budget instead of about 1.5.
 
 
+#### C6b's budget on Haruna: results (2026-11-24, 118)
+
+scensim main ddf1c32e (siw 31593ab: issues 128, 132 and 134 in), workspace `gate-c5c` as gated
+(ee643c0b, the same tree; provenance accepted by the rule), testbenches rebuilt over it, GPU0
+under the amended quiet rule. The 15 s log shows no foreign process on GPU0 during any run, so
+none is void. NAS "2026-11-24 086 C6b Haruna budget (118)".
+
+**One ego, haruna_down under Autoware**, interleaved (world server's tick, ms):
+
+| run | map | tick p50 | tick p95 | tick max | pose error p95 | NVTL p05 |
+|---|---|---|---|---|---|---|
+| r1 | rocks | 49.51 | 73.14 | 167.8 | 0.123 m | 3.12 |
+| n1 | none | 48.42 | 72.52 | 142.3 | 0.124 m | 3.12 |
+| r2 | rocks | 49.56 | 75.46 | 151.6 | 0.123 m | 3.12 |
+| n2 | none | 48.28 | 71.02 | 146.6 | 0.126 m | 3.12 |
+| r3 | rocks | 49.77 | 77.45 | 151.9 | 0.123 m | 3.12 |
+| n3 | none | 48.46 | 71.91 | 163.0 | 0.124 m | 3.12 |
+
+- **p50: passes.** The median on *rocks* is 49.56 ms against 48.42 on *none*, 1.14 ms over
+  (at most 5). The prediction (0 to 3 ms) holds.
+- **p95, the amended criterion: fails.** The median on *rocks* is 75.46 ms, above the highest on
+  *none*, 72.52. The prediction (passes) **failed**. Every *rocks* run's p95 is above every
+  *none* run's: 73.1 to 77.5 against 71.0 to 72.5, about 3.5 ms more at the median. *none*'s
+  spread over these three runs was 1.5 ms, not C5's 40, so the pair resolves the effect the
+  amendment said it might not.
+- For the record against the absolute 45 ms (not applied): both maps' p95 are over it.
+- **Pose error and NVTL: pass** on all six runs (p95 0.123 to 0.126 m against 0.2; NVTL p05
+  3.12 against 2.5). The prediction holds.
+
+**Two cars, `fixture_cost --follow` on Haruna's record**, raycast, 60 Hz, 10 m/s, three runs a
+map, interleaved (frame ms, medians):
+
+| cars | map | frame p50 | frame p95 | our contact p50 | first frames' largest | base contacts |
+|---|---|---|---|---|---|---|
+| 2 | rocks | 17.25 | 28.1 | 3.10 | 1.9 s | 0 |
+| 2 | none | 16.90 | 25.9 | 2.87 | 1.2 s | 0 |
+| 1 | rocks | 9.73 | 26.9 | 1.58 | 2.6 s | 0 |
+| 1 | none | 9.39 | 19.4 | 1.48 | 1.6 s | 0 |
+
+- **Two cars' p50 at most 50 ms: passes** (17.25 ms). The prediction (12 to 25 ms) holds.
+- The cars drive the first 280 to 293 m of the record. The first frames' largest (1.2 to 2.6 s)
+  are the first tiles at the start, under the guard's 10 s; the self-check found no rock on
+  the base road.
+
+**C6b's budget therefore fails on one line**: one ego's p95 rises about 3.5 ms with the rocks,
+on a quiet GPU0, beyond the baseline's spread. The p50, the localization, and the two cars stay
+within their lines. What in the rocks costs the p95 is not measured here (the step split was
+off in these runs); finding it is the next step, if 133 wants it.
+
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
