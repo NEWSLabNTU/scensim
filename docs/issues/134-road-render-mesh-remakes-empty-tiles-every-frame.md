@@ -1,6 +1,6 @@
 # 134: the road's render mesh remakes its empty tiles every frame, and makes new tiles on the frame's thread
 
-**Status:** fixed on siw `issue-134`, not landed. **Severity:** high: an Isaac run with a road
+**Status:** fixed on siw `issue-134` (live check passed), not landed. **Severity:** high: an Isaac run with a road
 layer on a winding record takes seconds a step and times out (086 C6b's Haruna budget).
 **Found:** 2026-11-24, scensim 118, 086 C6b's diagnostic.
 
@@ -58,3 +58,23 @@ the step split every step. The bars:
 - **118's prediction:** all three bars pass. Tick p50 45 to 50 ms, p95 under 90 ms, the
   largest flush 50 to 150 ms (a new tile's mesh and collider written to the stage), look
   fallbacks 0, and tile waits only in the first second.
+
+### The live check's result (2026-11-24)
+
+siw issue-134 31593ab in the workspace, haruna_down on Haruna's record without rocks, 03:17 to
+03:25; NAS "2026-11-24 issue 134 road render mesh (118)". GPU0 held only the run's world server
+and Autoware's container throughout (the 15 s log, 28 and 27 samples). The run passed (its pose
+judges too) and the prediction holds; every bar passes:
+
+| bar | measured | limit |
+|---|---|---|
+| tick p50 | 49.7 ms | 55 ms |
+| tick p95 | 80.8 ms | 100 ms |
+| largest flush after the ego's first second | 59.2 ms (sim 136.40 s) | 250 ms |
+| look fallbacks at the end | 0 | 0 |
+
+Over 7052 logged steps the flush was 0.10 ms p50 and 12.2 ms p99. One tile wait over 1 ms
+happened, at 0.1 s (the first tile at the spawn), and none after, so the worker keeps ahead of
+reach and no change of cure is needed. No step was slow (over 500 ms). The largest step, 340 ms
+at sim 136.45 s, was not the flush; it is within the p95 bar and reported here. Before the
+fix the same run was 1855 ms p50 and 2029 ms p95 and timed out.
