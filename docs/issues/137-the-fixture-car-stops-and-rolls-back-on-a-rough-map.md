@@ -79,3 +79,27 @@ Wheels in aib's order: front left, front right, rear left, rear right. The launc
 Two questions are open, each for a probe of its own: where the 1 m in `w` comes from (the road's
 samples `h` under the rear-left wheel at steps 1038 to 1041, and the tile each came from), and
 what PhysX's body touched at step 994 (the chassis's contact report, t 16.45 to 16.7 s).
+
+## The source probe (before the run)
+
+The same run, the code unchanged (133: 139's fix waits for 137's cause), logging two windows
+only, and ended by a timeout just past them (a hang after the throw, issue 139, costs 2 minutes):
+
+- t 17.25 to 17.36 s, every step: per wheel PhysX's hit (on the ground, its position, the
+  collider) and our contact's base plane under it (the plane through PhysX's hits, refitted when
+  three or more wheels are on the ground, kept otherwise); the road's samples `h` our contact
+  read (each wheel's least, greatest and where), the rear-left wheel's in full; each tile the
+  samples came from (its key, its bounds, its height range, made or cached) and each sample's
+  grid index.
+- t 16.45 to 16.70 s: the chassis's PhysX contact report (what it touched, where, the normal and
+  the impulse).
+
+- **118's prediction (a):** step 1040 is the first since t 16.6 s with three or more PhysX hits,
+  so the base plane is refitted there. The rear-left wheel's hit lies about 1 m above the road
+  under it, at about its suspension ray's start (an initial-overlap hit), and the refit carries
+  the 1 m into that wheel's base. The tiles' detail under the rear-left wheel is smooth: within
+  2 cm of the step before, from the same tile keys, every sample inside its tile. So the cause is
+  not in the sample source 133 lists (a seam, a stale or wrong tile, a key collision, a default).
+- **118's prediction (b):** at step 994 the chassis touches a road collider (a detail tile or the
+  base road) near its front-left corner, with an impulse of about the body's mass times 1.4 m/s
+  (2.6 kN s).
