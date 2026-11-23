@@ -1353,6 +1353,29 @@ post-128 and is not C5's (C5 ran no road layer). The criteria and predictions ab
 unchanged. The runner now accepts a provenance whose commit has the landed main's tree, with
 "+dirty" only for submodule Cargo.lock files (133).
 
+**r1 on main d653aabd: void, and amendments made before any further run** (133, 2026-11-24).
+
+- *r1, void.* It ran 01:32 to 01:46 with its checks passing (the processes under the
+  workspace, provenance b047f971+dirty with Cargo.lock files alone). It ended in error: SSv2
+  timed out, and the world server's step was 2.3 s at p50 (3.1 s p95, growing from 0.7 s at
+  the start to 3.1 s by 14.8 s of sim time), all "physics and render". GPU0 was quiet when it
+  started, but another project's encodes (about 8 GB each, 94 % utilisation) ran on GPU0 on
+  and off through that hour, and the runner looked only at each start. The run is void, its
+  cause not separated from the contention. (An earlier start was refused before running: the
+  testbench workspace had been built over the previous install.)
+- *Quiet GPU0.* A run starts only after GPU0 has held no compute process for 10 minutes. A
+  log of GPU0's processes and utilisation every 15 s covers every run, and any run during
+  which it shows another process on GPU0 is void. Each run's record says so.
+- *A diagnostic first.* One run on *none*, judged by nothing, with the world server's step
+  split (each physics substep, the render substep, the road layer's work, the contacts) and
+  the render products' count logged.
+  - If *none* is fast (tick p50 near C5's 45 ms), the slowness is the rocks', and one *rocks*
+    run under the same logging follows.
+  - If *none* is also seconds a step on a quiet GPU0, it is the road layer's under the
+    sensors' render. That would be a new issue before the budget, not a budget result.
+  - If both are fast on a quiet GPU0, r1's slowness was the contention, and the budget's six
+    runs follow as specified.
+
 #### C6d's spec: sensors and Autoware on the rough record road (written 2026-11-24, before any run; approved to write by 133)
 
 C6d is 066 R7 on the record road: Autoware's Model 3 on C5d's rebuilt Haruna made rough, with
