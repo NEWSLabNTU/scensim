@@ -1326,8 +1326,9 @@ host and GPU): `tick_p50_ms` 45.1 to 45.3, `tick_p95_ms` 51.4 to 88.9 over six r
     written before the runs, and the bound is not changed (133 to rule).
   - Pose error and NVTL pass on both maps, as in C5d (the road layer does not reach
     localization).
-  - Two cars, frame p50 at most 50 ms on rocks: passes. I expect 20 to 35 ms, from the 119/120
-    cost runs on fixture courses (one to four cars).
+  - Two cars, frame p50 at most 50 ms on rocks: passes. I expect 12 to 25 ms. The 119/120 cost runs
+    measured 11.3 ms with two cars on a fixture course (raycast, colliders on); Haruna's world
+    is larger and has rocks.
 
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
