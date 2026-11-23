@@ -49,3 +49,22 @@ the control: the step's processing time in result.json (frame p50 and p95) grows
 vehicle has `control` at every frame with a world pose, the throttle and brake in 0..1 and the
 steer in -1..1 (the world server tracks by velocity and steer: throttle and brake 0, steer
 varying), and the walker-free set has no `control` on a body that is not a tracked vehicle.
+
+**The alignment check (2026-11-24, 06:05 to 06:15, newslab-server243, load about 4):** CARLA
+0.9.16 at Epic on its own port, `scensim_launch/scripts/carla_control_alignment.py`, 400 ticks,
+then 4000:
+
+| Applied before tick k by | Ticks | Snapshot frame = tick frame | Frame k holds k's control | Holds the previous |
+|---|---|---|---|---|
+| `apply_batch_sync` | 400 + 4000 | all | all | 0 |
+| `apply_control` (async) | 400 + 4000 | all | all | 0 |
+
+The first part of the prediction holds: a frame's snapshot is its tick's, and holds the control
+applied before that tick, so `control` at frame k is the control CARLA ran in tick k. The
+second did not show: the asynchronous call never landed late, in 4400 ticks. One client's calls
+travel in order on one connection, so its `apply_control` reaches the server before its own
+`tick()`; the race this issue names needs two clients, as acb (its own client) and the world
+server (the one that ticks) are. That is what the field now lets a run see. One caution: K12's walker
+stalls (issue 127) came from one client too, the world server's own `set_transform` before its
+own tick, so for a pose (a body without physics) the order of the calls alone did not keep it
+in its tick; for a vehicle's control it did, in all of these.
