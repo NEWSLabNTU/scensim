@@ -149,6 +149,49 @@ steptest failed silently there: its measure raised on the short phase, and `app.
 `"tests": {}`, with rc 0. The run script now flags an empty summary. The silent failure is a
 separate defect, to be written up.
 
+## The full table on post-108 aib: results (2026-11-23)
+
+55 runs, every one measured (no empty summary). The three repeats of each run are identical
+to the step and to the hundredth of a m/s^2: the runs are deterministic here, so the repeats
+add no spread. Data: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-23 issue 106 and 108 (241)/106-post108`
+(judge3.py). "rsc" and "ABS" are each control's first action by ECU step; "never" means it
+did not act:
+
+| release | mu 0.2 R from 30 | mu 0.2 B from 30 | mu 0.3 B from 60 | mu 0.3 B from 30 |
+|---|---|---|---|---|
+| 0.25 | ABS 9, rsc 10: fail | ABS 7, rsc 8: fail | rsc 10, ABS 11 | ABS 9, rsc 10: fail |
+| 0.19 | both 9: fail | ABS 7, rsc 8: fail | rsc 10, ABS 11 | both 9: fail |
+| 0.18 | both 9: fail | ABS 7, rsc 8: fail | rsc 10, ABS 11 | both 9: fail |
+| 0.15 | rsc 8, ABS never | ABS 7, rsc 8: fail | rsc 9, ABS 11 | rsc 8, ABS 9 |
+| 0.10 | rsc 7, ABS never | ABS 7, rsc 8: fail | rsc 8, ABS 12 | rsc 7, ABS 9 |
+
+- **R at 0.3, and dry at every release:** neither control acts. R holds 1.50 m/s^2 with
+  regen alone, 2360 N from 60 and 2475 N from 30. Dry is the same at every release: B 4.00
+  and 4.19 m/s^2.
+- **Conditions 2 to 4** hold in every run. B's deceleration is 1.92 to 1.97 m/s^2 at 0.2
+  (0.98 to 1.00 mu g) and 2.85 to 2.98 at 0.3 (0.97 to 1.01 mu g), against the 0.85 mu g
+  bar.
+- **Regen kept in R at 0.2:** 1254 N at 0.15 and 0.10. At 0.18 and above it is 0, because
+  ABS acted and removed it.
+- **No release passes under the rule.** mu 0.2's B fails at every release, 0.10 included:
+  ABS acts at step 7 and rsc at step 8, whatever the release. Before issue 108 the same run
+  read rsc 7, ABS 8 at 0.15 to 0.10. 0.15 passes every other run.
+
+Against the prediction:
+- **Order "unchanged": wrong for mu 0.2's B.** The one-step margin the old table noted turned
+  over. Everywhere else the order held, and 0.15 is still the highest release that passes
+  every run but that one.
+- **B "about 0.9 mu g": wrong.** It reads 0.97 to 1.01 mu g, so the margin over 0.85 is about
+  0.13, not 0.05.
+- **R:** as predicted. **Repeats:** within the prediction, in fact identical.
+
+What mu 0.2's B order costs: nothing in these runs. B's regen is 0 at every release on 0.2
+and 0.3, before ABS's first action as after it. In B the request (4 m/s^2) is twice the grip,
+so the friction brakes saturate at once and ABS must engage. Its first action one step before
+or after rsc's decides only whether `abs_event` ends regen that had already gone. The rule's
+condition 1 for B is a one-step race there. Per the rule, the spec stays at 0.15 until 133
+rules.
+
 ## Fix
 
 - **sim_vehicle_spec:** the schema gains `powertrain.regen_slip_control`, its twelve fields.
