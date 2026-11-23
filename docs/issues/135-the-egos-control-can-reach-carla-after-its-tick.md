@@ -95,3 +95,9 @@ unit tests (`only_physics_vehicles_report_a_control`).
 it from its own client) on the same build. Prediction: the ego carries `control` at every frame
 with a world pose from its first nonzero control on, all values in range, and throttle and
 brake never both above 0.5 at one frame.
+
+**The ego run's result (2026-11-24, 06:31):** `k12_commanded_free` seed 1, passed. The ego's
+first nonzero control is at frame 2; from there all 245 frames with a world pose carry
+`control` (none missing), all in range, and throttle and brake are never both above 0.5 (their
+maxima 0.75 and 1.0). The prediction held. The run's other bodies, the commanded walker and the
+van (a misc object), carry none: live, the exclusion the bench set could not show.
