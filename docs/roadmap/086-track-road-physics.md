@@ -1287,6 +1287,48 @@ does not fix this fixture's outcome. Sweep's small travel is issue 125, because 
 (`isaac_verge`) uses sweep. Issue 122 is closed (133).
 
 
+#### C6b's budget on Haruna: the runs as built (2026-11-23, before any run)
+
+The budget's lines are as approved (the C6b spec above). How they are run:
+
+- **Maps.** Two copies of C5d's rebuilt Haruna (`isaac-ex/c5d/haruna`, the course builder's
+  ribbon from the record), each with a map-dir `road_detail.yaml`: one corridor on the record
+  (`stations: course/section.npz`, `section_in_base: true`, `roughness: {gd0: 1.0e-12}`, as
+  the fixture courses), the ground from `isaac/world.yaml`. *rocks* adds C6b's cover
+  (carriageway 0, shoulder 1 %, runoff 1 %, ditch 3 %); *none* is the same file without rocks.
+  Both run the road layer, so the pair isolates the rocks' cost. The world server reads
+  `<map dir>/road_detail.yaml`.
+- **One ego.** `haruna_down` under Autoware as C5d ran it, one local testbench per map, on a
+  fresh workspace built from main 7cc930a0 in a clean environment. Each run is checked by
+  `/proc` (the bridge's and the world server's executables under that workspace) and by
+  `result.json`'s provenance, as C5's clean pairing was. Six runs, interleaved rocks, none,
+  rocks, none, rocks, none, GPU0 only and quiet (`nvidia-smi` logged before each run; none
+  starts while another user's process holds GPU0). The frame is `result.json`'s `tick_p50_ms`
+  and `tick_p95_ms`: the world server's step per SSv2 frame, as the bridge measures it. Each
+  side's median over its three runs is judged. The rocks the world loads, holds as prims and
+  wakes are read from the world server's log.
+- **Two cars.** `fixture_cost` today drives a straight line from the course's first point to
+  its last, so it gains a mode that follows the centreline: s to (x, y) along `centreline.npz`,
+  and the pursuit's target found the same way. Two cars, 20 m apart in the two lanes, 10 m/s,
+  raycast, 60 Hz. Three runs per map, interleaved, medians. Frame p50 at most 50 ms on *rocks*.
+  Reported beside it: one car, and our contact's share.
+
+Context, measured before (C5's clean pairing, haruna_down without any road layer, the same
+host and GPU): `tick_p50_ms` 45.1 to 45.3, `tick_p95_ms` 51.4 to 88.9 over six runs.
+
+- **118's predictions:**
+  - One ego, p50: rocks at most 5 ms over none (passes). I expect 0 to 3 ms. haruna_down
+    stays on the carriageway, where the cover is 0, and only a shoulder rock within reach of a
+    wheel wakes.
+  - One ego, p95 under 45 ms: **fails on both maps.** C5's runs without a road layer already
+    had p95 51 to 89 ms, so the rocks are not what decides it. The bound came from 066's
+    world-server frame without Autoware's sensors; the bridge's tick includes them. This is
+    written before the runs, and the bound is not changed (133 to rule).
+  - Pose error and NVTL pass on both maps, as in C5d (the road layer does not reach
+    localization).
+  - Two cars, frame p50 at most 50 ms on rocks: passes. I expect 20 to 35 ms, from the 119/120
+    cost runs on fixture courses (one to four cars).
+
 #### C6d's spec: sensors and Autoware on the rough record road (written 2026-11-24, before any run; approved to write by 133)
 
 C6d is 066 R7 on the record road: Autoware's Model 3 on C5d's rebuilt Haruna made rough, with
