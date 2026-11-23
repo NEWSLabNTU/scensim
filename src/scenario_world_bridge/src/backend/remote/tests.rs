@@ -222,6 +222,14 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
                     contacts,
                     sim_time_ns: 0,
                     tick_seconds: 0.0005,
+                    // a COMMANDS server's counts: one gate miss a frame, here
+                    command_counts: caps.contains(&wire::Capability::Commands).then_some(
+                        wire::CommandCounts {
+                            unknown_entity: 0,
+                            gate_misses: frame,
+                            malformed: 0,
+                        },
+                    ),
                 })))
             }
             R::SetGoal(_)
@@ -1613,7 +1621,14 @@ fn a_model_pedestrian_is_commanded_and_its_cmd_frame_is_in_the_truth() {
             "{f}"
         );
         assert!(f["entities"]["npc"].get("cmd_frame").is_none(), "{f}");
+        assert_eq!(f["commands"]["gate_misses"], f["sim_frame"], "{f}");
+        assert_eq!(f["commands"]["unknown_entity"], 0, "{f}");
     }
+    let walker = of("entity")
+        .into_iter()
+        .find(|e| e["name"] == "walker")
+        .unwrap();
+    assert_eq!(walker["role"], "model");
 }
 
 /// Roadmap 092 S4: the run's truth file at schema 2, as the bridge writes it from a world
@@ -1683,6 +1698,8 @@ fn the_truth_file_is_schema_3_from_the_servers_replies() {
         assert!(f["sim_time_ns"].as_i64().is_some(), "{f}");
         // SSv2's npc_logic_started from the status that staged it (092 K2.4)
         assert!(f["npc_logic_started"].is_boolean(), "{f}");
+        // no COMMANDS here: no command counts (092 K12)
+        assert!(f.get("commands").is_none(), "{f}");
         for (name, s) in f["entities"].as_object().unwrap() {
             assert!(s.get("carla").is_none(), "{name}: {s}");
             if !s["sim_pose"].is_null() {

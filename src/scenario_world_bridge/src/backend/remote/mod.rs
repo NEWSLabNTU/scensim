@@ -1894,6 +1894,13 @@ impl SimBackend for RemoteBackend {
                 (self.sim_time * 1e9).round() as i64
             };
             if self.gap_trace.recording() {
+                if let Some(c) = step.command_counts {
+                    self.gap_trace.command_counts(gap_trace::CommandCounts {
+                        unknown_entity: c.unknown_entity,
+                        gate_misses: c.gate_misses,
+                        malformed: c.malformed,
+                    });
+                }
                 self.gap_trace.emit_staged_at(
                     self.frame,
                     Some(step.frame),

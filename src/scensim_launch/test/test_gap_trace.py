@@ -526,8 +526,10 @@ def to_v3(records):
             r["schema"] = 3
         elif r["type"] == "entity" and r["name"] == "truck":
             r["role"] = "model"
-        elif r["type"] == "frame" and "truck" in r["entities"]:
-            r["entities"]["truck"]["cmd_frame"] = max(r["frame"] - 1, 0)   # 0: none yet
+        elif r["type"] == "frame":
+            r["commands"] = {"unknown_entity": 0, "gate_misses": r["frame"] // 2, "malformed": 1}
+            if "truck" in r["entities"]:
+                r["entities"]["truck"]["cmd_frame"] = max(r["frame"] - 1, 0)   # 0: none yet
     return out
 
 
@@ -544,6 +546,18 @@ class SchemaThree(unittest.TestCase):
         for f in frames:
             self.assertEqual(f.entities["truck"].cmd_frame, max(f.frame - 1, 0))
             self.assertIsNone(f.entities["ego"].cmd_frame)
+
+    def test_reads_the_command_counts(self):
+        trace = gt.load_trace(lines(SAMPLE3))
+        for f in trace.frames:
+            self.assertEqual(f.commands, gt.CommandCounts(0, f.frame // 2, 1))
+
+    def test_malformed_command_counts_are_refused(self):
+        bad = copy.deepcopy(SAMPLE3)
+        f = next(r for r in bad if r["type"] == "frame")
+        del f["commands"]["malformed"]
+        with self.assertRaisesRegex(gt.TraceError, "commands"):
+            gt.load_trace(lines(bad))
 
     def test_older_schemas_have_no_cmd_frame(self):
         for sample in (SAMPLE, SAMPLE2):

@@ -172,6 +172,21 @@ class Frame:
     # SSv2's npc_logic_started in the status that staged the frame (schema 2, from 092
     # K2.4): absent in older traces
     npc_logic_started: object = None
+    # schema 3: a COMMANDS world server's CommandCounts since its world's last load, or None
+    commands: object = None
+
+
+@dataclass(frozen=True)
+class CommandCounts:
+    """What a world server that commands bodies could not apply (092 K12): commands naming an
+    entity it does not command (each entity and frame once), frames its tick gate ticked on
+    without an acknowledgement, datagrams it dropped whole."""
+    unknown_entity: int
+    gate_misses: int
+    malformed: int
+
+
+COMMAND_COUNT_KEYS = ("unknown_entity", "gate_misses", "malformed")
 
 
 @dataclass(frozen=True)
@@ -464,8 +479,16 @@ def _frame(ln, known):
     npc = o.get("npc_logic_started") if ln.schema >= 2 else None
     if npc is not None:
         npc = ln.boolean(npc, "npc_logic_started")
+    counts = o.get("commands") if ln.schema >= 3 else None
+    if counts is not None:
+        if not isinstance(counts, dict) or set(counts) != set(COMMAND_COUNT_KEYS):
+            raise ln.error("commands", f"expected an object of {', '.join(COMMAND_COUNT_KEYS)}, "
+                                       f"got {counts!r}")
+        counts = CommandCounts(*(ln.integer(counts[k], f"commands.{k}", minimum=0)
+                                 for k in COMMAND_COUNT_KEYS))
     return Frame(frame=frame, sim_time=sim_time, entities=states, sim_frame=sim_frame,
-                 sim_time_ns=sim_time_ns, wall_ns=wall_ns, npc_logic_started=npc)
+                 sim_time_ns=sim_time_ns, wall_ns=wall_ns, npc_logic_started=npc,
+                 commands=counts)
 
 
 def _contact(ln):
@@ -699,7 +722,9 @@ def to_json(record, schema=SCHEMA):
             {} if record.sim_frame is None else {k["sim_frame"]: record.sim_frame}) | (
             {"wall_ns": record.wall_ns} if two and record.wall_ns is not None else {}) | (
             {"npc_logic_started": record.npc_logic_started}
-            if two and record.npc_logic_started is not None else {}) | {
+            if two and record.npc_logic_started is not None else {}) | (
+            {"commands": {k: getattr(record.commands, k) for k in COMMAND_COUNT_KEYS}}
+            if schema >= 3 and record.commands is not None else {}) | {
             "entities": entities,
         }
     if isinstance(record, Contact):
