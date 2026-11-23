@@ -1376,6 +1376,20 @@ unchanged. The runner now accepts a provenance whose commit has the landed main'
   - If both are fast on a quiet GPU0, r1's slowness was the contention, and the budget's six
     runs follow as specified.
 
+**The diagnostic's outcome, and the quiet rule amended before r1** (133, 2026-11-24).
+
+- The diagnostic on *none*, GPU0 holding only its own processes, was 1.86 s a step, all of it in
+  the frame-end flush: the road's render mesh remade every frame the tiles in reach that hold
+  none of the road (issue 134). With 134's fix the same run passed at tick p50 49.7 ms and p95
+  80.8 ms. 128, 132 and 134 landed in scensim main ddf1c32e, which the budget runs on. r1's
+  slowness was 134's, not the rocks' and not mainly the contention, but r1 stays void.
+- *The quiet rule, as amended.* At every start GPU0 holds no process of ours (the previous run
+  fully gone), and no foreign process has been on GPU0 for the 10 minutes before it. Any run
+  whose 15 s log shows a foreign process on GPU0 during it is void, as before. Ours are the
+  processes the runners start, marked in their environment. The reason: the 10 minutes exist
+  to catch another user's job. Counted against our own last run as first written, they put 10
+  minutes between every pair of runs, about 4 hours for the budget instead of about 1.5.
+
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
