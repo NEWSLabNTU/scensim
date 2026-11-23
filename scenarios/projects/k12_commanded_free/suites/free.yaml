@@ -1,0 +1,4 @@
+# K12's exit runs, F: free-running, seed 1
+scenarios: [scenarios/cs1_town01.xosc]
+parameters: {ttc_entry: [3.0], behaviour: [steady]}
+seed: 1

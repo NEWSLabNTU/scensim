@@ -1,0 +1,5 @@
+# K12's exit runs, L: lockstep, seeds 1-3
+scenarios: [scenarios/cs1_town01.xosc]
+parameters: {ttc_entry: [3.0], behaviour: [steady]}
+seed: 1
+repetitions: 3

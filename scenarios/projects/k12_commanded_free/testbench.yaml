@@ -1,0 +1,22 @@
+# k12_commanded_free (roadmap 092 K12): K12's run F: the scenario of k12_commanded (its scenarios/, linked) with the walker's
+# attachment free-running: its commands go as CMD on the gate, never waited for; the lag is
+# reported, with no bar (docs/roadmap/092, "K12's exit runs").
+simulator: carla
+assets:
+  - dataset: carla-town-autoware-maps
+    take: [Town01]
+pilots:
+  ego: {kind: carla_basic, vehicle: tesla_model3}
+attachments:
+  - name: walker
+    # the runner builds its model with scensim_batch (torch): this host's numpy 2 in ~/.local
+    # breaks the system torch, as in `just test`'s batch lane
+    run: [env, PYTHONNOUSERSITE=1, python3, -m, scensim.behaviour.seats]
+    lockstep: false
+    commands: [walker]
+    required: true
+judges:
+  # the storyboard log (context.jsonl), for the far-kerb event's frame (check 3)
+  - {name: context_log, run: ["true"], needs: [context]}
+logging: {capture: standard, gap_trace: true, keep: {passed: full, failed: full, error: full}}
+default: free

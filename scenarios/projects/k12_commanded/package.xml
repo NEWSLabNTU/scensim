@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>k12_commanded</name>
+  <version>0.0.1</version>
+  <description>092 K12 exit runs: a commanded walker on Town01</description>
+  <maintainer email="jerry73204@gmail.com">aeon</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>scensim</exec_depend>
+
+  <export>
+    <build_type>scensim_testbench</build_type>
+  </export>
+</package>

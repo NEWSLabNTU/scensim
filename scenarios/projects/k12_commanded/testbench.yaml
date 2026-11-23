@@ -1,0 +1,24 @@
+# k12_commanded (roadmap 092 K12, "K12's exit runs"): CS1's gap acceptance walker on Town01,
+# moved by the CARLA world server on its behaviour model's commands, which the seats runner sends
+# on the tick gate. The ego is CARLA's BasicAgent, so the runs measure the command channel, not
+# an autopilot. `scensim run k12_commanded` runs the lockstep runs (L); the free-running run (F)
+# is the project k12_commanded_free, the same scenario with `lockstep: false`.
+simulator: carla
+assets:
+  - dataset: carla-town-autoware-maps
+    take: [Town01]
+pilots:
+  ego: {kind: carla_basic, vehicle: tesla_model3}
+attachments:
+  - name: walker
+    # the runner builds its model with scensim_batch (torch): this host's numpy 2 in ~/.local
+    # breaks the system torch, as in `just test`'s batch lane
+    run: [env, PYTHONNOUSERSITE=1, python3, -m, scensim.behaviour.seats]
+    lockstep: true
+    commands: [walker]
+    required: true
+judges:
+  # the storyboard log (context.jsonl), for the far-kerb event's frame (check 3)
+  - {name: context_log, run: ["true"], needs: [context]}
+logging: {capture: standard, gap_trace: true, keep: {passed: full, failed: full, error: full}}
+default: lockstep
