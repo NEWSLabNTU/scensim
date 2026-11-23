@@ -31,3 +31,21 @@ Measured: how far the rock moves and its largest speed.
 - **118's prediction:** it stays put either way. The push and its limit are the same with or
   without tiles, and a 13 kg rock pressed down by a share of the tyre's load meets the same
   friction on the base mesh as on a tile.
+
+## The first test's result (2026-11-23)
+
+siw 502bc03, aib ff5e72b, GPU0; NAS "2026-11-23 issue 122 tiles off test (118)". loose_15, the
+rock's travel and largest speed, tiles off (on the base mesh) / on:
+
+| query | moved | largest speed |
+|---|---|---|
+| raycast | 1.7 / 1.5 cm | 0.15 / 0.007 m/s |
+| sweep | 7.2 / 7.9 cm | 1.2 / 1.0 m/s |
+
+**The tiles are not the cause**, as predicted: off and on move the rock alike under each query.
+So it is not a regression from issue 119's fix. Two things the test also shows: under sweep the
+rock moved 7-8 cm here where C6b's sweep run moved it 1.5 cm (the same code and course: the
+rock's push varies from run to run by several times), and every run is far under R4's
+0.2-1.0 m. The next lead is the push path: `RockStream.push`, its speed bound (`rocks.limit`:
+no faster than the tyre surface at the push's height), the reaction's direction and share
+(`rocks.reactions`), and how long the rock is awake under the tyre.
