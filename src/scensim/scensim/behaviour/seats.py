@@ -14,8 +14,9 @@ frame it reads its own entity's pose and the ego's truth (the ego's acceleration
 from its velocity over the frame), each the entity's pose: the truth carries the simulator's
 body pose, and the body's `origin_offset` (the latched entities topic) is taken back off, as
 `scensim.truth.boxes` does (issue 130). A frame's entity whose offset has not arrived yet is
-absent for that frame. Velocities are the body origin's, as the truth carries them, steps, and the frame's commands go out as one datagram
-answering that frame's `sim_frame`. A model whose entity or the ego is absent from a frame
+absent for that frame. Velocities are the entity origin's too (the body's, less the yaw rate
+times the offset). The model steps, and the frame's commands go out as one datagram answering
+that frame's `sim_frame`. A model whose entity or the ego is absent from a frame
 sends nothing for it (the world keeps its last command). Its decisions (the model's events)
 are written, one JSON line per event, to `$SCENSIM_ATTACHMENT_DIR/decisions.jsonl` (D6),
 where K10's agreement check reads them.
@@ -142,6 +143,13 @@ def entity_pose(x, y, yaw, offset):
     return e.x, e.y, e.yaw
 
 
+def entity_velocity(vx, vy, wz, x_body, y_body, x_entity, y_entity):
+    """The entity origin's map-frame (vx, vy) from the body origin's: v - w x r, r the body
+    origin from the entity's (a rigid body; yaw rate wz)."""
+    rx, ry = x_body - x_entity, y_body - y_entity
+    return vx + wz * ry, vy - wz * rx
+
+
 def offsets_of(msg) -> dict:
     """{name: origin_offset} from a TruthEntities message."""
     return {e.name: tuple(e.origin_offset) for e in msg.entities}
@@ -156,7 +164,9 @@ def frame_of(msg, offsets) -> dict:
             ents[name] = None
             continue
         p, v = msg.poses[6 * k:6 * k + 6], msg.velocities[3 * k:3 * k + 3]
-        ents[name] = (*entity_pose(p[0], p[1], p[5], offsets[name]), v[0], v[1])
+        x, y, yaw = entity_pose(p[0], p[1], p[5], offsets[name])
+        wz = msg.angular_velocities[3 * k + 2]
+        ents[name] = (x, y, yaw, *entity_velocity(v[0], v[1], wz, p[0], p[1], x, y))
     return {"frame": msg.frame, "sim_frame": msg.sim_frame, "sim_time_ns": msg.sim_time_ns,
             "entities": ents}
 

@@ -79,8 +79,8 @@ def seats_poses(trace, start_frames, steps, entities, pose="ssv2", shift=None):
 def ego_states(trace, start_frames, steps, ego):
     """The seats ego at frames S + k, k in 0..steps-1, for TruthPlayback (092 K10): the
     entity's pose (the simulator's body pose with the truth's `origin_offset` taken back off,
-    as scensim.truth.boxes does; issue 130) and the truth's map-frame velocity, as the seats
-    attachment reads them. A frame without the ego holds the last state."""
+    as scensim.truth.boxes does; issue 130) and its map-frame velocity (the truth's body
+    velocity less the yaw rate times the offset), as the seats attachment reads them. A frame without the ego holds the last state."""
     gg = _gap_geometry()
     o = trace.entities[ego].origin_offset
     frames = sorted(trace.frames, key=lambda f: f.frame)
@@ -93,8 +93,11 @@ def ego_states(trace, start_frames, steps, ego):
         if st is not None:
             p = gg.entity_pose_from_actor(gg.Pose2D(st.sim_pose.x, st.sim_pose.y,
                                                     st.sim_pose.yaw), o.x, o.y, o.yaw)
+            # the entity origin's velocity: the body's less w x r (r body from entity)
+            wz = st.angular_velocity[2]
+            rx, ry = st.sim_pose.x - p.x, st.sim_pose.y - p.y
             last = {"x": p.x, "y": p.y, "yaw": p.yaw,
-                    "vx_map": st.velocity[0], "vy_map": st.velocity[1]}
+                    "vx_map": st.velocity[0] + wz * ry, "vy_map": st.velocity[1] - wz * rx}
         if last is None:
             raise ValueError(f"the truth has no {ego!r} at frame {first + start_frames + k}")
         out.append(dict(last))

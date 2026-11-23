@@ -54,8 +54,15 @@ the batch's engines use, and what the model's gap means. So both sides take the 
   `origin_offset` from the latched `/scensim/truth/entities` and takes it off every pose before
   a model sees it (an entity whose offset has not arrived is absent for that frame).
 
-Velocities stay the body origin's, as the truth carries them: the entity origin's differs by
-the yaw rate times the offset (1.387 m at a few degrees a second is a few cm/s), not corrected.
+**Velocities, the same point on every side.** The batch's engines give the entity origin's
+velocity: engine A aib's `base_link` velocity, engine B the articulation root link's
+(`root_link_vel_w`), whose frame is `base_link`, the rear axle's centre (sim_vehicle_spec's
+articulation file: `frame: base_link`, the chassis box centred 1.416 m ahead of it, the
+declared box's centre). Seats' truth carries the body origin's, 1.387 m ahead. A rigid body's
+two points differ by w x r: |dv| = 1.387 m x |yaw rate|, across the heading (0.14 m/s at
+0.1 rad/s, 0.42 m/s at 0.3 rad/s). So the playback and the seats attachment take that off too,
+from the truth's yaw rate: v_entity = v_body - w x r. On K10's CS1 runs the ego drives
+straight (yaw rate 0 at every frame), so this changes nothing measured there.
 
 ## Effect on landed results
 
@@ -73,4 +80,10 @@ lag and the two sides' agreement, does not depend on which pose both read.
 - `seats.frame_of(msg, offsets)` takes it off for every entity. Test
   (`test_behaviour_seats.py`): on a truth whose body is 1.387 m ahead, the model's ego is the
   entity pose `boxes()` builds the ego's box from.
+- Both also take w x r off the velocity. Tests: a turning body's velocity becomes the entity
+  origin's, in the playback and in the attachment.
 - K11b's check 4 is rerun per frame (roadmap 092, "K11b's check 4").
+- **K10's open recheck** (roadmap 092): two new seats runs (L seeds 2 and 31 of
+  `k12_commanded`) with the fixed attachment, then the agreement on them, its prediction
+  written first: decisions at the same frames. Not optional: K10's "decisions agree" rests on
+  code both sides have changed.

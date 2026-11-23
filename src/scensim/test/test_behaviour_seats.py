@@ -69,6 +69,7 @@ def test_a_truth_frame_message_becomes_a_frame():
         names, present = ["ego", "walker"], [True, False]
         poses = [1, 2, 0, 0, 0, 0.5] + [0] * 6
         velocities = [4, 0.5, 0] + [0] * 3
+        angular_velocities = [0] * 6
     f = seats.frame_of(Msg, {"ego": (0.0, 0.0, 0.0), "walker": (0.0, 0.0, 0.0)})
     assert f == {"frame": 3, "sim_frame": 5003, "sim_time_ns": 1_000_150_000_000,
                  "entities": {"ego": (1, 2, 0.5, 4, 0.5), "walker": None}}
@@ -100,6 +101,7 @@ def test_a_model_reads_the_entitys_pose_as_boxes_takes_it_from_the_truth():
         names, present = ["ego"], [True]
         poses = [body.x, body.y, 0, 0, 0, body.yaw]
         velocities = [-8.0, 0.1, 0.0]
+        angular_velocities = [0.0, 0.0, 0.0]
 
     class Ent:
         name, origin_offset = "ego", off
@@ -115,3 +117,21 @@ def test_a_model_reads_the_entitys_pose_as_boxes_takes_it_from_the_truth():
     again = gg.ssv2_box(e, header.declared.center, header.declared.dimensions)
     assert abs(again.cx - box.cx) < 1e-12 and abs(again.cy - box.cy) < 1e-12
     assert abs(seen["ego_x"] - body.x) > 1.3                 # not the body's pose
+
+
+def test_a_turning_bodys_velocity_becomes_the_entity_origins():
+    """Issue 130: the body 1.387 m ahead of the entity, turning at 0.3 rad/s: the entity's
+    velocity is the body's less w x r, here 0.416 m/s less to its left."""
+    off = (1.387, 0.0, 0.0)
+
+    class Msg:
+        frame, sim_frame, sim_time_ns = 1, 101, 10**12
+        names, present = ["ego"], [True]
+        poses = [10.0, 0.0, 0, 0, 0, 0.0]              # heading +x
+        velocities = [8.0, 0.0 + 0.3 * 1.387, 0.0]     # the body's: the entity's 8 m/s + w x r
+        angular_velocities = [0.0, 0.0, 0.3]
+
+    x, y, yaw, vx, vy = seats.frame_of(Msg, {"ego": off})["entities"]["ego"]
+    assert abs(x - (10.0 - 1.387)) < 1e-12 and abs(y) < 1e-12
+    assert abs(vx - 8.0) < 1e-12 and abs(vy) < 1e-12
+

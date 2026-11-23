@@ -195,6 +195,22 @@ class SeatsSide(unittest.TestCase):
         self.assertAlmostEqual(s[0]["y"], -1.387 * math.sin(0.1), places=12)
         self.assertEqual((s[0]["vx_map"], s[0]["vy_map"], s[0]["yaw"]), (8.0, 0.5, 0.1))
 
+    def test_a_turning_egos_velocity_is_the_entity_origins(self):
+        """Issue 130: body 1.387 m ahead, heading 0.1 rad, turning at 0.3 rad/s: the played-back
+        velocity is the body's less w x r."""
+        from scensim_batch import agreement as A
+        t = trace()
+        f = sorted(t.frames, key=lambda f: f.frame)[1]
+        b = f.entities["ego"]
+        f.entities["ego"] = gt.EntityState(ssv2=b.ssv2, sim_pose=b.sim_pose,
+                                           velocity=(8.0, 0.5, 0.0),
+                                           angular_velocity=(0.0, 0.0, 0.3),
+                                           velocity_source="measured")
+        st = A.ego_states(t, 1, 1, "ego")[0]
+        rx, ry = 1.387 * math.cos(0.1), 1.387 * math.sin(0.1)
+        self.assertAlmostEqual(st["vx_map"], 8.0 + 0.3 * ry, places=12)
+        self.assertAlmostEqual(st["vy_map"], 0.5 - 0.3 * rx, places=12)
+
     def test_the_played_back_egos_box_is_the_seats_truths_box_at_every_frame(self):
         """Issue 130: the batch's ego box (its entity pose and declared box) against
         scensim.truth.boxes on the seats truth, frame S + k against step k."""
