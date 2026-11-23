@@ -140,6 +140,15 @@ not, the table names the highest that does, and the spec changes only after 133 
 - **Repeats:** run to run, the first-action steps within one step, and the decelerations
   within 0.02 m/s^2.
 
+**Amended before any result was judged (2026-11-23):** `regen_60` at 0.2 is dropped. On the
+lower grip, the car reaches 60 km/h only at 23.4 s of the test's 24 s. R then has 9 rows, and B
+none. That is why `regen_30` exists. 0.2's order is judged on `regen_30`; `regen_60` runs at
+0.3 and 1.0 only. 0.2 has three repeats of one test, 0.3 three of each. That is 55 runs.
+steptest failed silently there: its measure raised on the short phase, and `app.close()` in its
+`finally` ended the process before the traceback printed. The summary showed only
+`"tests": {}`, with rc 0. The run script now flags an empty summary. The silent failure is a
+separate defect, to be written up.
+
 ## Fix
 
 - **sim_vehicle_spec:** the schema gains `powertrain.regen_slip_control`, its twelve fields.
