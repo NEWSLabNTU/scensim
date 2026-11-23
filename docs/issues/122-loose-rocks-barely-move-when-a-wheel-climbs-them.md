@@ -126,3 +126,24 @@ them.
   `limit`), and R4's 0.2-1.0 m is not reproduced by its own spike.
 - **118's prediction:** it still moves the rock 0.2 m or more (the same push code moved it then,
   and the spike's rock is awake from the start, resting on a plain mesh).
+
+## The third test's result (2026-11-23)
+
+siw 1fe0e1f's tree, aib ff5e72b, GPU0; NAS "2026-11-23 issue 122 R4 spike today (118)". The spike
+ran its four fixtures to the end:
+
+| fixture | R4's table (066) | the spike today |
+|---|---|---|
+| loose_15, 11.6 kg | moved 0.2-0.5 m on, 0.9-1.0 m aside, 3.0-3.6 m/s at most | **0.2 cm**, 0.19 m/s at most (push peak 18.3 kN) |
+| loose_8, 1.8 kg | 0.11 m aside, 1.5 m/s at most | 4.2 cm on, 9.2 cm aside (10 cm), 0.47 m/s |
+| embedded_15 | wheel rise 0.111 m, 57.5 kN | jounce rise 0.105 m, suspension 74.6 kN (tyre 46.5) |
+| boulder_35 | high-centred | high-centred (stuck, front axle 5 cm short of the rock) |
+
+**118's prediction failed:** the spike as it is today does not move loose_15 either (0.2 cm
+against R4's 0.2-1.0 m), though loose_8 still moves about as R4 had it (10 cm against 11 cm). So
+the world server's path is not the cause of loose_15's pinning: the spike, with its own rocks
+awake from the start on a plain mesh, pins it too. Either something shared changed since R4's
+slice (the contact's loads and shares: R2's damper and bump stop, R5's cam and compiled kernel,
+issue 108's grip; `reactions`, `limit`), or R4's table came from a state of the spike other than
+the one committed (its text names an unlimited first run before `limit`). R4's 0.2-1.0 m is not
+reproduced by its own spike today.
