@@ -1160,6 +1160,11 @@ siw `086-c6b` 3381a36 (5940bc2 the fixes), aib ff5e72b, fixture_c6a, 60 Hz, GPU0
   shoulders and in the ditches (offline, 76 placed between s 180 and 320, 37 on the shoulders,
   39 in the ditches), off the car's path, and the tiles they rest on were already there: what
   (b) was to show (the plate against a cleat that collides) the replay shows.
+- 133's notes: the p95 cost is the fix's known cost, judged by C6b's Haruna budget (pre-cooked
+  or asynchronously built tiles a possible later step); sweep with four cars and no colliders
+  at 122-142 ms p95 is an open observation; and C6b's `fixture_drive` logs the rocks in the
+  stage and the rocks awake, so that rocks present is measured, not inferred from the
+  placement.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,

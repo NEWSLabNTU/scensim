@@ -61,3 +61,10 @@ the tiles lie 2-7 cm above the true road on that course.
 086, "C6b: issues 119 and 120 fixed": J within the runs' spread on cleat_10 under both queries,
 no double count, the plate striking cleat_15 (+1.3 mm instead of -5 mm); frame p50 unchanged,
 p95 about 12 ms higher with one to four cars (a tile collider's first step).
+
+- **The fix's known cost** (133): about +12 ms on the frame's p95, from making a tile collider
+  and PhysX taking in its new mesh in the next step. 086 C6b's Haruna budget judges it. A
+  possible later step, if it does not pass: tiles cooked ahead of need, or built off the
+  frame (asynchronously).
+- **Open observation, not explained:** sweep with four cars and no colliders had a frame p95
+  of 122-142 ms in all three runs (34 ms with the colliders).
