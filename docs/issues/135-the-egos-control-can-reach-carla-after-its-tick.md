@@ -25,3 +25,19 @@ the control CARLA held for the ego at each tick (the world server reading the eg
 CARLA frame at which acb called `apply_control` (an acb log line or a truth field), and the
 tick's own wall time (the truth's `wall_ns`); a control acb sent before tick k's start that CARLA
 does not hold at tick k is one that landed late.
+
+## Step 1: the control CARLA held, in the truth (2026-11-24, 133 approved)
+
+The CARLA world server reports, per step, the `VehicleControl` CARLA held for the ego and every
+vehicle it moves by physics (`EntityState.applied_control`, the truth's optional `control`,
+raw). Which control a frame's snapshot holds is checked, not assumed, by a direct client on a
+CARLA of its own (no world server), synchronous at 20 Hz, one vehicle, 400 ticks, a different
+control each tick (throttle k/400, steer alternating sign), applied just before the tick in two
+ways: by one `apply_batch_sync` of `ApplyVehicleControl` (it waits), and by `apply_control` (an
+`AsyncCall`). After each tick the vehicle's `get_control()` is read and the snapshot's frame is
+compared with the frame `tick()` returned.
+
+**Prediction, written before the check:** the snapshot's frame is the tick's at every tick;
+with the synchronous batch, frame k holds the control applied before tick k at all 400 ticks;
+with `apply_control`, frame k holds it at most ticks, and any tick that does not holds the
+previous one (the race this issue names, at a client sending right before the tick).
