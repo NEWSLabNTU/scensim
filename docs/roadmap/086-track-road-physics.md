@@ -985,6 +985,9 @@ the same contact, so this comes before C6b (133); C6c keeps the unsprung mass.
   mean already integrates our contact's force over the step, and R5's cam spreads it over
   the footprint, so a finer step should resolve the same impulse into a narrower, higher
   peak.
+- If the verdict is a sampling artefact, which physics rate scensim defaults to is a
+  separate decision (the frame's cost doubles with each doubling), not part of C6a3.
+- **Approved by 133** (2026-11-23, as written).
 - **The cost line again**: `fixture_cost` with 1, 2 and 4 cars under both queries at 60 Hz,
   on GPU0 with nothing else on it if the other session's job allows (`nvidia-smi` before each
   run, in the log), else as it is and said so; and 1 car at 120 and 240 Hz. Reported, not
