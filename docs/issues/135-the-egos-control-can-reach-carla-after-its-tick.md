@@ -41,3 +41,11 @@ compared with the frame `tick()` returned.
 with the synchronous batch, frame k holds the control applied before tick k at all 400 ticks;
 with `apply_control`, frame k holds it at most ticks, and any tick that does not holds the
 previous one (the race this issue names, at a client sending right before the tick).
+
+**Its cost and a live check, also written before they run.** On `town01_npc_10` tracked (the
+four runs of issue 127's "before" set, the baseline), the same set on the build that reports
+the control: the step's processing time in result.json (frame p50 and p95) grows by under
+0.05 ms at p50 (one actor list and ten snapshot lookups a step). In those runs every tracked
+vehicle has `control` at every frame with a world pose, the throttle and brake in 0..1 and the
+steer in -1..1 (the world server tracks by velocity and steer: throttle and brake 0, steer
+varying), and the walker-free set has no `control` on a body that is not a tracked vehicle.
