@@ -1,6 +1,6 @@
 # 128: the road layer's tiles take seconds on a long record, and an Isaac run stalls at its first frames
 
-**Status:** fixed on siw `issue-128` (2f71238), not landed. **Severity:** high: every Isaac
+**Status:** fixed, landed as siw 637b454 (scensim main d653aabd). **Severity:** high: every Isaac
 run whose map has a road layer on a long per-station record (086 C5's records: a station every
 0.5 m) stalls in its first frames, long enough for the bridge to give up, so the scenario ends
 in error. **Found:** 2026-11-23, scensim 118, 086 C6b's Haruna budget.
@@ -49,7 +49,9 @@ for bit.
   full loop on both maps' records.
 - `test/test_issue_128.py`: tiles along and off a 3000-station winding corridor and a hairpin
   tie, against the full loop, bit for bit; a tile keeps under 200 segments; a 3055-station
-  tile's `uv` under 1 s. This test is the gate's guard, since the gate runs no Isaac.
+  tile's `uv` under 1 s (since issue 132: its CPU time under a quarter of the full loop's;
+  the wall-clock bar failed on a loaded gate host). This test is the gate's guard, since the
+  gate runs no Isaac.
 - The live guard, `fixture_cost --guard-ms`, exits 1 when a frame of the first 120 takes
   longer than the bound, or a rock touches the base road (issue 123's self-check). With the
   fix, one car on Haruna (a codec job of another session shared GPU0): the first frames'
