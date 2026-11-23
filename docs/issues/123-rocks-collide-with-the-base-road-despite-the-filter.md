@@ -45,3 +45,16 @@ collider for one in two groups, after which it applies neither group's filter as
 3. **Tests**: a unit test with a stand-in for pxr that the pool's membership edits are made as the
    chosen fix makes them; and live, the rock touching its tile alone over the steps it is in
    contact, the warning gone from the load, and loose_15's travel recorded beside issue 122's.
+
+## The diagnosis (approved by 133, 2026-11-23; predictions before the runs)
+
+loose_15, raycast, tiles on, `--trace-push` (the collider each contact is with), siw e4ffffc's
+`--rock-pool`: (i) `off`, no pool, every rock made live as it streams in; (ii) `late`, the pool
+made as now but its group edit flushed a physics step later; and the pool `on` as the control.
+(iii) is read from (i): the warnings logged at the road's load with the rocks' groups made and no
+rock prim, against the tiles-alone run's one.
+
+- **118's predictions:** (i) the load's warnings go (one, as tiles alone), the live rock is put in
+  `rocks` by its own path at a frame's end, and it touches its tile alone; (ii) the warnings go
+  and the rock touches its tile alone, the timing being the cause; (iii) the base is not taken
+  into two groups (one warning at most). The control as before: 769 warnings, base contact.
