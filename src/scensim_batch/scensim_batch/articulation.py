@@ -278,7 +278,10 @@ class ArticulationModel:
         origins = torch.as_tensor(origins, **f64)
         st = {"x": pos[:, 0] - origins[:, 0], "y": pos[:, 1] - origins[:, 1], "yaw": yaw,
               "v": vb[:, 0], "yaw_rate": ang[:, 2], "accel_x": acc[:, 0], "accel_y": acc[:, 1],
-              "wheel_speeds": torch.as_tensor(spin_vel, **f64)}
+              "wheel_speeds": torch.as_tensor(spin_vel, **f64),
+              # the map-frame velocity a behaviour model reads (092 K10): the world's, an env's
+              # origin moving positions only
+              "vx_map": lin[:, 0], "vy_map": lin[:, 1]}
         return st, vb
 
 

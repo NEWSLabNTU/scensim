@@ -38,6 +38,18 @@ CLOSE_M = 2.0
 SEPARATION_WARN = 5.0
 
 
+def map_velocity(quat_wxyz, velocity_body):
+    """(vx, vy) in the map frame: aib's base_link velocity rotated by the car's orientation
+    (w, x, y, z), the whole rotation, so a pitched car's vertical velocity stays out of x and y
+    (092 K10: what a behaviour model reads, as the seats attachment reads the truth)."""
+    w, qx, qy, qz = quat_wxyz
+    bx, by, bz = velocity_body
+    return ((1 - 2 * (qy * qy + qz * qz)) * bx + 2 * (qx * qy - w * qz) * by
+            + 2 * (qx * qz + w * qy) * bz,
+            2 * (qx * qy + w * qz) * bx + (1 - 2 * (qx * qx + qz * qz)) * by
+            + 2 * (qy * qz - w * qx) * bz)
+
+
 class PhysxVehicleBackend:
     vectorised = False   # one car at a time through PhysX's vehicle interface (no vehicle view)
 
@@ -376,6 +388,7 @@ class PhysxVehicleBackend:
         n = self.n
         x, y, yaw, v = (np.zeros(n) for _ in range(4))
         yr, ax, ay = (np.zeros(n) for _ in range(3))
+        vxm, vym = np.zeros(n), np.zeros(n)
         ws = np.zeros((n, 4))
         for i, (car, st) in enumerate(zip(self.cars, self.states)):
             px, py, _ = st.position
@@ -383,9 +396,11 @@ class PhysxVehicleBackend:
             x[i], y[i] = px - self.origins[i][0], py - self.origins[i][1]
             yaw[i] = math.atan2(2 * (w * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz))
             v[i] = st.velocity[0]
+            vxm[i], vym[i] = map_velocity(st.quat, st.velocity)
             yr[i], ax[i], ay[i] = st.angular_velocity[2], st.acceleration[0], st.acceleration[1]
             if car.wheel_states is not None:
                 ws[i] = [w_.rotation_speed for w_ in car.wheel_states]
         t = lambda a: torch.as_tensor(a, dtype=torch.float64)   # noqa: E731
         return {"x": t(x), "y": t(y), "yaw": t(yaw), "v": t(v), "yaw_rate": t(yr),
-                "accel_x": t(ax), "accel_y": t(ay), "wheel_speeds": t(ws)}
+                "accel_x": t(ax), "accel_y": t(ay), "wheel_speeds": t(ws),
+                "vx_map": t(vxm), "vy_map": t(vym)}
