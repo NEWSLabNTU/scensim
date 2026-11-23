@@ -5,9 +5,11 @@ keeps scripts/check_pins.py green on main (scripts/land_pin.sh runs this):
     scripts/land_pin.sh [--dry-run] [--onto <branch> [--gated <sha>]] <repo> <sha> [<repo> <sha> ...] [-- note]
     scripts/land_pin.sh [--dry-run] <repo> <sha> [note]
 
-1. Each <sha> must already be on its <repo>'s origin/main (push and land it there first). Several targets land
-   as one cascade and one commit here (issue 083: check_pins wants every deps/ pin equal to this repository's,
-   so a component whose main moved two repositories needs both moved here together).
+1. Each <sha> must already be on its <repo>'s origin/<branch>, the branch its .gitmodules entry here
+   tracks, else main (push and land it there first; issue 124: the SSv2 fork's managed-ego-unforked).
+   Several targets land as one cascade and one commit here (issue 083: check_pins wants every deps/
+   pin equal to this repository's, so a component whose main moved two repositories needs both moved
+   here together).
 2. The cascade: every component whose deps/ pins a moving repository moves too, transitively --
    sim_vehicle_spec moves autoware_sim_vehicle, which moves autoware_isaac_bridge, which moves
    scensim_isaac_world. In dependency order, each gets a new commit on its main with its moving deps bumped,
@@ -17,6 +19,8 @@ keeps scripts/check_pins.py green on main (scripts/land_pin.sh runs this):
    moves (aib pinning autoware_sim_vehicle while sim_vehicle_spec lands), it gets a new commit on top
    bumping it. That commit goes on the target's main, so the given commit must be its main's tip; one
    behind it is refused by name rather than landing the commits after it (issue 085).
+   The cascade works on main only: a component it would move whose src/ entry here, or whose moving
+   deps/ entry, tracks another branch is refused by name, naming the branch (issue 124).
 3. This repository's checkout must hold nothing that is not on its origin/main: the pins are committed onto
    origin/main, so a local commit would be left out. It is refused, in a dry run too, naming the commits.
 4. Every commit is made locally first: the components' (from their origin/main), then this repository's
@@ -386,8 +390,12 @@ def main(argv):
         if not full:
             print(f"{repo} has no commit {sha} (pushed?)", file=sys.stderr)
             return 2
-        if not ok("merge-base", "--is-ancestor", full, "origin/main", cwd=top):
-            print(f"{repo} {sha} is not on its origin/main: land it there first", file=sys.stderr)
+        # from the branch its .gitmodules entry tracks, else main (issue 124: the SSv2 fork's
+        # managed-ego-unforked)
+        branch, _ = tracked_branch(ROOT, base, f"src/{repo}")
+        if not ok("merge-base", "--is-ancestor", full, f"origin/{branch}", cwd=top):
+            print(f"{repo} {sha} is not on its origin/{branch} (the branch src/{repo} tracks): "
+                  "land it there first", file=sys.stderr)
             return 2
         targets[repo] = full
 
@@ -418,6 +426,24 @@ def main(argv):
             return 2
         order += ready
         rest = [c for c in rest if c not in ready]
+    # the cascade reads, commits on and pushes a component's main: one it would move that tracks
+    # another branch, or whose moving deps/ entry does, is refused by name (issue 124), in a dry
+    # run too; nothing tracks another branch under deps/ today
+    for c in order:
+        mv = sorted(deps.get(c, set()) & moving - {c})
+        if c in targets and not mv:  # a target landing as given: from its own tracked branch
+            continue
+        b, _ = tracked_branch(ROOT, base, f"src/{c}")
+        if b != "main":
+            print(f"{c}: src/{c} tracks {b}, and the cascade moves a component on its main only "
+                  "(issue 124): land it by hand, or move its pins first", file=sys.stderr)
+            return 2
+        for d in mv:
+            db, _ = tracked_branch(src / c, "origin/main", f"deps/{d}")
+            if db != "main":
+                print(f"{c}: its deps/{d} tracks {db}, and the cascade bumps a deps/ entry on main "
+                      "only (issue 124): land it by hand", file=sys.stderr)
+                return 2
     # each: a new commit bumping its moving deps when its main (a target: the given commit) pins any of them
     # elsewhere than its target (a dep that gets a new commit itself counts as elsewhere), else that commit
     # as it is (issue 083). A target bumped so must be its main's tip: the new commit goes on its main, and

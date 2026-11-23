@@ -689,3 +689,85 @@ def test_a_component_whose_main_another_worktree_holds_is_refused(world):
     assert r.returncode == 1
     assert "C: its main is checked out in another worktree" in r.stderr
     assert world.remote_pin("A") == world.sha["A"] and world.remote_pin("C") == remote_c
+
+
+def forked(world, name="F", branch="fork"):
+    """A component F whose src/ entry tracks `branch` (as the SSv2 fork's managed-ego-unforked):
+    its origin has main and that branch; a commit on the branch only, its sha."""
+    run("git", "init", "-q", "--bare", "-b", "main", str(world.origin / f"{name}.git"))
+    d = world.clone(name)
+    commit(d, f"{name} 1")
+    git(d, "push", "-q", "origin", "main")
+    git(d, "checkout", "-q", "-b", branch)
+    git(d, "push", "-q", "origin", branch)
+    s = world.super
+    git(s, "submodule", "add", "-q", "-b", branch, world.url(name), f"src/{name}")
+    git(s, "commit", "-q", "-m", f"super pins {name} on {branch}")
+    git(s, "push", "-q", "origin", "main")
+    sha = commit(d, f"{name} on {branch}")
+    git(d, "push", "-q", "origin", branch)
+    return sha
+
+
+def test_a_target_on_its_tracked_branch_lands(world):
+    """Issue 124: a submodule whose .gitmodules names a branch lands from that branch, not main."""
+    f2 = forked(world)
+    r = world.land("--dry-run", "F", f2[:9])
+    assert r.returncode == 0 and "dry run: nothing changed" in r.stdout, r.stdout + r.stderr
+    r = world.land("F", f2[:9])
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert world.remote_pin("F") == f2
+    assert world.check_pins().returncode == 0
+
+
+def test_a_target_on_neither_its_branch_nor_main_is_refused_naming_the_branch(world):
+    forked(world)
+    d = world.work / "F"
+    git(d, "checkout", "-q", "-b", "other")
+    stray = commit(d, "F on other")
+    git(d, "push", "-q", "origin", "other")
+    r = world.land("--dry-run", "F", stray[:9])
+    assert r.returncode == 2
+    assert f"F {stray[:9]} is not on its origin/fork (the branch src/F tracks)" in r.stderr, r.stderr
+
+
+def test_a_submodule_with_no_branch_still_lands_from_main(world):
+    """The default: no `branch =` is main; a commit on another branch only is refused."""
+    d = world.work / "A"
+    git(d, "pull", "-q", "--rebase", "origin", "main")
+    git(d, "checkout", "-q", "-b", "side")
+    side = commit(d, "A on side")
+    git(d, "push", "-q", "origin", "side")
+    r = world.land("--dry-run", "A", side[:9])
+    assert r.returncode == 2
+    assert f"A {side[:9]} is not on its origin/main (the branch src/A tracks)" in r.stderr, r.stderr
+    git(d, "checkout", "-q", "main")
+    a2 = world.advance("A")
+    assert world.land("--dry-run", "A", a2).returncode == 0
+
+
+def test_the_cascade_refuses_a_component_tracking_another_branch_by_name(world):
+    """Issue 124 (133): the cascade commits on and pushes a component's main; a component whose
+    moving deps/ entry tracks another branch is refused, naming it, the entry and the branch."""
+    c = world.work / "C"
+    git(c, "pull", "-q", "--rebase", "origin", "main")
+    git(c, "config", "-f", ".gitmodules", "submodule.deps/A.branch", "feat")
+    git(c, "add", ".gitmodules")
+    git(c, "commit", "-q", "-m", "C: deps/A tracks feat")
+    git(c, "push", "-q", "origin", "main")
+    a2 = world.advance("A")
+    r = world.land("--dry-run", "A", a2)
+    assert r.returncode == 2
+    assert "C: its deps/A tracks feat" in r.stderr, r.stderr
+
+
+def test_the_cascade_refuses_a_moving_component_whose_src_entry_tracks_another_branch(world):
+    s = world.super
+    git(s, "config", "-f", ".gitmodules", "submodule.src/C.branch", "feat")
+    git(s, "add", ".gitmodules")
+    git(s, "commit", "-q", "-m", "super: src/C tracks feat")
+    git(s, "push", "-q", "origin", "main")
+    a2 = world.advance("A")
+    r = world.land("--dry-run", "A", a2)
+    assert r.returncode == 2
+    assert "C: src/C tracks feat" in r.stderr, r.stderr

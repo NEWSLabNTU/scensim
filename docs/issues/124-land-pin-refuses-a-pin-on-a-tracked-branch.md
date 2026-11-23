@@ -1,6 +1,6 @@
 # 124: land_pin refuses a target whose submodule tracks a branch other than main
 
-**Status:** open (2026-11-24, 243; found in 092 K12's landing). **Severity:** low.
+**Status:** fixed (2026-11-24, 243; found in 092 K12's landing). **Severity:** low.
 
 ## What is wrong
 
@@ -29,16 +29,18 @@ $ scripts/land_pin.sh --dry-run scenario_simulator_v2 38d645ac4
 scenario_simulator_v2 38d645ac4 is not on its origin/main: land it there first
 ```
 
-## The fix proposed
+## Fix
 
-- A target's commit is checked against `origin/<its tracked branch>` (`tracked_branch(ROOT,
-  "origin/main", f"src/{repo}")`), and the refusal names that branch.
-- The cascade: no component pins the SSv2 fork under `deps/`, so it never cascades; a
-  component whose `deps/` entry names a branch would read, commit on and push that branch. If
-  that is more than this issue needs, the cascade keeps main and refuses a component tracking
-  another branch by name instead, so the gap is never silent.
-- Tests (`scripts/test_land_pin.py`): a target tracking a named branch, its commit on that
-  branch and not on main, lands in a dry run; the same commit on neither is refused naming the
+- A target's commit is checked against `origin/<the branch src/<repo> tracks>` (`tracked_branch`
+  on this repository's `.gitmodules`, else main), and the refusal names that branch: `F <sha>
+  is not on its origin/fork (the branch src/F tracks): land it there first`.
+- The cascade works on main only (133 chose this over teaching it other branches: nothing under
+  `deps/` tracks another branch). A component it would move whose `src/` entry tracks another
+  branch, or whose moving `deps/` entry does, is refused in a dry run too, naming the component,
+  the entry and the branch: `C: src/C tracks feat, ...`, `C: its deps/A tracks feat, ...`. A
+  target landing as given, with no deps/ to bump, is not a cascade move and lands from its own
   branch.
-
-Until it is fixed, a landing that moves the SSv2 pin is done by hand as K12's was.
+- Tests (`scripts/test_land_pin.py`): a target on its tracked branch lands (dry run, then for
+  real, `check_pins` green); a commit on neither that branch nor main is refused naming the
+  branch; a submodule with no `branch =` still lands from main and refuses a commit only on
+  another branch; the cascade's two refusals by name.
