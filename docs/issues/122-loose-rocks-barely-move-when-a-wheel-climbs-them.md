@@ -102,3 +102,27 @@ The following steps push 0.7-3 kN against 2-9 kN down, then nothing.
   spike as it is today: if it still moves the rock, the cause is in the world server's path
   (`RockStream`: waking, the speed it passes to `limit`, the ground it rests on); if it does
   not, something shared changed since R4.
+
+## What "moves at least 5 cm" rests on (133's question)
+
+C6b's check that a loose rock moves at least 5 cm rests on R4's spike alone (066 R4's first slice,
+`spikes/rock_fixtures.py`: 0.2-1.0 m), no outside source and no measurement of a real tyre over a
+loose rock. A tyre climbing a rock presses it down as it pushes it (this issue's trace), so a rock
+pinned while the tyre is on it may be physical, and R4's 0.2-1.0 m may be what is off. Neither is
+shown yet.
+
+## The third test: R4's spike as it is today (before the run)
+
+`spikes/rock_fixtures.py` as it stands on siw `086-c6b` (502bc03's tree and later; its own flat
+base mesh, its own rocks, which collide with that base, always awake, its own loop calling
+`rocks.reactions` and `rocks.limit`), aib ff5e72b, GPU0, its four fixtures (embedded_15, loose_15,
+loose_8, boulder_35). Measured: each loose rock's travel and largest speed, as the spike reports
+them.
+
+- If its loose_15 moves 0.2 m or more, the shared push code still moves a rock and the cause is in
+  the world server's path (`RockStream`: waking, the rock velocity it hands `limit`, the ground the
+  rock rests on, which the third finding above already questions).
+- If it moves a few cm, something shared changed since R4 (the contact's loads, `reactions`,
+  `limit`), and R4's 0.2-1.0 m is not reproduced by its own spike.
+- **118's prediction:** it still moves the rock 0.2 m or more (the same push code moved it then,
+  and the spike's rock is awake from the start, resting on a plain mesh).
