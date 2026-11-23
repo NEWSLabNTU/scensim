@@ -1,6 +1,6 @@
 # 130: the batch's truth playback puts the seats ego's actor pose where the entity's belongs
 
-**Status:** fixed (local, not landed): the playback and the seats attachment read the entity's pose. Found 2026-11-24 by 241 in 092 K11b's check 4.
+**Status:** fixed: the playback and the seats attachment read the entity's pose. Found 2026-11-24 by 241 in 092 K11b's check 4.
 **Severity:** medium. The ego's box in the batch is 1.387 m ahead of where seats has it, for
 every frame of an `--ego-from-truth` run. Box geometry on the ego is shifted by that much: the
 closest gap, contacts, and storyboard conditions measured to the ego.
