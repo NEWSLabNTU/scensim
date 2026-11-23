@@ -1,6 +1,6 @@
 # 121: just build compiles SSv2's C++ at one job per core, about 2 GB a compiler
 
-**Status:** open (doc first; the fix follows, gated). **Severity:** medium: a build beside
+**Status:** fixed: `just build` takes its job count from `scripts/build_jobs.py`. **Severity:** medium: a build beside
 running work can take a host's memory, and the kernel's OOM killer then picks a training run.
 **Found:** 2026-11-23, scensim 243, measuring a full gate's memory; assigned to 241 by 133.
 
@@ -32,7 +32,7 @@ side by side. On a 60 GB host with training running, it does not fit.
 For the gates since then, the gate runs with `MAKEFLAGS=-j6`, `CARGO_BUILD_JOBS=6` and colcon at
 2 workers (`COLCON_DEFAULTS_FILE`), set by hand outside the recipe (243, 2026-11-23).
 
-## Fix (proposed)
+## Fix
 
 `just build` picks its job count from the memory the host has free, or takes it from a host
 setting, and says what it picked:
@@ -54,3 +54,23 @@ setting over both, the existing `MAKEFLAGS` kept).
 
 acb's own `just build` (its workspace, which the gate builds first) has the same defaults. It
 builds no SSv2, so it is left as it is; that is noted, not changed here.
+
+## What the fix does
+
+`scripts/build_jobs.py` prints the shell assignments `just build` evaluates before colcon, and a
+line saying what it chose. On 241 with 56 GB available and 24 CPUs:
+
+```
+build jobs: 11 (half of 56.2 GB available at 2.5 GB a job, 24 CPUs): colcon 2 package(s) at
+once, make and cargo 5 each
+```
+
+A `MAKEFLAGS` without a job count keeps its other flags and gains `-jJ`. With a
+`COLCON_DEFAULTS_FILE` in the environment the recipe passes no `--parallel-workers`, so the
+file's setting stands. `scripts/test_build_jobs.py` (in `just test`) checks the choice: little
+memory caps it below the cores (16 GB: 3 jobs, one package at a time), plenty stops at the
+cores (24), no memory still builds with 1, the host setting wins, a bad one is refused, and
+settings already in the environment are kept.
+
+`SCENSIM_BUILD_JOBS` belongs beside the other host settings in CLAUDE.md, which this change
+does not edit.
