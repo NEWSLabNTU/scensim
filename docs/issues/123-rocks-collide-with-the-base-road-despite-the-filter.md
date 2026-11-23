@@ -233,3 +233,17 @@ control that separates the trace from running the case alone).
 - **118's prediction:** with the trace, about 6.5 cm; without it, about 1.67 m. The trace
   applies the contact report to the rock's prim while PhysX simulates it, and that changes the
   rock's motion.
+
+### The trace hypothesis' result (2026-11-23)
+
+siw 2ef3001, aib ff5e72b; NAS "2026-11-23 issue 123 trace hypothesis (118)". loose_15 alone,
+raycast: with `--trace-push` it moved 6.6 cm (largest speed 1.45 m/s), and without it 6.6 cm
+(1.45 m/s), the same to the millimetre. **The prediction failed:** the trace does not change
+the rock's motion, and `--trace-push`'s help is unchanged.
+
+The difference is between loose_15 run alone (6.6 cm) and loose_15 in the whole fixture set
+(1.67 m, 086's C6b rerun). Both started within the check at nearly the same state: 11.168 and
+11.170 m/s, 1.06 and 1.05 cm off the lane. In the set, the rear wheel met the rock and threw it.
+Alone, it did not. **Open, unexplained**, with no new issue (133). One run each: the rock's
+travel at this fixture takes one of two very different outcomes, and which one comes is not
+known in advance.

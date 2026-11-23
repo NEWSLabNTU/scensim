@@ -1,6 +1,7 @@
 # 122: loose rocks barely move when a wheel climbs them
 
-**Status:** open, being tested. **Severity:** medium: a loose rock under a tyre should be
+**Status:** closed 2026-11-23 (133): not a defect in today's code; see "Closed". **Severity:**
+as first judged, medium: a loose rock under a tyre should be
 shoved or kicked (066 R4's slice: 0.2-1.0 m), and here it stays put, so C6b's rocks behave as
 static ones and its budget's rock costs would be measured on rocks that do not behave.
 **Found:** 2026-11-23, scensim 118, 086 C6b's fixture runs.
@@ -198,3 +199,24 @@ In issue 123's test (iv), with the base contact gone (the groups made before the
 starts), loose_15 moved 6.5 cm instead of 1.5 cm (raycast): the rock resting on its tile and on
 the base road at once (issue 123) held it more than its tile alone. loose_15 is rerun under both
 queries after 123's fix and recorded; this issue's close waits for it.
+
+## Closed (133's ruling, 2026-11-23)
+
+133's earlier closing line ("R4's 0.2-1.0 m not reproduced by today's code") is withdrawn,
+because the rerun disproves it. The ruling, as recorded:
+
+"Not a defect in today's code. The pinning came from issue 123's harness fault: the base carried
+55 % of the rock's normal force (23.2 of 42.1 kN). With the fault fixed, raycast reproduces R4's
+throw (loose_15: 1.67 m, by the rear wheel, 0.73 m on and 1.5 m aside). Sweep moves the same rock
+2.5 cm."
+
+- The numbers: 086's C6b fixtures rerun after issue 123 (siw 2ef3001, NAS "2026-11-23 086 C6b
+  rock fixtures after issue 123 (118)"). loose_15 moved 1.67 m in raycast and 2.5 cm in sweep;
+  loose_8 moved 1.1 cm and 5.0 cm.
+- The check ("moves at least 5 cm") still has no physical source (above), and its verdicts are
+  recorded as measured.
+- **Failed predictions, kept as failed:** the rerun's loose_15 in raycast (predicted about 6.5
+  cm, measured 1.67 m) and loose_8 passing in raycast (measured 1.1 cm).
+- loose_15 run alone in raycast moves 6.6 cm, with or without the trace (issue 123's trace
+  hypothesis' result). That is unexplained and open, with no new issue.
+- Sweep's small travel is issue 125.

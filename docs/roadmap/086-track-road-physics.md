@@ -1280,6 +1280,12 @@ here. Those runs ran with `--trace-push`, which applies PhysX's contact report t
 while it is being simulated and wraps `rocks.limit`. In this run every rock has the report from
 its creation, and nothing is wrapped. Whether the trace changed the rock's motion is not tested.
 
+**Afterwards (2026-11-23, issue 123's trace hypothesis):** the trace changed nothing. loose_15
+alone moved 6.6 cm with `--trace-push` and without it. The 6.6 cm against 1.67 m difference is
+the case run alone against the whole set, which is unexplained and open. A single raycast run
+does not fix this fixture's outcome. Sweep's small travel is issue 125, because a study config
+(`isaac_verge`) uses sweep. Issue 122 is closed (133).
+
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
