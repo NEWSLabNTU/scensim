@@ -190,3 +190,35 @@ far kerb. A run that decides otherwise is reported with its decision gap; the ch
 
 **The verdict.** K12's exit holds when all three L runs pass 1 to 3. A failure is named by
 run, check and number, and nothing is rerun until its cause is known.
+
+**Exit set 1 (2026-11-23): failed.** One stack (seat 0, CARLA 0.9.16 at Epic), scensim
+0cc054d8, the project at its first form. Four attempts never played a frame: SSv2's
+preprocessor refused the scenario (the catalog ego lacked its ParameterAssignments, and SSv2's
+Pedestrian needs `model`); both fixed in the project, and their runs reported `command_lag`
+instead of SSv2's refusal (fixed: no frame is no lag). Then:
+
+| run | check 1 | lag | unmatched | gate misses | unknown | decision | far kerb | check 2 (max xy) |
+|---|---|---|---|---|---|---|---|---|
+| L seed 1 | pass | 1 on 238 frames | 0 | 0 | 0 | reject, then crosses | yes | 0.070 m, failed (events match) |
+| L seed 2 | fail | 1 on 230 frames | 1 | 1 | 1 | reject, then crosses | yes | not judged (cause A) |
+| L seed 3 | fail | 1 on 231 frames | 1 | 1 | 1 | reject, then crosses | yes | not judged (cause A) |
+| L seed 31 | fail | 1 on 192 frames | 1 | 1 | 1 | accepts | yes | 0.0037 m (events match) |
+
+Branch coverage, as (c) provides: seed 1's thin margin flipped and it rejected, so seed 31
+(U - logit(u) = 2.61) was added and accepted. F was not run.
+
+Cause A, the world server's tick gate kept state across runs (every run after the stack's
+first): it kept the previous run's newest command for `walker`, which the new walker took at
+its first step (seed 2's first walker frame, world frame 3408, has `cmd_frame` 3402, seed 1's
+last frame: D5 broken, the same command counted as unknown); and a follower that joined was
+waited for, a whole timeout, on the previous run's last frame, which it never saw. Cause B,
+CARLA: LibCarla 0.9.16's `SetActorTransform` is an asynchronous call, so the walker's
+transform could reach CARLA after its tick, and its reported pose stalled a frame and caught up
+with a double step (seed 2 at frames 158 and 220, seed 3 at 165); seed 1's 0.070 m is such a
+stall on its last two frames, the integrator matching the batch within 1e-4 m on every other.
+Fixed in scensim_carla_world a27b833: a name's command is forgotten when its body is spawned
+or destroyed (a later command answering an earlier frame refused), a new world clears them, a
+joining follower is never waited for on a frame from before it joined, and commanded bodies
+are posed by one synchronous `apply_batch_sync` per step. The same asynchronous pose of other
+kinematic bodies is issue 127. The rule is unchanged; set 2 is the whole set again from scratch
+on a fresh stack (L seeds 1, 2, 3 and 31, F seed 1).
