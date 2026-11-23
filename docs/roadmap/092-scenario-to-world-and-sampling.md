@@ -47,11 +47,11 @@ From the design's section 10.
 | K8 | 093's description rules (scenario-description.md section 2a): `latent: true` model variables (gap 2), `scensim.present` optional entities (3), `scensim.static` stopped vehicles (4), `isBlind` in the subset with lane following as its condition (5), a per-sample entity class conditioned on per-slot assets (6), anchor attributes in derived values (7, with K9) | spec, component | S1, S2 | | done 2026-11-22 but gap 3 (swb 243): gaps 2, 4 and 6: latent variables in the record's `latent`; `scensim.static` with SSv2's `maxSpeed = 0`, a batch prop (scensim_batch: executor pending); a parameter in an entity's class or model a condition naming it and its values (SSv2's examples' counts unchanged); gap 5: a blind default controller's condition is SSv2's lane following alone (executor pending in the batch); gap 7: `anchor.<name>.<attribute>` in derived values, from `testbench.yaml` `world.anchors` (lane heading, length, speed limit; point x, y), recorded in the record's `anchors`, CS7's `exit_heading` stand-in gone (the rest of anchors is K9); gap 3 (`scensim.present`) open, needed by neither case study |
 | K9 | 093 D2's world interface beyond knobs: anchors (lanes, regions, conflict points, curves) declared by a world and checked by `testbench check`, knob profiles (`profile: true`, CS5), the pilot's map variants (`maps.pilot_variants`, CS3) | spec, component | K1 | | in progress (swb 243): K9a done 2026-11-22, a map's lanes: `<map dir>/anchors.yaml`, resolved by the map's author with `python3 -m scensim_batch.anchors resolve` (torch) into `anchors.resolved.json` (length, speed limit, ends, a heading table within 1e-3 rad in SSv2's arc length, the map's digest), read by the sampler and scensim with ROS 2 alone and merged with `world.anchors`; `anchor.<lane>.heading(s)`; the record's `anchor_source`; Town01's anchors (west_street, west_left_turn) published 2026-11-22 as the maps dataset's revision deb23e3a, tag v2026.11d, with the user's OK; every testbench's lock on it; K9b done 2026-11-22: FileHeader `scensim.anchor.<parameter> = <anchor>.<attribute>` or `<anchor>.<function>(<arg>)`, `$<parameter>` for a drawn anchor or argument; resolved lanes gain `lanelet_at(s)` and `local_s(s)`, a stated lane its `lanelet`; the sampler checks bindings before drawing and rejects a draw off its lane by name; `scensim run` sets a scenario's bound parameters before SSv2 starts, checks a record's against the world, refuses a given value and SSv2's own distribution of a bound scenario, and records `result.json` `anchors`; `compilable` refuses a named laneId with the binding as its fix; CS6 and CS7 bind their lanes. K9c done 2026-11-22: conflicts (two lanes crossing once: `s_<lane>`, `x`, `y`, `angle`, `position_error`), curves (`length`, `turn`, `direction`, `min_radius` over 2 m, `mean_radius`) and regions (polygon: `area`, centroid, each lane's `from_`/`to_`) resolved from the map's file; Town01's conflict west_left_turn x north_through (the turn crossing the northbound through lane) with its bend and junction, published 2026-11-22 with the user's OK as the maps dataset's revision 19d52699, tag v2026.11e, every testbench's lock on it. K9d done 2026-11-22: `testbench check` refuses a scenario's bindings the world cannot satisfy (an anchor or attribute it lacks, a function on a stated anchor, a bare heading, a constant s off the lane, a stale resolved file); `anchor_source` names the lock's dataset and commit when the lock holds the file read; a stated lane's `lanelet` passes `testbench check`. The anchors are done (K9a-d). Knob profiles built 2026-11-22 (CS5): `profile: true` knobs (a range, the field they set), bound to breakpoints along `time` or `s(<lane>)`, applied by the bridge each frame (`set_knob_profiles`; a send when the value moved by its step and `min_interval`, 1 s by default, has passed, or at once on a crossed breakpoint: a send every frame took CARLA's frame p95 to 21-222 ms, one a second kept it at 1-4 ms), read back by the world servers (`ENVIRONMENT_APPLIED`), recorded per frame in the gap trace's `knob` lines and judged in `result.json` `knobs.profiles` (`knob_profile` error runs); resolved lanes gain their centreline (`x`, `y`). The pilot's map variants (CS3) remain. Before: K8 built the minimal anchor declaration it extends (`world.anchors` in testbench.yaml, numbers the project states): K9 adds anchors a world declares beside its map, attributes computed from the map (`heading(s)`, length and speed limit from lanelets, conflict points), regions and curves, binding entities to anchors, and the check |
 | K10 | 093 D3's behaviour models (scenario-description.md section 4): the model interface (a parameter schema, `reset`, `step`, one array API code for numpy on seats and `step_batch` in torch; truth in, a kinematic command out, decisions into the truth), the starter model (a gap-acceptance walker for CS1, from a published model named before any coefficient), batched in scensim_batch, on seats as a K4 attachment that commands its entity through K12; the agreement check in K2.4's style (the same records on both forms: decisions and their frames, the walker's trajectory error, trigger times, verdict); the latency from a truth frame to the command taking effect measured free-running and in lockstep (093's open question 1) | component | K2, K4, K12 | swb 241 | in progress: planned 2026-11-22 (133 approved), the section 4 draft corrected (SSv2 takes a world-owned pose for any entity; pilots do not see truth, attachments do); (i)-(ii) landed ce760b69: `scensim.behaviour`, the walker on numpy and torch bit for bit (0 of 2800 arrays differ on an RTX 5090), its coefficients the cited set `khaki2021_restricted` (Khaki and Mohammadnazar 2021, CC0; the gap's 2.021 against the 2021 meta-analysis's pooled 1.98); (iii) in the batch: a model entity (role `model`) compiled from its ObjectController (its properties per slot, `anchor.*` for the crossing, its seed from `seeds.pilots.<entity>`), stepped after the ego's physics on its truth and moved kinematically within its acceleration limit; CS1's start trigger is the model's `start_gap` (`$ttc_entry`), as the subset keeps ActivateControllerAction seats-only; the walker decides where it can still stop at the kerb; `cs1_walker_gap_acceptance.xosc` the batch example (the description's CS1 stays refused: a storyboard SpeedAction on a model entity) |
-| K12 | Truth-fed pilots: a command channel from a K4 attachment back to the bridge (`entity_command`: an entity's kinematic command, applied by the world and returned to SSv2 in the status response, which the fork's `updateEntitiesStatusInSim` applies to any entity), under lockstep held to one frame; for K10's behaviour models and learned background agents | component | K4 | | open (243 to review) |
+| K12 | Truth-fed pilots: a command channel from a K4 attachment to the world server (`entity_command`: an entity's kinematic command, carried with the tick gate's acknowledgement, integrated and applied by the world, read back to SSv2, whose fork adopts it for a simulator-driven pedestrian), under lockstep held to one frame; for K10's behaviour models and learned background agents | component | K4 | swb 243 | spec reviewed by 133, 2026-11-23 ("K12's spec" below); pedestrians first, CARLA only; build plan next |
 | K11 | 093 D4's search (purpose B): an adaptive search over cells that writes the record's reserved `search` | component | K1, K7 | | open |
 | E1 | Examples | examples | the above | | open |
 
-## K12's spec (draft, 2026-11-23, 243; for 133's review, before any code)
+## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
 background agent reads the truth stream and commands its entity, the world server moves it, and
@@ -79,23 +79,32 @@ three corrections, and the spec is written around them:
 ### Decisions
 
 - **D1, which entities.** An entity whose `ObjectController` has a `model` property (the
-  batch's role `model`) is commanded on seats. Its controller is named `model` (CS1's
-  `walker_model` renamed). `scensim run` reads the commanded entities from the scenario and
-  each attachment's new key `commands: [<entity>, ...]`; it refuses, by name, a commanded entity
-  no attachment claims, one claimed twice, a claim on an entity without `model`, and a misc
-  object. `attachments.roles` gains the role `model`.
-- **D2, SSv2 (the fork).** `drives()` gains `model` for vehicles; a
-  `SimulatorDrivenPedestrianEntity` does the same for pedestrians: no behaviour plugin, the
-  returned pose and twist adopted, route, lane change and speed actions on it semantic errors.
-  `SpawnPedestrianEntityRequest` gains `string behavior = 4`, as the vehicle's field 6.
+  batch's role `model`) is commanded on seats. Its controller is named `model`, as the batch's
+  role (CS1's `walker_model` renamed). Pedestrians first: CS1's walker is the only consumer
+  (133). `scensim run` reads the commanded entities from the scenario and each attachment's new
+  key `commands: [<entity>, ...]`; it refuses, by name, a commanded entity no attachment claims,
+  one claimed twice, a claim on an entity without `model`, and a commanded vehicle or misc
+  object. `attachments.roles` gains the role `model`. Vehicles are the next step, when a vehicle
+  behaviour model exists: the fork's `SimulatorDrivenVehicleEntity::drives()` gains `model`, and
+  the rest of this spec holds as written.
+- **D2, SSv2 (the fork, branch `managed-ego-unforked`, pushed before any pin moves).** A
+  `SimulatorDrivenPedestrianEntity` for controller `model`, as `SimulatorDrivenVehicleEntity`
+  is for vehicles: no behaviour plugin, the returned pose and twist adopted, route, lane change
+  and speed actions on it semantic errors. `SpawnPedestrianEntityRequest` gains
+  `string behavior = 4`, as the vehicle's field 6.
 - **D3, the bridge.** A `model` entity is `Mover::Simulator`, spawned with a new `Motion`
   `COMMANDED`, and read back like the ego. A world server without `READS_BACK` and a tick gate
-  refuses it: Isaac today, by name.
+  refuses it: Isaac today, by name. Its follow-up, named and not part of K12: a tick gate and
+  `READS_BACK` for the Isaac world server.
 - **D4, the channel.** The tick gate's datagram, extended: a follower acknowledges a frame with
   `DONE <frame> [<entity> <speed> <heading> <accel_limit>]...` (SSv2's frame, radians, SI
   units). Free-running (`lockstep: false`), the follower sends the same list as `CMD <frame>
   ...` to the same port and is not waited for. The world server applies each entity's latest
-  command at the next tick. A frame's commands fit one datagram; more is a refusal.
+  command at the next tick. A frame's commands fit one datagram, bounded so it never fragments
+  on an Ethernet link (the gate may be bound off the loopback, as for ns-3): at most 1472 bytes,
+  each number in its shortest round-trip form (at most 24 characters), an entity's name at most
+  64 bytes, so at most **10 commanded entities** per scenario. `scensim run` refuses a scenario
+  over either bound by name, before SSv2 starts; nothing is split or dropped.
 - **D5, the motion.** Before each tick the world server integrates each commanded entity as the
   batch does (`scensim_batch.core.Models`): `v += clamp(speed - v, +-accel_limit dt)`, the yaw
   set to the heading, the position moved `v dt` along it; then sets the actor's transform with
@@ -124,10 +133,7 @@ three corrections, and the spec is written around them:
    (a traffic_simulator test); a spawn's `behavior` reaches the bridge.
 4. Each refusal of D1 and D3, by name.
 
-### For 133
+### Answered (133, 2026-11-23)
 
-- The controller name `model`, or another.
-- Vehicles in scope now (learned background agents), or pedestrians only first.
-- Commands carried in the gate's datagram (D4), or a separate command socket with the frame
-  in each command and the gate unchanged (one frame still holds if the follower sends the
-  command before `DONE`, but two sockets can reorder).
+The controller name is `model`; pedestrians first, vehicles when a vehicle behaviour model
+exists; the commands ride the gate's datagram, bounded as in D4.

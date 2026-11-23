@@ -533,20 +533,22 @@ Rules:
   against the ego's live approach.
 - **On seats,** a behaviour model runs for its entity on the truth stream, and the world, not
   SSv2, moves the entity. Two facts decide how (found in K10's planning, 2026-11-22):
-  - SSv2 already takes a world-owned pose for any entity. The fork's
-    `API::updateEntitiesStatusInSim` applies the simulator's returned status to every entity:
-    the ego's pose and twist, and `setStatus` for every other one, a pedestrian included. So the
-    bridge returns the model's entity in its status response, as it does for
-    `simulator_autopilot` vehicles, and SSv2's conditions read the pose the world shows.
-    Nothing changes in SSv2.
+  - SSv2 takes a world-owned pose for any entity, but runs its behaviour afterwards. SSv2's
+    `API::updateEntitiesStatusInSim` (upstream's, not the fork's) applies the simulator's
+    returned status to every entity: the ego's pose and twist, and `setStatus` for every other
+    one, a pedestrian included. In the same frame SSv2 then runs the entity's behaviour, and a
+    pedestrian's controller name is loaded as a behaviour plugin. So SSv2 changes: the fork
+    gains a simulator-driven pedestrian for controller `model`, which runs no behaviour and
+    adopts the returned pose, as `simulator_autopilot` vehicles do, and SSv2's conditions read
+    the pose the world shows (092 K12's spec, corrected 2026-11-23).
   - A `command` pilot does not see the other actors. The relay carries the agent protocol's
     commands (reset, goal, speed limit, stop) and the agent's reports; a pilot sees its own car
     only, over ROS on the vehicle side. The truth stream is K4's: `/scensim/truth` in the
     scenario domain, which an attachment reads, following CARLA's tick gate when `lockstep:
     true`. An attachment cannot command an entity, though. So the model runs as a K4
-    attachment, and the command channel back to the bridge (`entity_command`, applied to the
-    entity and returned to SSv2) is its own item, 092 K12, since learned background agents need
-    it too.
+    attachment, and the command channel (`entity_command`: to the world server with the tick
+    gate's acknowledgement, which moves the entity, read back to SSv2) is its own item, 092 K12,
+    since learned background agents need it too.
 - **In a batch,** a behaviour model is batched (`step_batch` over slots, like the control
   component of 092 S3). A model without a batched form keeps the scenario on seats, with the
   reason named.
