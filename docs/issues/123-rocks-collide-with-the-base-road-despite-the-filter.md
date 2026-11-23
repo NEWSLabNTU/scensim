@@ -164,3 +164,32 @@ travel.
     server has no map's ground then). The server's order would be unaffected.
   - Warnings: at most 2 per load in each order (test (iv) logged 1), none from the pool.
   - loose_15: 6.5 cm in each order, within 1 cm.
+
+### Step 2's result (2026-11-23)
+
+siw 3f90fb3, aib ff5e72b; NAS "2026-11-23 issue 123 fix (118)". Raycast, loose_15 at 11.11 m/s:
+
+| order | the rock's contact (normal force summed) | warnings | loose_15's travel |
+|---|---|---|---|
+| server (`--server-order`) | its tile alone, 36.0 kN | 1 | 6.5 cm |
+| `fixture_drive`'s | its tile 18.9 kN, the base 23.2 kN | 1 | 1.5 cm |
+
+- Server order: the prediction holds, as in step 1.
+- `fixture_drive`'s order: **the prediction failed.** The base contact is unchanged from before the
+  fix. Making the groups before play is not enough. `roadBase`'s members must also be set before
+  PhysX parses the ground. Test (iv) set them before play and held. The world server meets that
+  condition: its map's ground enters the stage after the simulation starts, and the road's load
+  sets the members before the next physics step. `fixture_drive` adds the world's USD before play.
+- Warnings: the prediction holds. There is 1 per load in each order, and none from the pool.
+- loose_15: the prediction holds for the server order (6.5 cm) and fails for `fixture_drive`'s
+  order (1.5 cm), because that order keeps the base contact.
+
+Issue 122's rerun in the server order, sweep: the rock touches its tile alone (45.4 kN summed), 1
+warning, 1.6 cm of travel, peak speed 1.30 m/s. The raycast run's peak speed was 1.45 m/s.
+
+Open, for 133:
+
+- whether `fixture_drive` should set `roadBase`'s members before play by default (today's
+  `--groups-early`), so that its order matches the server's condition;
+- whether the per-pair filter (`FilteredPairsAPI`, the plan's fallback) is still wanted to cover a
+  future load that steps between the map's USD and the road.
