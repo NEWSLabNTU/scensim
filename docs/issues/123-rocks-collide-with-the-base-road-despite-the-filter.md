@@ -123,3 +123,44 @@ today (made at the road's load). Read: what the rock touches, and the warnings.
   but the road's load sets `roadBase` after that USD is already in the stage; whether one step
   separates them or not, the rock pool's prims and the groups are edited in the same frames as in
   `fixture_drive`, where the filter did not hold.
+
+### Step 1's result (2026-11-23)
+
+siw 2f96a99, aib ff5e72b; NAS "2026-11-23 issue 123 server order (118)". **The prediction
+failed.** In the world server's order the rock touches its tile alone (`t_12_0_9`, 36.0 kN summed
+over its contact, nothing on `/World/env/Road`) and loose_15 moves 6.5 cm, as with the groups
+made before play. The load logs 771 "only in one collision group" warnings, as in
+`fixture_drive`'s order.
+
+So the base contact is `fixture_drive`'s order alone: the world's USD added before the
+simulation starts and the groups made after it runs. The world server adds its map's ground
+after the simulation starts, and the groups made at the road's load then hold. The pool's
+warnings come with both orders.
+
+## Step 2: the fix (approved by 133, applied whatever step 1 showed; predictions before the runs)
+
+siw after 2f96a99:
+
+- `rock_layer.define_groups(stage)` makes the road's groups (`roadBase`, `rocks` and `rockTiles`
+  filtering `groundQuery` and `roadBase`, `roadDetail` filtering `groundQuery`). `world.py`
+  calls it next to `ensure_vehicle_scene`, before `world.reset` and `world.play`.
+  `DetailColliders` and `RockStream` call it again; it is idempotent. `RockStream` only sets
+  `roadBase`'s members, the map's ground, at the road's load.
+- The rock pool's prims no longer join `rocks` in `reserve`. They join at the next frame's end
+  (`update`'s single edit), as a live rock does.
+- `fixture_drive` makes the groups before play as `world.py` does. `--groups-late` restores the
+  old order, and `--groups-early` now only sets `roadBase`'s members before play too.
+
+Runs: loose_15 at 11.11 m/s, raycast, tiles on, `--trace-push`. One run in `fixture_drive`'s
+order and one with `--server-order`. Read: what the rock touches, the warnings, loose_15's
+travel.
+
+- **118's predictions:**
+  - Server order: the rock touches its tile alone, as in step 1.
+  - `fixture_drive`'s order: the rock touches its tile alone too. The groups exist before PhysX
+    parses the ground, and a later change to an existing group's members is applied, as the live
+    rocks' group edits are every frame. This is the less certain of the two. If it fails, the
+    base's members must also be set before play, which only `fixture_drive`'s order can do (the
+    server has no map's ground then). The server's order would be unaffected.
+  - Warnings: at most 2 per load in each order (test (iv) logged 1), none from the pool.
+  - loose_15: 6.5 cm in each order, within 1 cm.
