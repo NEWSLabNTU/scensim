@@ -333,6 +333,7 @@ variables: [ttc_entry, ego_speed]  # the base's variables the search moves
 n: 1000                            # draws a generation, and in the fresh stage
 seed: 7
 threshold: 0                       # a run fails at a score at most this (default 0)
+map: assets/maps/Town01              # optional: the map whose resolved anchors it binds
 ```
 
 The outcomes are a JSONL of `{record, outcome: {score, error}}` for every record of the stage,
