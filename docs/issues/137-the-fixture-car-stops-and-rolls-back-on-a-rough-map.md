@@ -177,3 +177,26 @@ reads PhysX's hits as they are.
   step before, and its load is within a factor of 3 of PhysX's at the same step (not 1.6 MN). The
   car drives on to the run's end (`cost.json` written, s past 250 m). If the run stops early, its
   cause is named from the log; a hang after the frames are done is issue 139's, not a throw.
+
+### The rerun's result (2026-11-24)
+
+*rough_none*, siw `issue-137` 4df3198, one car, raycast, GPU0 quiet: the run ended by itself
+(rc 0, 25 s) with the car at s 278.8 m and 9.87 m/s. No throw, no hang.
+
+- **No throw: held.** At the landing (step 1040) the rear left's `w` went from -109.320 to
+  -109.311 m. Over t 16 to 18 s the body's height stayed between -109.75 and -108.36 m (the slope
+  of the road) and no wheel struck its rim beyond 2.2 cm.
+- **"As before to the digit up to step 1039": failed.** The trace first differs at step 997
+  (t 16.6 s): with fewer than three wheels on the ground from step 996, the wheels off the ground
+  now take their bases from their own last hits, so the fix acts from there, not only at the
+  refit. The car's course is the same to a few mm and cm/s until the landing (roll at most
+  0.329 rad, 0.33 before; speed 8.64 m/s at step 1038, 8.63 before), and the skid plate's step
+  (issue 140) is before 997 and unchanged.
+- **"The rear left's load within a factor of 3 of PhysX's at the landing": failed at the first
+  step, held after.** At step 1040 our load was 1.04 kN against PhysX's 13.1 kN (12.6 times
+  less: our wheel meets the road later in the step than PhysX's rigid one); from step 1041 on it
+  was within a factor of 2.1 (9.3 against 18.7 kN). The largest load from our contact over t 16
+  to 18 s was 49.1 kN, the front left at step 1042 with a 2.2 cm rim strike as the car settled,
+  against PhysX's 27.5 kN largest; R4's peak is 57.5 kN.
+- **"Drives on to the run's end": held.** `cost.json` written, s 278.8 m, past the 265 m where
+  both rough maps had stopped and rolled back.
