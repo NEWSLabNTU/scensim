@@ -63,6 +63,7 @@ from scensim import overlays as overlaysmod, vehicles as vehiclesmod, world as w
 from scensim import launcher as launchermod, timeline as timelinemod, tools as toolsmod
 from scensim import attachments as attachmentsmod, autoware as autowaremod
 from scensim import component as componentmod
+from scensim import assets as assetsmod
 from scensim.config import ConfigError
 
 SCHEMA = "scensim.stack/1"
@@ -571,6 +572,15 @@ def switch_problem(rec: dict, name: str, pilot_map: str = None):
     if pilot_map and pilot_map != name and not map_dir(rec["project"], pilot_map).is_dir():
         return (f"the pilots' map {pilot_map} is not fetched ({map_dir(rec['project'], pilot_map)});"
                 f" {projectmod.FETCH}")
+    # issue 129: the maps the pilots and the world are about to load are the locked ones; a
+    # cache edited while the stack runs is refused by file name, not loaded silently
+    for m in dict.fromkeys(x for x in (name, pilot_map) if x):
+        if map_dir(rec["project"], m).is_dir():
+            bad = assetsmod.verify_map(rec["project"], m)["problems"]
+            if bad:
+                return (f"map {m} is not the locked one: {bad[0]}"
+                        + (f" (and {len(bad) - 1} more)" if len(bad) > 1 else "")
+                        + f"; {projectmod.FETCH}")
     if name == rec.get("map"):
         return None
     if not map_dir(rec["project"], name).is_dir():

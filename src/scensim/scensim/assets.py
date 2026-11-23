@@ -1002,6 +1002,39 @@ def prune(cache, dry_run=False, out=print) -> list:
     return removed
 
 
+def verify_map(project: Path, name: str) -> dict:
+    """Issue 129: map ``name``'s locked files in the cache against the lock, by stat key
+    (``Verified``: a file is hashed again only when its size, times or inode changed).
+    ``{"problems": [...], "lanelet2_sha256": <the map's lanelet2_map.osm, hex> or None}``; a map
+    no dataset in the lock holds (a host's own copy, a local path) is not checked here."""
+    project = Path(project)
+    try:
+        lock = read_lock(project)
+        cache = Path(config.host_settings(project)["cache"])
+    except (AssetError, config.ConfigError) as e:
+        return {"problems": [str(e)], "lanelet2_sha256": None}
+    out, osm = [], None
+    for dname, e in ((lock or {}).get("datasets") or {}).items():
+        files = {f: h for f, h in (e.get("files") or {}).items() if f.startswith(f"{name}/")}
+        if not files:
+            continue
+        cdir = commit_dir(cache, e["repo"], e["commit"])
+        ver = Verified(cache, e["repo"], e["commit"])
+        for f, h in sorted(files.items()):
+            p = cdir / f
+            if not p.is_file():
+                out.append(f"{dname}: {f} is missing from the cache ({cdir})")
+                continue
+            got = ver.digest(f, p, h.split(":", 1)[-1])
+            if "sha256:" + got != h:
+                out.append(f"{dname}: {f} differs from the lock (sha256 {got[:16]}..., locked "
+                           f"{h.split(':', 1)[-1][:16]}...)")
+            elif f == f"{name}/lanelet2_map.osm":
+                osm = got
+        ver.save()
+    return {"problems": out, "lanelet2_sha256": osm}
+
+
 def check(project: Path, settings: dict = None, full_hash=False) -> list:
     """Findings: assets not fetched, not matching the lock, or not linked. A file is hashed
     when its stat key differs from the one it was last hashed under (G35); ``full_hash``:
@@ -1061,8 +1094,11 @@ def check(project: Path, settings: dict = None, full_hash=False) -> list:
                 findings.append(Finding(lf, f"{name}: {f} is missing from the cache ({cdir})",
                                         FETCH, refused=True))
             elif "sha256:" + ver.digest(f, p, h.split(":", 1)[-1]) != h:
+                # issue 129: a refusal, not a note: the files a stack would load are not the
+                # locked ones
                 findings.append(Finding(lf, f"{name}: {f} differs from the lock",
-                                        f"delete {cdir} (chmod -R u+w first), then {FETCH}"))
+                                        f"delete {cdir} (chmod -R u+w first), then {FETCH}",
+                                        refused=True))
         ver.save()
     try:
         want = plan_links(project, lock, cache,

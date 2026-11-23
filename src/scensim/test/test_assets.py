@@ -250,7 +250,8 @@ def test_check(host, maps_hub, capsys):
     os.chmod(f, 0o644)
     f.write_text("changed")
     capsys.readouterr()
-    assert assets.main(["--project", str(p), "check"]) == 1
+    # issue 129: refused (3), not a note: a stack would load files that are not the locked ones
+    assert assets.main(["--project", str(p), "check"]) == 3
     out = capsys.readouterr().out
     assert "problem: scensim.lock: carla-town-autoware-maps: Town01/pointcloud_map.pcd differs" in out
     # testbench.yaml moved on since the fetch

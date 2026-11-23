@@ -292,6 +292,8 @@ def problems(d) -> list:
                 or mp.get("pointcloud") not in ("same", "edited"):
             out.append("maps: expected an object, {world, pilot, variant, pointcloud: "
                        "same|edited}")
+        elif "lanelet2_sha256" in mp and not isinstance(mp["lanelet2_sha256"], dict):
+            out.append("maps.lanelet2_sha256: expected an object, {world, pilot}")
     if "knobs" in d:
         kb = obj("knobs")
         if not isinstance(kb.get("ok"), bool):

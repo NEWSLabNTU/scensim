@@ -192,3 +192,50 @@ def test_a_variant_not_fetched_is_the_switchs_problem(where, maps_hub):
     assert stack.switch_problem(rec, "Town01", "Town01_v") is None
     assert "the pilots' map Town01_x is not fetched" in stack.switch_problem(rec, "Town01",
                                                                             "Town01_x")
+
+
+def _edit_cached(d, rel="Town01/lanelet2_map.osm", text="<osm edited/>"):
+    """Edit a locked file in the test's own cache, through the project's link, as issue 129's
+    incident did."""
+    p = (d / "assets" / "maps" / rel).resolve()
+    p.chmod(0o644)
+    p.parent.chmod(0o755)
+    p.write_text(text)
+    return p
+
+
+def test_issue_129_the_keeper_refuses_a_switch_onto_an_edited_cache(where, maps_hub):
+    d, _ = proj(where)
+    rec = stack.plan(project_arg=str(d), map_name="Town01").record
+    assert stack.switch_problem(rec, "Town01") is None
+    _edit_cached(d)
+    why = stack.switch_problem(rec, "Town01")
+    assert why.startswith("map Town01 is not the locked one: carla-town-autoware-maps: "
+                          "Town01/lanelet2_map.osm differs from the lock (sha256 "), why
+    sd = where["tmp"] / "stackdir"
+    sd.mkdir()
+    log = []
+    assert not stack.switch_map(sd, rec, {"id": "r1", "map": "Town01",
+                                          "pilot_map": "Town01_v"}, Pilots(log))
+    assert log == []   # no pilot stopped or started on it
+    sw = json.loads((sd / "stack.json").read_text())["switch"]
+    assert sw["state"] == stack.FAILED and "Town01/lanelet2_map.osm differs" in sw["error"]
+
+
+def test_issue_129_testbench_check_refuses_a_lock_mismatch(where, maps_hub):
+    d, _ = proj(where)
+    assert not [f for f in project.check_project(d) if "differs from the lock" in f.what]
+    _edit_cached(d)
+    f = [x for x in project.check_project(d) if "differs from the lock" in x.what]
+    assert len(f) == 1 and f[0].refused and "Town01/lanelet2_map.osm" in f[0].what
+
+
+def test_issue_129_the_run_records_the_verified_digests(where, maps_hub):
+    import hashlib
+    d, _ = proj(where)
+    want = hashlib.sha256((d / "assets" / "maps" / "Town01" / "lanelet2_map.osm")
+                          .resolve().read_bytes()).hexdigest()
+    assert pilot_maps.lanelet2_digest(d, "Town01") == want          # the lock's, verified
+    assert pilot_maps.lanelet2_digest(d, "Town01_v") == want        # a copy, hashed
+    _edit_cached(d)
+    assert pilot_maps.lanelet2_digest(d, "Town01") != want

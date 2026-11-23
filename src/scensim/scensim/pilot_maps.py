@@ -187,3 +187,16 @@ def file_problems(decl, maps_dir: Path) -> list:
                 out.append((where, f"{m}'s point cloud is not {world_map}'s, and the variant does "
                             "not declare it an edit ({map: " + m + ", pointcloud: edited})"))
     return out
+
+
+def lanelet2_digest(project, name):
+    """Map ``name``'s ``lanelet2_map.osm`` sha256 (hex), as verified against the lock when a
+    locked dataset holds it (issue 129), else hashed from the project's copy; None when it has
+    none. result.json's ``maps`` records it for the world's map and the pilot's."""
+    from scensim import assets as assetsmod   # noqa: PLC0415
+    v = assetsmod.verify_map(project, name)
+    if v["lanelet2_sha256"]:
+        return v["lanelet2_sha256"]
+    p = Path(project) / "assets" / "maps" / str(name) / "lanelet2_map.osm"
+    return hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else None
+

@@ -1430,6 +1430,9 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                 spec.parameters)
         except pilotmapsmod.PilotMapError as e:
             raise Refused(str(e)) from None
+        if maps_block:   # issue 129: the provenance says which files the maps were
+            maps_block["lanelet2_sha256"] = {
+                k: pilotmapsmod.lanelet2_digest(project, maps_block[k]) for k in ("world", "pilot")}
     if m:
         msg = ensure_map(ctx, m, pilot_map=(maps_block or {}).get("pilot"))
         if msg:
