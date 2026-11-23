@@ -35,7 +35,7 @@ from pathlib import Path
 from scensim import config, own_world
 
 WORLD_KEYS = ("weather", "npc_motion", "contact_report_dir", "config_file", "world_config_file",
-              own_world.KEY, "knobs", "anchors")
+              own_world.KEY, "knobs", "anchors", "pilot_maps")
 ISAAC_KEYS = ("ego", "render", "follow", "physics_hz", "preload", "wheels_topic", "wheel_query")
 WHEEL_QUERIES = ("raycast", "sweep")
 NPC_MOTIONS = ("tracked", "kinematic")
@@ -150,6 +150,12 @@ def problems(settings: dict, simulator: str, project: Path = None) -> list:
             out += knobsmod.problems(v, "world.knobs")
         elif k == "anchors":
             out += anchor_problems(v)
+        elif k == "pilot_maps":
+            from scensim import pilot_maps as pilotmapsmod   # noqa: PLC0415
+            shape = pilotmapsmod.problems(v)
+            out += shape
+            if project is not None and not shape:
+                out += pilotmapsmod.file_problems(v, Path(project) / "assets" / "maps")
         elif k == "npc_motion" and v not in NPC_MOTIONS:
             out.append(("world.npc_motion", f"{v!r} is not one of {', '.join(NPC_MOTIONS)}"))
         elif k == "contact_report_dir":

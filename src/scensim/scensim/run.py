@@ -62,6 +62,7 @@ from scensim import crashloop, launcher as launchermod, signals as signalsmod, w
 from scensim import attachments as attachmentsmod, knobs as knobsmod, sampled as sampledmod
 from scensim import truth as truthmod
 from scensim import anchors as anchorsmod
+from scensim import pilot_maps as pilotmapsmod
 from scensim import stage as stagemod
 from scensim import simulator as simmod, testbenches
 from scensim.findings import ros_args
@@ -187,6 +188,7 @@ def expand(target: Path, project: Path, repeat: int = None, params: dict = None,
     for s in specs:
         bind_anchors(s, project)
         check_commands(s, project)
+        check_pilot_map(s, project)
     return specs, suite
 
 
@@ -213,6 +215,24 @@ def command_check(traces, claimers) -> tuple:
                    f"{e.get('unmatched_frames', 0)} unmatched, "
                    f"{e.get('uncommanded_frames', 0)} before its first; gate misses "
                    f"{block['gate_misses']}, unknown entities {block['unknown_entity']})")
+
+
+def check_pilot_map(spec, project: Path):
+    """Refuse, before any run, a spec whose pilot map variant (FileHeader scensim.pilot_map,
+    092 K9 CS3) the world does not declare for the scenario's map."""
+    if spec.distribution or pilotmapsmod.BIND not in Path(spec.scenario).read_text(errors="replace"):
+        return
+    m = scenario_map(spec.scenario)
+    if not m:
+        return
+    try:
+        world = (config.project_settings(project).get("world") or {})
+    except config.ConfigError:
+        world = {}
+    try:
+        pilotmapsmod.resolve(world.get(pilotmapsmod.KEY), m, spec.scenario, spec.parameters)
+    except pilotmapsmod.PilotMapError as e:
+        raise Refused(str(e)) from None
 
 
 def check_commands(spec, project: Path):
@@ -886,21 +906,24 @@ def order_by_map(specs: list, current=None) -> list:
     return [s for m in order for s in groups[m]]
 
 
-def ensure_map(ctx: Context, name: str, timeout: float = SWITCH_TIMEOUT, restart=False):
-    """The stack's pilots on map ``name``: nothing when they are; else the keeper is asked to
-    move them and the answer waited for. Refused when the stack cannot serve the map; an
-    infrastructure message (str) when the switch failed; None when done. ``ctx.stack``
-    becomes the stack.json after the switch."""
+def ensure_map(ctx: Context, name: str, timeout: float = SWITCH_TIMEOUT, restart=False,
+               pilot_map: str = None):
+    """The stack's pilots on map ``name`` (``pilot_map``: on that variant of it, roadmap 092 K9
+    CS3): nothing when they are; else the keeper is asked to move them and the answer waited
+    for. Refused when the stack cannot serve the map; an infrastructure message (str) when the
+    switch failed; None when done. ``ctx.stack`` becomes the stack.json after the switch."""
     rec = ctx.stack
-    if rec.get("map") == name and not restart:
+    pilot = pilot_map or name
+    if rec.get("map") == name and stackmod.pilot_map_of(rec) == pilot and not restart:
         return None
-    problem = stackmod.switch_problem(rec, name)
+    problem = (stackmod.switch_problem(rec, name, pilot) if pilot != name
+               else stackmod.switch_problem(rec, name))
     if problem:
         raise Refused(problem)
     stack_dir = Path(rec["proc"]).parent
     out = ctx.out or sys.stdout
     t0 = time.time()
-    rid = stackmod.request_switch(stack_dir, name, restart=restart)
+    rid = stackmod.request_switch(stack_dir, name, restart=restart, pilot_map=pilot)
     while True:
         try:
             cur = stackmod.read_json(stack_dir / stackmod.STACK_JSON)
@@ -918,7 +941,8 @@ def ensure_map(ctx: Context, name: str, timeout: float = SWITCH_TIMEOUT, restart
     if sw["state"] == stackmod.FAILED:
         return f"the stack could not switch to map {name}: {sw.get('error')}"
     ctx.stack = cur
-    out.write(f"map      {name}  (pilots restarted from {rec.get('map') or 'none'} in "
+    out.write(f"map      {name}" + (f", pilots on {pilot}" if pilot != name else "")
+              + f"  (pilots restarted from {stackmod.pilot_map_of(rec) or 'none'} in "
               f"{time.time() - t0:.1f} s)\n")
     out.flush()
     return None
@@ -1395,10 +1419,19 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
         if not managed:
             pilots = [p for p in pilots if p["entity"] != "ego"]
 
-    # the stack's pilots on the scenario's map (a switch when they are on another)
+    # the stack's pilots on the scenario's map (a switch when they are on another), or on the
+    # variant of it the scenario binds (092 K9 CS3: scensim.pilot_map)
     m = scenario_map(spec.scenario, sc) if sc is not None else None
+    maps_block = None
+    if m and sc is not None and sc.distribution_of is None:
+        try:
+            maps_block = pilotmapsmod.resolve(
+                (psettings.get("world") or {}).get(pilotmapsmod.KEY), m, spec.scenario,
+                spec.parameters)
+        except pilotmapsmod.PilotMapError as e:
+            raise Refused(str(e)) from None
     if m:
-        msg = ensure_map(ctx, m)
+        msg = ensure_map(ctx, m, pilot_map=(maps_block or {}).get("pilot"))
         if msg:
             infra.append(msg)
         rec = ctx.stack
@@ -1791,7 +1824,7 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                               "lifetime": p.get("lifetime", "stack")} for p in pilots},
         provenance=prov, sample=sample_block, replay=replay_block,
         attachments={r.name: r.record() for r in attached} or None, knobs=knob_block,
-        anchors=spec.anchors,
+        anchors=spec.anchors, maps=maps_block,
         error=results.error_block(verdict, infra, reason), clock=clock_block,
         commands=commands_block)
     result.write(run_dir / "result.json")

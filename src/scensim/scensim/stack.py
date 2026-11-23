@@ -546,21 +546,31 @@ def served_maps(settings: dict, scenarios) -> list:
     return sorted({m for _p, sc in scenarios if (m := map_of(sc))})
 
 
-def contract_for_map(contract: dict, project, sim, name) -> dict:
-    """The pilots' common contract with the map's parts: ``map_path`` and, on CARLA, the
-    state dir's signal table."""
+def contract_for_map(contract: dict, project, sim, name, pilot_map=None) -> dict:
+    """The pilots' common contract with the map's parts: ``map_path`` (the pilot's map: a
+    variant of the world's, roadmap 092 K9 CS3, else the world's) and, on CARLA, the state
+    dir's signal table (the world's town's)."""
     out = {k: v for k, v in contract.items()
            if k not in ("map_path", "traffic_light_state_path")}
     if name:
-        out["map_path"] = str(map_dir(project, name))
+        out["map_path"] = str(map_dir(project, pilot_map or name))
         if sim == "carla":
             out["traffic_light_state_path"] = str(
                 Path(project) / "state" / name / "carla" / "traffic_lights.yaml")
     return out
 
 
-def switch_problem(rec: dict, name: str):
-    """Why the stack of ``rec`` cannot move its pilots to map ``name`` (None: it can)."""
+def pilot_map_of(rec: dict):
+    """The map the stack's pilots are on: a variant's (roadmap 092 K9 CS3), else the world's."""
+    return rec.get("pilot_map") or rec.get("map")
+
+
+def switch_problem(rec: dict, name: str, pilot_map: str = None):
+    """Why the stack of ``rec`` cannot move its pilots to map ``name``, the world's, with the
+    pilots on ``pilot_map`` (a variant; None: ``name``) (None: it can)."""
+    if pilot_map and pilot_map != name and not map_dir(rec["project"], pilot_map).is_dir():
+        return (f"the pilots' map {pilot_map} is not fetched ({map_dir(rec['project'], pilot_map)});"
+                f" {projectmod.FETCH}")
     if name == rec.get("map"):
         return None
     if not map_dir(rec["project"], name).is_dir():
@@ -1621,13 +1631,15 @@ class Pilots:
 # --- the map switch -------------------------------------------------------------------------
 
 def request_switch(stack_dir: Path, name: str, request_id: str = None,
-                   restart: bool = False) -> str:
+                   restart: bool = False, pilot_map: str = None) -> str:
     """Ask the keeper of ``stack_dir`` to move its pilots to map ``name`` (``restart``: start
-    them again even when they are on it); the request's id."""
+    them again even when they are on it; ``pilot_map``: the pilots load that variant of it,
+    roadmap 092 K9 CS3); the request's id."""
     rid = request_id or f"{os.getpid()}-{time.time_ns()}"
     write_json(Path(stack_dir) / SWITCH_REQUEST,
                {"id": rid, "map": name, "requested": iso_now(), "by": os.getpid(),
-                **({"restart": True} if restart else {})})
+                **({"restart": True} if restart else {}),
+                **({"pilot_map": pilot_map} if pilot_map and pilot_map != name else {})})
     return rid
 
 
@@ -1704,34 +1716,44 @@ def switch_map(stack_dir: Path, rec: dict, req: dict, pilots: Pilots) -> bool:
     map, start them on it; the answer in ``rec["switch"]``, written to stack.json."""
     path = Path(stack_dir) / STACK_JSON
     name = req["map"]
+    pilot = req.get("pilot_map") or name
     sw = {"id": req["id"], "map": name, "from": rec.get("map"), "state": SWITCHING,
-          "requested": req.get("requested"), "started": iso_now()}
+          "requested": req.get("requested"), "started": iso_now(),
+          **({"pilot_map": pilot} if pilot != name else {})}
     rec["switch"] = sw
-    problem = switch_problem(rec, name)
+    problem = switch_problem(rec, name, pilot)
     if problem:
         sw.update(state=FAILED, error=problem, ended=iso_now())
         write_json(path, rec)
         event(stack_dir, "map.switch_failed", map=name, error=problem)
         print(f"scensim stack: no switch to map {name}: {problem}", file=sys.stderr, flush=True)
         return False
-    if name == rec.get("map") and pilots.procs and not req.get("restart"):
+    same_world = name == rec.get("map")
+    if same_world and pilot == pilot_map_of(rec) and pilots.procs and not req.get("restart"):
         sw.update(state=DONE, ended=iso_now())
         write_json(path, rec)
         return True
     write_json(path, rec)
-    event(stack_dir, "map.switch", map=name, previous=rec.get("map"))
-    print(f"scensim stack: pilots to map {name} (from {rec.get('map') or 'none'})", flush=True)
+    event(stack_dir, "map.switch", map=name, previous=rec.get("map"),
+          **({"pilot_map": pilot} if pilot != name else {}))
+    print(f"scensim stack: pilots to map {pilot}"
+          + (f" (a variant of {name})" if pilot != name else "")
+          + f" (from {pilot_map_of(rec) or 'none'})", flush=True)
+    variant_only = same_world and pilot != pilot_map_of(rec)
     pilots.stop_all(rec)
-    # the town first, so the pilots start on it (G9); a failure is recorded, not fatal
-    sw["preload"] = preload = preload_map(rec, name)
-    event(stack_dir, "map.preload", map=name, **preload)
-    print(f"scensim stack: town for {name}: {preload['state']} "
-          f"({preload.get('message') or preload.get('error')})",
-          file=sys.stderr if preload["state"] == NOT_LOADED else sys.stdout, flush=True)
+    if not variant_only:
+        # the town first, so the pilots start on it (G9); a failure is recorded, not fatal.
+        # Another variant on the same world restarts the pilots only (092 K9 CS3)
+        sw["preload"] = preload = preload_map(rec, name)
+        event(stack_dir, "map.preload", map=name, **preload)
+        print(f"scensim stack: town for {name}: {preload['state']} "
+              f"({preload.get('message') or preload.get('error')})",
+              file=sys.stderr if preload["state"] == NOT_LOADED else sys.stdout, flush=True)
     rec["map"] = name
-    rec["map_path"] = str(map_dir(rec["project"], name))
+    rec["pilot_map"] = pilot if pilot != name else None
+    rec["map_path"] = str(map_dir(rec["project"], pilot))
     rec["pilot_contract"] = contract_for_map(rec.get("pilot_contract") or {}, rec["project"],
-                                             rec.get("simulator"), name)
+                                             rec.get("simulator"), name, pilot)
     for p in rec.get("pilots", []):
         if p.get("lifetime", "stack") == "stack":
             p["ready_at"] = None

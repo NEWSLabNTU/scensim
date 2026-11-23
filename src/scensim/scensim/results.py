@@ -120,6 +120,9 @@ class RunResult:
     # 092 K9b, additive: the parameters bound to the world's anchors, {parameter: {value,
     # anchor, source}}; absent from runs whose scenario binds none
     anchors: dict = None
+    # 092 K9 (CS3), additive: the world's map and the pilot's, {world, pilot, variant,
+    # pointcloud}; absent from runs whose scenario binds no pilot map variant
+    maps: dict = None
     # roadmap 092 K4, additive: an error run's class and message (error_block), and the run's
     # clock: its mode and its lag against wall time (scensim.truth.clock); absent when unknown
     error: dict = None
@@ -131,7 +134,7 @@ class RunResult:
 
     def to_dict(self) -> dict:
         d = dataclasses.asdict(self)
-        for k in ("sample", "replay", "attachments", "knobs", "anchors", "error", "clock",
+        for k in ("sample", "replay", "attachments", "knobs", "anchors", "maps", "error", "clock",
                   "commands"):
             if d.get(k) is None:
                 d.pop(k)
@@ -174,8 +177,8 @@ class RunResult:
 # --- validation -----------------------------------------------------------------------------
 
 _TOP = ("schema", "run_id", "verdict", "reason", "scenario", "ssv2", "events", "metrics",
-        "pilots", "provenance", "sample", "replay", "attachments", "knobs", "anchors", "error",
-        "clock", "commands")
+        "pilots", "provenance", "sample", "replay", "attachments", "knobs", "anchors", "maps",
+        "error", "clock", "commands")
 _REQUIRED = ("schema", "run_id", "verdict")
 
 
@@ -282,6 +285,13 @@ def problems(d) -> list:
                 isinstance(b, dict) and "value" in b and isinstance(b.get("anchor"), str)
                 for b in an.values()):
             out.append("anchors: expected an object, {parameter: {value, anchor, source}}")
+    if "maps" in d:
+        mp = d["maps"]
+        if not isinstance(mp, dict) or not all(isinstance(mp.get(k), str) and mp.get(k)
+                                               for k in ("world", "pilot", "variant")) \
+                or mp.get("pointcloud") not in ("same", "edited"):
+            out.append("maps: expected an object, {world, pilot, variant, pointcloud: "
+                       "same|edited}")
     if "knobs" in d:
         kb = obj("knobs")
         if not isinstance(kb.get("ok"), bool):

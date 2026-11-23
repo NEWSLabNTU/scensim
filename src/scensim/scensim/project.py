@@ -776,6 +776,15 @@ def check_scenario(project: Path, sc: Scenario, settings: dict, managed: bool = 
     # resolved file and world.anchors), checked as far as they can be without a sample
     if lf and lf.startswith(MAPS_PREFIX) and "scensim.anchor." in _text(sc.path):
         out += _anchor_findings(project, rel, sc.path, lf[len(MAPS_PREFIX):].strip("/"))
+    # roadmap 092 K9 (CS3): the pilot's map variant the scenario binds, against the world's
+    if lf and lf.startswith(MAPS_PREFIX) and "scensim.pilot_map" in _text(sc.path):
+        from scensim import pilot_maps as pilotmapsmod   # noqa: PLC0415
+        w = settings.get("world") if isinstance(settings.get("world"), dict) else {}
+        out += [Finding(rel, msg, f"declare it under world.{pilotmapsmod.KEY} in "
+                        f"{config.PROJECT_FILE}, or bind a declared variant", refused=True)
+                for msg in pilotmapsmod.scenario_problems(w.get(pilotmapsmod.KEY),
+                                                          lf[len(MAPS_PREFIX):].strip("/"),
+                                                          sc.path)]
     # roadmap 080: the scenario properties of the old name (swb.spec_hash, swb.zone.*, ...)
     # are not read by any part; each is named with its successor
     for old in sorted(set(re.findall(r'name="(swb\.[^"]+)"', _text(sc.path)))):

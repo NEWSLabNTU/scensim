@@ -417,6 +417,13 @@ def check(path, ego="policy"):
                 continue
             cls, reason = WORLD_KNOBS.get(knob, UNKNOWN_KNOB)
             v.add(cls, where, f"world knob {knob} (bound to {prop.get('value')})", reason)
+        elif name == "scensim.pilot_map":
+            # 092 K9 (CS3): the map a pilot loads, apart from the world's; a batched policy that
+            # takes a map as an observation does not exist yet
+            v.add(SEATS, f"/OpenSCENARIO/FileHeader/Properties/Property[@name='{name}']",
+                  f"the pilot's map variant (bound to {prop.get('value')})",
+                  "a pilot's map variant is loaded by a seats pilot; no batched policy takes a "
+                  "map yet")
     for obj in root.findall("Entities/ScenarioObject"):
         where = f"/OpenSCENARIO/Entities/{_step(obj)}"
         _entity_class(obj, where, v, declared, values)
