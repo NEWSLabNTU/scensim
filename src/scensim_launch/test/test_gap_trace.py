@@ -527,7 +527,8 @@ def to_v3(records):
         elif r["type"] == "entity" and r["name"] == "truck":
             r["role"] = "model"
         elif r["type"] == "frame":
-            r["commands"] = {"unknown_entity": 0, "gate_misses": r["frame"] // 2, "malformed": 1}
+            r["commands"] = {"unknown_entity": 0, "gate_misses": r["frame"] // 2, "malformed": 1,
+                             "stale": r["frame"] % 2}
             if "truck" in r["entities"]:
                 r["entities"]["truck"]["cmd_frame"] = max(r["frame"] - 1, 0)   # 0: none yet
     return out
@@ -550,7 +551,22 @@ class SchemaThree(unittest.TestCase):
     def test_reads_the_command_counts(self):
         trace = gt.load_trace(lines(SAMPLE3))
         for f in trace.frames:
-            self.assertEqual(f.commands, gt.CommandCounts(0, f.frame // 2, 1))
+            self.assertEqual(f.commands, gt.CommandCounts(0, f.frame // 2, 1, f.frame % 2))
+
+    def test_command_counts_without_stale_read_it_as_0(self):
+        # stale is additive within schema 3: files written before it lack it
+        old = copy.deepcopy(SAMPLE3)
+        for r in old:
+            if r["type"] == "frame":
+                del r["commands"]["stale"]
+        trace = gt.load_trace(lines(old))
+        self.assertTrue(all(f.commands.stale == 0 for f in trace.frames))
+
+    def test_an_unknown_command_count_is_refused(self):
+        bad = copy.deepcopy(SAMPLE3)
+        next(r for r in bad if r["type"] == "frame")["commands"]["late"] = 1
+        with self.assertRaisesRegex(gt.TraceError, "commands"):
+            gt.load_trace(lines(bad))
 
     def test_malformed_command_counts_are_refused(self):
         bad = copy.deepcopy(SAMPLE3)

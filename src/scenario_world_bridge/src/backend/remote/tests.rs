@@ -228,6 +228,7 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
                             unknown_entity: 0,
                             gate_misses: frame,
                             malformed: 0,
+                            stale: 0,
                         },
                     ),
                 })))
@@ -1623,6 +1624,7 @@ fn a_model_pedestrian_is_commanded_and_its_cmd_frame_is_in_the_truth() {
         assert!(f["entities"]["npc"].get("cmd_frame").is_none(), "{f}");
         assert_eq!(f["commands"]["gate_misses"], f["sim_frame"], "{f}");
         assert_eq!(f["commands"]["unknown_entity"], 0, "{f}");
+        assert_eq!(f["commands"]["stale"], 0, "{f}");
     }
     let walker = of("entity")
         .into_iter()

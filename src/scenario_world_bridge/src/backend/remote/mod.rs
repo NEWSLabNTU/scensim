@@ -1899,6 +1899,7 @@ impl SimBackend for RemoteBackend {
                         unknown_entity: c.unknown_entity,
                         gate_misses: c.gate_misses,
                         malformed: c.malformed,
+                        stale: c.stale,
                     });
                 }
                 self.gap_trace.emit_staged_at(

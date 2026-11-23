@@ -114,7 +114,13 @@ follows the frame they answer, so under lockstep an entity is moved at frame k+1
 that answered frame k: a lag of one frame, by construction, which the truth file records
 (`cmd_frame`) and `result.json`'s `commands` checks (`command_lag` otherwise). A datagram is at
 most 1472 bytes and a name at most 64, so a scenario commands at most 10 entities; a datagram
-over either bound, or one that does not parse, is dropped whole and counted. Before each tick
+over either bound, or one that does not parse, is dropped whole and counted. A command that
+answers a frame at or before a floor is stale: dropped, never applied, and counted (`stale`, a
+record outside `commands.ok`). The floors are the frame an entity's body was spawned or
+destroyed at, and, for every entity, the last step's frame when a new world or run clears the
+gate, so a previous run's last acknowledgement, read after the clear, never moves or counts
+against the new run. A step whose frame is below a floor (the world's frames started again)
+resets that floor, logged. Before each tick
 the world server integrates each commanded entity's newest command, as the batch does
 (`scensim_batch.core.Models`), and poses it with physics off. `scensim.attachments.CommandGate`
 is the follower's side.

@@ -180,13 +180,17 @@ class Frame:
 class CommandCounts:
     """What a world server that commands bodies could not apply (092 K12): commands naming an
     entity it does not command (each entity and frame once), frames its tick gate ticked on
-    without an acknowledgement, datagrams it dropped whole."""
+    without an acknowledgement, datagrams it dropped whole, and commands it dropped as stale
+    (answering a frame at or before a floor: an earlier body's or run's; additive within schema
+    3, 0 where a file lacks it)."""
     unknown_entity: int
     gate_misses: int
     malformed: int
+    stale: int = 0
 
 
-COMMAND_COUNT_KEYS = ("unknown_entity", "gate_misses", "malformed")
+COMMAND_COUNT_KEYS = ("unknown_entity", "gate_misses", "malformed", "stale")
+COMMAND_COUNT_REQUIRED = ("unknown_entity", "gate_misses", "malformed")
 
 
 @dataclass(frozen=True)
@@ -481,10 +485,11 @@ def _frame(ln, known):
         npc = ln.boolean(npc, "npc_logic_started")
     counts = o.get("commands") if ln.schema >= 3 else None
     if counts is not None:
-        if not isinstance(counts, dict) or set(counts) != set(COMMAND_COUNT_KEYS):
-            raise ln.error("commands", f"expected an object of {', '.join(COMMAND_COUNT_KEYS)}, "
-                                       f"got {counts!r}")
-        counts = CommandCounts(*(ln.integer(counts[k], f"commands.{k}", minimum=0)
+        if (not isinstance(counts, dict) or not set(COMMAND_COUNT_REQUIRED) <= set(counts)
+                or not set(counts) <= set(COMMAND_COUNT_KEYS)):
+            raise ln.error("commands", f"expected an object of {', '.join(COMMAND_COUNT_KEYS)} "
+                                       f"(stale optional), got {counts!r}")
+        counts = CommandCounts(*(ln.integer(counts.get(k, 0), f"commands.{k}", minimum=0)
                                  for k in COMMAND_COUNT_KEYS))
     return Frame(frame=frame, sim_time=sim_time, entities=states, sim_frame=sim_frame,
                  sim_time_ns=sim_time_ns, wall_ns=wall_ns, npc_logic_started=npc,

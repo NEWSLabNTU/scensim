@@ -225,6 +225,22 @@ def test_commands_a_late_command_fails_lockstep_and_is_a_record_free_running(tmp
     assert truth.commands(traces, lockstep=False)["ok"]
 
 
+def test_commands_stale_is_reported_outside_ok(tmp_path):
+    # 092 K12's second exit runs: a previous run's last command, read after the next run's
+    # reset, is dropped as stale and counted; a leak to see, never a failed run
+    traces = _commanded_trace(tmp_path, [0, 101, 102, 103],
+                              {"unknown_entity": 0, "gate_misses": 0, "malformed": 0,
+                               "stale": 1})
+    c = truth.commands(traces, lockstep=True)
+    assert c["ok"] and (c["unknown_entity"], c["stale"]) == (0, 1)
+
+
+def test_commands_a_schema_3_file_without_stale_reads_it_as_0(tmp_path):
+    traces = _commanded_trace(tmp_path, [0, 101, 102],
+                              {"unknown_entity": 0, "gate_misses": 0, "malformed": 0})
+    assert truth.commands(traces, lockstep=True)["stale"] == 0
+
+
 def test_commands_a_lost_command_fails_lockstep(tmp_path):
     c = truth.commands(_commanded_trace(tmp_path, [0, 101, 0, 103]), lockstep=True)
     assert not c["ok"] and c["entities"]["walker"]["lost_frames"] == 1

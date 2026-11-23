@@ -214,11 +214,13 @@ def commands(traces, lockstep=True) -> dict:
     frame the command answered (a truth frame's ``sim_frame``, as the gate's ``DONE``), so the
     lag is this frame's number minus that truth frame's; a ``cmd_frame`` no truth frame names is
     ``unmatched``. From the
-    world server's counts, the commands naming an unknown entity, the gate's misses and the
-    dropped datagrams (each episode's last frame). Under lockstep ``ok`` holds when every frame
+    world server's counts, the commands naming an unknown entity, the gate's misses, the
+    dropped datagrams and the commands dropped as stale (each episode's last frame; ``stale``
+    is a record, outside ``ok``: a leak to see, never a failure). Under lockstep ``ok`` holds when every frame
     after an entity's first has lag 1 (its first frame precedes any answer): else the run is an
     error run (``command_lag``). Free-running, the lag is a record and ``ok`` is true."""
-    per, counts, seen = {}, {"unknown_entity": 0, "gate_misses": 0, "malformed": 0}, False
+    per, counts, seen = {}, {"unknown_entity": 0, "gate_misses": 0, "malformed": 0,
+                             "stale": 0}, False
     for t in traces:
         models = [n for n, h in t.entities.items() if h.role == "model"]
         by_sim = {f.sim_frame: f.frame for f in t.frames if f.sim_frame is not None}

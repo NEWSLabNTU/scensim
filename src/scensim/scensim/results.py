@@ -305,6 +305,8 @@ def problems(d) -> list:
         for k in ("unknown_entity", "gate_misses", "malformed"):
             if not _is_int(cm.get(k)):
                 out.append(f"commands.{k}: expected an integer")
+        if "stale" in cm and not _is_int(cm["stale"]):
+            out.append("commands.stale: expected an integer")
     if "clock" in d:
         ck = obj("clock")
         if ck.get("mode") not in ("lockstep", "paced"):
