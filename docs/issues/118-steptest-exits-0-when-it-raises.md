@@ -1,6 +1,8 @@
 # 118: steptest exits 0 when it raises
 
-**Status:** open (doc first; the fix after issue 117 lands). **Severity:** low: a failed step test
+**Status:** fixed (aib a838261, scensim_isaac_world eba244c): the five entry points exit
+nonzero when they raise, through `aib.app_exit`. Other Isaac entry points still close with 0
+(below, "Not covered"). **Severity:** low: a failed step test
 looks like a passed run with nothing measured. A sweep reads it as a run, and the cause is lost.
 **Found:** 2026-11-23, scensim 241, in issue 106's table on post-108 aib.
 
@@ -65,3 +67,66 @@ Tests:
 - **One test per entry point** that makes it raise and asserts a nonzero exit status. A test
   runs without Isaac where its entry point can (a fake `SimulationApp` module); otherwise it
   runs under Isaac's Python with a forced failure.
+
+## What the fix does
+
+Two things in Isaac 6.2's `SimulationApp` (`isaacsim.simulation_app`) decided its shape:
+
+- **`close()` takes an `exit_code`** (default 0). It runs the same cleanup (replicator's queued
+  writes, the stage) and then ends the process with that status, where fast shutdown would end
+  it with 0.
+- **The app registers an atexit close.** An exception that escapes the entry point is printed,
+  and then the interpreter's exit calls `close()`, which ends the process with 0. So an
+  exception raised after the app starts but before the entry point's `try` was silent too.
+  steptest, lip_drive and arc_drive all built Isaac's World before their `try`.
+
+`aib.app_exit` (pure, no Isaac import):
+
+- `code_of(exc)` writes the traceback to stderr and returns the status: a `SystemExit` keeps its
+  own (None is 0), a `KeyboardInterrupt` is 130, anything else 1. Ctrl-C under Kit does not
+  reach it as a KeyboardInterrupt: Kit's SIGINT handler shuts the app down and raises
+  `SystemExit(0)`, so a stopped world server still exits 0, as before.
+- `close(app, failed)` calls `app.close()` for a run that passed. For a failed one it calls
+  `app.close(exit_code=code)`, and should that return, refuse the argument (an older Isaac) or
+  raise, it flushes and calls `os._exit(code)`.
+
+Each entry point now opens its `try` right after the app, maps an exception with `code_of` in an
+`except BaseException`, and ends with `close(app, code)` in its `finally`:
+
+| entry point | change |
+|---|---|
+| `aib.steptest` | the `try` now covers the stage and the vehicle too; a failure is in `summary.json` as `"error"`, and `"tests"` holds what finished |
+| `aib.ground_check` | the helper in place of its own `os._exit` |
+| `world_server.py` | the part after Kit's start moves into `_serve`, unchanged; a refused configuration still exits 2 before Kit starts |
+| `course/lip_drive.py`, `course/arc_drive.py` | their own `finally`, which writes what they measured, sits inside the new `try` |
+
+## Checks
+
+`aib.fake_kit` runs an entry point with no Isaac: every module under omni, pxr, carb, usdrt and
+isaacsim is a stand-in, `SimulationApp` closes and exits at exit as 6.2's does, and Isaac's
+`World()` raises a marked error. A test runs the entry point under it and asserts a nonzero
+status and the marked error's traceback in the output.
+
+| test | before the fix | after |
+|---|---|---|
+| aib `test_app_exit`: the helper (an app with and without `exit_code`, a passed run, `code_of`'s statuses) | (new) | pass |
+| aib: steptest raises | fail (exit 0, no summary) | pass (exit 1, `"error"` in the summary) |
+| aib: ground_check raises | pass (its own `os._exit` since issue 117) | pass |
+| scensim_isaac_world `test_app_exit`: world server raises | fail (exit 0) | pass |
+| the same: arc_drive raises | fail (exit 0) | pass |
+| the same: lip_drive raises | fail (exit 0) | pass |
+
+aib's suite: 167 passed. The world server's test fakes `zmq` too, which the shell's `bind`
+imports (`FAKE_KIT_EXTRA=zmq`).
+
+## Not covered
+
+These also start a `SimulationApp` and end with its close, status 0, whatever the run did (not
+changed here, for a decision):
+
+- `aib.runner`, the stand-alone Isaac ego (`just isaac-ego`): it logs a failure, then exits 0.
+- scensim_isaac_world: `course/fixture_drive.py`, `course/fixture_cost.py`,
+  `course/isaac_check.py`, `scripts/step_response/isaac_step.py`, and the scripts in `spikes/`.
+- scensim: `scensim_batch/scripts/` (`agreement_run.py`, `check_resident.py`, `eval_drift.py`,
+  `eval_leadbrake.py`, `smoke_articulation.py`, `smoke_drift.py`, `smoke_env.py`) and
+  `scripts/svl_import/isaac_probe.py`.
