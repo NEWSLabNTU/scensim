@@ -96,3 +96,37 @@ frames over the four runs, the set is reported as too small to judge, not as a p
 
 If the "before" runs show 0 stalls, the work stops there and is reported: the race is then too
 rare at this load to show, and the fix would rest only on the code argument and K12's set 3.
+
+## The "before" runs (2026-11-24, 243): no stall, so the work stopped
+
+Build: scensim 79775334 (scensim_carla_world 507d66c), CARLA 0.9.16 at Epic, newslab-server243
+(load average about 5 to 15 on 32 cores), one fresh stack per set, four repeats each:
+
+| Set | Entity-frames | Moving frames | Stalls | Error from SSv2, p50 / p95 / max |
+|---|---|---|---|---|
+| `town01_npc_10`, kinematic | 48040 | 48000 | 0 | 0.0 / 0.0 / 0.0001 m |
+| `town01_npc_10`, tracked | 48040 | 48000 | 0 | 0.0006 / 0.030 / 0.30 m |
+| `town01_pedestrian`, kinematic | 5673 (the walker 1880) | 0 over 0.05 m | 0 | 0.0 / 0.0 / 0.0 m |
+
+The world's step against SSv2's, over the kinematic set's moving frames: p1 0.9999, p50 1.0000,
+p99 1.009. The four repeats of each set gave the same numbers. The walker walks at about
+0.69 m/s (0.035 m a frame), under the detector's 0.05 m, so by the rule written above its set is
+too small to judge. Read at 0.02 m instead (not the written rule), its 952 moving frames have no
+stall and no error.
+
+So the predictions failed: no stall in any set where 5 or more were predicted, and by the rule
+written before the runs the work stopped here. Why the kinematic NPCs never showed what K12's
+walker did: the walker was posed inside the step (`advance_commanded`, in `tick_frame`), one
+asynchronous call sent immediately before `world.tick()`; a kinematic NPC is posed while
+`UpdateEntityStatus` is handled, a request of its own that SSv2 sends and waits for before it
+asks for the frame, so its call has long landed when the tick comes. The race issue 127 names is
+real in the code (the calls are asynchronous), but at this load it does not show for NPCs.
+
+Two corrections made on the way, both before any "before" number was read against the
+predictions: the detector first compared the body's pose with SSv2's entity pose (a constant
+1.387 m, issue 130's mistake), now the entity's; and a first attempt at the runs was void (two
+scripts overlapped on one CARLA, and a `pkg://` path is refused on the command line).
+
+The batched actuation (scensim_carla_world 9947fef, branch `127-npc-batch`, not pushed: one
+`apply_batch_sync` of every NPC command per status request, unit tests for its order and its
+failure mapping) is kept but not landed; whether to land it on the code argument alone is open.
