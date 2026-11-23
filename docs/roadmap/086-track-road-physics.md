@@ -1039,9 +1039,15 @@ default, which is what users run (133).
     above the surface m, the share of the rock below it, loose or static), each a seeded R4
     hull of Zingg's axes, the hull's long axis along the road.
   - *`fixture_drive`* drives C6a's way with the rig's skid plate (`ground_clearance`, 0.138 m,
-    as the world server's ego has it; C6a's drives had none, which the fixtures there, all
-    under 15 cm but cleat_15, did not reach) and logs per PhysX step, beside C6a's columns,
+    as the world server's ego has it) and logs per PhysX step, beside C6a's columns,
     PhysX's jounce per wheel and each fixed rock's pose.
+- **C6a's drives had no skid plate** (found writing this spec): `fixture_drive` made the
+  vehicle without the rig's `ground_clearance`, and the world server's ego has one at
+  0.138 m. cleat_15 stands 15 cm across the whole carriageway, over that clearance, and a
+  compressed suspension lowers the plate further, so in the world server the plate may strike
+  cleats C6a judged without it. C6b's first run repeats C6a's cleat_10 and cleat_15 cases at
+  60 Hz with the plate and reports whether it strikes and how J and the body rise change;
+  C6a's verdicts stand as measured.
 - **The fixture course, `fixture_c6b`**: C6a's straight road, level, with a record section
   whose shoulder, runoff (1 m) and ditch are real strips, and R4's fixtures (`spikes/
   rock_fixtures.py`) on the left lane:
