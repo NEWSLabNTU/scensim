@@ -371,3 +371,45 @@ engine either: K2.4's rows have none, and the walker's batch form so far is test
 `cs1_walker_gap_acceptance.xosc` example. So nothing reruns and nothing needs a note. The
 engines giving map-frame velocity too, for a model beside a sliding ego, is a follow-up. The batch side needs no simulator and no GPU, and
 the seats side is set 3's runs, so nothing here takes a GPU.
+
+### K10's agreement, run 1 (2026-11-24): failed, walker_far_kerb
+
+Set 3's L seed 2 and L seed 31, read from
+`~/nas/home/2026-11-23 092 K12 exit set 3 runs (243)/` (SHA256SUMS sha256 54ec8033...;
+`sha256sum -c` passed there and on the local copy), with scensim 80df7418's
+`agreement_run.py --ego-from-truth`, the record each run's seed and parameters (street 6583).
+
+| run | outcome (seats / batch) | walker max / RMS xy | decisions (step, event) | ego | van | element offsets |
+|---|---|---|---|---|---|---|
+| L seed 2 (S 14, 218 steps) | passed / passed | 1.49e-4 / 1.29e-4 m | 61 appear, 82 reject, 121 go_after on both | 0 | 2e-5 m | 0, but walker_far_kerb -3 (seats 218, batch 215) |
+| L seed 31 (S 13, 179 steps) | passed / passed | 1.50e-4 / 1.29e-4 m | 61 appear, 82 go on both | 0 | 2e-5 m | 0, but walker_far_kerb -3 (seats 179, batch 176) |
+
+The walker's error is the prediction (check 2's), and the decisions agree; the rule fails on
+the far-kerb event, three steps early in the batch in both runs. Its cause, from the truth (seed
+2: CARLA's pose of the walker first within the condition's 1.0 m at truth frame 231, batch step
+215, where the batch fires), is three frames:
+
+- (a) the channel's lag: on seats the walker moves a frame after the truth its model read (K12's
+  lag 1); the batch moved it in the same step;
+- (b) on seats the walker is world-owned, so SSv2 has the world's pose a frame later: the
+  truth's ssv2 pose of the walker at frame f + 1 is its sim pose at f, exactly;
+- (c) SSv2 evaluates its storyboard a frame after that, as for the ego (K2.4: the storyboard
+  reads the ego of two steps before). The batch's `_as_ssv2_sees` moved only the ego's columns
+  two steps back; a model entity stayed current, as SSv2's own NPCs are.
+
+**The fix (133, 2026-11-24).** (b) and (c): a model entity enters the storyboard's view two
+steps back, as the ego does. (a): the batch applies a model's command a step after the model
+gives it, the lockstep channel's lag 1, so the batch reproduces seats with the lag included
+(seats is the reference; a stated offset on every condition naming a model entity was the
+alternative, refused). A model entity stands at its Init pose until its first command takes
+effect, as on seats. With it the two forms pair a model entity's poses without a shift.
+
+So on both targets a model reacts one frame later than its decision: its effective reaction
+time is its calibrated one plus one frame (0.05 s at the 20 Hz the runs step). A note for K10's
+calibration (`khaki2021_restricted`), not a change to it.
+
+**Prediction for run 2, before it (2026-11-24).** The same set 3 data and the same rule, the
+batch with the fix: every element offset 0 (walker_far_kerb at 218 and 179 on both sides);
+the decisions at the same steps as run 1 (61, 82, 121; 61, 82); the outcome passed on both; the
+walker's max xy error unchanged (1.49e-4 m, 1.50e-4 m), its poses now paired without a shift;
+ego 0 and van 2e-5 m as before.
