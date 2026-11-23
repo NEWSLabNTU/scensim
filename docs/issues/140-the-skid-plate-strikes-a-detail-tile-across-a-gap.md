@@ -38,3 +38,25 @@ as the pothole lowers the front-left corner) or PhysX acted on the face's plane 
 only 3 cm tall. The probe: the plate's lowest points against the tile's own height along their
 path over steps 990 to 998, and PhysX's contactOffset and restOffset for the plate, the body and
 the tile, recorded beside the 8.3 cm separation. Contact offsets are not changed before it.
+
+## The geometric probe (before the run)
+
+The same drive (*rough_none*, one car, raycast; siw main 4df3198, whose issue 137 fix acts only
+from step 997, after the strike), logging at t 16.45 to 16.70 s (steps 987 to 1001) only:
+
+- the skid plate's bottom face in the world (its corners and a 5 cm grid over it, from its
+  prim's transform and size);
+- under each of those points, the tile `t_5_21_26`'s height (a downward PhysX raycast, the hits
+  on that tile alone), now and along the point's path over the next step (its velocity times
+  1/60 s, in 1 cm steps): the least vertical gap and where;
+- the chassis's contact report as before, to place the 6.28 kN s point again;
+- PhysX's contactOffset and restOffset for the plate, the body and the tile: what is authored on
+  each prim (PhysxCollisionAPI), and the scene's default where nothing is.
+
+- **118's prediction:** not a true strike. Over steps 990 to 998 no point of the plate's bottom
+  comes within 3 cm of the tile, now or along its next step's path: the wall's top is at the
+  road's level and the plate stays some cm above it, the front-left corner lowered by the pothole
+  but not to the road. The 6.28 kN s point repeats at step 994. The plate and the tile carry no
+  authored offsets, and the plate's own contact offset (with the tile's) reaches past the
+  8.3 cm gap: PhysX made the point from the face's plane within that reach and the solver acted
+  on it as closing.
