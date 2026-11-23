@@ -68,3 +68,21 @@ server (the one that ticks) are. That is what the field now lets a run see. One 
 stalls (issue 127) came from one client too, the world server's own `set_transform` before its
 own tick, so for a pose (a body without physics) the order of the calls alone did not keep it
 in its tick; for a vehicle's control it did, in all of these.
+
+**The cost and the live check (2026-11-24, 06:15 to 06:28):** `town01_npc_10` tracked, four
+repeats, on the build that reports the control (scensim on 79775334 with scensim_world_protocol
+3c8a120 and scensim_carla_world 8939db6), against issue 127's four "before" runs of the same set:
+
+| | frame p50 (ms) | frame p95 (ms) | tick p50 (ms) |
+|---|---|---|---|
+| before | 0.53, 0.52, 0.55, 0.52 | 0.73, 0.74, 0.78, 0.72 | 2.89, 2.81, 2.86, 2.95 |
+| with `control` | 0.58, 0.59, 0.59, 0.56 | 0.81, 1.42, 1.22, 0.82 | 2.91, 2.99, 2.94, 2.87 |
+
+The step's processing grew by about 0.05 ms at p50 (0.53 to 0.58 on the means), at the bound
+the prediction set ("under 0.05 ms"), not under it. Two of the four p95s are well above the
+others (1.42 and 1.22 ms), which these four runs do not separate from the host's load; the
+frame budget judge passed all four. The tick itself did not move. The live check held: every
+tracked vehicle had `control` at every frame with a world pose (12010 of 12010 in each run), all
+in range, throttle and brake 0 at every frame and the steer varying (246 values a run). The set
+has no body that is not a tracked vehicle, so "no `control` on such a body" is shown only by the
+unit tests (`only_physics_vehicles_report_a_control`).
