@@ -786,6 +786,32 @@ slides out without ESC under all three, further under T1 and T2 (peak sideslip 7
 against 34), which turn harder before they let go. With ESC every case holds, the mud lane change to 0.9-1.0 m against today's 0.21
 (today's car steered less and lost less speed doing it).
 
+### T1's peaks after issue 108: the prediction (2026-11-23, before the runs)
+
+Issue 108 landed (scensim 60ca020b): aib (`ff5e72b`) writes the spec's mu over PhysX's load
+filter gain (1.154), and the surface layer (`cb4d749`) takes `PEAK_SPAN` = 2.3 / 1.154, since
+step 4a's 2.3 was fitted with the filter in the cap. Owed (issue 108): each class's peak lands
+where the class says. The re-check is `spikes/manoeuvres.py` with `MANOEUVRES=sweep_lat,sweep_long`
+and `PADS=dry,wet,mud`, on GPU1 beside P4, in a worktree built at 60ca020b's tree.
+
+Predicted, with the reasoning:
+- **A class with its own peak keeps it.** The stiffness scale is mu_c tan(alpha_rig) /
+  tan(alpha_c) and the tire saturates near PEAK_SPAN mu F_z / C; both carry the new
+  `PEAK_SPAN`, which cancels. Mud: sideways 12.8 deg (the class's 12), as at 4b, within
+  0.5 deg; lengthways at 4b's slip, within 0.05.
+- **Dry and wet asphalt take the rig's peaks, which move:** the rig's own now saturates 1.154
+  times sooner, about 7.4 deg and 0.21 slip (siw's test). Measured 0.2 deg above the rig's
+  at 4b, so dry sideways about 7.6 deg, within 0.5. Lengthways the brakes reach about 0.6
+  slip, past the new peak, as before.
+- **Force over load falls by 1.154 on the PhysX tire:** dry asphalt's peak about 1.0 instead
+  of about 1.15 (front, within 0.07; the rear lower, as its load is), wet about 0.75 of dry.
+- **Past the peak:** dry sideways at 24 deg sits further past the earlier peak, so its share of
+  the peak is between the sliding 0.8 and 4b's 0.88. Mud at 34 deg about 4b's 0.78.
+- **Not predicted: mud's force level.** 4b read mud's sideways peak at 0.237 of the load, the
+  soil layer's own value, with and without T1. If that number reached PhysX through the
+  friction aib writes, it is now 0.237 / 1.154 = 0.205; if the soil layer's force bypasses the
+  PhysX cap, it stays 0.237. The run says which; its peak slip angle is predicted either way.
+
 ## Open questions
 
 - Whether T2 later needs our own tire on soil (option A): PhysX's wheel with near-zero
