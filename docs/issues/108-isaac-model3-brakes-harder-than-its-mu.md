@@ -170,21 +170,56 @@ omni.physx applies and Isaac's schema does not expose, gives the car 1.154 times
 Data: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-23 issue 106 and 108 (241)/restload`, with
 the script, the analysis and the test-only diff.
 
-### If it is the filter
+## Fix plan (for 133's review, before any code)
 
-The filter is not in Isaac's USD schema, so aib cannot set it. While every wheel stays within 3
-rest loads, the car's grip is exactly 1.154 times its friction. So aib can write each wheel's
-friction divided by 1.154, and the car's limit is then the spec's mu. Two things are left:
-- **Per wheel:** a lightly loaded wheel still gets more than its share, 1.385 at half its rest
-  load.
-- **Lateral stiffness:** PhysX's lateral stiffness already reads the filtered load.
+**The change (aib).** Every friction aib writes to a PhysX tyre is divided by 1.154
+(`FILTER_GRIP` = 0.2308 + (3 - 0.2308) / 3, named with this issue). That covers the friction
+table's default value at build, `--set tire_friction`, the per-axle overrides, and the surface
+layer's per-substep `set_wheel_friction`. Dividing at those points means nothing upstream
+changes: the spec's mu, scensim's surface map and the ECU's assumptions stay as they are. The
+car's limit is then the spec's mu, exactly, while every wheel carries 0 to 3 rest loads. The
+filter cannot be set (not in the USD schema), and a restLoad choice cannot make it the identity,
+since filter(x) / x = 0.9231 + 0.2308 / x is 1 only at x = 3 and clamps above.
 
-That is for the fix, after the test.
+**What it leaves.**
+- **Per wheel.** A wheel's grip is (0.9231 + 0.2308 / x) / 1.154 of mu times its load: 1.20
+  at half its rest load, 1.0 at rest, 0.90 at twice, 0.87 at three. The total is exact. Under
+  load transfer the light wheels or axle get more than their share, which shifts the balance
+  in a corner (the inside wheels) and front to rear in a stop. That is PhysX's tyre as built;
+  the fix does not change it.
+- **Lateral stiffness.** It reads filteredLoad / restLoad, so it does not move with the
+  friction. The force's saturation term K = stiffness x slip / (mu load) rises by 1.154, so
+  the tyre reaches its (now lower) limit at a smaller slip, as a tyre with that mu should. aib's
+  lateral stiffness values were tuned with the filter in place. They stay as they are, and the
+  cornering checks below show whether they need a second look.
+- **Every car.** The Mustang drift car and the MuSHR use the same PhysX tyre and get the same
+  factor. The drift car was tuned on the over-grip (243's 057/058), so its numbers move. 243
+  should hear before it lands.
+- **Hashes.** isaac_physics_hash moves (the rig's friction). The spec and its physics_hash do
+  not.
+
+**What was measured on the over-gripping tyre, and has to be re-run after the fix.**
+- **Issue 106's ABS and regen order** (regen_60, regen_30 at mu 0.2, 0.3 and 1.0). The
+  effective grip falls from 1.07 to 1.0 times the set mu, so at the same request each wheel
+  slips more, and both controls act sooner. The order depends on the two releases, 0.15
+  against ABS's 0.2. It should hold, but B's margin was one ECU step (rsc 7, ABS 8), so 106's
+  table is re-run whole and judged by its written rule. 106's condition 4 (B at least 0.85 mu g)
+  is predicted to hold: ABS now reaches about 0.92 to 0.93 mu g, against 1.06 to 1.08 before.
+- **The dry set:** launch, brake_100 (39.54 m now, predicted about 42 m), start_flat,
+  start_up, hold_camber.
+- **Issue 100's Isaac validation and reference reruns,** not yet run, so they run after the
+  fix.
+- **Any Isaac-vs-CARLA braking or cornering comparison** made before it.
+
+**Tests.**
+- **aib unit:** the rig writes the spec's mu / FILTER_GRIP to the table, to the overrides and
+  to `set_wheel_friction`.
+- **steptest:** the locked `limit_brake` at mu 0.2, 0.5 and 1.0 gives frictionVsSlip x mu g,
+  0.83 mu within 0.01. With ABS it gives 0.92 to 0.93 mu g, under 1.0 at every mu.
 
 ## Fix
 
-After issue 106. Find the term. Then either correct it in aib's rig, so the effective mu is the
-spec's, or state the factor in the spec's provenance and in every Isaac-vs-CARLA braking
-comparison. Until then, Isaac's mu is about 1.07 times the spec's at the peak.
+The term is found, and the plan above is under review. Until the fix lands, Isaac's tyre grip is
+1.154 times the spec's mu, which ABS turns into about 1.07 times mu g in a stop.
 
 Data: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-23 issue 106 and 108 (241)/mueff`.
