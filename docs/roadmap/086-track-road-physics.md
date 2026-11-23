@@ -1097,6 +1097,31 @@ default, which is what users run (133).
 - **Approved by 133** (2026-11-23, with the plate's repeat first, 3 + 3 Haruna runs judged on
   medians, and the two cars named as a simplification).
 
+#### C6b's run (a): the cleats with the plate, no rocks (2026-11-23, 118)
+
+Writing the plate in, two faults turned up (issues 119 and 120, 133's numbers): the detail
+collides with the chassis and the plate only when the corridor has rocks, and on a
+`section_in_base` corridor its tiles, render mesh and rock rests leave out the section, 2-7 cm
+above the true road. So the plate's repeat became two runs (133): (a) fixture_c6a as built, no
+rocks, no tiles; (b) with the record's rock cover, after both fixes.
+
+Run (a) (siw 3ac4e4c, aib ff5e72b, 60 Hz, GPU0 with nothing else on it; NAS "2026-11-23 086
+C6b run a skid plate (118)"), raycast / sweep, against C6a2's 60 Hz runs without a plate:
+
+| case | plate's lowest clearance (mm; 137 before) | largest deceleration (m/s^2) | J change | body rise change (cm) |
+|---|---|---|---|---|
+| cleat_10, 10 m/s | 38 / 39 | 8.1 / 8.3 | -3.9 % / 0.0 % | -0.34 / -0.01 |
+| cleat_10, 20 m/s | 54 / 44 | 10.8 / 10.4 | 0.0 % / -1.9 % | 0.00 / -0.36 |
+| cleat_15, 10 m/s | **-5 / +0.5** | 19.7 / 23.9 | 0.0 % / +8.2 % | -0.03 / +1.64 |
+
+- The plate meets nothing but the base road here, as issue 119 says: over cleat_15 its bottom
+  goes 5 mm into the cleat (raycast) and 0.5 mm over it (sweep), and passes. With a collider it
+  would strike. cleat_10 leaves it 38-54 mm.
+- J and body rise are as without the plate (C6a2's run of the same code but the plate), but
+  sweep's cleat_15 (+8 %, +1.6 cm), within the spread its runs show (C6a's sweep: 20.3 cm).
+- The deceleration is the wheels' impact, with no plate contact in this run; it is the
+  baseline (b) is set against. No step at PhysX's rigid limit.
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
