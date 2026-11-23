@@ -955,6 +955,36 @@ within the check; logs on the NAS, "2026-11-23 086 C6a2 rate test (118)". Raycas
   after the docs gate's build ended, so its raycast-sweep gap is not a result. One car at 120
   and 240 Hz: 13.8/16.5 and 26.6/32.1 (raycast), 13.4/16.4 and 27.5/33.0 (sweep); our contact
   2.8/3.5 and 5.5/6.6: the frame's cost about doubles with each doubling of the rate.
+
+#### C6a3: the peaks' growth with rate (spec written 2026-11-23, before any run; for 133's approval)
+
+C6a2 found the sharp-edge peaks growing past the reference with rate. C6b's rock checks rest on
+the same contact, so this comes before C6b (133); C6c keeps the unsprung mass.
+
+- **The cases**: cleat_10 at 20 m/s, cleat_15 at 10 m/s and washboard at 10 m/s, under both
+  wheel queries, at 480 Hz (24 PhysX steps a frame, aib's substeps 1: the vehicle's own
+  integration still 480 Hz), beside C6a2's 60, 120 and 240 Hz runs of the same code and
+  plant (siw `086-c6a2`, aib ff5e72b), which are not run again.
+- **The measure, an impulse, not a peak.** For a cleat, the excess impulse J = the integral
+  over time of max(load - static, 0), with the front-left hub from 1 m before the face to 1 m
+  past the cleat's end (the landing excluded); static as `fixture_check` takes it. Our
+  contact's logged load is its mean over the step, so J is its force's integral at any
+  rate. For washboard, D = the mean of |load - static| with the hub on the washboard. The
+  reference's, from R0's quarter car at 4 kHz (sampled at 500 Hz) with C6a's constants:
+  J 376.8 N s (cleat_10, 20 m/s) and 733.0 N s (cleat_15, 10 m/s); D 1858 N (washboard,
+  10 m/s). Its peaks reproduce C6a's table (24.0, 26.6 kN; washboard's minimum 1.16 kN).
+- **The verdict**, per case and query, from the 240 and 480 Hz runs:
+  - *a sampling artefact*: J (or D) at 480 Hz within 30 % of the reference's, and within
+    10 % of its 240 Hz value, while the peak (or, for washboard, the minimum's distance from
+    static) has grown by at least 30 % from 60 Hz;
+  - *too stiff*: J (or D) at 480 Hz more than 30 % over the reference's, or still rising by
+    more than 10 % from 240 to 480 Hz;
+  - otherwise *unsettled*, reported as it is.
+  C6a's rule and its verdict are unchanged.
+- **118's prediction**: a sampling artefact in all six (three cases, two queries). The per-step
+  mean already integrates our contact's force over the step, and R5's cam spreads it over
+  the footprint, so a finer step should resolve the same impulse into a narrower, higher
+  peak.
 - **The cost line again**: `fixture_cost` with 1, 2 and 4 cars under both queries at 60 Hz,
   on GPU0 with nothing else on it if the other session's job allows (`nvidia-smi` before each
   run, in the log), else as it is and said so; and 1 car at 120 and 240 Hz. Reported, not
