@@ -729,6 +729,46 @@ sim_vehicle_ecu (ef6bfd8 to 99505b0) and sim_vehicle_spec (21bf3dc to 9ceb8cb).
   pose error p95 is bimodal, about 0.12 m or about 0.18 m from run to run on either main, and 4
   of the 6 clean runs' maxima were over 0.2 m; its margin to the 0.2 m rule is thin.
 
+### C6's steps (spec written 2026-11-23, before any run; for 133's approval)
+
+C6 is the rest of 066 (R1's checks, R4 finished, R6, R7), now on the road record: a course the
+builder makes, its section and hazards in `course/section.npz`, its road layer reading it, its
+Autoware maps from C5d's builder. Every Isaac run on 118's GPU0 (GPU1 is 094's); every
+A/B comparison in one testbench workspace per side, each run refused unless its live processes
+and `result.json` name that side (C5's lesson). Four steps, each with its own spec, written
+into its section before its runs, and its rule set before them:
+
+- **C6a. The fixtures on a record course, and R1's checks.** R0's nine lanes (5, 10, 15 cm
+  cleats, the 8 cm pothole, 30 m of washboard, the kicker, the 20 cm boulder, the loose 10 kg
+  rock) as a fixture course the builder makes (C5b's `fixture:` path), the lanes the road
+  layer's features on its record, driven by `road_fixtures` through the world server's road
+  layer (R5's contact). Check, 066's first acceptance item less wheel hop: the cleat force
+  rising ahead of the hub, the pothole's unload then far-edge peak within 0.5 s, the landing
+  spread over 10-30 ms, each fixture's peak load and body rise within 30 % of R0's 4 kHz
+  reference. R1's cost line: PhysX's query and our contact with 1, 2 and 4 vehicles, frame
+  p50 and p95.
+- **C6b. Rocks on the record's road (R4 finished).** Rocks placed from the record (R4's
+  size distribution along the edges, in the record's `runoff` and `ditch` strips, none on the
+  carriageway unless the course asks) on Haruna rebuilt and on a fixture. Check: a 15 cm rock
+  at 40 km/h lifts the wheel and pitches the body with no rigid-limit impulse; a boulder over
+  the clearance strikes the skid plate; rocks under wheels move by the reaction force; R4's
+  budget on an idle GPU0 (one ego frame p50 at most 5 ms over the same course without rocks,
+  p95 under 45 ms; two egos keep real time at p50).
+- **C6c. Wheel hop (R6).** A virtual unsprung mass per corner on a tire spring at the vehicle
+  substep rate, between R5's effective road and the body. Check: a 10-15 Hz peak in the chassis
+  and wheel-load spectra on C6a's washboard; grip loss on washboard rising with speed; 055's
+  manoeuvre suite and aib's slope matrix unchanged on smooth road (paired, A/B as above).
+- **C6d. Sensors and Autoware on the rough record road (R7).** Autoware on C6b's Haruna with
+  rocks, its lanelets and cloud from C5d's builder (the lanelet map R4 lacked): motion BVH on,
+  the lidar following the chassis, `scan_ground_filter` over the washboard and ruts. Check:
+  the scenario passes; NVTL p05 at least 2.5 and the pose error p95 at most 0.2 m (C5d's rule;
+  Haruna's margin is thin, so three runs, judged on all three); false stops reported per km,
+  rock and pothole detection range reported.
+
+C6's exit is 066's acceptance as these four steps hold it, plus aib's slope matrix and
+haruna_down unchanged on smooth road, paired as C5's were. C6a's own spec (the fixture course's
+table, the reference's numbers per lane, the runs) is written next, before its first run.
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
