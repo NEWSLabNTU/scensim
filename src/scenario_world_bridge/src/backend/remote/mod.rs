@@ -1819,7 +1819,9 @@ impl SimBackend for RemoteBackend {
         type Measured = Option<([f64; 3], [f64; 3])>;
         // And the command an ego ran, where the server reports it (092 K2.4).
         type Taken = Option<gap_trace::TakenCommand>;
-        let mut trace_states: BTreeMap<u32, (gap_trace::Pose6, Measured, Taken, u64)> =
+        // And a physics vehicle's control as the server held it (issue 135).
+        type Control = Option<gap_trace::AppliedControl>;
+        let mut trace_states: BTreeMap<u32, (gap_trace::Pose6, Measured, Taken, u64, Control)> =
             BTreeMap::new();
         for state in &step.states {
             let Some(pose) = state.pose.as_ref() else {
@@ -1839,7 +1841,22 @@ impl SimBackend for RemoteBackend {
                 gear: c.gear,
                 arrived: c.arrived,
             });
-            trace_states.insert(state.handle, (now, velocity, taken, state.cmd_frame));
+            let control = state
+                .applied_control
+                .as_ref()
+                .map(|c| gap_trace::AppliedControl {
+                    throttle: c.throttle,
+                    brake: c.brake,
+                    steer: c.steer,
+                    hand_brake: c.hand_brake,
+                    reverse: c.reverse,
+                    manual_gear_shift: c.manual_gear_shift,
+                    gear: c.gear,
+                });
+            trace_states.insert(
+                state.handle,
+                (now, velocity, taken, state.cmd_frame, control),
+            );
             let Some(name) = self.names.get(&state.handle) else {
                 continue;
             };
@@ -1870,7 +1887,8 @@ impl SimBackend for RemoteBackend {
                 .entities
                 .values()
                 .filter_map(|e| {
-                    let (pose, measured, command, cmd_frame) = trace_states.get(&e.handle)?;
+                    let (pose, measured, command, cmd_frame, control) =
+                        trace_states.get(&e.handle)?;
                     let (velocity, angular_velocity) =
                         measured.unwrap_or((e.motion.velocity, [0.0, 0.0, e.motion.yaw_rate]));
                     Some((
@@ -1883,6 +1901,7 @@ impl SimBackend for RemoteBackend {
                             command: *command,
                             // a commanded body's only (schema 3); 0 before its first command
                             cmd_frame: e.commanded.then_some(*cmd_frame),
+                            control: *control,
                         },
                     ))
                 })

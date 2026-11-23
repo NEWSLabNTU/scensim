@@ -217,6 +217,12 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
                                 ..Default::default()
                             }),
                             cmd_frame: if commanded.contains(h) { frame - 1 } else { 0 },
+                            // the control the server held for the ego's vehicle (issue 135)
+                            applied_control: ego.then_some(wire::AppliedControl {
+                                throttle: 0.25,
+                                steer: -0.5,
+                                ..Default::default()
+                            }),
                         })
                         .collect(),
                     contacts,
@@ -1712,8 +1718,13 @@ fn the_truth_file_is_schema_3_from_the_servers_replies() {
             if name == "ego" && !s["sim_pose"].is_null() {
                 assert_eq!(s["command"]["arrived"], 1, "{s}");
                 assert!(s["command"]["stamp_ns"].as_i64().unwrap() > 1_000_000_000_000);
+                // and the control it held, raw (issue 135)
+                assert_eq!(s["control"]["throttle"], 0.25, "{s}");
+                assert_eq!(s["control"]["steer"], -0.5, "{s}");
+                assert_eq!(s["control"]["hand_brake"], false, "{s}");
             } else {
                 assert!(s.get("command").is_none(), "{name}: {s}");
+                assert!(s.get("control").is_none(), "{name}: {s}");
             }
         }
     }

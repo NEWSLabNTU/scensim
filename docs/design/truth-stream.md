@@ -76,12 +76,30 @@ step that ended at this frame, 0 before its first command. Its command lag is th
 number minus that of the truth frame whose `sim_frame` is `cmd_frame`: 1 under lockstep, by
 construction (`scensim.truth.commands`).
 
+A vehicle the simulator moves by its physics may also have `control` (schema 3, optional;
+scensim issue 135): the actuator control the simulator held for it in the step that ended at
+this frame, raw, in the simulator's units: `throttle` and `brake` 0..1, `steer` -1..1 (CARLA's
+sign, right positive), `hand_brake`, `reverse`, `manual_gear_shift` and `gear`. It is not an
+Autoware command (that is `command`): CARLA's throttle and brake do not map back to an
+acceleration without the car's pedal map, so none is made up. The CARLA world server reports it
+for the ego and for every vehicle it moves by physics (a tracked NPC vehicle, an autopilot or
+agent one), from the tick's snapshot (`Vehicle::GetControl`, LibCarla's copy of the tick, no
+RPC); not for a kinematic or commanded body or a walker. The snapshot holds the control CARLA
+ran in that tick, and the tick's frame is the snapshot's frame: checked with a control applied
+just before each of 4400 ticks, by a synchronous batch and by `apply_control` alike, none held a
+tick late (`scensim_launch/scripts/carla_control_alignment.py`, issue 135). So `control` at
+frame k is what the vehicle ran in tick k; a pilot's control sent for tick k (acb's, from its
+own client) and not seen there landed late, which is what issue 135 measures. Isaac's world
+server leaves it unset, as it sends no `commands`: no `control` in an Isaac truth, never a
+zero one. A file without it reads as before.
+
 Schema 2 names the simulator's values neutrally. Schema 1 (CARLA only) named them `carla`
 (`sim_pose`), `carla_frame` (`sim_frame`), `actor_id` (`sim_id`), `blueprint` (`asset`) and
 `blueprint_box` (`asset_box`), and lacked `index`, `role`, `subtype`, `sim_time_ns`,
 `angular_velocity`, `velocity_source`, the `episode` line's map fields and the `signal` lines.
 Schema 3 (roadmap 092 K12) adds the role `model`, its entities' `cmd_frame` and the frame's
-`commands`; nothing else changes. A reader takes the names of the file's `schema`: versioned reading of a versioned
+`commands`, and (within it, optional, issue 135) a physics vehicle's `control`; nothing else
+changes. A reader takes the names of the file's `schema`: versioned reading of a versioned
 format.
 
 Signals are events, not repeated every frame: a reader keeps the last state per signal.

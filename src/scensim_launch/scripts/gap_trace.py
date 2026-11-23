@@ -133,6 +133,25 @@ COMMAND_KEYS = ("stamp_ns", "acceleration", "velocity", "tire_angle", "gear", "a
 
 
 @dataclass(frozen=True)
+class AppliedControl:
+    """A physics vehicle's actuator control as the simulator held it in a frame (schema 3,
+    optional; scensim issue 135): raw, in the simulator's units (CARLA: throttle and brake
+    0..1, steer -1..1 with right positive, the flags and the gear asked for). Not an Autoware
+    command, which `TakenCommand` is."""
+    throttle: float
+    brake: float
+    steer: float
+    hand_brake: bool
+    reverse: bool
+    manual_gear_shift: bool
+    gear: int
+
+
+CONTROL_KEYS = ("throttle", "brake", "steer", "hand_brake", "reverse", "manual_gear_shift",
+                "gear")
+
+
+@dataclass(frozen=True)
 class EntityState:
     ssv2: Pose6
     sim_pose: object  # Pose6, or None when the body was not in the simulator's snapshot
@@ -142,6 +161,7 @@ class EntityState:
     velocity_source: object = None  # schema 2: one of VELOCITY_SOURCES, or None
     command: object = None  # schema 2, optional: the ego's TakenCommand this frame, or None
     cmd_frame: object = None  # schema 3: a commanded entity's command frame (0: none yet), or None
+    control: object = None  # schema 3, optional: a physics vehicle's AppliedControl, or None
 
     @property
     def spawn(self):
@@ -453,9 +473,22 @@ def _state(ln, name, s):
     cmd_frame = None
     if ln.schema >= 3 and s.get("cmd_frame") is not None:
         cmd_frame = ln.integer(s["cmd_frame"], f"{path}.cmd_frame", minimum=0)
+    control = None
+    if ln.schema >= 3 and s.get("control") is not None:
+        c, cp = s["control"], f"{path}.control"
+        if not isinstance(c, dict) or set(c) != set(CONTROL_KEYS):
+            raise ln.error(cp, f"expected an object of {', '.join(CONTROL_KEYS)}, got {c!r}")
+        control = AppliedControl(
+            throttle=ln.number_(c["throttle"], f"{cp}.throttle"),
+            brake=ln.number_(c["brake"], f"{cp}.brake"),
+            steer=ln.number_(c["steer"], f"{cp}.steer"),
+            hand_brake=ln.boolean(c["hand_brake"], f"{cp}.hand_brake"),
+            reverse=ln.boolean(c["reverse"], f"{cp}.reverse"),
+            manual_gear_shift=ln.boolean(c["manual_gear_shift"], f"{cp}.manual_gear_shift"),
+            gear=ln.integer(c["gear"], f"{cp}.gear"))
     return EntityState(ssv2=ssv2, sim_pose=sim_pose, velocity=velocity, flags=tuple(flags),
                        angular_velocity=angular, velocity_source=source, command=command,
-                       cmd_frame=cmd_frame)
+                       cmd_frame=cmd_frame, control=control)
 
 
 def _frame(ln, known):
@@ -715,6 +748,8 @@ def to_json(record, schema=SCHEMA):
                     e["command"] = {k: getattr(s.command, k) for k in COMMAND_KEYS}
             if schema >= 3 and s.cmd_frame is not None:
                 e["cmd_frame"] = s.cmd_frame
+            if schema >= 3 and s.control is not None:
+                e["control"] = {k: getattr(s.control, k) for k in CONTROL_KEYS}
             if s.flags:
                 e["flags"] = list(s.flags)
             entities[name] = e

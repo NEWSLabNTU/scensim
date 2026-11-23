@@ -189,6 +189,7 @@ mod tests {
             measured,
             command: None,
             cmd_frame: None,
+            control: None,
         }
     }
 

@@ -592,6 +592,43 @@ class SchemaThree(unittest.TestCase):
         with self.assertRaisesRegex(gt.TraceError, "role"):
             gt.load_trace(lines(bad))
 
+    def test_a_physics_vehicles_control_is_read_and_written_back(self):
+        # issue 135: optional within schema 3, raw; absent where the simulator reports none
+        with_c = copy.deepcopy(SAMPLE3)
+        for r in with_c:
+            if r["type"] == "frame" and r["entities"]["ego"]["sim_pose"] is not None:
+                r["entities"]["ego"]["control"] = {
+                    "throttle": 0.25, "brake": 0.0, "steer": -0.5, "hand_brake": False,
+                    "reverse": False, "manual_gear_shift": False, "gear": 0}
+        trace = gt.load_trace(lines(with_c))
+        got = [f.entities["ego"].control for f in trace.frames
+               if f.entities["ego"].sim_pose is not None]
+        self.assertTrue(got)
+        self.assertEqual(set(got), {gt.AppliedControl(0.25, 0.0, -0.5, False, False, False, 0)})
+        self.assertTrue(all(s.control is None for f in trace.frames
+                            for n, s in f.entities.items() if n != "ego"))
+        self.assertEqual([gt.to_json(r) for r in trace.records()], with_c)
+        # a file without it reads as before
+        self.assertTrue(all(s.control is None for f in gt.load_trace(lines(SAMPLE3)).frames
+                            for s in f.entities.values()))
+
+    def test_a_malformed_control_is_refused(self):
+        for bad_control, field in (({"throttle": 0.1}, "entities.ego.control"),
+                                   ({"throttle": 0.1, "brake": 0.0, "steer": 0.0,
+                                     "hand_brake": 0, "reverse": False,
+                                     "manual_gear_shift": False, "gear": 0},
+                                    "entities.ego.control.hand_brake"),
+                                   ({"throttle": "x", "brake": 0.0, "steer": 0.0,
+                                     "hand_brake": False, "reverse": False,
+                                     "manual_gear_shift": False, "gear": 0},
+                                    "entities.ego.control.throttle")):
+            bad = copy.deepcopy(SAMPLE3)
+            f = next(r for r in bad if r["type"] == "frame"
+                     and r["entities"]["ego"]["sim_pose"] is not None)
+            f["entities"]["ego"]["control"] = bad_control
+            with self.assertRaisesRegex(gt.TraceError, field):
+                gt.load_trace(lines(bad))
+
     def test_a_negative_cmd_frame_is_refused(self):
         bad = copy.deepcopy(SAMPLE3)
         f = next(r for r in bad if r["type"] == "frame" and "truck" in r["entities"])
