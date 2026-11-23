@@ -482,11 +482,12 @@ then the peak lateral acceleration in the 1 s after it less the control's (m/s^2
 | 4 | 10 cm | 90 | **held** | **re-enters** +0.017 | +1.39 | **re-enters** +0.032 | +1.95 |
 | 5 | 10 cm | 45 | boundary | re-enters +0.045 | +1.41 | re-enters +0.077 | +1.36 |
 | 6 | 10 cm | 30 | re-enters | re-enters +0.067 | +1.15 | re-enters +0.060 | +1.28 |
-| 7 | 15 cm | 90 | **held** | held | | **re-enters** +0.057 | +4.68 |
+| 7 | 15 cm | 90 | **held** | held, by artefact (below) | | **re-enters** +0.057 | +4.68 |
 | 8 | 15 cm | 45 | boundary | re-enters +0.077 | +2.19 | re-enters +0.103 | +3.46 |
 | 9 | 15 cm | 30 | re-enters | re-enters +0.086 | +2.16 | re-enters +0.157 | +2.25 |
 
-Raycast: 7 agree, 1 mismatch, 3 boundary. Sweep: 6 agree, 2 mismatches, 3 boundary. No case
+Raycast: 6 agree, 1 mismatch, 1 held by artefact (15 cm, 90 deg: issue 077's, below; not
+counted as an agreement), 3 boundary. Sweep: 6 agree, 2 mismatches, 3 boundary. No case
 showed the yaw spike: the peak yaw rate after the crossing was within 0.06 rad/s of the
 control's in every case. The body's roll about the crossing grew with the lip, 1.5 deg on
 the control to 5 deg at 10 cm and 7 deg at 15 cm.
@@ -498,10 +499,15 @@ the control to 5 deg at 10 cm and 7 deg at 15 cm.
 - **Finding: the raycast's hold at 15 cm is not a tyre's.** Its right front wheel ran 4 cm
   outside the edge for the whole window with its ray's hit at the face's foot (v -3.2509, the
   1 mm-wide face at -3.250 to -3.251), on the shoulder: issue 077's mechanism, the ray taking
-  a sharp face as the ground. It is not robust either: in the two smoke runs (15.51 and
-  16.87 m/s at the turn-in) raycast held at 10 cm, at 15.64 m/s it climbed. So the raycast's
-  holds are an artefact, and the sweep's re-entries are the plant's real answer: it has no
-  sidewall to scrub with.
+  a sharp face as the ground. So it is counted as held by artefact, not as the rule's held,
+  and the sweep's re-entries are the plant's real answer: it has no sidewall to scrub with.
+- **Finding: the outcome depends on the speed, and each case was classified at one.** In the
+  two smoke runs raycast held at 10 cm, 90 deg with start speeds of 15.51 m/s (the case ended
+  2.4 s after the turn-in, the wheel still outside) and 16.87 m/s (held for 4.5 s, the whole
+  window); in the full run, at 15.64 m/s, it climbed. So no case's class above is robust: each
+  is one drive at one speed.
+- **Next, beside 066 R8's edge force: a speed sweep** around 15.6 m/s for the lips at 90 deg
+  (both wheel queries), to find where the outcome changes. Not run in C5c.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
