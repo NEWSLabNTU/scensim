@@ -879,7 +879,8 @@ raycast / sweep:
   1, 2, 4 cars under raycast; 7.4/9.6, 12.8/17.2, 21.9/27.3 ms under sweep; our contact
   1.4-2.4, 2.8-4.8 (raycast's two: 3.2/38.5), 5.4-8.0 ms.
 
-**C6a failed**: body rise on the 5 and 10 cm cleats at 10 m/s, washboard's minimum at
+**C6a failed**, judged without the rig's skid plate (C6b found the drives had none; its
+first run repeats the cleats with it): body rise on the 5 and 10 cm cleats at 10 m/s, washboard's minimum at
 20 m/s, and the landing spread. The rule is not amended after the result. Both queries put
 the load ahead of the hub on every cleat and differ little: 118's prediction held, and 133's
 (a raycast wheel cannot feel a cleat ahead of its hub) did not, since the cleat's load is our
@@ -1078,15 +1079,19 @@ default, which is what users run (133).
     area over the strip's area, over the course) within a factor of 2 of its k.
 - **The budget on Haruna** (C5's course rebuilt with rocks from its record at the same cover,
   GPU0 with nothing else on it; `nvidia-smi` before each run in the log; 60 Hz):
-  - one ego, haruna_down under Autoware as C5 ran it, two runs with rocks and two without,
-    interleaved: the world server's frame p50 with rocks at most 5 ms over without, and its
-    p95 under 45 ms;
-  - two cars (`fixture_cost`'s drive, no Autoware or sensors) on the rebuilt course: frame
-    p50 at most 50 ms (real time). Reported beside it: the same with one car, and our contact.
+  - one ego, haruna_down under Autoware as C5 ran it, three runs with rocks and three
+    without, interleaved, judged on the medians (Haruna's pose error is bimodal, C5): the
+    world server's median frame p50 with rocks at most 5 ms over without, and the median p95
+    under 45 ms;
+  - two cars without Autoware or sensors (`fixture_cost`'s drive), a simplification accepted
+    by 133, on the rebuilt course: frame p50 at most 50 ms (real time). Reported beside it: the
+    same with one car, and our contact. The budget with two Autoware egos is open (below).
 - **118's predictions:** every fixture check holds under both queries (R4's slice saw the
   same behaviours on a flat base); the placement check holds; the one-ego budget holds (the
   rocks are off the carriageway and few wake), the p95 bound on an idle GPU too; two cars keep
   real time.
+- **Approved by 133** (2026-11-23, with the plate's repeat first, 3 + 3 Haruna runs judged on
+  medians, and the two cars named as a simplification).
 - **The cost line again**: `fixture_cost` with 1, 2 and 4 cars under both queries at 60 Hz,
   on GPU0 with nothing else on it if the other session's job allows (`nvidia-smi` before each
   run, in the log), else as it is and said so; and 1 car at 120 and 240 Hz. Reported, not
@@ -1097,6 +1102,11 @@ C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
 C3 has written Haruna's record. About 4-5 weeks of work to C5, which gives one road from the
 record to Isaac, Autoware's maps and the planner.
+
+### Open
+
+- **The budget with two Autoware egos on Haruna** (C6b's two-ego line, which C6b measures with
+  two cars without Autoware): when a two-ego Haruna scenario exists. Not built for C6b (133).
 
 ### Decisions (accepted by 133, 2026-11-20)
 
