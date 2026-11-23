@@ -63,6 +63,24 @@ Roadmap 094 records it and names the factor.
 | The drift retune and the race planner's refit (243's verdict below) | 243 | when the user resumes the drift work (on hold since 2026-11-02) |
 | A question, not yet an issue: do our Isaac runs need the network at start? One `limit_brake` failed fetching Isaac's asset root from S3 (`add_default_ground_plane` via `get_assets_root_path`) | 241 | with 106's table |
 
+### The dry set on post-108 aib: prediction (2026-11-23, before the run)
+
+aib.steptest, shipped values (no `--set`), aib ff5e72b: launch, brake_100, regen_60,
+start_flat, start_up and hold_camber, against issue 106's verified set (pre-108 aib 23ef5fb).
+One run each. Issue 106's 55 runs were identical to the step on repeats, so repeats add
+nothing.
+- **brake_100: 42 to 46 m** (39.54 before). An ABS stop from 100 km/h is grip-limited, and the
+  grip fell by 1.07 to 1.154, depending on how much load transfer the stop holds.
+- **launch: 6.43 to 6.70 s** (6.428). Only the first metres can be traction-limited at mu 1.0.
+- **start_flat 0.2845 m and start_up 3.65 m: unchanged within 1 %.** They are creeps far below
+  any grip limit.
+- **hold_camber: under 1 cm sideways in 60 s** (0.128 cm). It is held below the limit, so a
+  lower cap moves it little.
+- **regen_60 dry: -1.5 m/s^2 all regen, no friction torque, unchanged.**
+
+A value outside its range is a miss, reported as one, and looked into before anything is
+re-judged on it.
+
 ### The drift work (243, 2026-11-23, read only)
 
 **Verdict:** retune and rerun, folded into the rerun of 057/058 on issue 100's slip denominator
