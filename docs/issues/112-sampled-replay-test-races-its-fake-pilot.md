@@ -61,3 +61,19 @@ runs, with the test's body passed. Every `start_stack` teardown had the same fix
 `test_run.py`, one each in `test_knobs.py` and `test_sampled.py`. All now wait
 `_ceiling.STOP_WAIT()`, which is `ceiling(base=60)` scaled by the load per core, as the
 ready-waits are.
+
+## A third race (2026-11-23, found by 241's issue 118 gate)
+
+241's gate for issue 118, at load 68 to 82 on 32 cores, failed the test at its `--replay` step
+with "pilot follower is not coming up: its launch exited (code 0) before it was ready". The
+no-op child of the resolution above exits at once. The run's wait for its own pilots
+(`run.py`, issue 089's check) polls the pilot's process before its readiness, so a pilot that
+has already ended is an infra error. Unloaded, the first poll comes before the child exits;
+under load it can come after. The child before the resolution also exited at once, after
+writing its line, so the race is older; the no-op child made the window wider.
+
+The fake pilot now stays up until the run stops it, as a real pilot does (`FAKE_PILOT`:
+`signal.pause()`, ending with code 0 on SIGINT or SIGTERM).
+`test_the_fake_pilot_outlives_a_late_first_poll` makes the race deterministic: it holds the
+run's first poll until the pilot has exited, or for 5 s if it has not. With a pilot that exits
+at once it fails with 241's message; with `FAKE_PILOT` it passes. Product code is unchanged.

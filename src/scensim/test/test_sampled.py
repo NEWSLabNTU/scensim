@@ -4,6 +4,7 @@ test_run harness's (a real keeper, a stub SSv2)."""
 import io
 import json
 import signal
+import subprocess
 import sys
 from pathlib import Path
 
@@ -168,6 +169,16 @@ def test_world_of_a_carla_town_hashes_its_map_directory(tmp_path):
 
 # --- runs, replay, fidelity -----------------------------------------------------------------
 
+# The fake pilot stays up until the run stops it, as a real one does: a pilot whose process
+# has ended before the run's first poll is not coming up (issue 089), so one that exits at once
+# failed the run whenever load delayed that poll (issue 112).
+FAKE_PILOT = [sys.executable, "-c",
+              "import signal, sys\n"
+              "for s in (signal.SIGINT, signal.SIGTERM):\n"
+              "    signal.signal(s, lambda *_: sys.exit(0))\n"
+              "signal.pause()"]
+
+
 @pytest.fixture
 def stack_up(where, maps_hub, monkeypatch):
     d = sampled_project(where, testbench=SEEDED)
@@ -183,7 +194,7 @@ def stack_up(where, maps_hub, monkeypatch):
         words = dict(w.split(":=", 1) for w in argv if ":=" in w)
         with open(seen, "a") as f:
             f.write(json.dumps(words.get("run", "")) + "\n")
-        return [sys.executable, "-c", "pass"]
+        return FAKE_PILOT
     monkeypatch.setattr(run, "pilot_argv", pilot_cmd)
     p, proc = start_stack(d)
     yield d, seen
@@ -243,6 +254,27 @@ def test_sampled_runs_carry_their_bound_record_and_replay_exactly(stack_up, wher
     assert "fidelity: 1 of 1 replays reached the original's outcome (1.00)" in out.getvalue()
     rep = json.loads((where["tmp"] / "f.json").read_text())
     assert rep["pairs"][0]["differs"] == []
+
+
+def test_the_fake_pilot_outlives_a_late_first_poll(stack_up, where, monkeypatch):
+    """Issue 112: the run's first poll of its pilot made late, as load makes it, on purpose. A
+    fake pilot that exits at once has ended by then and the run is an infra error; one that
+    stays up until the run stops it, as a real pilot does, passes."""
+    d, _ = stack_up
+    real = run._start
+
+    def start(argv, *args, **kwargs):
+        proc = real(argv, *args, **kwargs)
+        if argv == FAKE_PILOT:
+            try:   # until a pilot that exits at once has exited; a live one is waited 5 s
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+        return proc
+    monkeypatch.setattr(run, "_start", start)
+    out = io.StringIO()
+    assert run.main([str(suite(d, n=1, seed=11)), "--project", str(d)], out=out) == 0, \
+        out.getvalue()
 
 
 def test_a_replay_of_a_changed_scenario_is_refused(stack_up, where, capsys):
