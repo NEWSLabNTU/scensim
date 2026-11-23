@@ -13,7 +13,7 @@ steps ("C5's steps" below); C5a done (scensim_isaac_world ea35f35), C5b done
 (scensim_isaac_world b5de87b, its fixture course and checks), C5c done (scensim_isaac_world
 7eb96cc, the lip fixtures and the strips as zones), C5d done with one failed check
 (scensim_isaac_world 33c6aae: the maps pass, the fixture's localization fails), C5d2 done
-(scensim_isaac_world 086-c5d2: the fixture with guardrails and trees passes).
+(scensim_isaac_world 41a0102: the fixture with guardrails and trees passes).
 Issue 077's cause is confirmed (2026-11-20, 118): PhysX's raycast wheel query takes Town01's
 sharp curb face as the ground, and Town01 has no road layer. Its fix comes first, ahead of C5:
 recheck the sweep (066 R1's check, from C6). If the sweep no longer throws the car, aib switches
