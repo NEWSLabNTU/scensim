@@ -1,7 +1,7 @@
 # 116: haruna_down's localization p95 rose about 0.065 m between main 8965a06a and f98f1cd1, below C5
 
-**Status:** open, bisecting (2026-11-23, 118). **Severity:** low today, every run still passes;
-the margin to the 0.2 m rule is thin. **Found:** 2026-11-23, scensim 118, in roadmap 086 C5's
+**Status:** closed, not reproduced (2026-11-23): the premise came from a mixed overlay.
+**Severity:** none (no shift); Haruna's margin to the 0.2 m rule is thin on either main. **Found:** 2026-11-23, scensim 118, in roadmap 086 C5's
 exit pairing.
 
 ## What was seen
@@ -58,3 +58,31 @@ moves neither run is not the cause; one run each side of the threshold is report
 If no single component's step comes back to 0.13 m or less, the next step is pairs of
 components, an interaction (for example sim_vehicle_ecu and sim_vehicle_spec together, issue
 106 having changed both), not more runs of the single steps (133, written before the results).
+
+## Closed: not reproduced; the premise came from a mixed overlay
+
+The four runs above went through one testbench workspace built with B's install sourced, so
+its `setup.bash` chained `/mnt/renegade/aeon/gate-c5c/install` (B) over whatever was sourced
+before it (CLAUDE.md's overlay-order trap). Every run's `result.json` records scensim f98f1cd1,
+the two "A" runs included: they were a mix of A's and B's paths, not A. The bisection's runs
+went through the same workspace and ran B's code throughout; it was stopped during its second
+step (sim_vehicle_ecu) and none of its runs is a result.
+
+The clean pairing (roadmap 086, "C5's exit pairing"): a testbench workspace per side built
+against that side's install only, each run refused unless the live bridge and world server are
+under its own install and `result.json` names its commit; three runs per side, alternating, its
+rule written before the runs. Every run passed the check and its scenario:
+
+| run | scensim | pose error p95 | max |
+|---|---|---|---|
+| cB1, 2026-11-23T13-27-25 | f98f1cd1 | 0.181 m | 0.203 m |
+| cA1, 2026-11-23T13-34-42 | 8965a06a | 0.182 m | 0.202 m |
+| cB2, 2026-11-23T13-41-58 | f98f1cd1 | 0.126 m | 0.155 m |
+| cA2, 2026-11-23T13-49-14 | 8965a06a | 0.184 m | 0.203 m |
+| cB3, 2026-11-23T13-56-37 | f98f1cd1 | 0.180 m | 0.201 m |
+| cA3, 2026-11-23T14-03-53 | 8965a06a | 0.185 m | 0.201 m |
+
+B's mean p95 0.162 m, A's 0.184 m: B is not above A, so there is no shift. The runs fall in two
+groups, about 0.18 m and about 0.12 m, on either main; the mixed "A" runs were two of the lower.
+The lesson, for any paired run: check what the live processes loaded (`/proc/<pid>/exe` and
+command line) and what `result.json` records, per run, rather than what the script sourced.
