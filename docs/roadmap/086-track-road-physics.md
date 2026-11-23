@@ -646,9 +646,9 @@ lateral features (118)". Run on 118 in `/mnt/renegade/aeon/isaac-ex/c5d2`.
 
 - **Finding: with lateral features NDT holds the pose on the crowned, banked course**, within
   the rule set before the runs and with more margin than Haruna (0.103 against 0.183 m). So
-  C5d's failure was the fixture's, as its A/B said, and C5's exit "haruna_down passes on a
-  course with a nonzero crown" is met here on a course that has what a real road has beside
-  it. NVTL was lower with the features (3.08 against 3.31) while the pose was right: a high
+  C5d's failure was the fixture's, as its A/B said. For C5's exit ("haruna_down passes on a
+  course with a nonzero crown") this is the candidate run, on a course that has what a real
+  road has beside it; whether it closes that item is 133's call. NVTL was lower with the features (3.08 against 3.31) while the pose was right: a high
   NVTL on a featureless map is no sign of a held pose.
 - As built: the guardrails stand at the centreline's height (`props.guardrails`, as on every
   course), so on the 6 % bank a rail is up to about 0.27 m off the ground at 4.5 m; NDT needed
