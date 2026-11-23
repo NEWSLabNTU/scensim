@@ -204,6 +204,36 @@ A reading, not a result: the shared GPU slows stock more than ours. Stock's bloc
 90k, though the sync probe called six of the nine v3 runs at 4096 envs idle; the probe's 0.05 ms
 limit does not see the load that the idle windows' 0 % SM gate excluded.
 
+### Run notes: training on a shared GPU (139's host, fixed 2026-11-24 by 133)
+
+139's GPU0 (an RTX 5090, 32607 MiB) is shared with other users' jobs. The rules for 094's
+training runs on it, in place of the per-seed guards before them:
+
+- **Start**: a run starts only when GPU0's total, plus the new run's expected share (about
+  3.5 GB for an engine A seed of P4, about 3.1 GB for a P2 seed), stays at or under 26 GB for
+  10 minutes, and the host keeps 12 GB of RAM available after it starts. So we do not crowd
+  the card.
+- **Stop**: one guard (`gpuguard.sh`) over all our runs protects the card from running out of
+  memory, which hurts every user of it, not our share of it. When GPU0's total is above
+  32000 MiB on two consecutive samples 30 s apart, it stops our youngest run (least elapsed),
+  one at a time, re-checking after each. Other users' processes are never touched.
+- **Arming**: any guard first reads the value it watches and refuses to arm if its stop
+  condition already holds; it says so and waits.
+
+Why, as it happened. Engine A seeds 2 to 5 of P4's ECU row (scensim e178f268) each had a guard
+that stopped the seed when GPU0's total passed 26 GB. Another user's jobs took the total to
+26.5 to 30.7 GB on 2026-11-24, and the guards stopped seeds 5 and 4 at 03:03 (iterations 4 and 20
+of 1500) and seeds 3 and 2 at 03:15 (117 and 171). Those are **guard stops caused by another
+user's load, not training failures**: 29 to 36 GB of RAM was available at each stop, and the card did not run out.
+Their outputs are kept as `seedN-gpustop` with a STOPPED.txt, not counted, and all four rerun
+from scratch. The first replacement guard then stopped P2 row b's seed 2 (scensim 4c5d7a7a,
+iteration 1956 of 5000, 12 h in) the moment it armed, at 04:37, with the total already at
+31381 MiB from the other user's job (about 24.5 GB of it) and ours (6.8 GB). Two errors: **a rule
+error**, the stop line of 31000 MiB set too low, below where one other job plus our runs already
+sat (133's); and **arming without a check**, the guard armed without reading the total first
+(139's). Seed 2 is kept as `seed2-gpustop` (WheeledLab's `p2-b-stock-seeds-seed2-gpustop`),
+not counted, and reruns from scratch, its second rerun after the OOM kill of 2026-11-23.
+
 ## Measures
 
 The same on both sides, from one harness (P0):
