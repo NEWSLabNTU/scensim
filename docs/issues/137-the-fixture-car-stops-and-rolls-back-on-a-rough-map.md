@@ -103,3 +103,46 @@ only, and ended by a timeout just past them (a hang after the throw, issue 139, 
 - **118's prediction (b):** at step 994 the chassis touches a road collider (a detail tile or the
   base road) near its front-left corner, with an impulse of about the body's mass times 1.4 m/s
   (2.6 kN s).
+
+### The source probe's result (2026-11-24)
+
+*rough_none*, siw 31593ab, the code unchanged, GPU0 quiet (a first start died at 7 s on a name
+clash in the probe and logged nothing). The run repeats the contact probe's to the digit: the
+throw at step 1040, the rear-left wheel's `w` -108.3154 m, our load 1.604 MN. It then hung (issue
+139) and was stopped by its 3 min timeout after the files were written.
+
+- **(a) The 1 m is our base plane's, not the tiles'.** Under the rear-left wheel at step 1040 the
+  road's samples were -108.35 to -108.29 m (-109.36 to -109.29 at step 1039): the base plane's
+  part rose by 1.00 m while the detail's stayed within 2 cm (-0.028 to -0.014 m), every sample
+  from tile (5, 21), cached, 321 x 321 points, no NaN, inside the tile. The tiles are not the
+  cause.
+
+  The plane: from t 16.6 s until step 1039 fewer than three wheels had PhysX hits, so `_Car.
+  _planes` kept the plane it had (z = a x + b y + c_i, b = -0.0785). Step 1039 had three hits
+  (both fronts and the rear right; the rear left still off the ground), and the refit gave
+  b = -0.0756 and new c_i to the three wheels on the ground, -82.896 m. The rear left, off the
+  ground, kept its old c_i, -81.886 m, under the new slope. c_i is the plane's height at the
+  world's origin, and the car was 349 m from it along y: the slope's change of 0.0029 moved that
+  wheel's base by 0.0029 x 349 = 1.01 m. At step 1040 the rear left came down onto it (PhysX's hit
+  for it then -109.299 m, where the road is), our contact read the road 1 m above its true place,
+  and the next refit, with four hits, put the base back. A stale intercept carried under a new
+  slope: the further from the origin, the larger the error.
+- **(b) The skid plate struck a detail collision tile at step 994.** The chassis's report at
+  t 16.45 to 16.70 s: the body and the skid plate in contact (within their contact offsets) with
+  the base road, the terrain and tile `t_5_21_26` at every step, all with no impulse except one
+  point at step 994: the skid plate on the tile at (81.60, 345.30, -108.996), its normal (-0.021,
+  -0.479, 0.877) (a face 29 deg from level, facing the car: the pothole's far wall in the tile's
+  5 cm mesh), separation +0.083 m, impulse (-133, -3011, 5513) N s, 6.28 kN s along the normal.
+  Its component along the road, 3.0 kN s, is the 1.4 m/s the car lost in that step. The gap was
+  open (+8.3 cm); the car's 10 m/s along that face's normal closes about 4.8 m/s, 8 cm in one
+  1/60 s step, so the solver acted on the contact as one the step would close.
+- **118's predictions:** (a) the refit there and the 1 m in the base, with smooth tiles from the
+  same keys, **held**; "the rear-left wheel's hit about 1 m high, an initial overlap" **failed**:
+  that wheel had no hit in the refit's step, and its base came from its stale intercept. (b) a
+  road collider near the front-left corner at step 994 **held** (a detail tile, the plate's front
+  left); the impulse, 2.6 kN s predicted, was 6.28 kN s (2.4 times).
+
+Two defects, each on its own: (a) is ours, and it throws the car; (b) starts the 0.7 s on one
+wheel that brings (a) about. Whether (b) is a true strike (the plate's front edge reaching the
+wall's top) or PhysX acting on the face's plane beyond the 3 cm wall is not settled by this
+trace.
