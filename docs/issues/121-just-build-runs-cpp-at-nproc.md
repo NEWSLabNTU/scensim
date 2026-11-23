@@ -52,9 +52,17 @@ Tests: the job-count choice is a pure function of the free memory, the CPU count
 host setting, tested without a build (memory far below and above the cores' need, the host
 setting over both, the existing `MAKEFLAGS` kept).
 
-**Follow-up, not in this fix (133):** acb's own `just build` (its workspace, which the gate
-builds first) has colcon's defaults too. It builds no SSv2, but carla-sys and the Rust crates
-compile at a job per core: the same script in acb's justfile.
+**Follow-up (133), done in acb e1bb5dc:** acb's own `just build` (its workspace, which the
+gate builds first) had colcon's defaults too. It builds no SSv2, but carla-sys and the Rust
+crates compiled at a job per core. acb's justfile now evaluates the same script, with the same
+host setting (acb reads this repository's `.env` through just's `dotenv-load`), and its `just
+test` runs the same tests. Built in a fresh acb worktree with no caps (241, 2026-11-23): 12
+jobs chosen (half of 64.6 GB available, 24 CPUs), 22 packages in 7 min 40 s, the compilers'
+summed RSS at most 12.4 GB and available memory at least 53 GB; nextest 245 passed.
+
+**Two copies.** `scripts/build_jobs.py` and `scripts/test_build_jobs.py` exist here and in acb
+(autoware_carla_bridge's `scripts/`), the same apart from their docstrings: acb builds on its
+own, without this repository. Whoever changes one changes the other in the same landing.
 
 ## What the fix does
 
