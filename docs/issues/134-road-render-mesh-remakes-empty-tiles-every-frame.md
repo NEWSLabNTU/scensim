@@ -1,6 +1,6 @@
 # 134: the road's render mesh remakes its empty tiles every frame, and makes new tiles on the frame's thread
 
-**Status:** fixed on siw `issue-134` (live check passed), not landed. **Severity:** high: an Isaac run with a road
+**Status:** fixed, landed as siw 31593ab (the live check passed). **Severity:** high: an Isaac run with a road
 layer on a winding record takes seconds a step and times out (086 C6b's Haruna budget).
 **Found:** 2026-11-24, scensim 118, 086 C6b's diagnostic.
 

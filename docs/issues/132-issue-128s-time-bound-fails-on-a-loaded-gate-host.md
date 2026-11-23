@@ -1,6 +1,6 @@
 # 132: issue 128's time bound fails on a loaded gate host
 
-**Status:** fixed on siw `issue-132`, not landed. **Severity:** low: a false failure in the
+**Status:** fixed, landed with siw 31593ab. **Severity:** low: a false failure in the
 gate, with nothing wrong in the code. **Found:** 2026-11-24, scensim 241's gate.
 
 ## What happens
