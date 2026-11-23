@@ -8,7 +8,11 @@ The model is built as the seats runner builds it (scensim.behaviour.seats.build:
 compiled for the run's record, anchors by scensim_batch.core.model_anchors), and stepped as the
 batch steps it: on its own state from the walker's Init pose, moved by
 scensim_batch.core.model_law, fed each frame the seats ego's truth (pose, velocity, and the
-acceleration differenced over the frame's sim time, as the runner does). Frames pair as the lag
+acceleration differenced over the frame's sim time, as the runner does). Every pose and
+velocity read from the truth is the entity's, through the runner's own conversion
+(scensim.behaviour.seats.entity_pose and entity_velocity, issue 130): the truth carries the
+body's, and the entity header's origin_offset is taken back off; a frame before the entity's
+first header has no entity pose, as the runner skips it. Frames pair as the lag
 does, by the truth's own cmd_frame: the walker's truth at frame j was moved by the command that
 answered the truth frame whose sim_frame is j's cmd_frame, so it is compared with the replay's
 state after its step on that frame. The comparison is in x and y (the world puts the walker's z
@@ -25,22 +29,48 @@ import sys
 from pathlib import Path
 
 
+def entity_states(trace, name):
+    """{frame: (x, y, yaw, vx, vy)} of entity ``name``: its pose and origin velocity in the map
+    frame, as the seats runner reads them from the truth (scensim.behaviour.seats.frame_of:
+    the body's pose and velocity, the latest entity header's origin_offset taken back off;
+    issue 130), or None where it is absent or has no header yet."""
+    from scensim.behaviour import seats
+    headers = sorted((h for h in trace.headers if h.name == name), key=lambda h: h.frame)
+    out, offset = {}, None
+    for f in trace.frames:
+        while headers and headers[0].frame <= f.frame:
+            o = headers.pop(0).origin_offset
+            offset = (o.x, o.y, o.yaw)
+        s = f.entities.get(name)
+        if s is None or s.sim_pose is None or offset is None:
+            out[f.frame] = None
+            continue
+        p = s.sim_pose
+        x, y, yaw = seats.entity_pose(p.x, p.y, p.yaw, offset)
+        wz = s.angular_velocity[2] if s.angular_velocity is not None else 0.0
+        vx, vy = seats.entity_velocity(s.velocity[0], s.velocity[1], wz, p.x, p.y, x, y)
+        out[f.frame] = (x, y, yaw, vx, vy)
+    return out
+
+
 def ego_inputs(trace, ego):
     """Per truth frame: (frame, sim_frame, dt, ego (x, y, vx, vy, ax, ay)) as the runner
-    computed them, or ego None where the ego is absent."""
+    computed them, the ego's entity pose and origin velocity (entity_states), or ego None
+    where the ego is absent."""
+    states = entity_states(trace, ego)
     out, prev_t, prev_v = [], None, None
     for f in trace.frames:
         t = f.sim_time_ns
         dt = (t - prev_t) / 1e9 if t is not None and prev_t is not None and t > prev_t else None
         prev_t = t if t is not None else prev_t
-        s = f.entities.get(ego)
+        s = states.get(f.frame)
         e = None
-        if s is not None and s.sim_pose is not None:
-            vx, vy = s.velocity[0], s.velocity[1]
+        if s is not None:
+            vx, vy = s[3], s[4]
             ax, ay = ((0.0, 0.0) if prev_v is None or dt is None else
                       ((vx - prev_v[0]) / dt, (vy - prev_v[1]) / dt))
             prev_v = (vx, vy)
-            e = (s.sim_pose.x, s.sim_pose.y, vx, vy, ax, ay)
+            e = (s[0], s[1], vx, vy, ax, ay)
         out.append((f.frame, f.sim_frame, dt, e))
     return out
 
@@ -58,9 +88,9 @@ def replay(trace, model, entity, ego, x0, y0, step_time=0.05, events=None):
     x, y, v = t(x0), t(y0), t(0.0)
     after = {}                                # sim_frame -> replay (x, y) after that frame's step
     mine = {}
-    present = {f.frame: f.entities.get(entity) for f in trace.frames}
+    present = entity_states(trace, entity)
     for frame, sim_frame, dt, e in ego_inputs(trace, ego):
-        if e is None or present.get(frame) is None or present[frame].sim_pose is None:
+        if e is None or present.get(frame) is None:
             continue
         dt = dt or step_time
         obs = {"x": a(x), "y": a(y), "ego_x": a(e[0]), "ego_y": a(e[1]), "ego_vx": a(e[2]),
@@ -74,13 +104,13 @@ def replay(trace, model, entity, ego, x0, y0, step_time=0.05, events=None):
         after[sim_frame] = (float(x), float(y))
     worst, at, compared = 0.0, None, 0
     for f in trace.frames:
-        s = f.entities.get(entity)
-        if s is None or s.sim_pose is None or not s.cmd_frame:
+        s, p = f.entities.get(entity), present.get(f.frame)
+        if s is None or p is None or not s.cmd_frame:
             continue
         r = after.get(s.cmd_frame)
         if r is None:
             continue
-        err = math.hypot(s.sim_pose.x - r[0], s.sim_pose.y - r[1])
+        err = math.hypot(p[0] - r[0], p[1] - r[1])
         compared += 1
         if err > worst:
             worst, at = err, f.frame

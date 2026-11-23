@@ -31,13 +31,21 @@ class Stub:
                  "accel_limit": np.array([100.0])}, np.array([1 if self.k == 2 else 0]))
 
 
-def trace(walker_y, cmd_frames):
+def header(name, frame=1, offset=(0.0, 0.0, 0.0)):
+    return gt.EntityHeader(frame=frame, name=name, kind="vehicle",
+                           declared=gt.DeclaredBox((0.0, 0.0, 0.0), (4.0, 2.0, 1.5)),
+                           origin_offset=gt.OriginOffset(*offset), sim_id=1, asset="x",
+                           asset_box=None)
+
+
+def trace(walker_y, cmd_frames, ego_offset=(0.0, 0.0, 0.0), ego_header_frame=1):
     st = lambda x, y, vx=0.0: gt.EntityState(          # noqa: E731
         ssv2=gt.Pose6(x, y, 0, 0, 0, 0), sim_pose=gt.Pose6(x, y, 0, 0, 0, 0),
         velocity=(vx, 0.0, 0.0), angular_velocity=(0.0, 0.0, 0.0),
         velocity_source="measured")
     t = gt.Trace(episode=gt.Episode(schema=3, episode=1, start_unix=0.0, npc_motion="tracked",
                                     map="Town01", step_time=0.05))
+    t.headers = [header("ego", ego_header_frame, ego_offset), header("walker")]
     for n, (wy, cf) in enumerate(zip(walker_y, cmd_frames), start=1):
         w = st(10.0, wy)
         w = gt.EntityState(**{**w.__dict__, "cmd_frame": cf})
@@ -66,6 +74,34 @@ class Replay(unittest.TestCase):
         self.assertAlmostEqual(r["max_xy_error_m"], 0.05, places=9)
         self.assertEqual(r["at_frame"], 4)
         self.assertFalse(r["events_match"])
+
+
+    def test_the_ego_is_read_as_its_entity_as_the_runner_reads_it(self):
+        """Issue 130: the truth carries the body; the replay takes the origin_offset back off
+        through the runner's own conversion (seats.entity_pose, entity_velocity)."""
+        from scensim.behaviour import seats
+        t = trace([0.0] * 3, [0, 101, 102], ego_offset=(1.387, 0.0, 0.0))
+        body = t.frames[1].entities["ego"]
+        e = rp.ego_inputs(t, "ego")[1][3]
+        x, y, _ = seats.entity_pose(body.sim_pose.x, body.sim_pose.y, body.sim_pose.yaw,
+                                    (1.387, 0.0, 0.0))
+        self.assertEqual((e[0], e[1]), (x, y))
+        self.assertAlmostEqual(e[0], -1.387, places=12)   # body at 0 facing +x: origin behind
+        self.assertEqual((e[2], e[3]), (8.0, 0.0))          # no yaw rate: the body's velocity
+
+    def test_the_origin_velocity_takes_off_the_yaw_rate_times_the_offset(self):
+        t = trace([0.0] * 2, [0, 101], ego_offset=(1.387, 0.0, 0.0))
+        f = t.frames[1]
+        ego = f.entities["ego"]
+        f.entities["ego"] = gt.EntityState(**{**ego.__dict__, "angular_velocity": (0.0, 0.0, 0.5)})
+        x, y, yaw, vx, vy = rp.entity_states(t, "ego")[f.frame]
+        self.assertAlmostEqual(vx, 8.0, places=12)
+        self.assertAlmostEqual(vy, -0.5 * 1.387, places=12)   # v - w x r, r = +1.387 x
+
+    def test_a_frame_before_the_entitys_header_is_skipped_as_the_runner_skips_it(self):
+        t = trace([0.0, 0.05, 0.10], [0, 101, 102], ego_header_frame=2)
+        self.assertIsNone(rp.ego_inputs(t, "ego")[0][3])
+        self.assertIsNotNone(rp.ego_inputs(t, "ego")[1][3])
 
 
 if __name__ == "__main__":

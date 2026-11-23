@@ -72,6 +72,13 @@ decisions in those runs were made against an ego 1.387 m ahead of its entity, on
 alike. A rerun of their decision frames is not needed for those exits: what they checked, the
 lag and the two sides' agreement, does not depend on which pose both read.
 
+K12's recorded check 2 results stand as measured with the tool of their day:
+`k12_walker_replay.py` then read the ego's body pose, as the seats runner did. Since 2026-11-24
+(243) it reads every entity through the runner's own conversion (`seats.entity_pose`,
+`seats.entity_velocity`). Before that change it disagreed with the fixed runner on K10's recheck
+runs (each event 3 frames early, 0.210 m); after it, on the same two runs (L seeds 2 and 31,
+scensim dcce0cdb): max xy error 1.49e-4 m on each, events on the same frames.
+
 ## The fix
 
 - `ego_states` takes the offset off with `gap_geometry.entity_pose_from_actor`, as
