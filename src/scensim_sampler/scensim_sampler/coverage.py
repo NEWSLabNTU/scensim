@@ -111,6 +111,8 @@ def outcomes_from_jsonl(path):
                                     "error": bool(o.get("error")),
                                     "error_kind": o.get("error_kind") if o.get("error") else None,
                                     "seeds_not_applied": bool(o.get("seeds_not_applied")),
+                                    # the search's score (092 K11): lower is more critical
+                                    "score": o.get("score"),
                                     "run": o.get("run") or f"{Path(path).name}:{i + 1}"}))
     return out
 
@@ -203,6 +205,20 @@ def _rate(rows, failure):
         return {"n": n, "failures": k,
                 "refused": "runs from more than one proposal or base: "
                            + ", ".join(sorted(f"{p}/{b}" for p, b in props))}
+    stages = {json.dumps(r.get("search"), sort_keys=True) for r, _ in rows}
+    s0 = rows[0][0].get("search")
+    if len(stages) == 1 and s0 and s0.get("stage") == "fresh":
+        # a search's fresh stage (092 K11): exact weights (search.normaliser carries the
+        # constraints' constants), so the plain estimator, as the search reports it; the
+        # constants' own error is in the search's report, not here
+        from .search import plain_estimate
+        e = plain_estimate([float(r["log_weight"]) for r, _ in rows], s0["normaliser"],
+                           [_failed(o, failure) for _, o in rows], 0.0)
+        return {"n": n, "failures": k, "rate": e["p"], "interval": tuple(e["interval"]),
+                "interval_method": e["interval_method"], "weighted": True,
+                "n_eff": e["n_eff"], "n_eff_share": e["n_eff"] / n,
+                "heavy_weights": e["n_eff"] / n < HEAVY,
+                "proposal": next(iter(props))[0], "approximate": True}
     lw = [float(r["log_weight"]) for r, _ in rows]
     top = max(lw)
     w = [math.exp(x - top) for x in lw]   # in log space: a small weight does not underflow

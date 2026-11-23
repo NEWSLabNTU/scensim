@@ -59,7 +59,7 @@ sampler: {name: scensim_sampler, version: 0.1.0, plugins: [importance], run_seed
 | `proposal` | `{id, sha256}` or null | the distribution it was drawn from instead of the base (purpose A, a rate) |
 | `weight` | number ≥ 0 | base density / proposal density at `values`; 1 without a proposal |
 | `log_weight` | number | its natural logarithm, which does not underflow; 0 without a proposal |
-| `search` | `{id, generation}` or null | the adaptive search that proposed it (purpose B); reserved, the sampler writes null |
+| `search` | `{id, generation, stage, normaliser}` or null | the search that drew it (purpose B, section 10): its id, the generation, the stage (`cross_entropy`, or `fresh` for the draws the rate is estimated from), and `normaliser`, Z_q / Z_b, the constraints' acceptance under the proposal over that under the base (1 without constraints), so `weight` times it is the exact density ratio. Null from a plain draw |
 | `world` | `{name, hash}` | the world it ran in. Written by the executor that binds it (the field is optional in a drawn record, required by `check --bound`) |
 | `car` | `{name, spec_hash}` | the car spec it ran with, by `sim_vehicle_spec`'s `spec_hash`; bound as `world` is |
 | `sampler` | `{name, version, plugins, run_seed, index, env}` | what drew it: the plug-ins in order, the run's seed, the sample's index in the run, and `env` `{python, numpy, platform}`, the host's versions, to trace a record that does not redraw the same (numpy's streams may change between versions; libm may differ in the last bit) |
@@ -307,7 +307,45 @@ not record yet.
 
 ## 9. What is not here yet
 
-- **Adaptive search (purpose B).** `search` is reserved for it.
 - **Binding `world` and `car`.** The executors do this (roadmap 092 K2, K3).
 - **More than one fitted base per scenario.** A version 1 record names one, and the sampler
   refuses two.
+
+## 10. The search (purpose B)
+
+`scensim-sample search` (roadmap 092 K11) runs the cross-entropy method over one cell of a
+scenario, against its fitted base, stepped from outside so any executor can run the draws:
+
+```
+scensim-sample search init spec.yaml -o dir         # g0.yaml (a proposal) and g0.jsonl
+scensim-sample search next dir --outcomes out.jsonl # refit: g1, ..., then the fresh stage
+scensim-sample search report dir [--json r.json]    # the rate and the failures found
+```
+
+The spec:
+
+```yaml
+search: 1
+id: cs1_day_dry
+scenario: walker_dartout.xosc      # a distribution file, or a scenario with model:
+model: models/walker_dartout.yaml
+variables: [ttc_entry, ego_speed]  # the base's variables the search moves
+n: 1000                            # draws a generation, and in the fresh stage
+seed: 7
+threshold: 0                       # a run fails at a score at most this (default 0)
+```
+
+The outcomes are a JSONL of `{record, outcome: {score, error}}` for every record of the stage,
+`record` the record or its id. The score is lower for more critical: the ego's closest gap, box
+to box, in metres, as `python3 -m scensim.truth closest` gives it. A run with an error is left
+out and counted.
+
+Each generation is a proposal file, drawn as the defensive mixture 0.9 g_t + 0.1 base, so every
+weight is at most 10 times the normaliser. The rate comes only from the fresh stage, N new
+draws from the last mixture, with the plain estimator mean(w f), its standard error and a normal
+95 % interval; Kish's n_eff and the largest weight are reported beside it. The generations' own
+estimate is printed as a diagnostic: they chose their densities from their own draws, and it is
+biased. A searched variable is a normal, log-normal, uniform (searched as a normal within its
+range) or categorical with constant parameters; a latent, grouped, conditional or other
+variable is refused by name. The parameters are fixed: rho 0.1, alpha 0.7, beta 0.1, at most 20
+generations, a categorical floor of 0.01.

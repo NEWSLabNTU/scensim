@@ -575,7 +575,7 @@ The distribution file says four things. Each lands in the sample record (CS1).
 | the base | `UserDefinedDistribution type="scensim.sampler:joint"` naming a fitted model (its header names dataset, version, licence) | `base` with its hash |
 | constraints | in the model file (`constraints:`), evaluated on each draw, may read world knobs' physical values | the rejection count for the batch |
 | the proposal (purpose A) | `proposal:` in the suite, not in the scenario: the same scenario is used for rates and for search | `proposal`, `weight` |
-| the search (purpose B) | `search:` in the suite (bandit over cells, cross-entropy, Bayesian optimisation) | `search` id and generation |
+| the search (purpose B) | a search spec (`search: 1`), not in the scenario; built: the cross-entropy method over one cell, `scensim-sample search` (sample-record.md section 10, roadmap 092 K11) | `search` id, generation, stage, normaliser |
 
 Two rules follow from this:
 

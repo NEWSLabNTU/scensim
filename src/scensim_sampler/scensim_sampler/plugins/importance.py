@@ -10,7 +10,12 @@ The weights are not normalised, and must not be used unnormalised. A draw where 
 density is 0 is drawn again, which truncates the proposal to the base's support, and
 constraints truncate both: each changes a density by a constant, and the constants are not
 computed. They cancel in the self-normalised estimate sum(w * f) / sum(w), which is unbiased
-as n grows; a plain mean(w * f), for a rare-event probability say, is biased by them."""
+as n grows; a plain mean(w * f), for a rare-event probability say, is biased by them.
+
+`defensive: beta` (0 <= beta < 1, roadmap 092 K11): draw from the mixture
+(1 - beta) proposal + beta base instead, and weight by base / mixture (Hesterberg 1995). Every
+weight is then at most 1 / beta (before the constraints' constants), and a proposal narrower than
+the base cannot make the weights' variance infinite."""
 import math
 from pathlib import Path
 
@@ -25,10 +30,14 @@ def load_proposal(path):
     where = str(path)
     if not isinstance(doc, dict) or doc.get("proposal") != 1:
         raise SpecError(f"{where}: `proposal: 1` (the format's version) is required")
-    extra = set(doc) - {"proposal", "name", "base", "variables"}
+    extra = set(doc) - {"proposal", "name", "base", "variables", "defensive"}
     if extra:
         raise SpecError(f"{where}: unknown {sorted(extra)} (a proposal has proposal, name, "
-                        f"base, variables)")
+                        f"base, variables, and optionally defensive)")
+    beta = doc.get("defensive", 0.0)
+    if isinstance(beta, bool) or not isinstance(beta, (int, float)) or not 0 <= beta < 1:
+        raise SpecError(f"{where}: defensive is the base's share of the mixture, 0 <= beta < 1, "
+                        f"not {beta!r}")
     for k in ("name", "base"):
         if not isinstance(doc.get(k), str) or not doc[k].strip():
             raise SpecError(f"{where}: {k} is required")
@@ -45,6 +54,7 @@ class Importance(ModelPlugin):
         if proposal_path is None:
             _, proposal_path = model_path(content, base_dir, parameter, "importance")
         doc, sha, entries = load_proposal(proposal_path)
+        self.beta = float(doc.get("defensive", 0.0))
         base_path = (Path(proposal_path).parent / doc["base"]).resolve()
         if base_plugin is not None:
             if Path(base_plugin.path).resolve() != base_path:
@@ -62,6 +72,8 @@ class Importance(ModelPlugin):
         self.path = base_path
 
     def draw(self, rng, index, values):
+        if self.beta > 0 and rng.random() < self.beta:
+            return self.base_model.sample(rng, values)
         return self.proposal_model.sample(rng, values)
 
     def log_weight(self, values):
@@ -69,6 +81,13 @@ class Importance(ModelPlugin):
         if lb == -math.inf:
             return lb
         lq = self.proposal_model.logpdf(values)
+        if self.beta > 0:
+            a = math.log(self.beta) + lb
+            if lq == -math.inf:
+                return lb - a
+            b = math.log1p(-self.beta) + lq
+            top = max(a, b)
+            return lb - (top + math.log(math.exp(a - top) + math.exp(b - top)))
         if lq == -math.inf:
             raise SpecError(f"{self.proposal['id']}: drew values its own density gives 0")
         return lb - lq

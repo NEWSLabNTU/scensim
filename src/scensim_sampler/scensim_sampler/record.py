@@ -214,10 +214,14 @@ def check(rec, scenario=None, bound=False):
         out.append("proposal: a proposal is weighted against a base, and base is null")
     if "search" in rec and rec["search"] is not None:
         s = rec["search"]
-        if (not isinstance(s, dict) or set(s) != {"id", "generation"}
-                or not isinstance(s["id"], str)
-                or not (isinstance(s["generation"], int) and s["generation"] >= 0)):
-            out.append("search: null or {id, generation >= 0}")
+        if (not isinstance(s, dict) or set(s) != {"id", "generation", "stage", "normaliser"}
+                or not isinstance(s["id"], str) or not s["id"]
+                or isinstance(s["generation"], bool)
+                or not (isinstance(s["generation"], int) and s["generation"] >= 0)
+                or s["stage"] not in ("cross_entropy", "fresh")
+                or not (_number(s["normaliser"]) and s["normaliser"] > 0)):
+            out.append("search: null or {id, generation >= 0, stage (cross_entropy or fresh), "
+                       "normaliser > 0}")
     if "world" in rec:
         v = rec["world"]
         if (not isinstance(v, dict) or set(v) != {"name", "hash"}

@@ -10,6 +10,7 @@
 import argparse
 import json
 import sys
+from pathlib import Path
 
 import yaml
 
@@ -127,6 +128,32 @@ def compilable_cmd(a):
     return 0 if all(v.compiles for v in verdicts) else 1
 
 
+def search_cmd(a):
+    from . import search as S
+    if a.step == "init":
+        st = S.init(a.spec, a.output)
+        g = st["generations"][-1]
+        print(f"search {st['id']}: g0 drawn, {a.output}/{g['records']} (the base's acceptance "
+              f"{st['z_base']:.4g}); run them, then: search next {a.output} --outcomes <jsonl>")
+        return 0
+    if a.step == "next":
+        st = S.next_step(a.dir, a.outcomes)
+        g = st["generations"][-1]
+        if st["phase"] == "done":
+            S.print_report(S.report(a.dir), sys.stdout)
+        else:
+            prev = st["generations"][-2]
+            print(f"search {st['id']}: g{prev['generation']} level {prev['level']}, elite "
+                  f"{prev['elite']}; drew {g['stage']} g{g['generation']}: "
+                  f"{a.dir}/{g['records']}")
+        return 0
+    rep = S.report(a.dir)
+    if a.json:
+        Path(a.json).write_text(json.dumps(rep, indent=1, sort_keys=True) + "\n")
+    S.print_report(rep, sys.stdout)
+    return 0
+
+
 def list_plugins(a):
     for name, target in sorted(plugins.known().items()):
         print(f"{plugins.PREFIX}{name}  {target}")
@@ -177,6 +204,21 @@ def main(argv=None):
     k.add_argument("--all", action="store_true", help="list every refusal, not only the first")
     k.add_argument("--json", help="also write the verdicts here (scensim.compilable/1)")
     k.set_defaults(func=compilable_cmd)
+    s = sub.add_parser("search", help="the cross-entropy search over one cell (purpose B, "
+                                      "roadmap 092 K11), stepped from outside")
+    ss = s.add_subparsers(dest="step", required=True)
+    si = ss.add_parser("init", help="start a search: g0 and its draws")
+    si.add_argument("spec", help="the search's spec (search: 1)")
+    si.add_argument("-o", "--output", required=True, help="a new directory for the search")
+    sn = ss.add_parser("next", help="read a generation's outcomes; draw the next (or the "
+                                    "fresh stage, or finish)")
+    sn.add_argument("dir")
+    sn.add_argument("--outcomes", required=True, help="a JSONL of {record, outcome: {score, "
+                                                      "error}}, every record of the stage")
+    sr = ss.add_parser("report", help="the estimate and the failures found")
+    sr.add_argument("dir")
+    sr.add_argument("--json", help="also write the report here (scensim.search/1)")
+    s.set_defaults(func=search_cmd)
     p = sub.add_parser("plugins", help="the sampler plug-ins found")
     p.set_defaults(func=list_plugins)
     a = ap.parse_args(argv)
