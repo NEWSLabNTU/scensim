@@ -5,6 +5,14 @@ write the agreement table's row against the run.
     python agreement_run.py --run <seats run dir> --scenario <xosc> --world <map export .json> \\
         --map <map dir> --ego <aib ego.yaml> --commands <replay commands> [--engine A|B] \\
         [--out row.json]
+    python agreement_run.py --ego-from-truth --run <seats run dir> --scenario <xosc> \\
+        --world <map export .json> --map <map dir> [--out row.json]
+
+`--ego-from-truth` (092 K10's walker agreement): the batch ego plays the seats ego's truth back
+(scensim_batch.playback), so no engine runs and no Isaac starts; the comparison is of the
+behaviour models (their poses a frame on, as K12's lag 1 moves a commanded entity, and their
+decisions against the attachment's decisions.jsonl), SSv2's default vehicles and the
+storyboard. The record is the run's sample.json, else its seed and parameters.
 
 The seats run is a `scensim run` of the scenario with the ego as `replay_pilot` on the same
 commands; its directory holds the truth (gap_trace/), the storyboard log (context.jsonl) and
@@ -52,14 +60,77 @@ def _seats_outcome(run_dir):
     return json.loads(p.read_text()).get("verdict")
 
 
+def from_truth(a, run_dir, trace, S, A):
+    """092 K10's agreement: BatchRun on the seats ego's truth (no engine), the models' poses
+    and decisions, the storyboard and the outcome against the seats run."""
+    from scensim_batch import core
+    from scensim_batch.compile import compile_scenario
+    from scensim_batch.playback import NoComponent, TruthPlayback
+    from scensim_batch.world_lanelet import LaneletWorld
+    from sim_vehicle_ecu import batch as ecu_batch
+
+    step_time = trace.episode.step_time
+    steps = len(trace.frames) - S
+    world = LaneletWorld.load(a.world, map_dir=a.map)
+    record = json.loads(Path(a.record).read_text()) if a.record else A.run_record(run_dir)
+    c = compile_scenario(a.scenario, [record], world)
+    ego_name = c.entities[c.of_role("ego")[0]].name
+    models = [c.entities[i].name for i in c.of_role("model")]
+    states = A.ego_states(trace, S, steps, ego_name)
+    run = core.BatchRun(c, world, TruthPlayback(states),
+                        ecu_batch.load_batch(NoComponent, {}, {}, [0]), points=a.route_points,
+                        allow_loop=True, start_frames=S, step_time=step_time)
+    run.reset()
+    rec = A.BatchRecorder(run)
+    rec.record(run.obs)
+    end = {}
+    cmd = {"valid": [True], "acceleration": [0.0], "velocity": [0.0], "gear": [2],
+           "tire_angle": [0.0]}
+    for _ in range(steps - 1 + END_SLACK):
+        rec.record(run.step(cmd, step_time))
+        out = run.outcome()[0]
+        if out != "running":
+            end["outcome"], end["step"] = out, rec.k - 1
+            break
+    outcome = end.get("outcome", run.outcome()[0])
+    entities = [e.name for e in c.entities]
+    first = min(f.frame for f in trace.frames)
+    att = Path(a.attachment) if a.attachment else next(
+        (p.parent for p in sorted(run_dir.rglob("decisions.jsonl"))), run_dir)
+    pose = {n: ("sim" if n == ego_name or n in models else "ssv2") for n in entities}
+    seats = {"poses": A.seats_poses(trace, S, steps, entities, pose=pose,
+                                    shift={n: 1 for n in models}),
+             "steps": A.context_steps(run_dir / "context.jsonl", step_time)
+             if (run_dir / "context.jsonl").exists() else {},
+             "outcome": _seats_outcome(run_dir),
+             "decisions": A.seats_decisions(att / "decisions.jsonl", S, first)}
+    batch = {"poses": rec.poses, "steps": rec.steps, "decisions": rec.decisions,
+             "outcome": {"success": "passed", "failure": "failed"}.get(outcome, outcome)}
+    if a.dump:
+        Path(a.dump).write_text(json.dumps({"seats": seats["poses"], "batch": batch["poses"]}))
+    row = {"scenario": Path(a.scenario).name, "engine": "none (the seats ego played back)",
+           "S": S, "steps": steps, "batch_end_step": end.get("step"), "models": models,
+           "record": record, **A.compare(seats, batch)}
+    text = json.dumps(row, indent=1)
+    if a.out:
+        Path(a.out).write_text(text + "\n")
+    print(text, flush=True)
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", required=True)
     ap.add_argument("--scenario", required=True)
     ap.add_argument("--world", required=True)
     ap.add_argument("--map", required=True, help="the map directory the run used")
-    ap.add_argument("--ego", required=True)
-    ap.add_argument("--commands", required=True)
+    ap.add_argument("--ego", help="aib's ego config (engine runs)")
+    ap.add_argument("--commands", help="the replay pilot's commands (engine runs)")
+    ap.add_argument("--ego-from-truth", action="store_true",
+                    help="play the seats ego's truth back: no engine, no Isaac (092 K10)")
+    ap.add_argument("--attachment", default="",
+                    help="with --ego-from-truth: the attachment's directory (its "
+                         "decisions.jsonl); default the run's first that holds one")
     ap.add_argument("--record", default=None, help="the run's sample record (JSON); none: {}")
     ap.add_argument("--engine", choices=("A", "B"), default="A")
     ap.add_argument("--physics-dt", type=float, default=1 / 60,
@@ -83,6 +154,10 @@ def main(argv=None):
                          "before it dropped)")
     sys.path.insert(0, str(HERE.parent))
     from scensim_batch import agreement as A
+    if a.ego_from_truth:
+        return from_truth(a, run_dir, trace, S, A)
+    if not a.ego or not a.commands:
+        raise SystemExit("--ego and --commands are needed unless --ego-from-truth")
     rows = A.replay_log(run_dir / "replay_pilot.jsonl")
     cmd0 = A.first_command(rows)
     if cmd0 is None:

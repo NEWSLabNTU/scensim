@@ -56,22 +56,84 @@ def hold_steps(trace, start_frames, command0):
     return None
 
 
-def seats_poses(trace, start_frames, steps, entities, pose="ssv2"):
+def seats_poses(trace, start_frames, steps, entities, pose="ssv2", shift=None):
     """{entity: [(x, y, yaw) | None] for k in 0..steps-1}: seats frame S + k's poses. `pose`
     {entity: "ssv2" | "sim"}, or one for all: SSv2's pose (what it drives) or the simulator's
-    (what physics did: the ego's)."""
+    (what physics did: the ego's). `shift` {entity: frames}: that entity's pose from frame
+    S + k + shift (092 K10: a commanded walker moves a frame after the truth its model read)."""
     frames = sorted(trace.frames, key=lambda f: f.frame)
     first = frames[0].frame
     by = {f.frame: f for f in frames}
     out = {e: [] for e in entities}
+    shift = shift or {}
     for k in range(steps):
-        f = by.get(first + start_frames + k)
         for e in entities:
+            f = by.get(first + start_frames + k + shift.get(e, 0))
             which = pose.get(e, "ssv2") if isinstance(pose, dict) else pose
             st = None if f is None else f.entities.get(e)
             p = None if st is None else (st.sim_pose if which == "sim" else st.ssv2)
             out[e].append(None if p is None else (p.x, p.y, p.yaw))
     return out
+
+
+def ego_states(trace, start_frames, steps, ego):
+    """The seats ego at frames S + k, k in 0..steps-1, for TruthPlayback (092 K10): the
+    simulator's pose and the truth's map-frame velocity, as the seats attachment reads them.
+    A frame without the ego holds the last state."""
+    frames = sorted(trace.frames, key=lambda f: f.frame)
+    first = frames[0].frame
+    by = {f.frame: f for f in frames}
+    out, last = [], None
+    for k in range(steps):
+        f = by.get(first + start_frames + k)
+        st = None if f is None else f.entities.get(ego)
+        if st is not None:
+            p = st.sim_pose
+            last = {"x": p.x, "y": p.y, "yaw": p.yaw,
+                    "vx_map": st.velocity[0], "vy_map": st.velocity[1]}
+        if last is None:
+            raise ValueError(f"the truth has no {ego!r} at frame {first + start_frames + k}")
+        out.append(dict(last))
+    return out
+
+
+def run_record(run_dir):
+    """The record a seats run's attachment built its models from (scensim.behaviour.seats's
+    record_of): the run's sample.json, else its seed and parameters from result.json."""
+    run_dir = Path(run_dir)
+    p = run_dir / "sample.json"
+    sc = {}
+    if (run_dir / "result.json").exists():
+        sc = json.loads((run_dir / "result.json").read_text()).get("scenario") or {}
+    if p.is_file():
+        rec = json.loads(p.read_text())
+    else:
+        seed = sc.get("seed")
+        rec = {"seeds": {"scenario": int(seed if seed is not None else 0)}}
+    rec.setdefault("values", {}).update(sc.get("parameters") or {})
+    return rec
+
+
+def seats_decisions(path, start_frames, first_frame):
+    """{entity: [(step, event)]} from the seats attachment's decisions.jsonl (092 K12 D6): a
+    decision written for truth frame f is batch step f - first - S, the step whose ego it read."""
+    out = {}
+    p = Path(path)
+    if not p.exists():
+        return out
+    for line in p.read_text().splitlines():
+        if line.strip():
+            o = json.loads(line)
+            out.setdefault(o["entity"], []).append(
+                (o["frame"] - first_frame - start_frames, o["event"]))
+    return out
+
+
+def decisions_agree(seats, batch):
+    """{entity: {seats, batch, agree}}: the same events at the same steps, per model entity."""
+    return {e: {"seats": seats.get(e, []), "batch": batch.get(e, []),
+                "agree": seats.get(e, []) == batch.get(e, [])}
+            for e in sorted(set(seats) | set(batch))}
 
 
 def taken_commands(trace, start_frames, steps, ego):
@@ -184,6 +246,7 @@ class BatchRecorder:
         self.paths = element_paths(run.storyboard) if run.storyboard is not None else {}
         self.poses = {e.name: [] for e in run.c.entities}
         self.steps = {}
+        self.decisions = {}      # {model entity: [(step, event)]} (092 K10)
         self.k = 0
 
     def record(self, obs):
@@ -196,6 +259,12 @@ class BatchRecorder:
             name = self.NAMES.get(int(sb.state[id(node)][self.slot]))
             if name is not None:
                 self.steps.setdefault(path, {}).setdefault(name, self.k)
+        if obs.get("model_events"):
+            from scensim.behaviour.walker import EVENTS
+            for ent, ev in obs["model_events"].items():
+                e = int(ev[self.slot])
+                if e:
+                    self.decisions.setdefault(ent, []).append((self.k, EVENTS.get(e, str(e))))
         self.k += 1
 
 
@@ -243,8 +312,10 @@ def compare(seats, batch):
     """The agreement table's row: `seats` and `batch` are {poses, steps, outcome}."""
     traj = trajectory_error(seats["poses"], batch["poses"])
     trig = trigger_steps(seats["steps"], batch["steps"])
+    dec = ({"decisions": decisions_agree(seats.get("decisions", {}), batch.get("decisions", {}))}
+           if seats.get("decisions") or batch.get("decisions") else {})
     return {"outcome": {"seats": seats["outcome"], "batch": batch["outcome"],
                         "agree": seats["outcome"] == batch["outcome"]},
-            "trajectory": traj, "triggers": trig,
+            "trajectory": traj, "triggers": trig, **dec,
             "trigger_offsets": sorted({r[2] for row in trig.values() for r in row.values()
                                        if r[2] is not None})}

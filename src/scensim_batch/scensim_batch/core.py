@@ -571,8 +571,11 @@ class Models:
         if not self.idx:
             return
         n = self.run.c.n
-        vx = st["v"] * torch.cos(st["yaw"])
-        vy = st["v"] * torch.sin(st["yaw"])
+        if "vx_map" in st:   # the map-frame velocity, what the walker sees (092 K10's agreement)
+            vx, vy = st["vx_map"], st["vy_map"]
+        else:                # v along the body: a sliding ego's lateral velocity is dropped
+            vx = st["v"] * torch.cos(st["yaw"])
+            vy = st["v"] * torch.sin(st["yaw"])
         if self._prev_v is None:
             ax, ay = torch.zeros_like(vx), torch.zeros_like(vy)
         else:
