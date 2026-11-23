@@ -107,7 +107,8 @@ The following steps push 0.7-3 kN against 2-9 kN down, then nothing.
 
 C6b's check that a loose rock moves at least 5 cm rests on R4's spike alone (066 R4's first slice,
 `spikes/rock_fixtures.py`: 0.2-1.0 m), no outside source and no measurement of a real tyre over a
-loose rock. A tyre climbing a rock presses it down as it pushes it (this issue's trace), so a rock
+loose rock. **No physical source exists for it, so C6b's loose-rock "moves" check is unfounded
+until one does** (133); meanwhile a loose rock's movement is recorded as measured, not judged. A tyre climbing a rock presses it down as it pushes it (this issue's trace), so a rock
 pinned while the tyre is on it may be physical, and R4's 0.2-1.0 m may be what is off. Neither is
 shown yet.
 
@@ -170,3 +171,16 @@ most), 23.2 kN on the base (7.5 kN at most). **The prediction holds: the `roadBa
 not keep the rock off the base.** A fault of its own (number to come from 133). It does not by
 itself explain the pinning: the rock's total support and its friction are what they would be on
 one surface, and R4's spike, whose rocks collide with its base on purpose, pins loose_15 too.
+
+## The fifth test: R4's spike on the plant before issue 108 (before the run)
+
+Issue 108 divided every tyre's friction by 1.154 after R4's slice (aib ff5e72b). R4's spike as
+it is today (siw 086-c6b, fe69aa9's tree) with aib at 3cd2b7d, before 108, on loose_15 (the spike
+runs its four fixtures; loose_15 is the one judged). If loose_15 moves 0.2 m or more, issue 108
+explains the change and R4's figure was right for its plant; if not, the bisect (a) follows
+(133).
+
+- **118's prediction:** it stays pinned (under 1 cm). The push on a rock is its share of the
+  tyre's load times the face's gradient (`rocks.reactions`), bounded by the tyre surface's speed
+  (`rocks.limit`); the tyre's friction does not enter it. The grip changes the wheel's PhysX
+  force along the road, which hardly changes at a held 40 km/h.
