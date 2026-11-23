@@ -513,47 +513,58 @@ Rules:
   (`{parameter: {value, anchor, source}}`). Where a target cannot
   honour a knob (fog on a target without fog), it refuses the knob by name.
 
-## 4. Behaviour models (D3, first draft)
+## 4. Behaviour models (D3)
 
-- **Naming.** A scenario names a behaviour model through `ObjectController` properties:
-  `model` is an entry point, and the other properties are its parameters, which can
-  themselves be sampled.
-- **The interface** (092 K10). A model is a class with a parameter schema (typed and ranged,
-  so the sampler can draw the `ObjectController` properties), `reset(params, state0)` and
-  `step(state, obs, dt) -> (state, action)`, written once under 092 S3's array API contract:
-  numpy on seats, torch in a batch, where `step_batch` is the same code over a slot axis. Its
-  randomness is a counter-based stream from the entity's seed in the record
-  (`seeds.pilots.<entity>`), so both forms draw the same numbers. Its observation is truth only:
-  its own pose and speed, the other actors near it (the ego always: pose, velocity, kind, box),
-  and the anchors the scenario binds (CS1's conflict point). Its action is a kinematic command
-  for its entity (speed, heading or a path target, an acceleration limit, within the catalog's
-  limits), the motion SSv2 itself gives a pedestrian. It also writes its decisions (`wait`,
-  `go`, `abort`) into the truth, for the agreement check and coverage. An OpenSCENARIO action
-  form was considered and refused: a storyboard condition cannot express a decision taken
+As built by 092 K10 and K12 (2026-11-24); the first draft's corrections are folded in, and
+what was not built is said so at the end.
+
+- **Naming.** A scenario names a behaviour model through the entity's `ObjectController`: the
+  controller's name is `model`, its property `model` the entry point
+  (`scensim.behaviour:gap_acceptance_walker`), and its other properties the model's
+  parameters, which may be scenario parameters and so sampled. `testbench check` recognises it.
+- **The interface** (`scensim.behaviour`). A model is a class with a parameter schema
+  (`params_schema`: each parameter's type, default and range, refused outside it), built as
+  `Model(params, seeds, anchors, xp)` for every slot at once, with `reset(mask)` and
+  `step(obs, dt) -> (action, events)`. It is written once over an array namespace
+  (`sim_vehicle_ecu.xp`): numpy for one entity on seats, torch over a slot axis in a batch, the
+  same code (K10 (ii): bit for bit on numpy and torch). Its randomness comes from the entity's
+  seed in the record (`seeds.pilots.<entity>`), so both forms draw the same numbers. Its
+  coefficients are never constants in the code: a model reads a named, cited parameter set
+  (`sets/<name>.yaml`, the walker's `khaki2021_restricted`), and the record names the set and
+  its sha256.
+- **Its observation** is truth only: its own position, the ego's position, its map-frame
+  velocity and acceleration, and the anchors the scenario binds (CS1's kerb, far kerb and
+  conflict point, from the model's `anchor.*` properties and its Init pose). **Its action** is
+  a kinematic command for its entity: a speed, a heading and an acceleration limit, which the
+  world integrates (`model_law`: the speed toward the command within the limit, then along the
+  heading). Nothing is clamped to a catalog: OpenSCENARIO's Pedestrian has no Performance
+  element. **Its decisions** (`appear`, `go`, `reject`, `go_after`, ...) are events per step,
+  written beside the run, not into the truth (K12 D6): the agreement check reads them. An
+  OpenSCENARIO action form was refused: a storyboard condition cannot express a decision taken
   against the ego's live approach.
-- **On seats,** a behaviour model runs for its entity on the truth stream, and the world, not
-  SSv2, moves the entity. Two facts decide how (found in K10's planning, 2026-11-22):
-  - SSv2 takes a world-owned pose for any entity, but runs its behaviour afterwards. SSv2's
-    `API::updateEntitiesStatusInSim` (upstream's, not the fork's) applies the simulator's
-    returned status to every entity: the ego's pose and twist, and `setStatus` for every other
-    one, a pedestrian included. In the same frame SSv2 then runs the entity's behaviour, and a
-    pedestrian's controller name is loaded as a behaviour plugin. So SSv2 changes: the fork
-    gains a simulator-driven pedestrian for controller `model`, which runs no behaviour and
-    adopts the returned pose, as `simulator_autopilot` vehicles do, and SSv2's conditions read
-    the pose the world shows (092 K12's spec, corrected 2026-11-23).
-  - A `command` pilot does not see the other actors. The relay carries the agent protocol's
-    commands (reset, goal, speed limit, stop) and the agent's reports; a pilot sees its own car
-    only, over ROS on the vehicle side. The truth stream is K4's: `/scensim/truth` in the
-    scenario domain, which an attachment reads, following CARLA's tick gate when `lockstep:
-    true`. An attachment cannot command an entity, though. So the model runs as a K4
-    attachment, and the command channel (`entity_command`: to the world server with the tick
-    gate's acknowledgement, which moves the entity, read back to SSv2) is its own item, 092 K12,
-    since learned background agents need it too.
-- **In a batch,** a behaviour model is batched (`step_batch` over slots, like the control
-  component of 092 S3). A model without a batched form keeps the scenario on seats, with the
-  reason named.
-- **Shipping.** The starter models (a gap-acceptance walker, a car-follower with braking
-  events, an aggressive driver) are examples, per 092 D1.
+- **On seats** a model runs for its entity as a K4 attachment (`scensim.behaviour.seats`,
+  `commands: [walker]`) on the truth stream, and the world, not SSv2, moves the entity:
+  - the command goes to the world server with the tick gate's acknowledgement (K12's
+    `entity_command`), so under lockstep it takes effect the next frame, lag 1 by
+    construction; free-running the lag is measured and reported (`result.json`'s `commands`);
+  - SSv2's fork gives a pedestrian with controller `model` no behaviour: it adopts the pose the
+    world returns, as `simulator_autopilot` vehicles do, and SSv2's conditions read that pose,
+    two frames after the world's, as for the ego;
+  - pedestrians only, on CARLA only (K12).
+- **In a batch** a model entity (role `model`) is stepped after the ego's physics on that
+  step's ego and placed kinematically, and the batch reproduces seats: its command takes
+  effect a step later (the channel's lag 1), and the storyboard sees it two steps back, as the
+  ego (K10's agreement, 2026-11-24: decisions, trigger steps and outcome equal to seats on
+  K12's exit runs, the walker within 1.5e-4 m). So on both targets a model reacts one frame
+  (0.05 s at 20 Hz) after its decision, beyond its calibrated reaction time. A model without a
+  batched form keeps its scenario on seats, with the reason named.
+- **Shipped.** One starter model: the gap-acceptance walker for CS1
+  (`cs1_walker_gap_acceptance.xosc` in the batch, `k12_commanded` on seats). The car-follower
+  and the aggressive driver of the first draft are not built: a vehicle model needs K12's
+  vehicle side, a scope decision parked with the user (2026-11-24).
+- **Not covered.** An agreement with an engine in the loop (seats and batch driving the same
+  ego): K12 is CARLA-only and the batch's engines are Isaac's, so it waits until both targets
+  share an ego.
 
 ## 5. Sampling in the description (D4, first draft)
 
