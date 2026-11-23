@@ -1021,6 +1021,66 @@ peak (washboard: the minimum's distance from static) in kN; raycast, then sweep:
 - Neither is *too stiff* by the rule (no impulse more than 30 % over the reference, none
   still rising 10 %). C6b's rock checks may rest on this contact, judged by impulse or at a
   rate stated with the check; which rate scensim defaults to is a separate decision.
+
+#### C6b's rocks (spec written 2026-11-23, before any run; for 133's approval)
+
+R4's rocks on a record course: placed from the record's strips, R4's four fixtures driven as
+C6a drives, and the budget on Haruna. Checks by impulse against a reference wherever one
+exists (C6a3); a check on a peak names its physics rate; budget lines at 60 Hz, today's
+default, which is what users run (133).
+
+- **The code** (siw, a branch off main 38ada7b, with its unit tests):
+  - *Placement from the record.* R4's zones are the parametric section's (carriageway,
+    shoulder, ditch). On a corridor with stations a rock's zone is the record's strip at its
+    station: carriageway, shoulder, runoff (`runoff_len`), ditch (foreslope, bottom and
+    backslope to the section's extent); `rocks.Zones` gains a `runoff` cover. The
+    carriageway's cover is 0 unless the course gives one.
+  - *Fixed rocks* for a fixture: `rocks: {at: [[u, v, height, embed, loose], ...]}` (height
+    above the surface m, the share of the rock below it, loose or static), each a seeded R4
+    hull of Zingg's axes, the hull's long axis along the road.
+  - *`fixture_drive`* drives C6a's way with the rig's skid plate (`ground_clearance`, 0.138 m,
+    as the world server's ego has it; C6a's drives had none, which the fixtures there, all
+    under 15 cm but cleat_15, did not reach) and logs per PhysX step, beside C6a's columns,
+    PhysX's jounce per wheel and each fixed rock's pose.
+- **The fixture course, `fixture_c6b`**: C6a's straight road, level, with a record section
+  whose shoulder, runoff (1 m) and ditch are real strips, and R4's fixtures (`spikes/
+  rock_fixtures.py`) on the left lane:
+
+  | s (m) | fixture | rock | speed |
+  |---|---|---|---|
+  | 100 | embedded_15 | static, 15 cm proud, 30 cm long, under the left wheels | 40 km/h |
+  | 200 | loose_15 | loose, the same size (about 11 kg) | 40 km/h |
+  | 300 | loose_8 | loose, 8 cm, under the left tyres' outer edge | 40 km/h |
+  | 400 | boulder_35 | static, 35 cm, between the wheel tracks | 10 km/h |
+
+  Elsewhere, rocks placed from the record at R4's assumed cover (shoulder 1 %, runoff 1 %,
+  ditch 3 %, carriageway 0). Both wheel queries, as in C6a.
+- **The checks on the fixture:**
+  - *embedded_15*: the front-left wheel's excess impulse J (C6a3's measure, the hub from 1 m
+    before the rock to 1 m past it) within 30 % of R0's quarter car at 4 kHz over the rock's
+    top along the left track (the hull's own profile, the tyre's envelope); the wheel rises
+    at least 5 cm and the body pitches at least 0.3 deg (each against its 10 m before); no
+    step at PhysX's rigid limit (any wheel's jounce within 1 mm of its travel), any wheel.
+    The 60 Hz peak is reported beside R4's 57.5 kN, not judged.
+  - *loose_15, loose_8*: the rock moves (at least 5 cm) and is not lost (its centre stays
+    within 20 m and above the ground less 0.1 m); its largest speed at most the car's (R4's
+    bound: no faster than the surface pushing it); no step at the rigid limit.
+  - *boulder_35*: the skid plate strikes and the car high-centres: its speed under 0.5 m/s
+    within 3 s of the front axle reaching the boulder, the front axle past the boulder's
+    leading edge; no step at the rigid limit. The 60 Hz deceleration peak is reported.
+  - *placement*: no placed rock on the carriageway; each strip's placed cover (rocks' plan
+    area over the strip's area, over the course) within a factor of 2 of its k.
+- **The budget on Haruna** (C5's course rebuilt with rocks from its record at the same cover,
+  GPU0 with nothing else on it; `nvidia-smi` before each run in the log; 60 Hz):
+  - one ego, haruna_down under Autoware as C5 ran it, two runs with rocks and two without,
+    interleaved: the world server's frame p50 with rocks at most 5 ms over without, and its
+    p95 under 45 ms;
+  - two cars (`fixture_cost`'s drive, no Autoware or sensors) on the rebuilt course: frame
+    p50 at most 50 ms (real time). Reported beside it: the same with one car, and our contact.
+- **118's predictions:** every fixture check holds under both queries (R4's slice saw the
+  same behaviours on a flat base); the placement check holds; the one-ego budget holds (the
+  rocks are off the carriageway and few wake), the p95 bound on an idle GPU too; two cars keep
+  real time.
 - **The cost line again**: `fixture_cost` with 1, 2 and 4 cars under both queries at 60 Hz,
   on GPU0 with nothing else on it if the other session's job allows (`nvidia-smi` before each
   run, in the log), else as it is and said so; and 1 car at 120 and 240 Hz. Reported, not
