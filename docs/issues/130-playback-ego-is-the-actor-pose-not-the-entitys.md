@@ -79,6 +79,14 @@ K12's recorded check 2 results stand as measured with the tool of their day:
 runs (each event 3 frames early, 0.210 m); after it, on the same two runs (L seeds 2 and 31,
 scensim dcce0cdb): max xy error 1.49e-4 m on each, events on the same frames.
 
+K10's agreement table had the same gap in its ego row: `scensim_batch.agreement.seats_poses`
+with `pose="sim"` still gave the body's pose, so on K10's recheck runs the ego row read 1.387 m
+against the batch's entity pose (the decisions, walker and outcome rows were right). Since
+2026-11-24 (241) it takes the offset off, as `ego_states` does (test: a body 1.387 m ahead
+compares at its entity), and the row reads 0. The replay's change is scensim 79775334. K10's
+open recheck is closed: on those runs the decisions fall at the same frames on both sides
+(roadmap 092, "K10's open recheck").
+
 ## The fix
 
 - `ego_states` takes the offset off with `gap_geometry.entity_pose_from_actor`, as

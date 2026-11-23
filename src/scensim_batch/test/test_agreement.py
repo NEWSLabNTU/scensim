@@ -9,6 +9,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(HERE.parents[1] / "scensim_launch" / "scripts"))   # gap_geometry
 
 from scensim_batch import agreement as A   # noqa: E402
 
@@ -42,11 +43,24 @@ class Fr:
 
 
 @dataclass
+class Off:
+    x: float = 0.0
+    y: float = 0.0
+    yaw: float = 0.0
+
+
+@dataclass
+class Hd:
+    origin_offset: Off
+
+
+@dataclass
 class Tr:
     frames: list
+    entities: dict
 
 
-def trace(first=10, n=8, S=3, dt_ns=50_000_000):
+def trace(first=10, n=8, S=3, dt_ns=50_000_000, ego_offset=0.0):
     """Frames first..first+n-1; the ego at x = k (k scenario steps), the npc at 10 + 2k in SSv2
     and its body 0.1 m off; before S both still."""
     fr = []
@@ -55,7 +69,7 @@ def trace(first=10, n=8, S=3, dt_ns=50_000_000):
         fr.append(Fr(first + i, 1_000_000_000_000 + (i + 1) * dt_ns,
                      {"ego": St(P6(-9, 0, 0), P6(k, 0, 0)),
                       "npc": St(P6(10 + 2 * k, 0, 0), P6(10.1 + 2 * k, 0, 0))}))
-    return Tr(fr)
+    return Tr(fr, {"ego": Hd(Off(ego_offset)), "npc": Hd(Off())})
 
 
 class AgreementTest(unittest.TestCase):
@@ -65,6 +79,12 @@ class AgreementTest(unittest.TestCase):
         self.assertEqual([p[0] for p in s["ego"]], [0, 1, 2, 3])
         self.assertEqual([p[0] for p in s["npc"]], [10, 12, 14, 16])
         self.assertEqual(A.seats_poses(t, 6, 3, ["ego"], "sim")["ego"][2], None)  # past the end
+
+    def test_the_simulators_pose_is_compared_as_the_entitys(self):
+        """Issue 130: a body 1.387 m ahead of its entity (heading +x) compares at the entity."""
+        s = A.seats_poses(trace(ego_offset=1.387), 3, 2, ["ego"], pose="sim")
+        self.assertAlmostEqual(s["ego"][0][0], -1.387, places=12)
+        self.assertAlmostEqual(s["ego"][1][0], 1 - 1.387, places=12)
 
     def test_hold_is_paired_by_time(self):
         t = trace(first=10, S=3)

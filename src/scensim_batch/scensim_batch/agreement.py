@@ -59,8 +59,11 @@ def hold_steps(trace, start_frames, command0):
 def seats_poses(trace, start_frames, steps, entities, pose="ssv2", shift=None):
     """{entity: [(x, y, yaw) | None] for k in 0..steps-1}: seats frame S + k's poses. `pose`
     {entity: "ssv2" | "sim"}, or one for all: SSv2's pose (what it drives) or the simulator's
-    (what physics did: the ego's). `shift` {entity: frames}: that entity's pose from frame
-    S + k + shift (092 K10: a commanded walker moves a frame after the truth its model read)."""
+    (what physics did: the ego's), the latter as the entity's, the truth's `origin_offset`
+    taken off (issue 130), so it compares with the batch's entity poses. `shift` {entity:
+    frames}: that entity's pose from frame S + k + shift (092 K10: a commanded walker moves a
+    frame after the truth its model read)."""
+    gg = _gap_geometry()
     frames = sorted(trace.frames, key=lambda f: f.frame)
     first = frames[0].frame
     by = {f.frame: f for f in frames}
@@ -72,6 +75,9 @@ def seats_poses(trace, start_frames, steps, entities, pose="ssv2", shift=None):
             which = pose.get(e, "ssv2") if isinstance(pose, dict) else pose
             st = None if f is None else f.entities.get(e)
             p = None if st is None else (st.sim_pose if which == "sim" else st.ssv2)
+            if p is not None and which == "sim":
+                o = trace.entities[e].origin_offset
+                p = gg.entity_pose_from_actor(gg.Pose2D(p.x, p.y, p.yaw), o.x, o.y, o.yaw)
             out[e].append(None if p is None else (p.x, p.y, p.yaw))
     return out
 
@@ -80,7 +86,8 @@ def ego_states(trace, start_frames, steps, ego):
     """The seats ego at frames S + k, k in 0..steps-1, for TruthPlayback (092 K10): the
     entity's pose (the simulator's body pose with the truth's `origin_offset` taken back off,
     as scensim.truth.boxes does; issue 130) and its map-frame velocity (the truth's body
-    velocity less the yaw rate times the offset), as the seats attachment reads them. A frame without the ego holds the last state."""
+    velocity less the yaw rate times the offset), as the seats attachment reads them. A frame
+    without the ego holds the last state."""
     gg = _gap_geometry()
     o = trace.entities[ego].origin_offset
     frames = sorted(trace.frames, key=lambda f: f.frame)
