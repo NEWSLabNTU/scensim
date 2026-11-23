@@ -1337,7 +1337,25 @@ everywhere.
 - **Observation, not judged (133):** *rough_none* against the C6b budget's smooth *none* (pose
   error p95, NVTL p05, NDT iterations, tick): the roughness's effect on localization. They are
   different sessions, so this is not a pair.
-- **Predictions** are written here before the runs, once the sensor check is done.
+- **The sensor check's result (2026-11-24, read-only).** Motion BVH is **off**: Kit enables it
+  only through `SimulationApp`'s `enable_motion_bvh`, which the world server does not set (nor
+  aib, nor the host's `ISAAC_KIT_ARGS`); the deprecated `isaacsim.sensors.rtx` extension the
+  world server loads lists it only in its tests' arguments. The lidar follows the chassis:
+  `aib.isaac.sensors.Lidar.before_substep` puts it each substep at the body's full pose (pitch and
+  roll included) with the mount, and de-skews each point along that track. `scan_ground_filter`
+  is on (`ScanGroundFilterComponent` in the pointcloud container).
+- **Limitation, stated before the predictions (133).** C6d runs without motion BVH. The lidar's
+  following of the body, with its de-skew, covers the ego's own pitch and roll on the rough
+  road, which is what C6d measures; motion BVH matters for other objects moving within a scan.
+  Enabling it is issue 138 (a record: a world-server option or `ISAAC_KIT_ARGS`, its render cost
+  measured first).
+- **The maps' guard checks (2026-11-24).** Both pass `road_detail check`. The live guard: *rough_none*
+  passes (first frames' largest 5.0 s, no rock on the base); *rough_rocks* failed, 12 rocks on
+  the base road (issue 136) and a first frame of 10.4 s with a docs gate loading the CPU (to be
+  measured again on a quiet host before it is called a failure). On both maps the fixture car
+  stopped near s 265 m and rolled back (issue 137). C6d's runs wait until 136 and 137 are
+  understood.
+- **Predictions** are written here before the runs.
 
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
