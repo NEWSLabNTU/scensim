@@ -911,6 +911,10 @@ the 60 Hz rate (a load logged as each step's mean averages out washboard's 28.6 
     60 Hz value between 60 and 240 Hz. If it holds, the shortfall goes to C6c; if the body
     rise reaches the band with rate, the cause was the rate.
   - 118's prediction: H1, H2, H3 and H4 hold.
+- **The cost line again**: `fixture_cost` with 1, 2 and 4 cars under both queries at 60 Hz,
+  on GPU0 with nothing else on it if the other session's job allows (`nvidia-smi` before each
+  run, in the log), else as it is and said so; and 1 car at 120 and 240 Hz. Reported, not
+  judged.
 - **Approved by 133** (2026-11-23, as written): holding the vehicle's own integration at
   480 Hz while only our contact's and the logging's rate moves isolates the hypothesis. H1 to
   H4 are each judged alone; C6a's verdict stays failed.
@@ -1092,10 +1096,6 @@ default, which is what users run (133).
   real time.
 - **Approved by 133** (2026-11-23, with the plate's repeat first, 3 + 3 Haruna runs judged on
   medians, and the two cars named as a simplification).
-- **The cost line again**: `fixture_cost` with 1, 2 and 4 cars under both queries at 60 Hz,
-  on GPU0 with nothing else on it if the other session's job allows (`nvidia-smi` before each
-  run, in the log), else as it is and said so; and 1 car at 120 and 240 Hz. Reported, not
-  judged.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
