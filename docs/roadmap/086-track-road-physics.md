@@ -1199,11 +1199,13 @@ check; NAS "2026-11-23 086 C6b rock fixtures (118)". Raycast / sweep:
 The rocks were there, measured (133): 66 to 253 in the data, 35 to 49 in the stage, the case's
 loose rock awake when the wheel reached it.
 
-- **embedded_15** rides up as R4's did (9.5 cm against its 11.1), but carries half the
-  reference's impulse. A likely cause, not tested: the reference is a 1-D profile, the rock as
+- **embedded_15 fails the J check as written** (133): it rides up as R4's did (9.5 cm against
+  its 11.1), but carries half the reference's impulse. A likely cause, not tested: the reference is a 1-D profile, the rock as
   wide as the tyre's whole contact, while this rock (about 23 cm across, the tyre 23.5) meets
-  only part of R5's cams across the width.
-- **The loose rocks did not move**: the wheel climbed loose_15 (its load 12.7 kN) and left it
+  only part of R5's cams across the width. Untested; to be tested later with a reference that
+  covers the rock's width share of the tyre, its prediction first (133). The check is not
+  changed.
+- **The loose rocks did not move** (issue 122; the Haruna budget waits for it): the wheel climbed loose_15 (its load 12.7 kN) and left it
   where it lay, 1.5 cm on; R4's slice shoved the same rock 0.2-0.5 m on and 0.9-1.0 m aside, on
   a flat base without collision tiles. Not explained: the rock wakes, rests 7 mm lower on the
   tiles, and takes the push (`RockStream.push`) only as a rigid body; why its speed stays near
@@ -1217,8 +1219,8 @@ loose rock awake when the wheel reached it.
   size, and placement starts at 9 cm (smaller is gravel, a surface class), so the placed share
   is the truncation factor exp(-q 0.09), about 0.22, of k (q = 1.79 + 0.152 / k = 17.0). **The
   check amended after the results** (133): placed cover within a factor of 2 of 0.22 k. It
-  passes (0.227 % and 0.205 % against 0.217 %). fixture_c6b has no ditch, so its 3 % is not
-  tested.
+  passes (0.227 % and 0.205 % against 0.217 %). **The ditch is untested**: fixture_c6b has
+  none, so its 3 % cover placed nothing.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
