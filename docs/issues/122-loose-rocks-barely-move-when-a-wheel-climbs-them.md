@@ -68,3 +68,37 @@ friction (tangential) force, summed over its contacts.
   while the push lasts. Under sweep the share is spread differently over the footprint, which
   would explain its larger travel; R4's larger travel is not explained by this, and is a
   question for the second test's result.
+
+## The second test's result (2026-11-23)
+
+siw 1fe0e1f, aib ff5e72b, GPU0; NAS "2026-11-23 issue 122 push trace (118)". loose_15 moved 1.5 cm
+(raycast) and 7.9 cm (sweep), as in the first test. Each front and rear wheel pushes the rock
+over four PhysX steps; the first push of each wheel, raycast / sweep:
+
+| | front wheel | rear wheel |
+|---|---|---|
+| reaction, horizontal | 6.1 / 5.4 kN | 7.5 / 9.1 kN |
+| reaction, down | 12.1 / 4.5 kN | 7.8 / 9.6 kN |
+| `limit`'s scale (bound 3.5-3.8 m/s) | 0.50 / 0.52 | 0.38 / 0.34 |
+| applied, horizontal | 3.0 / 2.8 kN | 2.8 / 3.1 kN |
+| the rock's contact normal force (next step) | 12.2 / 5.0 kN | 7.9 / 9.7 kN |
+
+The following steps push 0.7-3 kN against 2-9 kN down, then nothing.
+
+- **The prediction holds on the push side**: the rock is pressed down at least as hard as it is
+  pushed, and `limit` halves or thirds the push, so the applied horizontal force (2.8-3.1 kN)
+  is a quarter to a half of the normal force under the rock (5-12 kN). With friction about 0.6
+  of the normal force, the push is under it in every step but sweep's first (2.8 kN against
+  0.6 x 5.0 = 3.0 kN, where the rock reached 0.9 m/s).
+- **Friction is not measured**: the contact report's impulse has no tangential part (0 at
+  every step), so the report gives the normal force only. Measuring the friction needs PhysX's
+  friction anchors (the full contact report).
+- **Found on the way:** the rock touches both its collision tile and the base road mesh
+  (`/World/env/Road`) at once, though the world's ground is in a group the rocks filter out. On
+  a section_in_base course the tile now lies on the base's surface (issue 120), so the two
+  coincide. Why the filter does not keep the rock off the base is open.
+- R4's slice (`spikes/rock_fixtures.py`, swb_isaac_world 61bb368) used the same `reactions`,
+  the same `limit` and the same rock material, and moved the rock 0.2-1.0 m. Next: run that
+  spike as it is today: if it still moves the rock, the cause is in the world server's path
+  (`RockStream`: waking, the speed it passes to `limit`, the ground it rests on); if it does
+  not, something shared changed since R4.
