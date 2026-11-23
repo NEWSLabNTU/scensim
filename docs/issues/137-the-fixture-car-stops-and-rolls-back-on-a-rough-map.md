@@ -146,3 +146,34 @@ Two defects, each on its own: (a) is ours, and it throws the car; (b) starts the
 wheel that brings (a) about. Whether (b) is a true strike (the plate's front edge reaching the
 wall's top) or PhysX acting on the face's plane beyond the 3 cm wall is not settled by this
 trace.
+
+## The fix (before the rerun)
+
+`_Car._planes` keeps each wheel's last PhysX hit and, at a refit, puts each wheel's c_i through
+its own last hit under the new slopes, the plane written about the hits' centre (x0, y0), not
+the world's origin: z = a (x - x0) + b (y - y0) + c_i. A wheel never on the ground takes the
+hits' mean. `test/test_issue_137.py`:
+
+- a refit 349 m out with the rear left off the ground: its base at its last hit is that hit's
+  height (to 1e-9 m). On siw 31593ab the same case is 1.013 m off.
+- the same with the rear left's last hit at the origin: the same base as before.
+- four wheels on the ground 350 m out: each wheel's base is the old plane's to 1e-9 m and passes
+  through its hit. Not bit for bit: about the centre, the sums are taken in another order.
+- fewer than three hits keep the plane and still record the hits; a wheel never on the ground
+  takes the hits' mean.
+
+Other places that fit or keep a plane (133's question), none carrying a world-origin intercept
+across a change: `surface_layer.sink_pose` (body frame), `soil_tiles.footprint` (about the
+plate's centre), the road contact's envelope (along the wheel's heading from its contact), and
+`rocks.RockSet.planes` (world-frame offsets, n . X <= h, recomputed from the rock's pose
+whenever it moves; at 350 m a float64 offset is exact to about 1e-13 m). aib fits no plane; it
+reads PhysX's hits as they are.
+
+- **118's prediction for the rerun** (*rough_none*, one car, the contact probe's per-step log
+  from t 16 to 18 s, the code fixed): no throw. The front-left wheel's pothole at s 186 m and the
+  skid plate's strike at step 994 (issue 140, not touched by the fix) are as before, to the digit
+  up to step 1039, and the car again spends about 0.7 s on its rear-right wheel. When the wheels
+  come down at t 17.3 s, the rear left's road under our contact (`w`) stays within 5 cm of the
+  step before, and its load is within a factor of 3 of PhysX's at the same step (not 1.6 MN). The
+  car drives on to the run's end (`cost.json` written, s past 250 m). If the run stops early, its
+  cause is named from the log; a hang after the frames are done is issue 139's, not a throw.
