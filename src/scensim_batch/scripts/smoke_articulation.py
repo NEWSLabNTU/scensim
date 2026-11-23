@@ -21,6 +21,8 @@ import sys
 import tempfile
 import time
 
+from aib import app_exit
+
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
@@ -42,6 +44,7 @@ def main(argv=None):
     from isaaclab.app import AppLauncher
     launcher = AppLauncher(headless=True, device=a.device)
     app = launcher.app
+    app_exit.guard(app)  # an escaped exception ends with 1, not with Kit's 0 (scensim issue 118)
 
     import torch
 
@@ -161,4 +164,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    app_exit.run(main)

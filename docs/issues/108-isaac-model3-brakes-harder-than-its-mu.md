@@ -1,6 +1,6 @@
 # 108: the Isaac Model 3 brakes about 7 % harder than its tyre's mu allows
 
-**Status:** fixed (aib ff5e72b, scensim_isaac_world cb4d749): PhysX's default tyre load filter,
+**Status:** fixed (landed in aib ff5e72b and scensim_isaac_world cb4d749, main 60ca020b): PhysX's default tyre load filter,
 confirmed by the restLoad-doubling stop, divided out by aib.
 **Severity:** medium: every braking comparison of Isaac against CARLA, or against a real car,
 carries it. **Found:** 2026-11-23, scensim 241, in issue 106's low-grip sweep (133 asked for it

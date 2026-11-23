@@ -30,6 +30,7 @@ if THREADS:
         os.environ[_k] = str(THREADS)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from aib import app_exit  # noqa: E402 (stdlib only: nothing before Kit's app)
 __import__("scensim_batch.tasks")      # registers Scensim-MushrDriftRL-v0
 
 
@@ -50,6 +51,8 @@ def _startup_then_ours():
 
     def startup(*a, **k):
         out = stock(*a, **k)
+        # the app: an escaped exception ends with 1, not with Kit's 0 (scensim issue 118)
+        app_exit.guard(out[0])
         if THREADS:
             import torch
             torch.set_num_threads(THREADS)
@@ -77,4 +80,4 @@ def _idempotent_space_serialization():
 _idempotent_space_serialization()
 _startup_then_ours()
 script, sys.argv = sys.argv[1], sys.argv[1:]
-runpy.run_path(script, run_name="__main__")
+app_exit.run(runpy.run_path, script, run_name="__main__")

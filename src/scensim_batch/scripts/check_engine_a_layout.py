@@ -50,6 +50,9 @@ AppLauncher.add_app_launcher_args(ap)
 args = ap.parse_args()
 args.headless = True
 app = AppLauncher(args).app
+from aib import app_exit  # noqa: E402
+
+app_exit.guard(app)  # an escaped exception ends with 1, not with Kit's 0 (scensim issue 118)
 
 import gymnasium as gym  # noqa: E402
 import numpy as np  # noqa: E402
@@ -152,6 +155,6 @@ def main():
 
 
 if __name__ == "__main__":
-    rc = main()
+    rc = app_exit.run(main) or 0
     # Kit's close ends the process with its own status (0): the check's goes out first
     os._exit(rc)

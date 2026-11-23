@@ -17,6 +17,8 @@ import sys
 import time
 from pathlib import Path
 
+from aib import app_exit
+
 HERE = Path(__file__).resolve().parent
 
 
@@ -30,6 +32,7 @@ def plan(k):
 def run(a):
     from isaaclab.app import AppLauncher
     app = AppLauncher(headless=True, device="cuda:0").app
+    app_exit.guard(app)  # an escaped exception ends with 1, not with Kit's 0 (scensim issue 118)
     import torch
     import yaml
     sys.path.insert(0, str(HERE.parent))
@@ -140,4 +143,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    app_exit.run(main)

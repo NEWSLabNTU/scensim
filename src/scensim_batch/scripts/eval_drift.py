@@ -163,5 +163,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    app_exit.run(main)
     simulation_app.close()

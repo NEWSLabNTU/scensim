@@ -11,6 +11,8 @@ import json
 import sys
 from pathlib import Path
 
+from aib import app_exit
+
 HERE = Path(__file__).resolve().parent
 CASES = HERE.parents[1] / "scensim_sampler" / "examples" / "cases"
 
@@ -27,6 +29,7 @@ def main(argv=None):
 
     from isaaclab.app import AppLauncher
     app = AppLauncher(headless=True).app
+    app_exit.guard(app)  # an escaped exception ends with 1, not with Kit's 0 (scensim issue 118)
 
     import torch
     import yaml
@@ -128,4 +131,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    app_exit.run(main)

@@ -1,8 +1,8 @@
 # 118: steptest exits 0 when it raises
 
 **Status:** fixed (aib a838261, scensim_isaac_world eba244c): the five entry points exit
-nonzero when they raise, through `aib.app_exit`. Other Isaac entry points still close with 0
-(below, "Not covered"). **Severity:** low: a failed step test
+nonzero when they raise, through `aib.app_exit`; the follow-up (aib 4e8d684,
+scensim_isaac_world a61f975) covers the other entry points but `spikes/`. **Severity:** low: a failed step test
 looks like a passed run with nothing measured. A sweep reads it as a run, and the cause is lost.
 **Found:** 2026-11-23, scensim 241, in issue 106's table on post-108 aib.
 
@@ -123,7 +123,7 @@ imports (`FAKE_KIT_EXTRA=zmq`).
 ## Not covered
 
 These also start a `SimulationApp` and end with its close, status 0, whatever the run did (not
-changed here, for a decision):
+changed by the first fix, for a decision; the follow-up below covers all but `spikes/`):
 
 - `aib.runner`, the stand-alone Isaac ego (`just isaac-ego`): it logs a failure, then exits 0.
 - scensim_isaac_world: `course/fixture_drive.py`, `course/fixture_cost.py`,
@@ -145,11 +145,18 @@ The entry points above, in this order, with the same test pattern; `spikes/` sta
 
 **Step 1.** Both evaluations are Isaac Lab scripts: their code runs at module level after the
 app, so an exception escapes to Python's top level and the app's atexit close then ends the
-process with 0. `aib.app_exit.guard(app)` (aib 63a8c0c), called right after the app, records an
-escaped exception in `sys.excepthook` and registers an atexit handler, which runs ahead of the
-app's own and ends the process through `close(app, 1)`. Each script gains that one call; a run
-that ends normally still calls `app.close()`. A `SystemExit` that escapes is not seen (Python
-calls no excepthook for it); neither script raises one after its app starts.
+process with 0. Two helpers in `aib.app_exit` (aib 4e8d684) cover such scripts:
+
+- `guard(app)`, called right after the app, wraps `sys.excepthook`: after Python prints the
+  traceback it ends the process at once through `close(app, 1)`, before any atexit handler
+  runs. `guard()` with no app serves a wrapper that runs a training script and never holds its
+  app: a flush and `os._exit(1)`, without Kit's cleanup.
+- `run(main)`, for the script's `__main__`: Python calls no excepthook for a `SystemExit`, and
+  these scripts `raise SystemExit("why")` after their app starts (eval_drift with no
+  checkpoints, eval_leadbrake on a replay mismatch). `run` maps any exception out of `main`, a
+  `SystemExit` with a status among them, and ends through `close` on the guarded app.
+
+Each script gains the two calls; a run that ends normally still calls `app.close()`.
 
 `eval_drift.py` runs under `run_p2.sh`'s PYTHONPATH, which now includes aib's source (133: one
 helper, not a copy); `run_p4.sh`'s had it. The fix changes only the exit status, not a score.
@@ -160,11 +167,33 @@ it lands. Until then 118 and 139 check the evaluations' records rather than thei
 
 | test | before | after |
 |---|---|---|
-| aib `test_app_exit`: a guarded script that raises (status 1, Python's traceback); one that ends (status 0) | (new; unguarded, the first ends with 0) | pass |
-| scensim_batch `test_app_exit`: eval_drift raises at its first Isaac Lab call | fail (exit 0) | pass |
-| the same: eval_leadbrake | fail (exit 0) | pass |
+**Step 2.** The rest of `scensim_batch/scripts/` gains the same two calls:
+`agreement_run.py`, `check_resident.py`, `check_engine_a_layout.py` (its own `os._exit(rc)`
+kept for a check that fails), `smoke_articulation.py`, `smoke_drift.py`, `smoke_env.py` and
+`smoke_physx_vehicle.py`. The training wrappers `train_drift.py` (P2) and `train_leadbrake.py`
+(P4) run WheeledLab's and Isaac Lab's training scripts: `train_drift` guards the app its patched
+`startup` returns, `train_leadbrake` guards with no app (Isaac Lab's train.py builds it), and
+both run the script through `run`. As with the evaluations, this applies to runs started after
+it lands. `aib.runner`, the stand-alone Isaac ego: its `try` now starts right after the app (it
+built the World and the ROS node before it) and ends through `close`; its own SIGINT and SIGTERM
+handlers still stop the loop and end with 0.
 
-The scensim_batch test runs each script under `aib.fake_kit` with Isaac Lab, torch, gymnasium
-and rsl_rl stood in for (`FAKE_KIT_EXTRA`), the failure at
-`isaaclab_tasks.utils.parse_cfg.load_cfg_from_registry` (`FAKE_KIT_FAIL`), and a stand-in
-`wheeledlab_rl.startup` that builds the stand-in app.
+**Step 3.** scensim_isaac_world (a61f975): `course/fixture_drive.py` and
+`course/fixture_cost.py` as lip_drive (the `try` right after the app); `course/isaac_check.py`
+closed its app and then returned its check's status, which Kit's close never let out, so a
+failed check now ends with 1 as one that raises; `scripts/step_response/isaac_step.py`, a
+module-level script, is guarded and its `try` ends through `close`.
+
+| test | before | after |
+|---|---|---|
+| aib `test_app_exit`: a guarded script that raises ends with 1, a wrapper guarded before its app likewise, `SystemExit("why")` out of `run(main)` with 1 and `SystemExit(0)` with 0, one that ends with 0 | (new; unguarded, a raise ends with 0) | pass |
+| aib: aib.runner raises (its ROS modules stood in for) | fail (exit 0) | pass |
+| scensim_batch `test_app_exit`: each of the ten scripts above but agreement_run raises after its app | fail (exit 0) | pass |
+| the same: every script that starts an app calls `app_exit.guard` and `app_exit.run` (read from the source; agreement_run's test, whose checks before its app need a recorded run) | fail | pass |
+| scensim_isaac_world `test_app_exit`: fixture_drive, fixture_cost, isaac_check, isaac_step raise | fail (exit 0) | pass |
+
+`aib.fake_kit` gained what these need: `FAKE_KIT_FAIL` names where an entry point that builds no
+World fails, a faked callable (`module.name`) or a faked module's import (`import:module`); with
+Isaac Lab faked, its `AppLauncher` gives the stand-in app, and with WheeledLab's `wheeledlab_rl`
+faked, its `startup` does. The scensim_batch scripts fail at their first torch import after the
+app, the evaluations at `load_cfg_from_registry`.

@@ -11,6 +11,8 @@ import os
 import sys
 import time
 
+from aib import app_exit
+
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
@@ -27,6 +29,7 @@ def main(argv=None):
     from isaacsim import SimulationApp
     app = SimulationApp({"headless": True, "extra_args": ["--/crashreporter/url="]
                          + os.environ.get("ISAAC_KIT_ARGS", "").split()})
+    app_exit.guard(app)  # an escaped exception ends with 1, not with Kit's 0 (scensim issue 118)
     import numpy as np
     import omni.physx
     import omni.usd
@@ -76,4 +79,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    app_exit.run(main)

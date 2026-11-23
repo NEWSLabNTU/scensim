@@ -20,6 +20,8 @@ import json
 import sys
 from pathlib import Path
 
+from aib import app_exit
+
 HERE = Path(__file__).resolve().parent
 END_SLACK = 5     # batch steps allowed past the seats truth's last frame
 
@@ -99,6 +101,7 @@ def main(argv=None):
 
     from isaaclab.app import AppLauncher
     app = AppLauncher(headless=True).app
+    app_exit.guard(app)  # an escaped exception ends with 1, not with Kit's 0 (scensim issue 118)
     import torch
     from aib.rig import EgoConfig
     from scensim_batch.env import ScensimEnv, ScensimEnvCfg
@@ -211,4 +214,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    app_exit.run(main)
