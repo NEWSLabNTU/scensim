@@ -452,14 +452,21 @@ class BatchRun:
             veh.lc_started = False     # no lane change left: its steps skipped again
 
     def _ego_view(self, obs):
-        """The ego's columns of an observation (x, y, yaw, v [N]) and its state dict."""
+        """The ego's columns of an observation (x, y, yaw, v [N]) and its state dict, and the
+        model entities' columns ([N, M]): what SSv2 holds of the world-owned entities."""
         e = self.ego
-        return {"x": obs["x"][:, e].clone(), "y": obs["y"][:, e].clone(),
+        view = {"x": obs["x"][:, e].clone(), "y": obs["y"][:, e].clone(),
                 "yaw": obs["yaw"][:, e].clone(), "v": obs["v"][:, e].clone(),
                 "ego": {k: v.clone() for k, v in obs["ego"].items()}}
+        if self.models.idx:
+            view["models"] = {k: obs[k][:, self.models.idx].clone()
+                              for k in ("x", "y", "yaw", "v")}
+        return view
 
     def _as_ssv2_sees(self, obs, seen):
-        """`obs` with the ego's columns and state from `seen` (two steps before)."""
+        """`obs` with the ego's columns and state from `seen` (two steps before), and the model
+        entities' columns: on seats they are world-owned as the ego is, so SSv2 has their pose
+        when it has the ego's (092 K10's agreement, run 1: the far kerb two steps early)."""
         if seen is None:
             return obs
         e = self.ego
@@ -467,6 +474,8 @@ class BatchRun:
         for k in ("x", "y", "yaw", "v"):
             col = obs[k].clone()
             col[:, e] = seen[k]
+            if "models" in seen:
+                col[:, self.models.idx] = seen["models"][k]
             view[k] = col
         view["ego"] = seen["ego"]
         return view
@@ -540,6 +549,7 @@ class Models:
         z = torch.zeros(n, len(self.idx), dtype=torch.float64)
         self.x, self.y, self.yaw, self.v = z.clone(), z.clone(), z.clone(), z.clone()
         self._prev_v = None
+        self.pending = [None] * len(self.idx)   # each model's command, applied the next step
         self.anchors = [self._anchors(j, i) for j, i in enumerate(self.idx)]
 
     def _anchors(self, j, i):
@@ -566,6 +576,12 @@ class Models:
         self.yaw = torch.where(m2, c.yaw[:, cols], self.yaw)
         self.v = torch.where(m2, torch.zeros_like(self.v), self.v)
         self._prev_v = None
+        for j, p in enumerate(self.pending):     # a reset slot has no command yet
+            if p is not None:
+                p["accel_limit"] = torch.where(mask, torch.zeros_like(p["accel_limit"]),
+                                               p["accel_limit"])
+                p["speed"] = torch.where(mask, torch.zeros_like(p["speed"]), p["speed"])
+                p["heading"] = torch.where(mask, self.yaw[:, j], p["heading"])
 
     def step(self, st, dt):
         if not self.idx:
@@ -583,13 +599,18 @@ class Models:
         self._prev_v = (vx, vy)
         valid = torch.ones(n, dtype=torch.bool, device=vx.device)
         for j, m in enumerate(self.models):
+            # the previous step's command moves the entity first: the lockstep channel's lag 1
+            # (092 K12), so a model on seats and in the batch reacts a frame after it decides
+            p = self.pending[j]
+            if p is not None:
+                self.x[:, j], self.y[:, j], self.v[:, j] = model_law(
+                    self.x[:, j], self.y[:, j], self.v[:, j],
+                    p["speed"], p["heading"], p["accel_limit"], dt)
+                self.yaw[:, j] = p["heading"]
             obs = {"x": self.x[:, j], "y": self.y[:, j], "ego_x": st["x"], "ego_y": st["y"],
                    "ego_vx": vx, "ego_vy": vy, "ego_ax": ax, "ego_ay": ay, "valid": valid}
             act, ev = m.step(obs, dt)
-            self.x[:, j], self.y[:, j], self.v[:, j] = model_law(
-                self.x[:, j], self.y[:, j], self.v[:, j],
-                act["speed"], act["heading"], act["accel_limit"], dt)
-            self.yaw[:, j] = act["heading"]
+            self.pending[j] = {k: act[k] for k in ("speed", "heading", "accel_limit")}
             self.events[self.run.c.entities[self.idx[j]].name] = ev
 
     def place(self, obs):

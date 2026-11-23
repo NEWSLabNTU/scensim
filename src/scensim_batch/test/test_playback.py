@@ -96,7 +96,7 @@ class Playback(unittest.TestCase):
                 return {"speed": z, "heading": z, "accel_limit": z + 1}, torch.zeros(1)
 
         m = core.Models.__new__(core.Models)
-        m.idx, m.models, m.events, m._prev_v = [0], [Stub()], {}, None
+        m.idx, m.models, m.events, m._prev_v, m.pending = [0], [Stub()], {}, None, [None]
 
         class Run:
             class c:
@@ -112,6 +112,53 @@ class Playback(unittest.TestCase):
         self.assertEqual((seen["vx"], seen["vy"]), (10.0, 0.0))  # derived: the slide dropped
         m.step({**st, "vx_map": one(10.0), "vy_map": one(2.0)}, DT)
         self.assertEqual((seen["vx"], seen["vy"]), (10.0, 2.0))
+
+
+@unittest.skipIf(torch is None, "no torch, sim_vehicle_ecu or the trace reader")
+class LagAndView(unittest.TestCase):
+    """092 K10's agreement run 1's fix: a model's command moves its entity a step later (the
+    lockstep channel's lag 1), and SSv2's view of a model entity is two steps back."""
+
+    def test_a_command_moves_the_entity_the_step_after_it(self):
+        from scensim_batch import core
+
+        class North:
+            def step(self, obs, dt):
+                one = torch.ones(1, dtype=torch.float64)
+                return ({"speed": one, "heading": one * math.pi / 2, "accel_limit": one * 1e6},
+                        torch.zeros(1))
+
+        m = core.Models.__new__(core.Models)
+        m.idx, m.models, m.events, m._prev_v, m.pending = [0], [North()], {}, None, [None]
+
+        class Run:
+            class c:
+                n = 1
+                entities = [type("E", (), {"name": "walker"})]
+        m.run = Run
+        zz = torch.zeros(1, 1, dtype=torch.float64)
+        m.x, m.y, m.yaw, m.v = zz.clone(), zz.clone(), zz.clone(), zz.clone()
+        z = torch.zeros(1, dtype=torch.float64)
+        st = {"x": z, "y": z, "yaw": z, "v": z}
+        m.step(st, 0.05)
+        self.assertEqual(float(m.y[0, 0]), 0.0)                  # decided, not moved yet
+        m.step(st, 0.05)
+        self.assertAlmostEqual(float(m.y[0, 0]), 0.05)           # the first command's step
+
+    def test_ssv2_sees_a_model_entity_when_it_sees_the_ego(self):
+        from scensim_batch import core
+        run = core.BatchRun.__new__(core.BatchRun)
+        run.ego = 0
+        run.models = type("M", (), {"idx": [2]})()
+        cols = lambda *v: torch.tensor([v], dtype=torch.float64)  # noqa: E731
+        obs = {k: cols(1.0, 5.0, 9.0) for k in ("x", "y", "yaw", "v")}
+        obs["ego"] = {}
+        seen = {k: torch.tensor([0.5]) for k in ("x", "y", "yaw", "v")}
+        seen["ego"] = {}
+        seen["models"] = {k: torch.tensor([[8.0]], dtype=torch.float64)
+                          for k in ("x", "y", "yaw", "v")}
+        view = run._as_ssv2_sees(obs, seen)
+        self.assertEqual(view["x"].tolist(), [[0.5, 5.0, 8.0]])  # ego and model back, NPC now
 
 
 def trace(n=5):
@@ -173,10 +220,10 @@ class SeatsSide(unittest.TestCase):
 class FromTruth(unittest.TestCase):
     def test_a_seats_run_made_from_a_batch_run_agrees_with_lag_one(self):
         """A seats run written from a point-mass batch run as the seats side records one: the
-        ego's truth at frame first + S + k is the batch's step k, the walker's at
-        first + S + k + 1 (K12's lag 1), a decision at step k written for truth frame
-        first + S + k. agreement_run's --ego-from-truth then agrees exactly: walker error 0,
-        the same decisions at the same steps; shifted by a frame they would not."""
+        ego's and the walker's truth at frame first + S + k are the batch's step k (the batch
+        applies a command a step later, K12's lag 1), a decision at step k written for truth
+        frame first + S + k. agreement_run's --ego-from-truth then agrees exactly: walker error
+        0, the same decisions at the same steps."""
         import argparse
         from scensim_batch import agreement as A
         sys.path.insert(0, str(HERE.parents[1] / "autoware_isaac_bridge" / "src" / "aib"))
@@ -204,8 +251,9 @@ class FromTruth(unittest.TestCase):
             v, yaw = float(e["v"][0]), float(e["yaw"][0])
             ego = es(float(e["x"][0]), float(e["y"][0]), yaw, v * math.cos(yaw),
                      v * math.sin(yaw))
-            wk = k - 1                                  # the walker is a frame behind
-            w = ref.poses["walker"][wk] if 0 <= wk <= steps else w0
+            # the batch applies the walker's command a step later, as the lockstep channel
+            # does: its pose at step k is the seats walker's at frame S + k
+            w = ref.poses["walker"][k] if 0 <= k <= steps else w0
             t.frames.append(gt.Frame(frame=first + j, sim_time=DT * j, sim_frame=100 + j,
                                      sim_time_ns=10**12 + int(DT * 1e9) * j,
                                      entities={"ego": ego, "walker": es(w[0], w[1], w[2])}))

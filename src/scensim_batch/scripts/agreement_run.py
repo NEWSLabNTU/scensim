@@ -10,9 +10,9 @@ write the agreement table's row against the run.
 
 `--ego-from-truth` (092 K10's walker agreement): the batch ego plays the seats ego's truth back
 (scensim_batch.playback), so no engine runs and no Isaac starts; the comparison is of the
-behaviour models (their poses a frame on, as K12's lag 1 moves a commanded entity, and their
-decisions against the attachment's decisions.jsonl), SSv2's default vehicles and the
-storyboard. The record is the run's sample.json, else its seed and parameters.
+behaviour models (their poses, the batch applying a command a step later as K12's lockstep
+channel does, and their decisions against the attachment's decisions.jsonl), SSv2's default
+vehicles and the storyboard. The record is the run's sample.json, else its seed and parameters.
 
 The seats run is a `scensim run` of the scenario with the ego as `replay_pilot` on the same
 commands; its directory holds the truth (gap_trace/), the storyboard log (context.jsonl) and
@@ -71,7 +71,7 @@ def from_truth(a, run_dir, trace, S, A):
 
     step_time = trace.episode.step_time
     steps = len(trace.frames) - S
-    world = LaneletWorld.load(a.world, map_dir=a.map)
+    world = LaneletWorld.load(a.world, map_dir=a.map or None)
     record = json.loads(Path(a.record).read_text()) if a.record else A.run_record(run_dir)
     c = compile_scenario(a.scenario, [record], world)
     ego_name = c.entities[c.of_role("ego")[0]].name
@@ -98,8 +98,9 @@ def from_truth(a, run_dir, trace, S, A):
     att = Path(a.attachment) if a.attachment else next(
         (p.parent for p in sorted(run_dir.rglob("decisions.jsonl"))), run_dir)
     pose = {n: ("sim" if n == ego_name or n in models else "ssv2") for n in entities}
-    seats = {"poses": A.seats_poses(trace, S, steps, entities, pose=pose,
-                                    shift={n: 1 for n in models}),
+    # the batch applies a model's command a step later, as the lockstep channel does (092 K10,
+    # run 1's fix): a model entity's poses pair as the ego's, seats frame S + k at step k
+    seats = {"poses": A.seats_poses(trace, S, steps, entities, pose=pose),
              "steps": A.context_steps(run_dir / "context.jsonl", step_time)
              if (run_dir / "context.jsonl").exists() else {},
              "outcome": _seats_outcome(run_dir),
@@ -123,7 +124,8 @@ def main(argv=None):
     ap.add_argument("--run", required=True)
     ap.add_argument("--scenario", required=True)
     ap.add_argument("--world", required=True)
-    ap.add_argument("--map", required=True, help="the map directory the run used")
+    ap.add_argument("--map", default="", help="the map directory the run used (its digest "
+                    "checks the export; with --ego-from-truth it may be left out)")
     ap.add_argument("--ego", help="aib's ego config (engine runs)")
     ap.add_argument("--commands", help="the replay pilot's commands (engine runs)")
     ap.add_argument("--ego-from-truth", action="store_true",
@@ -156,8 +158,8 @@ def main(argv=None):
     from scensim_batch import agreement as A
     if a.ego_from_truth:
         return from_truth(a, run_dir, trace, S, A)
-    if not a.ego or not a.commands:
-        raise SystemExit("--ego and --commands are needed unless --ego-from-truth")
+    if not a.ego or not a.commands or not a.map:
+        raise SystemExit("--ego, --commands and --map are needed unless --ego-from-truth")
     rows = A.replay_log(run_dir / "replay_pilot.jsonl")
     cmd0 = A.first_command(rows)
     if cmd0 is None:
