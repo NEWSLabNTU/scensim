@@ -443,7 +443,7 @@ Rules:
 
 - **A knob is bound by a property, not by a parameter's name.** The scenario declares a plain
   parameter (`surface`, a name the sampler's models can use) and binds it in its `FileHeader`
-  `Properties`: `<Property name="scensim.knob.surface" value="$surface"/>`. The sampler draws
+  `Properties`: `<Property name="scensim.knob.surface" value="param:surface"/>`. The sampler draws
   the parameter like any other; the runner reads the binding and applies the value to the
   world. `pilot.<name>` parameters reach pilots through the existing `{param:}` substitution.
 - **A sampled knob value must reach the world, and the record says what was applied.** The
@@ -461,7 +461,22 @@ Rules:
   keep both, so `result.json` judges the world against the profile. CS5's fog is such a profile
   along its route; the batch refuses it by name. The sampler rejects a draw whose breakpoints
   do not increase.
+- **A binding names a parameter as `param:<name>`, never `$<name>`** (issue 131). OpenSCENARIO
+  evaluates a FileHeader property before the scenario's parameters are declared, so a `$` there
+  fails in every OpenSCENARIO tool, SSv2's preprocessor first. This holds for every `scensim.*`
+  FileHeader property: a knob (`param:surface`), a knob profile's breakpoints (`time: 0 1000;
+  12 param:fog_end`), an anchor binding (`exit_n.lanelet_at(param:cyclist_s)`) and the pilot's
+  map (`param:pm`). The sampler, `testbench check` and `scensim run` refuse a `$` in any of
+  them by name, with the form to write. A `$` inside the scenario body (an entity's or an
+  action's property, a LanePosition's `laneId`) is OpenSCENARIO's own and stays.
 - **The world's map and the pilot's maps are separate entries** (CS3).
+- *Built, K9 (roadmap 092):* the pilot's maps. `world.pilot_maps` in testbench.yaml declares,
+  per world map, the maps a pilot may load (`current`, the world's own map, and named variants,
+  each a project map or `{map, pointcloud: edited}`); a scenario binds one by FileHeader
+  `scensim.pilot_map` (`param:<name>` or a variant's name). The world loads its own map, the
+  pilots load the variant's, and `result.json` records `maps` (world, pilot, variant, point
+  cloud, both lanelet2 digests). `testbench check` holds a variant to the world's projection and
+  point cloud (unless declared edited).
 - **`testbench check` refuses** a scenario that names an anchor or knob the world lacks, or a
   value outside the knob's declared values. The refusal names the scenario, the parameter and
   the world.
@@ -495,8 +510,8 @@ Rules:
   fetched it from, when the lock holds that file with the digest read; a host's own copy that
   differs claims none.
 - *Built, K9b (roadmap 092):* binding. A FileHeader Property `scensim.anchor.<parameter>` with
-  the value `<anchor>.<attribute>` or `<anchor>.<function>(<number or $parameter>)` sets that
-  declared parameter from the world before SSv2 starts; `<anchor>` may be `$<parameter>`, a
+  the value `<anchor>.<attribute>` or `<anchor>.<function>(<number or param:<parameter>>)` sets
+  that declared parameter from the world before SSv2 starts; `<anchor>` may be `param:<parameter>`, a
   string parameter naming the anchor, so a distribution can draw which. A resolved lane has
   `lanelet_at(s)` (the lanelet holding lane position s, the later one at a join) and
   `local_s(s)` (s within that lanelet), so a LanePosition along a lane of several lanelets is

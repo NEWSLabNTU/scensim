@@ -31,7 +31,7 @@ def where(host):
     return host
 
 
-def proj(where, pilot_maps_decl=VARIANTS, binding="$pm", default="current", name="proj"):
+def proj(where, pilot_maps_decl=VARIANTS, binding="param:pm", default="current", name="proj"):
     """A multi-pilot project on Town01 with Town01_v (a byte copy of Town01) and Town01_e (an
     edited point cloud), world.pilot_maps, and a scenario binding the variant."""
     d = where["tmp"] / name
@@ -239,3 +239,14 @@ def test_issue_129_the_run_records_the_verified_digests(where, maps_hub):
     assert pilot_maps.lanelet2_digest(d, "Town01_v") == want        # a copy, hashed
     _edit_cached(d)
     assert pilot_maps.lanelet2_digest(d, "Town01") != want
+
+
+def test_issue_131_a_dollar_binding_is_refused_before_ssv2(where, maps_hub):
+    d, sc = proj(where, binding="$pm")
+    with pytest.raises(pilot_maps.PilotMapError, match=r"write 'param:pm'"):
+        pilot_maps.resolve(VARIANTS, "Town01", sc)
+    with pytest.raises(run.Refused, match=r"FileHeader scensim.pilot_map = '\$pm'.*write "
+                                          r"'param:pm'"):
+        run.expand(sc, d, params={"pm": ["current"]})
+    f = [x for x in project.check_project(d) if "param:pm" in x.what]
+    assert f and f[0].refused

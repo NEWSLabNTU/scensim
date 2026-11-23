@@ -328,11 +328,11 @@ class Binding(Base):
         m.write_text(model_edit(m.read_text().replace("anchor.exit_n.heading",
                                                       "anchor.exit_n.heading(cyclist_s)")))
         p = self.d.path / "cs7_cyclist_low_sun.xosc"
-        x = p.read_text().replace("exit_n.lanelet\"", "exit_n.lanelet_at($cyclist_s)\"")
+        x = p.read_text().replace("exit_n.lanelet\"", "exit_n.lanelet_at(param:cyclist_s)\"")
         if bind_s:
             x = x.replace('<Property name="scensim.anchor.exit_lane"',
                           '<Property name="scensim.anchor.exit_ls" '
-                          'value="exit_n.local_s($cyclist_s)"/>\n      '
+                          'value="exit_n.local_s(param:cyclist_s)"/>\n      '
                           '<Property name="scensim.anchor.exit_lane"')
             x = x.replace('<ParameterDeclaration name="exit_lane" parameterType="string" value=""/>',
                           '<ParameterDeclaration name="exit_lane" parameterType="string" value=""/>'
@@ -369,12 +369,12 @@ class Binding(Base):
 
     def test_bindings_are_checked_before_any_draw(self):
         cases = (
-            ("exit_n.lanelet_at($cyclist_s)", "ghost_n.lanelet_at($cyclist_s)",
+            ("exit_n.lanelet_at(param:cyclist_s)", "ghost_n.lanelet_at(param:cyclist_s)",
              "anchor.ghost_n.lanelet_at"),
-            ("exit_n.lanelet_at($cyclist_s)", "exit_n.heading", "read at a lane position"),
-            ("exit_n.lanelet_at($cyclist_s)", "exit_n.lanelet_at(99.0)", "outside the lane"),
-            ("exit_n.lanelet_at($cyclist_s)", "exit_n.lanelet_at($nope)", "not a declared"),
-            ("exit_n.lanelet_at($cyclist_s)", "exit_n lanelet", "an anchor binding is"),
+            ("exit_n.lanelet_at(param:cyclist_s)", "exit_n.heading", "read at a lane position"),
+            ("exit_n.lanelet_at(param:cyclist_s)", "exit_n.lanelet_at(99.0)", "outside the lane"),
+            ("exit_n.lanelet_at(param:cyclist_s)", "exit_n.lanelet_at(param:nope)", "not a declared"),
+            ("exit_n.lanelet_at(param:cyclist_s)", "exit_n lanelet", "an anchor binding is"),
             ("approach_n.lanelet", "approach_n.lanelet_at(3.0)", "no such function"),
         )
         for old, new, why in cases:

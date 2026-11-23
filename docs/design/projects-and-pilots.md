@@ -253,8 +253,8 @@ scenario-environment field it `sets` (`fog_visual_range`, `sun_elevation`, `sun_
 `precipitation_intensity`, `cloud_cover_oktas`; CARLA takes all five, Isaac all but clouds), a
 `default`, an optional `step` (1 % of the range) and an optional `min_interval` (1 s): the
 least scenario time between two sends. A scenario binds it to a profile,
-`<Property name="scensim.knob.visibility" value="s(west_street): 0 1000; $fog_start 1000;
-$fog_end $visibility_min"/>`: breakpoints along the simulation time (`time:`) or the ego's
+`<Property name="scensim.knob.visibility" value="s(west_street): 0 1000; param:fog_start 1000;
+param:fog_end param:visibility_min"/>`: breakpoints along the simulation time (`time:`) or the ego's
 lane position on a resolved lane (`s(<lane>):`), linear between them. Every run of a testbench
 that declares a profile knob sends its profiles to the bridge (`set_knob_profiles`, an empty
 list when it binds none); each frame the bridge sends the value as `SetEnvironment` when it
@@ -287,7 +287,7 @@ batch refuses a profile by name (`scensim-sample compilable`).
 scenario-description.md section 3; a world.yaml may carry it later): a value maps to weather
 parameters (the world server's names, through `set_weather`) and/or a named surface map, with
 an optional friction `mu`, or `physics: none` for a visual-only value. A scenario binds a knob
-to a parameter (`<Property name="scensim.knob.surface" value="$surface"/>`); before each run the
+to a parameter (`<Property name="scensim.knob.surface" value="param:surface"/>`); before each run the
 runner sends the stack's weather baseline merged with the run's knobs' parameters, reads them
 back with `get_weather`, and records the result in `result.json`'s `knobs` (`scensim.knobs`).
 Once `world.knobs` is declared, every run sends and checks the baseline, bound knobs or not:
@@ -337,8 +337,8 @@ and commit of the project's lock that holds that file). `testbench check` refuse
 whose bindings the world cannot satisfy (scenario-description.md section 3).
 
 A scenario binds a parameter to an anchor in its FileHeader, `<Property
-name="scensim.anchor.<parameter>" value="exit_n.lanelet_at($cyclist_s)"/>` (or
-`exit_n.local_s($cyclist_s)`, `exit_n.lanelet` for a stated lane), and its LanePosition reads
+name="scensim.anchor.<parameter>" value="exit_n.lanelet_at(param:cyclist_s)"/>` (or
+`exit_n.local_s(param:cyclist_s)`, `exit_n.lanelet` for a stated lane), and its LanePosition reads
 the parameter. `scensim run` sets it from the world before SSv2 starts, refuses an s off the
 lane, checks a sample record's value rather than replace it, and records each binding in
 `result.json`'s `anchors` (scenario-description.md section 3). The published maps

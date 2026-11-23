@@ -22,8 +22,8 @@ WORLD = {
 SCEN = """<?xml version="1.0"?><OpenSCENARIO>
   <FileHeader revMajor="1" revMinor="3" date="2026-11-21T00:00:00" author="t" description="t">
     <Properties>
-      <Property name="scensim.knob.illumination" value="$light"/>
-      <Property name="scensim.knob.surface" value="$road"/>
+      <Property name="scensim.knob.illumination" value="param:light"/>
+      <Property name="scensim.knob.surface" value="param:road"/>
     </Properties></FileHeader>
   <ParameterDeclarations>
     <ParameterDeclaration name="light" parameterType="string" value="day"/>
@@ -141,8 +141,8 @@ def knobbed_project(where):
     s = s.replace('<Property name="scensim.cell_attributes" value="surface"/>'
                   '<Property name="scensim.cell.surface" value="dry"/>',
                   '<Property name="scensim.cell_attributes" value="illumination,surface"/>'
-                  '<Property name="scensim.knob.illumination" value="$light"/>'
-                  '<Property name="scensim.knob.surface" value="$road"/>', 1)
+                  '<Property name="scensim.knob.illumination" value="param:light"/>'
+                  '<Property name="scensim.knob.surface" value="param:road"/>', 1)
     s = s.replace('<ParameterDeclaration name="gap"',
                   '<ParameterDeclaration name="light" parameterType="string" value="day"/>'
                   '<ParameterDeclaration name="road" parameterType="string" value="dry"/>'
@@ -364,7 +364,7 @@ class ProfileBridge(Bridge):
         return super().__call__(rec, argv)
 
 
-def _profiled(tmp_path, binding="time: 0 1000; $fog_start 1000; 20 $vmin"):
+def _profiled(tmp_path, binding="time: 0 1000; param:fog_start 1000; 20 param:vmin"):
     p = tmp_path / "f.xosc"
     p.write_text(PROFILED.replace("BINDING", binding))
     return p
@@ -419,7 +419,7 @@ def test_profiles_the_world_cannot_take_are_refused_before_the_run(tmp_path):
                                {"world": {"knobs": clouds}}, call=ProfileBridge())
     assert "carla only" in why
     # a fixed binding on a profile knob, and a bridge that refuses
-    blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(_profiled(tmp_path, "$vmin")), ps,
+    blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(_profiled(tmp_path, "param:vmin")), ps,
                                call=ProfileBridge())
     assert "bound to a profile" in why
     blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(_profiled(tmp_path)), ps,

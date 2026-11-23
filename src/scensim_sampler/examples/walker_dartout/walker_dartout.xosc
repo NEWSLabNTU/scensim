@@ -13,8 +13,8 @@
       <!-- the world knobs the sampled parameters are applied to (scenario-description.md 3):
            the runner sends them to the world before the run, and the cell is computed from
            them, never labelled -->
-      <Property name="scensim.knob.illumination" value="$illumination"/>
-      <Property name="scensim.knob.surface" value="$surface"/>
+      <Property name="scensim.knob.illumination" value="param:illumination"/>
+      <Property name="scensim.knob.surface" value="param:surface"/>
     </Properties>
   </FileHeader>
   <ParameterDeclarations>

@@ -74,8 +74,8 @@ class Tmp:
         self.d.cleanup()
 
 
-BIND = ('<Property name="scensim.knob.illumination" value="$light"/>'
-        '<Property name="scensim.knob.surface" value="$road"/>')
+BIND = ('<Property name="scensim.knob.illumination" value="param:light"/>'
+        '<Property name="scensim.knob.surface" value="param:road"/>')
 
 
 class Knobs(unittest.TestCase):
@@ -84,7 +84,7 @@ class Knobs(unittest.TestCase):
             self.assertEqual(Scenario(d / "s.xosc").knobs, {"illumination": "light",
                                                             "surface": "road"})
         for bad in ('<Property name="scensim.knob.surface" value="wet"/>',
-                    '<Property name="scensim.knob.surface" value="$nope"/>'):
+                    '<Property name="scensim.knob.surface" value="param:nope"/>'):
             with Tmp(props=bad) as d, self.assertRaisesRegex(SpecError, "bound to a declared"):
                 Scenario(d / "s.xosc")
 

@@ -63,6 +63,7 @@ from scensim import attachments as attachmentsmod, knobs as knobsmod, sampled as
 from scensim import truth as truthmod
 from scensim import anchors as anchorsmod
 from scensim import pilot_maps as pilotmapsmod
+from scensim_sampler.bindings import written
 from scensim import stage as stagemod
 from scensim import simulator as simmod, testbenches
 from scensim.findings import ros_args
@@ -326,7 +327,7 @@ def bind_anchors(spec, project: Path):
         spec.parameters[param] = vals[param] = v
         ref = A.parse_binding(text)[0]
         name = vals.get(ref[1:]) if ref.startswith("$") else ref
-        out[param] = {"value": v, "anchor": text,
+        out[param] = {"value": v, "anchor": written(text),   # as the scenario writes it (131)
                       "source": (anchors.get(name) or {}).get("source")}
     spec.anchors = out
 

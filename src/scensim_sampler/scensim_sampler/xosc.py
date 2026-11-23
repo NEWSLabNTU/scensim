@@ -104,7 +104,7 @@ KNOB = "scensim.knob."
 class Scenario:
     """A scenario file: `parameters` {name: (type, default)}, `properties` (FileHeader),
     `category`, `cell_attributes`, `knobs` {knob: parameter} (FileHeader `scensim.knob.<name>
-    = $<parameter>`: the world knob that parameter's value is applied to), `entities`,
+    = param:<parameter>`: the world knob that parameter's value is applied to), `entities`,
     `sha256`."""
 
     def __init__(self, path):
@@ -121,8 +121,16 @@ class Scenario:
         header = root.find("FileHeader")
         self.properties = {}
         if header is not None:
+            from .bindings import PREFIX, BindingError, internal
             for prop in header.findall("Properties/Property"):
-                self.properties[prop.get("name")] = prop.get("value")
+                name, value = prop.get("name"), prop.get("value")
+                if name and name.startswith(PREFIX):
+                    # issue 131: param:<name> written, $<name> read below
+                    try:
+                        value = internal(name, value, str(path))
+                    except BindingError as e:
+                        raise SpecError(str(e)) from None
+                self.properties[name] = value
         self.category = self.properties.get("scensim.category")
         attrs = self.properties.get("scensim.cell_attributes") or ""
         self.cell_attributes = [a.strip() for a in attrs.split(",") if a.strip()]
@@ -143,13 +151,13 @@ class Scenario:
                     raise SpecError(str(e)) from None
                 bad = [p for p in P.parameters(prof[2]) if p not in self.parameters]
                 if bad:
-                    raise SpecError(f"{path}: FileHeader {k}: ${bad[0]} is not a declared "
+                    raise SpecError(f"{path}: FileHeader {k}: param:{bad[0]} is not a declared "
                                     "parameter")
                 self.knob_profiles[knob] = prof
                 continue
             if not knob or not v.startswith("$") or v[1:] not in self.parameters:
                 raise SpecError(f"{path}: FileHeader {k} = {v!r}: a knob is bound to a declared "
-                                "parameter, as $<name>, or to a profile, `time: <x> <value>; "
+                                "parameter, as param:<name>, or to a profile, `time: <x> <value>; "
                                 "...` or `s(<lane>): ...` (scenario-description.md section 3)")
             self.knobs[knob] = v[1:]
         # scensim.anchor.<parameter> = <anchor>.<attribute>[(<arg>)] (092 K9b): that parameter
@@ -169,7 +177,7 @@ class Scenario:
                 raise SpecError(str(e)) from None
             for r in (ref, arg):
                 if r and r.startswith("$") and r[1:] not in self.parameters:
-                    raise SpecError(f"{where}: {r} is not a declared parameter")
+                    raise SpecError(f"{where}: param:{r[1:]} is not a declared parameter")
             self.anchor_bindings[param] = v.strip()
         self.is_distribution = root.find("ParameterValueDistribution") is not None
 

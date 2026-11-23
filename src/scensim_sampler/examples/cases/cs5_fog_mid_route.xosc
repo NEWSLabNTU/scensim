@@ -9,7 +9,7 @@
       <!-- the fog is a knob profile along the route (092 K9): visibility 1000 m until fog_start,
            falling linearly to visibility_min at fog_end, applied by the bridge each frame -->
       <Property name="scensim.knob.visibility"
-                value="s(route_n): 0 1000; $fog_start 1000; $fog_end $visibility_min"/>
+                value="s(route_n): 0 1000; param:fog_start 1000; param:fog_end param:visibility_min"/>
     </Properties>
   </FileHeader>
   <ParameterDeclarations>

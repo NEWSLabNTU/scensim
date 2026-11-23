@@ -9,7 +9,7 @@
       <Property name="scensim.category" value="R1.lead_cut_out.stopped_vehicle"/>
       <Property name="scensim.cell_attributes" value="illumination,stopped_kind"/>
       <!-- the knob is bound by property (scenario-description.md section 3) -->
-      <Property name="scensim.knob.illumination" value="$illumination"/>
+      <Property name="scensim.knob.illumination" value="param:illumination"/>
       <!-- the highway's right lane is the world's anchor (092 K9b), bound before SSv2 starts -->
       <Property name="scensim.anchor.hwy_lane" value="hwy_right.lanelet"/>
     </Properties>

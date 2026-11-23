@@ -354,10 +354,10 @@ class Rows(unittest.TestCase):
                                    "value='night'/>")
             p.write_text(p.read_text().replace(
                 "<OpenSCENARIO>", "<OpenSCENARIO><FileHeader><Properties><Property "
-                "name='scensim.knob.illumination' value='$light'/></Properties></FileHeader>", 1))
+                "name='scensim.knob.illumination' value='param:light'/></Properties></FileHeader>", 1))
             v = subset.check(p)
         self.assertTrue(v.compiles)
-        self.assertTrue(any(c.startswith("world knob illumination (bound to $light): a slot "
+        self.assertTrue(any(c.startswith("world knob illumination (bound to param:light): a slot "
                                          "camera") for c in v.conditions), v.conditions)
 
     def test_a_pilot_map_variant_runs_on_seats_only(self):
@@ -367,12 +367,12 @@ class Rows(unittest.TestCase):
                                    "value='current'/>")
             p.write_text(p.read_text().replace(
                 "<OpenSCENARIO>", "<OpenSCENARIO><FileHeader><Properties><Property "
-                "name='scensim.pilot_map' value='$pm'/></Properties></FileHeader>", 1))
+                "name='scensim.pilot_map' value='param:pm'/></Properties></FileHeader>", 1))
             v = subset.check(p)
         self.assertFalse(v.compiles)
         r = [x for x in v.refusals if x["construct"].startswith("the pilot's map variant")]
         self.assertEqual((r[0]["class"], r[0]["construct"]),
-                         ("seats", "the pilot's map variant (bound to $pm)"), v.refusals)
+                         ("seats", "the pilot's map variant (bound to param:pm)"), v.refusals)
 
     def test_a_parameter_set_before_the_run_is_fixed_for_the_slot(self):
         init = ("<GlobalAction><ParameterAction parameterRef='p'><SetAction value='1'/>"

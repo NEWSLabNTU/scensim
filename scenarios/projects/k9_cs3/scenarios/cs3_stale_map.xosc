@@ -1,10 +1,17 @@
 <?xml version="1.0"?>
 <OpenSCENARIO>
 	<FileHeader author="scensim" date="2026-11-24T00:00:00+00:00" description="CS3 (092 K9): west_street closed by barriers in the world; the pilot's map is Town01 (current, stale) or the updated variant (works)" revMajor="1" revMinor="2">
-		<Properties><Property name="scensim.pilot_map" value="$pm"/></Properties>
+		<Properties>
+			<Property name="scensim.pilot_map" value="param:pm"/>
+			<Property name="scensim.knob.illumination" value="param:light"/>
+			<Property name="scensim.anchor.barrier_lane" value="west_street.lanelet_at(param:barrier_s)"/>
+		</Properties>
 	</FileHeader>
 	<ParameterDeclarations>
 		<ParameterDeclaration name="pm" parameterType="string" value="current"/>
+		<ParameterDeclaration name="light" parameterType="string" value="day"/>
+		<ParameterDeclaration name="barrier_s" parameterType="double" value="20"/>
+		<ParameterDeclaration name="barrier_lane" parameterType="string" value=""/>
 	</ParameterDeclarations>
 	<CatalogLocations><VehicleCatalog><Directory path="$(env SCENSIM_VEHICLES)" /></VehicleCatalog></CatalogLocations>
 	<RoadNetwork>
@@ -47,13 +54,13 @@
 					<PrivateAction><RoutingAction><AcquirePositionAction><Position><WorldPosition x="92.382" y="-78.140" z="0.0" h="1.5708" p="0" r="0" /></Position></AcquirePositionAction></RoutingAction></PrivateAction>
 				</Private>
 				<Private entityRef="barrier_a">
-					<PrivateAction><TeleportAction><Position><WorldPosition x="305.641" y="-130.806" z="0.0" h="1.5708" p="0" r="0"/></Position></TeleportAction></PrivateAction>
+					<PrivateAction><TeleportAction><Position><LanePosition roadId="" laneId="$barrier_lane" s="$barrier_s" offset="-1.3"><Orientation type="relative" h="1.5708"/></LanePosition></Position></TeleportAction></PrivateAction>
 				</Private>
 				<Private entityRef="barrier_b">
-					<PrivateAction><TeleportAction><Position><WorldPosition x="305.641" y="-129.506" z="0.0" h="1.5708" p="0" r="0"/></Position></TeleportAction></PrivateAction>
+					<PrivateAction><TeleportAction><Position><LanePosition roadId="" laneId="$barrier_lane" s="$barrier_s" offset="0.0"><Orientation type="relative" h="1.5708"/></LanePosition></Position></TeleportAction></PrivateAction>
 				</Private>
 				<Private entityRef="barrier_c">
-					<PrivateAction><TeleportAction><Position><WorldPosition x="305.641" y="-128.206" z="0.0" h="1.5708" p="0" r="0"/></Position></TeleportAction></PrivateAction>
+					<PrivateAction><TeleportAction><Position><LanePosition roadId="" laneId="$barrier_lane" s="$barrier_s" offset="1.3"><Orientation type="relative" h="1.5708"/></LanePosition></Position></TeleportAction></PrivateAction>
 				</Private>
 			</Actions>
 		</Init>

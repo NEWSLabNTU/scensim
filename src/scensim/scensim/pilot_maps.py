@@ -11,7 +11,7 @@ A world declares, beside its knobs and anchors, which maps a pilot may load on e
           edited: {map: Town01_edited, pointcloud: edited}
 
 A scenario binds the variant by a FileHeader property, as knobs and anchors are bound:
-``<Property name="scensim.pilot_map" value="$pilot_map"/>`` (a declared parameter) or a variant
+``<Property name="scensim.pilot_map" value="param:pilot_map"/>`` (a declared parameter) or a variant
 by name. ``scensim run`` resolves it before the run: the world loads the scenario's map, the
 stack's pilots start on the variant's (a switch request's ``pilot_map``), and ``result.json``
 records ``maps: {world, pilot, variant}``. A world map with no entry has the one variant
@@ -82,11 +82,16 @@ def variants(decl, world_map) -> dict:
 
 
 def binding(path):
-    """The scenario's ``scensim.pilot_map`` FileHeader property, or None."""
+    """The scenario's ``scensim.pilot_map`` FileHeader property, or None; ``param:<name>`` as
+    ``$<name>`` (issue 131: a ``$`` written there is refused)."""
+    from scensim_sampler.bindings import BindingError, internal   # noqa: PLC0415
     root = ET.parse(str(path)).getroot()
     for prop in root.findall("FileHeader/Properties/Property"):
         if prop.get("name") == BIND:
-            return (prop.get("value") or "").strip()
+            try:
+                return internal(BIND, prop.get("value"), Path(path).name).strip()
+            except BindingError as e:
+                raise PilotMapError(str(e)) from None
     return None
 
 

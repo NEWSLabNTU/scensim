@@ -396,7 +396,7 @@ def test_a_maps_resolved_anchors_reach_the_sampler(tmp_path):
         "simulator: carla\nworld:\n  anchors:\n    approach_n: {kind: lane, lanelet: 101}\n")
     # a resolved lane's LanePosition: the lanelet holding cyclist_s (092 K9b)
     sc.write_text(sc.read_text().replace('value="exit_n.lanelet"',
-                                         'value="exit_n.lanelet_at($cyclist_s)"'))
+                                         'value="exit_n.lanelet_at(param:cyclist_s)"'))
     dist = tmp_path / "cs7_cyclist_low_sun_dist.xosc"
     got = run._anchors_for(tmp_path, dist)
     assert got["exit_n"]["length"] == 30.0 and got["approach_n"]["lanelet"] == 101 and got["exit_n"]["source"]["map"] == "town_street"
@@ -430,7 +430,7 @@ def test_a_maps_resolved_anchors_reach_the_sampler(tmp_path):
 
 def _cs7_on_a_resolved_exit(tmp_path, length=30.0):
     """CS7 in a project on map town_street, its exit lane resolved (two lanelets, 7 then 8),
-    bound by lane position: exit_lane = exit_n.lanelet_at($cyclist_s), exit_ls its local s."""
+    bound by lane position: exit_lane = exit_n.lanelet_at(param:cyclist_s), exit_ls its local s."""
     import shutil
     from scensim_sampler import anchors as A
     cases = Path(scensim_sampler.__file__).resolve().parents[1] / "examples" / "cases"
@@ -442,9 +442,9 @@ def _cs7_on_a_resolved_exit(tmp_path, length=30.0):
     sc = tmp_path / "cs7_cyclist_low_sun.xosc"
     x = sc.read_text().replace('filepath="maps/town_street"',
                                'filepath="$(env SCENSIM_MAPS)/town_street"')
-    x = x.replace('value="exit_n.lanelet"', 'value="exit_n.lanelet_at($cyclist_s)"')
+    x = x.replace('value="exit_n.lanelet"', 'value="exit_n.lanelet_at(param:cyclist_s)"')
     x = x.replace('<Property name="scensim.anchor.exit_lane"',
-                  '<Property name="scensim.anchor.exit_ls" value="exit_n.local_s($cyclist_s)"/>'
+                  '<Property name="scensim.anchor.exit_ls" value="exit_n.local_s(param:cyclist_s)"/>'
                   '\n      <Property name="scensim.anchor.exit_lane"')
     x = x.replace('<ParameterDeclaration name="exit_lane" parameterType="string" value=""/>',
                   '<ParameterDeclaration name="exit_lane" parameterType="string" value=""/>\n'
@@ -476,7 +476,7 @@ def test_a_scenarios_anchor_bindings_are_set_before_ssv2_starts(tmp_path):
     (s,) = specs
     assert (s.parameters["exit_lane"], s.parameters["exit_ls"]) == ("8", 5.0)
     assert s.parameters["approach_lane"] == "101"
-    assert s.anchors["exit_lane"]["anchor"] == "exit_n.lanelet_at($cyclist_s)"
+    assert s.anchors["exit_lane"]["anchor"] == "exit_n.lanelet_at(param:cyclist_s)"
     assert s.anchors["exit_lane"]["source"]["map"] == "town_street"
     assert s.anchors["approach_lane"]["source"] is None             # a stated anchor
     r = results.RunResult("x", "passed", anchors=s.anchors).to_dict()
@@ -585,7 +585,7 @@ def test_testbench_check_refuses_a_binding_the_world_cannot_satisfy(tmp_path):
     an = run._anchors_for(tmp_path, sc)
     assert anchorsmod.binding_problems(sc, an) == []
     for old, new, want in (
-            ('value="exit_n.lanelet_at($cyclist_s)"', 'value="ghost.lanelet_at($cyclist_s)"',
+            ('value="exit_n.lanelet_at(param:cyclist_s)"', 'value="ghost.lanelet_at(param:cyclist_s)"',
              "the world has no such anchor (its anchors: approach_n, exit_n)"),
             ('value="approach_n.lanelet"', 'value="approach_n.lanelet_at(3)"',
              "a stated anchor has numbers only"),

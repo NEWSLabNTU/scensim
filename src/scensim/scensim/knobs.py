@@ -1,5 +1,5 @@
 """World knobs per run (093 D7 gap 1; scenario-description.md section 3): a scenario's bound
-knobs (FileHeader `scensim.knob.<knob> = $<parameter>`) take their run's parameter values,
+knobs (FileHeader `scensim.knob.<knob> = param:<parameter>`) take their run's parameter values,
 which go to the world before the scenario starts; the world's answer is read back and
 `result.json` records it under `knobs`. A run whose applied values differ from its record's is
 an error run, excluded from rates.

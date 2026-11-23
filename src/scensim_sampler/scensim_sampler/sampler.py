@@ -258,7 +258,7 @@ class Sampler:
                 raise SpecError(f"{k} is drawn and names a cell attribute, but {sc.path.name} "
                                 f"declares no parameter {k}: it would only label the cell, the "
                                 f"world would never get it; fix: declare it and bind it "
-                                f"(scensim.knob.<name> = ${k})")
+                                f"(scensim.knob.<name> = param:{k})")
             else:
                 raise SpecError(f"{k} is drawn, and it is neither a parameter of "
                                 f"{sc.path.name} nor one of its cell attributes")

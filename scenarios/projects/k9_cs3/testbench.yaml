@@ -8,6 +8,9 @@ assets:
     take: [Town01]   # + Town01_west_street_closed from v2026.11f
 maps: [Town01]
 world:
+  knobs:
+    # day only: the binding is under test, not the light (issue 131)
+    illumination: {values: {day: {weather: {sun_altitude_angle: 60}}}, default: day}
   pilot_maps:
     Town01: {current: Town01, works: Town01_west_street_closed}
 pilots:

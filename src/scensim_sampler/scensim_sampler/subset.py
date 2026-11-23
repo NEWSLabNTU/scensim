@@ -400,7 +400,7 @@ def check(path, ego="policy"):
             v.add(cls, where, f"world knob {name[6:]}={pd.get('value')}", reason)
         elif name.startswith("pilot.") and PILOT_PARAM not in v.notes:
             v.notes.append(PILOT_PARAM)
-    # a knob bound by property (scensim.knob.<knob> = $<parameter>, scenario-description.md
+    # a knob bound by property (scensim.knob.<knob> = param:<parameter>, scenario-description.md
     # section 3) is a world knob like world.<knob>
     for prop in root.findall("FileHeader/Properties/Property"):
         name = prop.get("name") or ""

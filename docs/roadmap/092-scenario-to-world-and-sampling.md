@@ -56,7 +56,7 @@ From the design's section 10.
 **The plumbing.** `world.pilot_maps` in testbench.yaml declares, per world map, the maps a pilot
 may load: `{<world map>: {current: <itself>, <variant>: <map> | {map: <map>, pointcloud:
 edited}}}`. `current` is the world's own map, not "up to date". A scenario binds a variant by
-FileHeader `scensim.pilot_map` (`$<parameter>` or a name). `scensim run` refuses an undeclared
+FileHeader `scensim.pilot_map` (`param:<parameter>` or a name; issue 131). `scensim run` refuses an undeclared
 variant before any run, asks the stack for it (a switch request's `pilot_map`: the world keeps
 its town, and the pilots restart on the variant's `map_path`, with no town load when only the
 variant changes), and records `result.json` `maps: {world, pilot, variant, pointcloud}`.
@@ -99,6 +99,17 @@ longer), so a route around the block exists.
   case; what does not is a route without 6583.
 - pm=works: the route holds no 6583, the ego's truth never enters it, and the ego reaches the
   goal within the limit (exitSuccess), about 490 m.
+
+**Attempt 1 (2026-11-24): refused by SSv2, issue 131.** Both runs were SSv2 error runs before
+the ego moved (`No such variable named "pm"`): a `$` in a FileHeader property is evaluated
+before the parameters exist. The stack had switched correctly: pm=works restarted the pilots
+alone on Town01_west_street_closed in 8.6 s, with no town load. Bindings now write
+`param:<name>` (issue 131). For attempt 2 the scenario also binds a knob (`illumination =
+param:light`, day only) and an anchor (`barrier_lane = west_street.lanelet_at(param:barrier_s)`,
+which places the barriers by LanePosition), so the two runs show all three binding kinds
+accepted by SSv2. Predicted besides the above: no SSv2 error; `result.json` `knobs.ok` true
+(illumination day), `anchors.barrier_lane` 6583, `maps` with the variant's and Town01's
+lanelet2 digests.
 
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 

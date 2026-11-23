@@ -51,8 +51,8 @@ class InTheScenario(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "cs5.xosc"
             p.write_text((CASES / "cs5_fog_mid_route.xosc").read_text().replace(
-                "$fog_end $visibility_min", "$fog_end $nope"))
-            with self.assertRaisesRegex(SpecError, r"\$nope is not a declared parameter"):
+                "param:fog_end param:visibility_min", "param:fog_end param:nope"))
+            with self.assertRaisesRegex(SpecError, r"param:nope is not a declared parameter"):
                 Scenario(p)
 
     def test_a_draw_whose_breakpoints_cross_is_rejected_by_name(self):

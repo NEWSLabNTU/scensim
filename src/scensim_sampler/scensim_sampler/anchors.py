@@ -178,8 +178,8 @@ def sources(anchors, read):
 #   <Property name="scensim.anchor.<parameter>" value="<ref>.<attribute>"/>
 #   <Property name="scensim.anchor.<parameter>" value="<ref>.<function>(<arg>)"/>
 #
-# <ref> is an anchor's name, or $<parameter> naming one (a string parameter, so the sampler can
-# draw which); <arg> is a number or $<parameter>. Before SSv2 starts the parameter takes the
+# <ref> is an anchor's name, or param:<parameter> naming one (a string parameter, so the sampler
+# can draw which); <arg> is a number or param:<parameter> ($<parameter> once read: issue 131). Before SSv2 starts the parameter takes the
 # anchor's value: a LanePosition's laneId (`<lane>.lanelet_at(s)`), its s (`<lane>.local_s(s)`),
 # a heading, a length.
 
@@ -194,8 +194,8 @@ def parse_binding(text, where="binding"):
     m = _BINDING.match((text or "").strip())
     if not m:
         raise AnchorError(f"{where}: {text!r}: an anchor binding is <anchor>.<attribute>, or "
-                          f"<anchor>.<function>(<number or $parameter>); <anchor> may be "
-                          f"$<parameter> naming one")
+                          f"<anchor>.<function>(<number or param:<parameter>>); <anchor> may "
+                          f"be param:<parameter> naming one")
     return m.group(1), m.group(2), m.group(3)
 
 
