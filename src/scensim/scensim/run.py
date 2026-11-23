@@ -185,6 +185,31 @@ def expand(target: Path, project: Path, repeat: int = None, params: dict = None,
     return specs, suite
 
 
+def command_check(traces, claimers) -> tuple:
+    """``(result.json's commands block, why the run is a command_lag error run or None)`` for
+    a run whose attachments ``claimers`` command entities (092 K12, D7). A truth with no frame
+    is no lag: the scenario never ran (SSv2 refused it, say), and the run's own error says so."""
+    block = truthmod.commands(traces, lockstep=all(a.get("lockstep") for a in claimers))
+    if block is None:
+        if not any(t.frames for t in traces):
+            return None, None
+        return None, ("the truth file has no commanded entity's cmd_frame, so the commands' lag "
+                      "is unknown")
+    if block["ok"]:
+        return block, None
+    bad = {n: e for n, e in block["entities"].items()
+           if e.get("lost_frames") or e.get("unmatched_frames")
+           or e.get("uncommanded_frames", 0) > 1
+           or (e.get("lag_frames") or {}).get("max", 1) != 1
+           or (e.get("lag_frames") or {}).get("p50", 1) != 1}
+    n, e = next(iter(bad.items())) if bad else ("?", {})
+    return block, (f"lockstep: {n}'s commands were not the previous frame's at every frame (lag "
+                   f"{e.get('lag_frames')}, {e.get('lost_frames', 0)} lost, "
+                   f"{e.get('unmatched_frames', 0)} unmatched, "
+                   f"{e.get('uncommanded_frames', 0)} before its first; gate misses "
+                   f"{block['gate_misses']}, unknown entities {block['unknown_entity']})")
+
+
 def check_commands(spec, project: Path):
     """Refuse a spec whose commanded entities (controller ``model``) and the testbench's
     attachments' ``commands:`` claims do not match, or exceed the gate's bounds (092 K12, D1 and
@@ -1655,25 +1680,12 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
     claimers = [a for a in (psettings.get("attachments") or []) if a.get("commands")]
     if ssv2 is not None and claimers:
         try:
-            commands_block = truthmod.commands(truthmod.load(run_dir),
-                                               lockstep=all(a.get("lockstep") for a in claimers))
+            commands_block, why = command_check(truthmod.load(run_dir), claimers)
         except Exception as e:  # noqa: BLE001 -- an unreadable trace is the judges' to report
             run_events.append({"t_wall": time.time(), "event": "commands.unread", "why": str(e)})
-        if commands_block is None:
-            infra.append(results.Infra("command_lag", "the truth file has no commanded entity's "
-                                       "cmd_frame, so the commands' lag is unknown"))
-        elif not commands_block["ok"]:
-            bad = {n: e for n, e in commands_block["entities"].items()
-                   if e.get("lost_frames") or e.get("unmatched_frames")
-                   or e.get("uncommanded_frames", 0) > 1
-                   or (e.get("lag_frames") or {}).get("max", 1) != 1
-                   or (e.get("lag_frames") or {}).get("p50", 1) != 1}
-            n, e = next(iter(bad.items())) if bad else ("?", {})
-            infra.append(results.Infra(
-                "command_lag", f"lockstep: {n}'s commands were not the previous frame's at every "
-                f"frame (lag {e.get('lag_frames')}, {e.get('lost_frames', 0)} lost, "
-                f"{e.get('uncommanded_frames', 0)} before its first; gate misses "
-                f"{commands_block['gate_misses']})"))
+            why = None
+        if why:
+            infra.append(results.Infra("command_lag", why))
     # 092 K9: each knob profile's commanded and read-back values, from the gap trace's knob
     # lines; one the world did not follow within its tolerance makes it an error run
     profile_plan = (knob_block or {}).pop("_profile_plan", None)

@@ -241,3 +241,26 @@ def test_commands_lag_counts_truth_frames_through_sim_frame(tmp_path):
     # is unmatched, and fails lockstep
     c = truth.commands(_commanded_trace(tmp_path, [0, 101, 102, 57]), lockstep=True)
     assert c["entities"]["walker"]["unmatched_frames"] == 1 and not c["ok"]
+
+
+def test_command_check_names_the_lag_and_stays_silent_when_nothing_ran(tmp_path):
+    # 092 K12: a run whose scenario SSv2 refused has a truth file with no frame; its error is
+    # SSv2's, not command_lag (the first exit runs reported command_lag for it)
+    from scensim import run
+    lock = [{"name": "walker", "commands": ["walker"], "lockstep": True}]
+    write(tmp_path, [EP | {"schema": 3}, entity("ego", "ego", 0),
+                     END | {"frame": 0, "frames": 0}])
+    assert run.command_check(truth.load(tmp_path), lock) == (None, None)
+    ok = _commanded_trace(tmp_path / "ok", [0, 101, 102])
+    block, why = run.command_check(ok, lock)
+    assert block["ok"] and why is None
+    bad = _commanded_trace(tmp_path / "bad", [0, 101, 57],
+                           {"unknown_entity": 1, "gate_misses": 1, "malformed": 0})
+    block, why = run.command_check(bad, lock)
+    assert not block["ok"]
+    assert "1 unmatched" in why and "gate misses 1" in why and "unknown entities 1" in why
+    # frames ran but no commanded entity was moved: the lag is unknown
+    write(tmp_path / "none", [EP | {"schema": 3}, entity("ego", "ego", 0),
+                              frame(1, {"ego": (0, 0, 0)}), END | {"frame": 1, "frames": 1}])
+    block, why = run.command_check(truth.load(tmp_path / "none"), lock)
+    assert block is None and "lag is unknown" in why
