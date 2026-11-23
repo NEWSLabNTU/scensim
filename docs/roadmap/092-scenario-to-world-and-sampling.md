@@ -279,3 +279,95 @@ or unmatched frame, the gate's counts 0, check 2's error 1.49e-4 m. All three L 
 checks 1 to 3, so K12's exit holds. Seed 1 rejected in all three sets, against the prediction
 (an accept on a thin margin, U - logit(u) = 0.08); seed 31 (2.61) was the accept branch in
 sets 1 to 3, so both branches were covered as (c) provides.
+
+## K10's next step: the walker's agreement, seats against the batch (plan, 2026-11-23, 241; approved by 133 with its additions, before any code)
+
+K10's row has two parts left: the agreement check in K2.4's style, and the latency from a truth
+frame to the command taking effect. K12 landed the seats side (`scensim.behaviour.seats`, the
+walker as a lockstep attachment commanding through the tick gate) and its exit runs measure the
+latency (D7: lockstep lag 1 at every frame or an error run; the free-running lag reported, F).
+So the latency is K12's numbers, not measured again: exit set 3 (above), lag 1 at p50, p95 and
+max in every lockstep run and in the free-running one (F seed 1, 240 frames), with no lost or
+unmatched frame.
+What is left is the agreement.
+
+**The question.** Does the batch, running CS1 from the same record, make the walker do on the
+same frames what it did on seats: the same decisions at the same frames, the same trajectory,
+the same storyboard trigger times, the same verdict?
+
+**Isolating the walker.** K12 is CARLA only, and the batch has no CARLA car: the ego's
+dynamics differ between the two sides (engine A is aib's PhysX vehicle, B an articulation), and
+a walker that decides on the gap to the ego would see a different gap. K2.4 avoided this by
+running seats on Isaac with engine A; that is not open here. So the batch ego **replays the
+seats ego's truth poses** kinematically (a pose playback, new: `agreement_run.py
+--ego-from-truth`), frame for frame as K2.4 pairs them (seats frame S + k is batch step k),
+and the comparison is of everything else. The ego's own column is then zero by construction and
+is checked to be (under 1e-6 m), not judged.
+
+**What it adds, and what it does not (133, 2026-11-23).** K12's check 2 already compared the
+batch's walker model, replayed in numpy on the seats ego's truth, with CARLA's walker (within
+1.5e-4 m but the stalls), and K10 (ii) showed the model's numpy and torch forms bit for bit. This
+agreement adds three things, which it judges: the walker placed in the batch as its executor
+places a model entity (`Models.place`, into the observation the storyboard reads, through the
+view SSv2 would have of it), the batch storyboard's timing on a commanded walker (each
+element's offset, the walker's own conditions among them), and the walker's decisions as the
+batch executor sequences them, a step after the ego's physics. (133 named Isaac Lab's
+placement of the walker: there is none to judge. ScensimEnv puts only the ego in Isaac's
+scene; SSv2's default vehicles and model entities live in BatchRun's tensors, read back from
+no simulator.)
+
+**No engine is in this agreement (133).** It checks BatchRun's logic on a playback backend:
+`Models.place`, the storyboard, the decisions' sequencing. The ego's engine (engine A or B
+against CARLA's car) is not covered: an agreement with an engine in the loop waits until both
+sides can drive the same ego, which K12's CARLA-only channel does not allow yet. The walker's xy error is kept and predicted to equal check 2's, since the same model
+on the same ego poses gives the same law; a difference from check 2's number is a finding.
+
+**The frame alignment, stated.** As in K2.4, seats frame S + k pairs with batch step k, and the
+played-back ego at step k is the seats ego's truth at frame S + k. In a batch step the ego
+moves first and the model then reads that step's ego and moves the walker in the same step
+(`BatchRun.step`, `Models.step`); on seats the attachment reads the truth of frame S + k and
+its command moves the walker in frame S + k + 1, K12's lag 1. So the batch walker at step k is
+compared with the seats walker's truth at frame S + k + 1, a decision the batch makes at step k
+with the one the attachment wrote for truth frame S + k, and the ego's velocity the model reads
+is the one the seats attachment read from the same truth frames (its finite-difference
+acceleration too). This is K12's check 2 convention; without it every decision would shift by
+a frame for the wrong reason.
+
+**The runs.** K12's exit set 3 (CS1's walker on Town01's `west_street`, the ego
+`carla_basic`, lockstep, scensim 6fd0c750): its L seed 2 (rejects, waits, crosses after the
+ego) and L seed 31 (accepts and crosses in front), one run of each branch, read from their run
+directories, so no seats run is made again. The batch side:
+`agreement_run.py --ego-from-truth` on each run directory, one slot, the walker a `model`
+entity compiled from its ObjectController with the run's seed. With the ego played back, no
+engine enters: BatchRun runs on a playback backend that returns the seats ego's truth (pose,
+and the velocity the attachment read), with no Isaac and no GPU.
+
+**The columns** (batch-executor.md section 8's, with the model's): the outcome on each side;
+the walker's max and RMS xy error and its max yaw error; each storyboard element's first
+running and complete step on each side (the walker's start trigger `start_gap`, the far-kerb
+`ReachPositionCondition`, the scenario's end); each of the walker's decisions (`wait`, `go`,
+`abort`) with its frame on each side (seats: the attachment's `decisions.jsonl`; batch: the
+model's events); the ego's error (checked zero).
+
+**The rule, fixed before any run.** Each run agrees when: the outcomes are equal; the
+decisions are the same sequence at the same frames; every element's offsets are 0; the
+walker's max xy error is at most 0.02 m (K12's check 2 bar, for the same set_transform pose
+read back each frame), and is expected to equal check 2's for the run (1.49e-4 m for seed 2,
+1.50e-4 m for seed 31). A disagreement is named by run, column and number, and its cause found
+before anything is rerun. The prediction: both seeds agree, as K12's check 2 found the model
+against the seats walker within 1e-4 m on every frame but the asynchronous-pose stalls, which
+scensim_carla_world a27b833 removed.
+
+**Code** (one landing, gated, asked first): `agreement.py` reads the attachment's decisions and
+pairs model entities' poses and decisions; `agreement_run.py --ego-from-truth`; tests on
+recorded fixtures, no simulator. A fix, named as one (133): `Models.step` takes the ego's
+velocity from the backend's state when it gives one (`vx_map`, `vy_map`, the map frame, which
+is what the walker sees and what the seats attachment reads from the truth), else from v and
+yaw as now, which drops a sliding ego's lateral velocity. Which runs it changes: only those whose
+backend gives the map-frame velocity, and today only the playback backend does; engine A's
+`PhysxVehicleBackend.state` and engine B's `ArticulationBackend.state` give v along the body,
+so every landed batch run computes as before. No landed result used a model entity on an
+engine either: K2.4's rows have none, and the walker's batch form so far is tests and the
+`cs1_walker_gap_acceptance.xosc` example. So nothing reruns and nothing needs a note. The
+engines giving map-frame velocity too, for a model beside a sliding ego, is a follow-up. The batch side needs no simulator and no GPU, and
+the seats side is set 3's runs, so nothing here takes a GPU.
