@@ -116,6 +116,25 @@ FileHeader (issue 131 holds) and refused the barriers' `miscObjectCategory="barr
 OpenSCENARIO category it does not implement; they are `obstacle` (as K12's van) for attempt 3,
 with the same predictions. The stack again switched to the variant alone (8.8 s).
 
+**Attempt 3 (2026-11-24): as predicted, both runs.** One stack (seat 0, CARLA 0.9.16 at Epic,
+the Autoware pilot with scensim's profile and clustering), the variant placed by hand in
+assets/maps until the dataset holds it.
+
+| run | Autoware's route (mission planner) | ego in 6583 | outcome | contacts |
+|---|---|---|---|---|
+| pm=current (Town01, stale) | 28257, 41654, 6583, 42451, 32189 | from sim 29.5 s | stopped for good at sim 34.8 s, its nose about 5.8 m before the barriers (centre x 313.86, barriers at x 305.64), until the 240 s limit: exitFailure | none |
+| pm=works (Town01_west_street_closed) | 28257, 42063, 28958, 39793, 21828, 41443, 32855, 42824, 32189 | never | reached the goal at sim 131.8 s: exitSuccess | none |
+
+The routes are lanelet2's shortest, as predicted; the stale pilot plans through the closed
+block and its perception stops it at the barriers, the updated pilot goes round. In both runs
+SSv2 accepted the three bindings: `knobs.ok` true (illumination day, sun altitude 60 applied),
+`anchors.barrier_lane` 6583 (the barriers stood at (305.64, -128.21 / -129.51 / -130.81)), and
+`maps` with the pilot's lanelet2 digest (Town01 a85836f5..., the variant a2daf41c...); the works
+run switched the pilots alone (8.7 s). The tag `participant:vehicle = no` shipped: Autoware 1.5's
+route honours it, so the fallback was not needed. The variant carries no anchors files: with 6583
+impassable lanelet2 gives it no followers, so `west_left_turn` cannot resolve there, and anchors
+are read from the world's map only.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
