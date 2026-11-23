@@ -54,10 +54,14 @@ Other entry points with `app.close()` in a `finally` and no `except` (not checke
   in the summary (`"error"`). The `finally` still writes the summary, then calls
   `close(app, failed)`. A failed run exits 1, and its summary says why.
 - **aib.ground_check** (issue 117) uses the helper in place of its own `os._exit`.
-- **The other entry points** are 133's call: the same helper, or left as they are.
+- **Every entry point gets the helper (133, 2026-11-23):** steptest, ground_check,
+  `world_server.py`, `course/lip_drive.py` and `course/arc_drive.py`. A silent exit 0 is the
+  same defect wherever it is, and the world server's exit status is what its supervisor and
+  play_launch act on.
 
-Tests: the helper with a fake app, a failed call exiting 1 without closing and a passed call
-closing; and steptest's handling, an exception in a test giving a summary with `"error"` and
-`failed` set, checked by reading `main`'s structure if it cannot run without Isaac. Under
-Isaac, once: a steptest run that raises (the 0.2 `regen_60` case, on a branch where it still
-raises) exits 1 and prints its traceback.
+Tests:
+- **The helper,** with a fake app and a fake exit: a failed call exits 1 without closing, and a
+  passed call closes.
+- **One test per entry point** that makes it raise and asserts a nonzero exit status. A test
+  runs without Isaac where its entry point can (a fake `SimulationApp` module); otherwise it
+  runs under Isaac's Python with a forced failure.
