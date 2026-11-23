@@ -51,6 +51,55 @@ From the design's section 10.
 | K11 | 093 D4's search (purpose B): an adaptive search over cells that writes the record's reserved `search` | component | K1, K7 | swb 241 | in progress: K11a done 2026-11-24 (`scensim-sample search`; "K11a's result" below, check 1's fourth part failed, its cause named); K11b, K11c open |
 | E1 | Examples | examples | the above | | open |
 
+## K9's CS3: the pilot's map variants (2026-11-24, 243; reviewed by 133)
+
+**The plumbing.** `world.pilot_maps` in testbench.yaml declares, per world map, the maps a pilot
+may load: `{<world map>: {current: <itself>, <variant>: <map> | {map: <map>, pointcloud:
+edited}}}`. `current` is the world's own map, not "up to date". A scenario binds a variant by
+FileHeader `scensim.pilot_map` (`$<parameter>` or a name). `scensim run` refuses an undeclared
+variant before any run, asks the stack for it (a switch request's `pilot_map`: the world keeps
+its town, and the pilots restart on the variant's `map_path`, with no town load when only the
+variant changes), and records `result.json` `maps: {world, pilot, variant, pointcloud}`.
+`testbench check` refuses a variant that is not fetched, one on another projection
+(`map_projector_info.yaml`), one whose point cloud is not the world's byte for byte unless it
+declares `pointcloud: edited`, and a scenario binding a variant its world lacks. `compilable`
+refuses the binding by name: no batched policy takes a map yet.
+
+**The variant (the user's OK, relayed by 133, 2026-11-24).** In CS3 the works are props in the
+world, and Town01's lanelets do not show them, so the stale map is plain Town01, which exists.
+The map to publish is the updated one that shows the closure:
+
+- the lane: west_street, lanelet 6583, the whole 224 m block between its junctions (from
+  (325.6, -129.5) west to (101.4, -129.4)), closed whole so no lanelet is split;
+- the world: three `static.prop.streetbarrier` MiscObjects across 6583 at s 20 (x 305.6, lateral
+  -1.3, 0 and +1.3 m in its 4 m lane), placed by the CS3 scenario; CARLA's map is unchanged;
+- the pilot's updated map, `Town01_west_street_closed`: Town01 with lanelet 6583 tagged
+  `participant:vehicle = no`, which lanelet2's traffic rules (Germany, Vehicle, as Autoware's
+  route handler builds them) read as not passable (`canPass` false, checked 2026-11-24); every
+  other file byte for byte Town01's, anchors included;
+- the point cloud: shared, byte for byte (the barriers are not in it; NDT localises on the
+  buildings and kerbs), so no `pointcloud: edited`;
+- declared as `pilot_maps: {Town01: {current: Town01, works: Town01_west_street_closed}}`.
+
+If Autoware's route ignores the tag, the fallback (133) is to remove 6583 from the updated map
+and drop west_street from its anchors; which one shipped is recorded here.
+
+**The runs, predicted before any.** Project `scenarios/projects/k9_cs3`, the Autoware pilot
+(scensim's profile, tesla_model3, clustering), CARLA 0.9.16 at Epic. The ego starts on lanelet
+28257 (334.85, -79.03), heading south; its goal is on 32189 (92.38, -78.14), heading north.
+lanelet2's shortest routes: on Town01, 28257, 41654, 6583, 42451, 32189 (358.5 m); on the
+updated map, 28257, 42063, 28958, 39793, 21828, 41443, 32855, 42824, 32189 (490.0 m, 37 %
+longer), so a route around the block exists.
+
+- pm=current (the stale map): Autoware's route (its mission planner's `LaneletRoute`) holds
+  6583, and the ego's truth enters 6583. Expected: lidar clustering sees the barriers and the
+  ego stops before them, then stays stopped (no lane change into the oncoming lane) until the
+  scenario's 240 s limit (exitFailure). Also a valid CS3 result, if it happens: perception
+  misses the barriers and the ego touches one (a contact). Either counts as the stale map's
+  case; what does not is a route without 6583.
+- pm=works: the route holds no 6583, the ego's truth never enters it, and the ego reaches the
+  goal within the limit (exitSuccess), about 490 m.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
