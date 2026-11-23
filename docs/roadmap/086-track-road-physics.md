@@ -1330,6 +1330,21 @@ host and GPU): `tick_p50_ms` 45.1 to 45.3, `tick_p95_ms` 51.4 to 88.9 over six r
     measured 11.3 ms with two cars on a fixture course (raycast, colliders on); Haruna's world
     is larger and has rocks.
 
+**The p95 criterion, amended before the runs** (133, 2026-11-23, after the predictions above):
+
+- The absolute 45 ms is not applied to the Autoware ego. It came from 066's world-server frame
+  without Autoware's sensors, and C5 measured `tick_p95_ms` 51 to 89 ms on Haruna with no road
+  layer at all. A bound known to fail measures nothing about the rocks. Both maps' p95 are still
+  reported against 45 ms for the record.
+- **The new criterion**: the median p95 on *rocks* is no higher than the highest p95 on *none*
+  over its three runs.
+- What it cannot see: C5's p95 spread was about 40 ms over six runs, so three runs against
+  three cannot resolve an effect smaller than about 10 ms. A pass means no effect above the
+  noise, not no effect.
+- p50 (at most 5 ms over *none*), the pose error, NVTL and the two cars' p50 (at most 50 ms)
+  stay as written.
+- 118's prediction under the new criterion: it passes.
+
 #### C6d's spec: sensors and Autoware on the rough record road (written 2026-11-24, before any run; approved to write by 133)
 
 C6d is 066 R7 on the record road: Autoware's Model 3 on C5d's rebuilt Haruna made rough, with
