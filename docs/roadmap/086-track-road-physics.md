@@ -10,7 +10,8 @@ approved by 133 the same day with its three decisions. C1 done 2026-11-20 (scens
 courses' dataset revision prepared, not published. C4 landed 2026-11-20 (scensim_isaac_world
 6177ced, scensim 82787b91); its Town01 suite waits for 139. C5 started 2026-11-23 in four
 steps ("C5's steps" below); C5a done (scensim_isaac_world ea35f35), C5b done
-(scensim_isaac_world b5de87b, its fixture course and checks).
+(scensim_isaac_world b5de87b, its fixture course and checks), C5c done (scensim_isaac_world
+086-c5c, the lip fixtures and the strips as zones).
 Issue 077's cause is confirmed (2026-11-20, 118): PhysX's raycast wheel query takes Town01's
 sharp curb face as the ground, and Town01 has no road layer. Its fix comes first, ahead of C5:
 recheck the sweep (066 R1's check, from C6). If the sweep no longer throws the car, aib switches
@@ -436,6 +437,71 @@ zones.
   strip reads its class and a point on the carriageway the map's; in Isaac, on segment 10
   the right wheels read `gravel` (wheels.py's `class` and `zone`) while they are on the
   shoulder, and the left ones the reference class.
+
+**As built, where it differs from the spec above** (told to 133 with the results):
+
+- aib's teleport puts the car at rest (`Vehicle.teleport` zeroes the body's velocity and the
+  wheels' state), so a case does not start at speed. It starts at rest 5 m into its segment
+  on the shoulder line, drives up to 15.6 m/s over 60 m along it, and the start check
+  (speed within 0.1 m/s, lateral offset within 5 cm, the right wheels on the shoulder) is
+  made where the 40 m parallel leg begins. The segments are 200 m, not 120 m, to hold that.
+  The speed hold has an integral term, taken only within 1 m/s of the target: without one
+  the cars started 0.09 m/s slow, and with one wound up from rest, 1.27 m/s fast (both seen in
+  smoke runs, both refused or near it).
+- The leg after the turn-in is 80 m (5.1 s at 15.6 m/s), over the 4 s held window.
+- Both shoulders are 2.0 m: the course builder's mesh takes one shoulder width.
+- The course's record is in `course/` (C3), not at `<map dir>/road_detail.yaml`, so the world
+  server loads no road layer for a course and its strips reach a scenario only on a map with
+  a road detail. `lip_drive` builds the surface layer as the server does
+  (`SurfaceLayer.add_record_zones` over `road_layer.strip_zones`) on the map's own surface
+  map.
+
+#### C5c's results (2026-11-23, 118, GPU0)
+
+scensim_isaac_world 086-c5c (`courses/fixture_c5c.yaml`, `course.lip_drive`,
+`course.lip_check`, `road_layer.strip_zones`, `SurfaceLayer.add_record_zones`). Logs and
+data: NAS "2026-11-23 086 C5c lip fixtures (118)".
+
+- **The road.** The lip course's mesh against its record offline, and Isaac's road by
+  510458 PhysX rays (32049 on a lip's face left out), 0 missing: both pass C5b's limits.
+- **The starts.** All 22 cases started right: speed 15.638 to 15.641 m/s, lateral offset
+  -0.010 to -0.015 m, both right wheels on the shoulder at its height.
+- **The control** crossed 0.368 s (raycast) and 0.349 s (sweep) after the turn-in, against
+  its line's 0.264 s (the front axle leads the base): within 0.3 s.
+- **The strips.** On segment 10 the right wheels read `gravel` in `record_right_shoulder_1`
+  through the parallel leg, the left wheels `asphalt` and no zone (both queries).
+
+The lips, the right front wheel's crossing after the control's (s; held: none within 4 s),
+then the peak lateral acceleration in the 1 s after it less the control's (m/s^2):
+
+| segment | lip | face | rule | raycast | | sweep | |
+|---|---|---|---|---|---|---|---|
+| 1 | 5 cm | 90 | boundary | re-enters -0.025 | +1.48 | re-enters +0.023 | +0.02 |
+| 2 | 5 cm | 45 | re-enters | re-enters -0.006 | +0.09 | re-enters +0.037 | +0.40 |
+| 3 | 5 cm | 30 | re-enters | re-enters 0.000 | +0.78 | re-enters +0.025 | +0.59 |
+| 4 | 10 cm | 90 | **held** | **re-enters** +0.017 | +1.39 | **re-enters** +0.032 | +1.95 |
+| 5 | 10 cm | 45 | boundary | re-enters +0.045 | +1.41 | re-enters +0.077 | +1.36 |
+| 6 | 10 cm | 30 | re-enters | re-enters +0.067 | +1.15 | re-enters +0.060 | +1.28 |
+| 7 | 15 cm | 90 | **held** | held | | **re-enters** +0.057 | +4.68 |
+| 8 | 15 cm | 45 | boundary | re-enters +0.077 | +2.19 | re-enters +0.103 | +3.46 |
+| 9 | 15 cm | 30 | re-enters | re-enters +0.086 | +2.16 | re-enters +0.157 | +2.25 |
+
+Raycast: 7 agree, 1 mismatch, 3 boundary. Sweep: 6 agree, 2 mismatches, 3 boundary. No case
+showed the yaw spike: the peak yaw rate after the crossing was within 0.06 rad/s of the
+control's in every case. The body's roll about the crossing grew with the lip, 1.5 deg on
+the control to 5 deg at 10 cm and 7 deg at 15 cm.
+
+- **Finding: Isaac's car climbs a vertical 10 cm lip it should be held by**, with both wheel
+  queries, at 4 deg and 15.6 m/s, 0.02-0.03 s later than with no lip, and no yaw spike. The
+  survey's inference holds for the sweep at 15 cm too. The lateral edge force 066 R8 named
+  is its fix, as its own step, not C5c's.
+- **Finding: the raycast's hold at 15 cm is not a tyre's.** Its right front wheel ran 4 cm
+  outside the edge for the whole window with its ray's hit at the face's foot (v -3.2509, the
+  1 mm-wide face at -3.250 to -3.251), on the shoulder: issue 077's mechanism, the ray taking
+  a sharp face as the ground. It is not robust either: in the two smoke runs (15.51 and
+  16.87 m/s at the turn-in) raycast held at 10 cm, at 15.64 m/s it climbed. So the raycast's
+  holds are an artefact, and the sweep's re-entries are the plant's real answer: it has no
+  sidewall to scrub with.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
