@@ -85,7 +85,8 @@ Two things in Isaac 6.2's `SimulationApp` (`isaacsim.simulation_app`) decided it
 - `code_of(exc)` writes the traceback to stderr and returns the status: a `SystemExit` keeps its
   own (None is 0), a `KeyboardInterrupt` is 130, anything else 1. Ctrl-C under Kit does not
   reach it as a KeyboardInterrupt: Kit's SIGINT handler shuts the app down and raises
-  `SystemExit(0)`, so a stopped world server still exits 0, as before.
+  `SystemExit(0)`, so a stopped world server still exits 0, as before (133: fine, a stop is not
+  a failure).
 - `close(app, failed)` calls `app.close()` for a run that passed. For a failed one it calls
   `app.close(exit_code=code)`, and should that return, refuse the argument (an older Isaac) or
   raise, it flushes and calls `os._exit(code)`.
@@ -130,3 +131,40 @@ changed here, for a decision):
 - scensim: `scensim_batch/scripts/` (`agreement_run.py`, `check_resident.py`, `eval_drift.py`,
   `eval_leadbrake.py`, `smoke_articulation.py`, `smoke_drift.py`, `smoke_env.py`) and
   `scripts/svl_import/isaac_probe.py`.
+
+## Follow-up (133, 2026-11-23)
+
+The entry points above, in this order, with the same test pattern; `spikes/` stays out
+(exploratory scripts):
+
+1. **The evaluations P2 and P4 run on, now:** `scensim_batch/scripts/eval_drift.py` and
+   `eval_leadbrake.py`. A silent crash there could read as a missing or partial evaluation.
+2. The rest of `scensim_batch/scripts/` and `aib.runner`.
+3. scensim_isaac_world's `course/fixture_drive.py`, `course/fixture_cost.py`,
+   `course/isaac_check.py` and `scripts/step_response/isaac_step.py`.
+
+**Step 1.** Both evaluations are Isaac Lab scripts: their code runs at module level after the
+app, so an exception escapes to Python's top level and the app's atexit close then ends the
+process with 0. `aib.app_exit.guard(app)` (aib 63a8c0c), called right after the app, records an
+escaped exception in `sys.excepthook` and registers an atexit handler, which runs ahead of the
+app's own and ends the process through `close(app, 1)`. Each script gains that one call; a run
+that ends normally still calls `app.close()`. A `SystemExit` that escapes is not seen (Python
+calls no excepthook for it); neither script raises one after its app starts.
+
+`eval_drift.py` runs under `run_p2.sh`'s PYTHONPATH, which now includes aib's source (133: one
+helper, not a copy); `run_p4.sh`'s had it. The fix changes only the exit status, not a score.
+The P2 evaluations already under way stay on `eval_drift.py` at the seeds' commit (4c5d7a7a)
+for both rows, so one file scores rows a and b; the fixed one applies to P2 runs started after
+it lands. Until then 118 and 139 check the evaluations' records rather than their exit codes
+(133; also in roadmap 094's P2 row).
+
+| test | before | after |
+|---|---|---|
+| aib `test_app_exit`: a guarded script that raises (status 1, Python's traceback); one that ends (status 0) | (new; unguarded, the first ends with 0) | pass |
+| scensim_batch `test_app_exit`: eval_drift raises at its first Isaac Lab call | fail (exit 0) | pass |
+| the same: eval_leadbrake | fail (exit 0) | pass |
+
+The scensim_batch test runs each script under `aib.fake_kit` with Isaac Lab, torch, gymnasium
+and rsl_rl stood in for (`FAKE_KIT_EXTRA`), the failure at
+`isaaclab_tasks.utils.parse_cfg.load_cfg_from_registry` (`FAKE_KIT_FAIL`), and a stand-in
+`wheeledlab_rl.startup` that builds the stand-in app.

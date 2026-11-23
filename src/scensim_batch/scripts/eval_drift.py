@@ -38,6 +38,9 @@ parser.add_argument("--starts", choices=("stock", "uniform"), default="stock")
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--out", required=True)
 simulation_app, args_cli = startup(parser=parser)
+from aib import app_exit  # noqa: E402
+
+app_exit.guard(simulation_app)  # an escaped exception ends with 1, not Kit's 0 (scensim issue 118)
 
 import glob  # noqa: E402
 import json  # noqa: E402

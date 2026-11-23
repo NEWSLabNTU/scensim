@@ -22,7 +22,7 @@ case $row in b) comp=() ;; a) comp=(env.drift_component=roboracer_vesc.component
 export OMNI_KIT_ACCEPT_EULA=YES PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=$GPU WHEELEDLAB_ENABLE_CAMERAS=0
 export VK_ICD_FILENAMES=${VK_ICD_FILENAMES:-/usr/share/vulkan/icd.d/nvidia_icd.json}
 export SCENSIM_ASSET_ROOT=$FORK/source
-export PYTHONPATH=$FORK/source/wheeledlab:$FORK/source/wheeledlab_tasks:$FORK/source/wheeledlab_rl:$FORK/source/wheeledlab_assets:$FORK/bench:$repo/src/sim_vehicle_ecu:$repo/src/sim_vehicle_spec:$repo/src/scensim_sampler:$repo/src/scensim_batch:$repo/scenarios/projects/roboracer/component/roboracer_vesc
+export PYTHONPATH=$FORK/source/wheeledlab:$FORK/source/wheeledlab_tasks:$FORK/source/wheeledlab_rl:$FORK/source/wheeledlab_assets:$FORK/bench:$repo/src/autoware_isaac_bridge/src/aib:$repo/src/sim_vehicle_ecu:$repo/src/sim_vehicle_spec:$repo/src/scensim_sampler:$repo/src/scensim_batch:$repo/scenarios/projects/roboracer/component/roboracer_vesc
 # an idle GPU and an idle host, as run_p1.sh (WheeledLab 788e8a7): the 1-minute load at most
 # MAX_LOAD x the cores, waited for up to WAIT_IDLE s (wheeledlab_bench refuses with exit 6 after)
 gate=(--require-idle --max-load "${MAX_LOAD:-0.5}" --wait-idle "${WAIT_IDLE:-1800}")

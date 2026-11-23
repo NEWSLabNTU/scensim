@@ -33,6 +33,9 @@ ap.add_argument("--conditions-from", default="",
 AppLauncher.add_app_launcher_args(ap)
 args = ap.parse_args()
 app = AppLauncher(args).app
+from aib import app_exit  # noqa: E402
+
+app_exit.guard(app)  # an exception that escapes ends with 1, not with Kit's 0 (scensim issue 118)
 
 import gymnasium as gym  # noqa: E402
 import torch  # noqa: E402
