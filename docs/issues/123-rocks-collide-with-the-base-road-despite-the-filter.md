@@ -58,3 +58,28 @@ rock prim, against the tiles-alone run's one.
   `rocks` by its own path at a frame's end, and it touches its tile alone; (ii) the warnings go
   and the rock touches its tile alone, the timing being the cause; (iii) the base is not taken
   into two groups (one warning at most). The control as before: 769 warnings, base contact.
+
+## The diagnosis' result (2026-11-23)
+
+siw e4ffffc, aib ff5e72b, GPU0; NAS "2026-11-23 issue 123 diagnosis (118)". The warning at the
+road's load, and the normal force on what the rock touches over its contact (summed):
+
+| pool | warnings | its tile | the base road |
+|---|---|---|---|
+| on (control) | 769 | 18.9 kN | 23.2 kN |
+| off | 1 | 18.9 kN | 23.2 kN |
+| late | 1 | 18.9 kN | 23.2 kN |
+
+- (i) and (ii): **the warnings go, the base contact does not**, to the newton. The prediction
+  failed on the contact: the pool's one-edit membership causes the warnings, but not the base
+  contact. (The warnings are a fault of their own and harmless here; they go with the fix below
+  if it moves the pool's edit.)
+- (iii): the base is not taken into two groups (one warning, as the tiles alone).
+
+**The next lead (before the run):** the `roadBase` group and the rocks' filter on it are made
+when the road loads, after the simulation has started (`world.play`), around ground prims PhysX
+already holds. Issue 030 found PhysX not taking a streamed prim into a group through its
+parent's path; a static collider PhysX parsed before its group existed may likewise keep no
+group. Test (iv): the same run with `roadBase` (the world's ground) and the `rocks` group's
+filter on it made before the simulation starts. **118's prediction:** the rock then touches its
+tile alone.
