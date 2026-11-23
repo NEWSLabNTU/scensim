@@ -1,0 +1,18 @@
+# k9_cs3 (roadmap 092 K9, CS3): a stale map. West_street (lanelet 6583) is closed in the world
+# by street barriers; the pilot's map is either Town01 itself (current: it shows the lane open,
+# the stale case) or Town01_west_street_closed (works: the lane closed to vehicles). The Autoware
+# ego drives from lanelet 28257 to 32189, a route through 6583 or around the block.
+simulator: carla
+assets:
+  - dataset: carla-town-autoware-maps
+    take: [Town01]   # + Town01_west_street_closed from v2026.11f
+maps: [Town01]
+world:
+  pilot_maps:
+    Town01: {current: Town01, works: Town01_west_street_closed}
+pilots:
+  ego: {kind: autoware, autoware_profile: scensim, vehicle: tesla_model3}
+judges:
+  - {name: context_log, run: ["true"], needs: [context]}
+logging: {capture: standard, gap_trace: true, keep: {passed: full, failed: full, error: full}}
+default: both
