@@ -47,7 +47,7 @@ From the design's section 10.
 | K8 | 093's description rules (scenario-description.md section 2a): `latent: true` model variables (gap 2), `scensim.present` optional entities (3), `scensim.static` stopped vehicles (4), `isBlind` in the subset with lane following as its condition (5), a per-sample entity class conditioned on per-slot assets (6), anchor attributes in derived values (7, with K9) | spec, component | S1, S2 | | done 2026-11-22 but gap 3 (swb 243): gaps 2, 4 and 6: latent variables in the record's `latent`; `scensim.static` with SSv2's `maxSpeed = 0`, a batch prop (scensim_batch: executor pending); a parameter in an entity's class or model a condition naming it and its values (SSv2's examples' counts unchanged); gap 5: a blind default controller's condition is SSv2's lane following alone (executor pending in the batch); gap 7: `anchor.<name>.<attribute>` in derived values, from `testbench.yaml` `world.anchors` (lane heading, length, speed limit; point x, y), recorded in the record's `anchors`, CS7's `exit_heading` stand-in gone (the rest of anchors is K9); gap 3 (`scensim.present`) open, needed by neither case study |
 | K9 | 093 D2's world interface beyond knobs: anchors (lanes, regions, conflict points, curves) declared by a world and checked by `testbench check`, knob profiles (`profile: true`, CS5), the pilot's map variants (`maps.pilot_variants`, CS3) | spec, component | K1 | | in progress (swb 243): K9a done 2026-11-22, a map's lanes: `<map dir>/anchors.yaml`, resolved by the map's author with `python3 -m scensim_batch.anchors resolve` (torch) into `anchors.resolved.json` (length, speed limit, ends, a heading table within 1e-3 rad in SSv2's arc length, the map's digest), read by the sampler and scensim with ROS 2 alone and merged with `world.anchors`; `anchor.<lane>.heading(s)`; the record's `anchor_source`; Town01's anchors (west_street, west_left_turn) published 2026-11-22 as the maps dataset's revision deb23e3a, tag v2026.11d, with the user's OK; every testbench's lock on it; K9b done 2026-11-22: FileHeader `scensim.anchor.<parameter> = <anchor>.<attribute>` or `<anchor>.<function>(<arg>)`, `$<parameter>` for a drawn anchor or argument; resolved lanes gain `lanelet_at(s)` and `local_s(s)`, a stated lane its `lanelet`; the sampler checks bindings before drawing and rejects a draw off its lane by name; `scensim run` sets a scenario's bound parameters before SSv2 starts, checks a record's against the world, refuses a given value and SSv2's own distribution of a bound scenario, and records `result.json` `anchors`; `compilable` refuses a named laneId with the binding as its fix; CS6 and CS7 bind their lanes. K9c done 2026-11-22: conflicts (two lanes crossing once: `s_<lane>`, `x`, `y`, `angle`, `position_error`), curves (`length`, `turn`, `direction`, `min_radius` over 2 m, `mean_radius`) and regions (polygon: `area`, centroid, each lane's `from_`/`to_`) resolved from the map's file; Town01's conflict west_left_turn x north_through (the turn crossing the northbound through lane) with its bend and junction, published 2026-11-22 with the user's OK as the maps dataset's revision 19d52699, tag v2026.11e, every testbench's lock on it. K9d done 2026-11-22: `testbench check` refuses a scenario's bindings the world cannot satisfy (an anchor or attribute it lacks, a function on a stated anchor, a bare heading, a constant s off the lane, a stale resolved file); `anchor_source` names the lock's dataset and commit when the lock holds the file read; a stated lane's `lanelet` passes `testbench check`. The anchors are done (K9a-d). Knob profiles built 2026-11-22 (CS5): `profile: true` knobs (a range, the field they set), bound to breakpoints along `time` or `s(<lane>)`, applied by the bridge each frame (`set_knob_profiles`; a send when the value moved by its step and `min_interval`, 1 s by default, has passed, or at once on a crossed breakpoint: a send every frame took CARLA's frame p95 to 21-222 ms, one a second kept it at 1-4 ms), read back by the world servers (`ENVIRONMENT_APPLIED`), recorded per frame in the gap trace's `knob` lines and judged in `result.json` `knobs.profiles` (`knob_profile` error runs); resolved lanes gain their centreline (`x`, `y`). The pilot's map variants (CS3) remain. Before: K8 built the minimal anchor declaration it extends (`world.anchors` in testbench.yaml, numbers the project states): K9 adds anchors a world declares beside its map, attributes computed from the map (`heading(s)`, length and speed limit from lanelets, conflict points), regions and curves, binding entities to anchors, and the check |
 | K10 | 093 D3's behaviour models (scenario-description.md section 4): the model interface (a parameter schema, `reset`, `step`, one array API code for numpy on seats and `step_batch` in torch; truth in, a kinematic command out, decisions into the truth), the starter model (a gap-acceptance walker for CS1, from a published model named before any coefficient), batched in scensim_batch, on seats as a K4 attachment that commands its entity through K12; the agreement check in K2.4's style (the same records on both forms: decisions and their frames, the walker's trajectory error, trigger times, verdict); the latency from a truth frame to the command taking effect measured free-running and in lockstep (093's open question 1) | component | K2, K4, K12 | swb 241 | in progress: planned 2026-11-22 (133 approved), the section 4 draft corrected (SSv2 takes a world-owned pose for any entity; pilots do not see truth, attachments do); (i)-(ii) landed ce760b69: `scensim.behaviour`, the walker on numpy and torch bit for bit (0 of 2800 arrays differ on an RTX 5090), its coefficients the cited set `khaki2021_restricted` (Khaki and Mohammadnazar 2021, CC0; the gap's 2.021 against the 2021 meta-analysis's pooled 1.98); (iii) in the batch: a model entity (role `model`) compiled from its ObjectController (its properties per slot, `anchor.*` for the crossing, its seed from `seeds.pilots.<entity>`), stepped after the ego's physics on its truth and moved kinematically within its acceleration limit; CS1's start trigger is the model's `start_gap` (`$ttc_entry`), as the subset keeps ActivateControllerAction seats-only; the walker decides where it can still stop at the kerb; `cs1_walker_gap_acceptance.xosc` the batch example (the description's CS1 stays refused: a storyboard SpeedAction on a model entity) |
-| K12 | Truth-fed pilots: a command channel from a K4 attachment to the world server (`entity_command`: an entity's kinematic command, carried with the tick gate's acknowledgement, integrated and applied by the world, read back to SSv2, whose fork adopts it for a simulator-driven pedestrian), under lockstep held to one frame; for K10's behaviour models and learned background agents | component | K4 | swb 243 | spec reviewed by 133, 2026-11-23 ("K12's spec" below); pedestrians first, CARLA only; build plan next |
+| K12 | Truth-fed pilots: a command channel from a K4 attachment to the world server (`entity_command`: an entity's kinematic command, carried with the tick gate's acknowledgement, integrated and applied by the world, read back to SSv2, whose fork adopts it for a simulator-driven pedestrian), under lockstep held to one frame; for K10's behaviour models and learned background agents | component | K4 | swb 243 | landed 2026-11-23 (scensim 0cc054d8; the SSv2 fork's model pedestrian, COMMANDED on the world protocol, the CARLA world server's integrator, the bridge, truth schema 3, attachments' `commands:`, `scensim.behaviour.seats`); pedestrians first, CARLA only; exit runs next, by the rule fixed before them ("K12's exit runs" below) |
 | K11 | 093 D4's search (purpose B): an adaptive search over cells that writes the record's reserved `search` | component | K1, K7 | | open |
 | E1 | Examples | examples | the above | | open |
 
@@ -140,3 +140,53 @@ three corrections, and the spec is written around them:
 
 The controller name is `model`; pedestrians first, vehicles when a vehicle behaviour model
 exists; the commands ride the gate's datagram, bounded as in D4.
+
+### K12's exit runs (rule fixed 2026-11-23, before any run)
+
+Exit checks 1, 3 and 4 hold in the landed code (scensim 0cc054d8: `commanded_law.json` and
+`test_model_law`, the fork's traffic_simulator test, the refusals' tests). Check 2 is these runs.
+
+**The scenario.** `scenarios/projects/k12_commanded/scenarios/cs1_town01.xosc`: CS1's gap
+acceptance walker (`cs1_walker_gap_acceptance.xosc`, which stays as it is) on Town01, its ego,
+van and walker on the map's anchor `west_street` (lanelet 6583, 224 m; FileHeader
+`scensim.anchor.street = west_street.lanelet`, maps dataset v2026.11e), at CS1's s and
+offsets. Its ego is driven by `carla_basic` (CARLA's BasicAgent) at `ego_speed` toward the
+lane's end, so the runs measure the command channel and not an autopilot. One addition to
+CS1: an event on a `ReachPositionCondition` for the walker at its far kerb, so an SSv2
+condition on a commanded entity is checked. The testbench's attachment is
+`python3 -m scensim.behaviour.seats` with `commands: [walker]`. CARLA 0.9.16 at Epic, after the
+VRAM check.
+
+**The runs.** L: lockstep, seeds 1, 2 and 3 (`ttc_entry` 3.0, `behaviour` steady). F: the same
+scenario with `lockstep: false`, seed 1. The seeds' decisions, predicted from the walker's draws
+(`GapAcceptanceWalker.draw`) at the gap it is offered at its decision point, about 2.4 s (3.0 s
+at its start trigger less its 1.5 m approach to where it can still stop; P(accept) 0.144):
+seed 1 accepts (U - logit(u) = 0.08) and crosses in front of the ego; seeds 2 and 3 reject, wait
+and cross once the ego has passed. So the L runs cover both branches, and all three reach the
+far kerb. A run that decides otherwise is reported with its decision gap; the checks still apply.
+
+**The rule.**
+1. Each L run: `result.json` `commands.ok` true, so every frame after the walker's first has
+   lag 1, with no lost or unmatched frame; `gate_misses`, `unknown_entity` and `malformed` 0;
+   the run is not an error run for any reason.
+2. Each L run: the walker's truth against the batch's model on the same record, replayed on
+   the run's own ego truth: the model's step and `scensim_batch.core.model_law` for one slot,
+   from the walker's Init pose (so a difference between the batch's ego and `carla_basic` does
+   not enter). Frames align as the lag does: the replay's model steps on the ego truth of frame
+   k, as the seats model did, and its state after that command is compared with the walker's
+   truth at frame k+1, the frame that command moved it in. The CARLA world server realises a
+   commanded walker kinematically: physics off, `set_transform` once per step to the
+   integrator's pose, its z put on the ground (`walker_teleport_z`); no walker control and no
+   physics move it. So the comparison is in x and y only (z is the ground's), and the bar is
+   0.02 m on the largest xy error over the run: loose for set_transform, whose only error is
+   CARLA's float32 transform (about 3e-5 m at x = 280 m) read back each frame, and the seats
+   model reading that pose, not its own. The model's events (`decisions.jsonl` against the
+   replay's) must occur at the same frames.
+3. Each L run: the walker's `ReachPositionCondition` completes, in the storyboard log, at the
+   frame whose truth first puts the walker within the condition's tolerance. Every L run is
+   expected to reach the far kerb (above); one that does not fails this check.
+4. F: the lag (p50, p95, max), the lost and unmatched frames' counts, the gate's counts and
+   check 2's error are reported; no bar (093's open question 1).
+
+**The verdict.** K12's exit holds when all three L runs pass 1 to 3. A failure is named by
+run, check and number, and nothing is rerun until its cause is known.
