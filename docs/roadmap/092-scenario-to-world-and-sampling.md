@@ -709,6 +709,51 @@ model's path as the spec writes it (not this host's), so record ids do not depen
 0 m); the parameters of "K11's plan"; N the batch's slot count, and the seed, written here
 before the first run, with the batch's engine.
 
+### K11c's spec, completed (2026-11-24, 241; 133's three decisions, before any run)
+
+**The plan's "the batch's engine" is amended: the ego is a point mass on CPU.** The search
+mechanism does not depend on the engine; CPU keeps P1's and P4's GPUs whole and makes a run
+deterministic and cheap to repeat. The point mass (`scensim_batch.pointmass`, from the batch
+tests' stand-in): a mass moving along its heading, its wheels at one radius, the requested
+acceleration as rear-wheel torque. It is neither engine A nor B, and the results say so. A
+repeat of the failures found on engine B is a later step, once GPU1 has measured headroom.
+
+**The ego under test: `aeb_ttc`, invented.** It holds its initial speed (acceleration 0) until
+the time to collision with the walker falls below **1.5 s**, then brakes at **6 m/s^2** to a
+stop. The time to collision is the box-to-box gap along the ego's heading over its speed,
+counted while the walker's box overlaps the ego's corridor (its width); the walker's own motion
+is not predicted. Both numbers are invented, labelled so beside the base. A non-reacting ego
+would be a weak subject: its failures are the walker's geometry alone (any walker that steps in
+front of a car that never brakes), so the search would find the walker's path, not a boundary
+of the ego's behaviour.
+
+**The world: Town01, as K12's runs.** CS1's Town01 form,
+`scenarios/projects/k12_commanded/scenarios/cs1_town01.xosc` (its entities on the anchor
+`west_street`, the walker its behaviour model), gets a sibling there,
+`cs1_town01_k11c.xosc`: the category and the fixed cell (illumination day, surface dry, occluder
+van), nothing else changed, so a failure found is replayable on seats in the same project (K3).
+The examples sibling (`cs1_walker_gap_acceptance_k11c.xosc`) names `maps/town_street`, which no
+world provides; it stays as the description's example. The world: the map export of the
+project's Town01 (`scensim.lock`, carla-town-autoware-maps 19d52699), the one K10's recheck used
+(map_sha256 ee291b6e), and its `anchors.resolved.json` for the sampler.
+
+**The runner: `scensim_batch/scripts/search_run.py`, interim.** One generation a call: a
+generation's records, compiled, run in one BatchRun of N slots (the point mass, `aeb_ttc`) to
+each slot's end or a cap of 400 steps (20 s), the truth exported, and `scensim.truth outcomes`
+written. When K2's `scensim bench` lands, the runner calls into it or is retired (its docstring
+says so).
+
+**N and the seed.** N = 1000 a generation and in the fresh stage; the search's seed 11; the
+other parameters "K11's plan"'s. The base's acceptance draws 10^5.
+
+**Predictions, fixed before the run.** No number for the rate: the base and the ego are
+invented. Reported: the stop rule and the generation it stopped at; each generation's level,
+elite and failures; the fresh stage's estimate with its interval, relative standard error
+SE / p_hat (no bar) and n_eff; the largest weight (at most 10 Z_q / Z_b). Then each distinct
+failure of the fresh stage is replayed on seats (K3, the k12_commanded stack, CARLA) and the
+count that fail there too is reported with no bar: the seats ego is the project's pilot
+(`carla_basic`), not `aeb_ttc`.
+
 ### K11b's check 4 (2026-11-24): passed as worded, exposed issue 130
 
 `python3 -m scensim.truth outcomes` (each batch slot's closest gap, by the same `closest()` the
