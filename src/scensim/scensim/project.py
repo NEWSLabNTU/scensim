@@ -84,6 +84,8 @@ class Entity:
     properties: dict = field(default_factory=dict)
     catalog_entry: str = None
     geometry: dict = field(default_factory=dict)  # an inline Vehicle's numeric axles and box
+    # "vehicle", "pedestrian" or "misc_object" when declared inline; None for a catalog entry
+    kind: str = None
 
     @property
     def ego(self) -> bool:
@@ -276,6 +278,10 @@ def read_scenario(path: Path) -> Scenario:
         veh = obj.find("Vehicle")
         if veh is not None:
             ent.geometry = vehicle_geometry(veh)
+        for tag, kind in (("Vehicle", "vehicle"), ("Pedestrian", "pedestrian"),
+                          ("MiscObject", "misc_object")):
+            if obj.find(tag) is not None:
+                ent.kind = kind
         sc.entities.append(ent)
     return sc
 

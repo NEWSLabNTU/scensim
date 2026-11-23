@@ -39,9 +39,10 @@ STACK_ERROR = "stack.error"
 # `knob_mismatch`: a bound knob the world cannot honour, or one whose read-back differs
 # (093 D7); `attachment`: a required attachment failed; `clock_lag`: a paced run fell behind
 # wall time by more than its budget; `knob_profile`: a knob profile the world did not follow
-# within its tolerance, or whose read-back the gap trace lacks (092 K9).
+# within its tolerance, or whose read-back the gap trace lacks (092 K9); `command_lag`: under
+# lockstep, a commanded entity moved by a command other than the previous frame's (092 K12).
 ERROR_KINDS = ("stack", "pilot", "ssv2", "scenario", "knob_refused", "knob_mismatch",
-               "attachment", "clock_lag", "knob_profile")
+               "attachment", "clock_lag", "knob_profile", "command_lag")
 
 
 class Infra(str):
@@ -123,11 +124,15 @@ class RunResult:
     # clock: its mode and its lag against wall time (scensim.truth.clock); absent when unknown
     error: dict = None
     clock: dict = None
+    # roadmap 092 K12, additive: the commanded entities' lag and the world server's counts
+    # (scensim.truth.commands); absent from runs that command none
+    commands: dict = None
     schema: str = SCHEMA
 
     def to_dict(self) -> dict:
         d = dataclasses.asdict(self)
-        for k in ("sample", "replay", "attachments", "knobs", "anchors", "error", "clock"):
+        for k in ("sample", "replay", "attachments", "knobs", "anchors", "error", "clock",
+                  "commands"):
             if d.get(k) is None:
                 d.pop(k)
         return {"schema": d.pop("schema"), **d}
@@ -170,7 +175,7 @@ class RunResult:
 
 _TOP = ("schema", "run_id", "verdict", "reason", "scenario", "ssv2", "events", "metrics",
         "pilots", "provenance", "sample", "replay", "attachments", "knobs", "anchors", "error",
-        "clock")
+        "clock", "commands")
 _REQUIRED = ("schema", "run_id", "verdict")
 
 
@@ -291,6 +296,15 @@ def problems(d) -> list:
             out.append("error.message: expected a string")
         if d.get("verdict") != ERROR:
             out.append("error: only an error run has one")
+    if "commands" in d:
+        cm = obj("commands")
+        if not isinstance(cm.get("ok"), bool):
+            out.append("commands.ok: expected a boolean (lag 1 throughout, under lockstep)")
+        if not isinstance(cm.get("entities"), dict):
+            out.append("commands.entities: expected a mapping")
+        for k in ("unknown_entity", "gate_misses", "malformed"):
+            if not _is_int(cm.get(k)):
+                out.append(f"commands.{k}: expected an integer")
     if "clock" in d:
         ck = obj("clock")
         if ck.get("mode") not in ("lockstep", "paced"):

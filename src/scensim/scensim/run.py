@@ -181,7 +181,30 @@ def expand(target: Path, project: Path, repeat: int = None, params: dict = None,
     specs, suite = _expand(target, project, repeat, params, seed)
     for s in specs:
         bind_anchors(s, project)
+        check_commands(s, project)
     return specs, suite
+
+
+def check_commands(spec, project: Path):
+    """Refuse a spec whose commanded entities (controller ``model``) and the testbench's
+    attachments' ``commands:`` claims do not match, or exceed the gate's bounds (092 K12, D1 and
+    D4): before SSv2 starts, by name."""
+    path = Path(spec.scenario)
+    if path.suffix != ".xosc":
+        return
+    try:
+        sc = projectmod.read_scenario(path)
+    except (ValueError, OSError):
+        return   # the run reports an unreadable scenario itself
+    try:
+        attached = config.project_settings(project).get("attachments") or []
+    except config.ConfigError:
+        attached = []   # no project file: the run refuses that itself, later
+    if not attachmentsmod.commanded(sc.entities) and not attachmentsmod.claims(attached):
+        return
+    probs = attachmentsmod.command_problems(attached, sc.entities)
+    if probs:
+        raise Refused(f"{path}: " + "; ".join(probs))
 
 
 def _anchor_scenario(spec):
@@ -388,6 +411,7 @@ def replay_specs(target: str, index, project: Path) -> list:
         raise Refused(str(e)) from None
     spec = sample_spec(record, scenario, replay_of=of_run or "")
     bind_anchors(spec, project)     # the record's bound values, checked against the world
+    check_commands(spec, project)
     return [spec]
 
 
@@ -1536,7 +1560,8 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                     a, attachmentsmod.env_for(
                         a, env, run_dir, spec.seed,
                         attachmentsmod.roles(sc.entities if sc is not None else [], pilots),
-                        rec.get("tick_gate")),
+                        rec.get("tick_gate"), scenario=spec.scenario,
+                        parameters=spec.parameters),
                     run_dir, project)
                 attached.append(r)
                 run_events.append({"t_wall": time.time(), "event": "attachment.start",
@@ -1622,6 +1647,30 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                 "clock_lag", f"the paced clock fell {lag * 1000:.0f} ms behind wall time, beyond "
                 f"its {cs['max_lag_s'] * 1000:.0f} ms budget ({clock_block['frames_over']} of "
                 f"{clock_block['frames']} frames over)"))
+    # 092 K12: the commanded entities' lag (lockstep: 1 at every frame, else an error run) and
+    # what the world server could not apply, from the truth file
+    commands_block = None
+    claimers = [a for a in (psettings.get("attachments") or []) if a.get("commands")]
+    if ssv2 is not None and claimers:
+        try:
+            commands_block = truthmod.commands(truthmod.load(run_dir),
+                                               lockstep=all(a.get("lockstep") for a in claimers))
+        except Exception as e:  # noqa: BLE001 -- an unreadable trace is the judges' to report
+            run_events.append({"t_wall": time.time(), "event": "commands.unread", "why": str(e)})
+        if commands_block is None:
+            infra.append(results.Infra("command_lag", "the truth file has no commanded entity's "
+                                       "cmd_frame, so the commands' lag is unknown"))
+        elif not commands_block["ok"]:
+            bad = {n: e for n, e in commands_block["entities"].items()
+                   if e.get("lost_frames") or e.get("uncommanded_frames", 0) > 1
+                   or (e.get("lag_frames") or {}).get("max", 1) != 1
+                   or (e.get("lag_frames") or {}).get("p50", 1) != 1}
+            n, e = next(iter(bad.items())) if bad else ("?", {})
+            infra.append(results.Infra(
+                "command_lag", f"lockstep: {n}'s commands were not the previous frame's at every "
+                f"frame (lag {e.get('lag_frames')}, {e.get('lost_frames', 0)} lost, "
+                f"{e.get('uncommanded_frames', 0)} before its first; gate misses "
+                f"{commands_block['gate_misses']})"))
     # 092 K9: each knob profile's commanded and read-back values, from the gap trace's knob
     # lines; one the world did not follow within its tolerance makes it an error run
     profile_plan = (knob_block or {}).pop("_profile_plan", None)
@@ -1723,7 +1772,8 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
         provenance=prov, sample=sample_block, replay=replay_block,
         attachments={r.name: r.record() for r in attached} or None, knobs=knob_block,
         anchors=spec.anchors,
-        error=results.error_block(verdict, infra, reason), clock=clock_block)
+        error=results.error_block(verdict, infra, reason), clock=clock_block,
+        commands=commands_block)
     result.write(run_dir / "result.json")
     judge_list = config.project_settings(project).get("judges")
     judged = judgesmod.run_all(judge_list, run_dir, project, verdict)

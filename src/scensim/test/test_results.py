@@ -308,3 +308,16 @@ def test_error_and_clock_are_validated():
     with pytest.raises(ResultError):
         RunResult("r", "passed", clock={"mode": "fast", "ok": True, "frames": 1,
                                         "lag_s": {}}).to_json()
+
+
+def test_commands_block_is_validated_and_command_lag_is_an_error_kind():
+    block = {"mode": "lockstep", "ok": False, "unknown_entity": 0, "gate_misses": 1,
+             "malformed": 0, "entities": {"walker": {"commanded_frames": 3,
+                                                      "uncommanded_frames": 1, "lost_frames": 0,
+                                                      "lag_frames": {"p50": 1, "p95": 2,
+                                                                     "max": 2}}}}
+    ok = RunResult("r", "error", error={"kind": "command_lag", "message": "m"}, commands=block)
+    assert RunResult.from_json(ok.to_json()) == ok
+    assert "commands" not in RunResult("r", "passed").to_dict()
+    with pytest.raises(ResultError):
+        RunResult("r", "passed", commands={"ok": "yes", "entities": {}}).to_json()

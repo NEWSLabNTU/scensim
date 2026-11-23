@@ -896,7 +896,7 @@ def plan(project_arg=None, seat_arg=None, simulator=None, map_name=None, logs=No
     # an attachment in lockstep follows the world's ticks: the CARLA world server's tick gate,
     # on the seat's SSv2 port + TICK_GATE_OFFSET (UDP), set through its environment
     tick_gate = None
-    if attachmentsmod.lockstep(attached) and sim == "carla":
+    if attachmentsmod.gate_wanted(attached) and sim == "carla":
         tick_gate = f"127.0.0.1:{s.ssv2_port + seatmod.TICK_GATE_OFFSET}"
         env["SCENSIM_TICK_GATE"] = tick_gate
     if episode_dirs[episodesmod.CONTACTS]:

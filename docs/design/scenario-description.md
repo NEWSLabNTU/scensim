@@ -68,7 +68,7 @@ steps out from behind it and crosses, so the ego sees the walker late.
 <!-- Init: ego at ego_speed on lane anchor street_east; van parked at van_offset;
      walker behind the van, controlled by a behaviour model -->
 <ObjectController>
-  <Controller name="walker_model">
+  <Controller name="model">
     <Properties>
       <Property name="model" value="scensim.behaviour:gap_acceptance_walker"/>
       <Property name="speed" value="$walk_speed"/>

@@ -125,3 +125,67 @@ def test_one_that_ignores_sigint_is_terminated(tmp_path):
     t = time.time()
     at.stop(r)
     assert r.code == -15 and time.time() - t < 5
+
+
+# --- commands (roadmap 092 K12) -----------------------------------------------------------
+
+def ent(name, controller="", kind="pedestrian"):
+    from scensim.project import Entity
+    return Entity(name, controller=controller, kind=kind)
+
+
+def test_commands_key_is_checked():
+    ok = {"name": "walkers", "run": ["x"], "lockstep": True, "commands": ["walker"]}
+    assert at.problems([ok], "carla") == []
+    for bad, want in (([], "a list of entity names"), (["w", "w"], "named twice"),
+                      ("walker", "a list of entity names")):
+        (_, m), = at.problems([{**ok, "commands": bad}], "carla")
+        assert want in m, (bad, m)
+    msgs = " | ".join(m for _, m in at.problems([ok], "isaac"))
+    assert "cannot move an entity on a model's commands" in msgs
+    assert at.gate_wanted([{"name": "a", "run": ["x"], "commands": ["w"]}])
+    assert not at.gate_wanted([{"name": "a", "run": ["x"]}])
+
+
+def test_command_problems_name_each_refusal():
+    walkers = {"name": "walkers", "run": ["x"], "commands": ["walker"]}
+    scene = [ent("ego", "Autoware", "vehicle"), ent("walker", "model")]
+    assert at.command_problems([walkers], scene) == []
+    assert at.command_problems([], [ent("ego", "Autoware", "vehicle")]) == []
+    # a commanded entity nobody claims
+    (m,), = [at.command_problems([], scene)]
+    assert "'walker' has controller 'model' and no attachment claims it" in m
+    # claimed twice
+    twice = at.command_problems([walkers, {**walkers, "name": "other"}], scene)
+    assert any("claimed by 2 attachments (walkers, other)" in m for m in twice)
+    # a claim on an entity without the model controller, or not in the scenario
+    plain = at.command_problems([{**walkers, "commands": ["walker", "npc", "ghost"]}],
+                                scene + [ent("npc", "", "vehicle")])
+    assert any("'npc', whose controller is 'the default', not 'model'" in m for m in plain)
+    assert any("'ghost', which the scenario does not have" in m for m in plain)
+    # a commanded vehicle
+    car = at.command_problems([{**walkers, "commands": ["car"]}],
+                              [ent("car", "model", "vehicle")])
+    assert any("'car' is a vehicle with controller 'model'" in m for m in car)
+    # the datagram's bounds: 10 entities, 64-byte names
+    many = [ent(f"w{i}", "model") for i in range(11)]
+    over = at.command_problems([{**walkers, "commands": [e.name for e in many]}], many)
+    assert any("11 commanded entities: at most 10" in m for m in over)
+    long = "w" * 65
+    assert any("name of 65 bytes" in m for m in
+               at.command_problems([{**walkers, "commands": [long]}], [ent(long, "model")]))
+    assert at.command_problems([{**walkers, "commands": ["w" * 64]}],
+                               [ent("w" * 64, "model")]) == []
+
+
+def test_a_commanding_attachment_gets_the_gate_its_entities_and_the_scenario(tmp_path):
+    run_dir = tmp_path / "run"
+    a = att(tmp_path, commands=["walker"])   # free-running: CMD to the gate, still the gate
+    roles = at.roles([ent("ego", "Autoware", "vehicle"), ent("walker", "model")], [])
+    assert roles == {"ego": "ego", "walker": "model"}
+    env = at.env_for(a, {}, run_dir, 7, roles, tick_gate="127.0.0.1:5561",
+                     scenario=tmp_path / "cs1.xosc", parameters={"walk_speed": 1.4})
+    assert env["SCENSIM_TICK_GATE"] == "127.0.0.1:5561"
+    assert json.loads(env["SCENSIM_COMMANDS"]) == ["walker"]
+    assert env["SCENSIM_SCENARIO"] == str(tmp_path / "cs1.xosc")
+    assert json.loads(env["SCENSIM_PARAMETERS"]) == {"walk_speed": 1.4}

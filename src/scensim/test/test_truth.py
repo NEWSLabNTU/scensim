@@ -189,3 +189,47 @@ def test_the_runs_own_real_time_factor_wins_over_the_testbenchs():
     ps = {"clock": {"mode": "paced", "max_lag_s": 0.05}, "ssv2": {"global_real_time_factor": 1}}
     assert truth.settings(ps)["rtf"] == 1.0
     assert truth.settings(ps, {"global_real_time_factor": 2.0})["rtf"] == 2.0
+
+
+def _commanded_trace(tmp_path, cmd_frames, counts=None, name="20261123T000000.000Z_1.jsonl"):
+    walker = entity("walker", "pedestrian", 1, dims=(0.6, 0.6, 1.8)) | {"role": "model"}
+    lines = [EP | {"schema": 3}, entity("ego", "ego", 0), walker]
+    for n, cf in enumerate(cmd_frames, start=1):
+        f = frame(n, {"ego": (0, 0, 0), "walker": (5.0, 0, 0)})
+        f["entities"]["walker"]["cmd_frame"] = cf
+        if counts is not None:
+            f["commands"] = counts
+        lines.append(f)
+    write(tmp_path, [*lines, END | {"frame": len(cmd_frames), "frames": len(cmd_frames)}], name)
+    return truth.load(tmp_path)
+
+
+def test_commands_lag_one_under_lockstep_is_ok(tmp_path):
+    traces = _commanded_trace(tmp_path, [0, 1, 2, 3, 4],
+                              {"unknown_entity": 0, "gate_misses": 0, "malformed": 0})
+    c = truth.commands(traces, lockstep=True)
+    assert c["ok"] and c["mode"] == "lockstep"
+    w = c["entities"]["walker"]
+    assert w == {"commanded_frames": 4, "uncommanded_frames": 1, "lost_frames": 0,
+                 "lag_frames": {"p50": 1, "p95": 1, "max": 1}}
+    assert (c["unknown_entity"], c["gate_misses"], c["malformed"]) == (0, 0, 0)
+
+
+def test_commands_a_late_command_fails_lockstep_and_is_a_record_free_running(tmp_path):
+    traces = _commanded_trace(tmp_path, [0, 1, 1, 3, 4],
+                              {"unknown_entity": 2, "gate_misses": 1, "malformed": 0})
+    c = truth.commands(traces, lockstep=True)
+    assert not c["ok"]
+    assert c["entities"]["walker"]["lag_frames"] == {"p50": 1, "p95": 2, "max": 2}
+    assert (c["unknown_entity"], c["gate_misses"]) == (2, 1)
+    assert truth.commands(traces, lockstep=False)["ok"]
+
+
+def test_commands_a_lost_command_fails_lockstep(tmp_path):
+    c = truth.commands(_commanded_trace(tmp_path, [0, 1, 0, 3]), lockstep=True)
+    assert not c["ok"] and c["entities"]["walker"]["lost_frames"] == 1
+
+
+def test_commands_is_none_without_a_commanded_entity(tmp_path):
+    write(tmp_path, [EP, entity("ego", "ego", 0), frame(1, {"ego": (0, 0, 0)}), END])
+    assert truth.commands(truth.load(tmp_path)) is None

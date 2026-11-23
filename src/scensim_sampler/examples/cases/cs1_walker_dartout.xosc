@@ -25,7 +25,7 @@
     </ScenarioObject>
     <ScenarioObject name="walker">
       <Pedestrian name="walker" pedestrianCategory="pedestrian" mass="60"><BoundingBox><Center x="0" y="0" z="0.9"/><Dimensions length="0.4" width="0.5" height="1.8"/></BoundingBox><Properties/></Pedestrian>
-      <ObjectController><Controller name="walker_model"><Properties>
+      <ObjectController><Controller name="model"><Properties>
         <Property name="model" value="scensim.behaviour:gap_acceptance_walker"/>
         <Property name="speed" value="$walk_speed"/>
         <Property name="style" value="$behaviour"/>
