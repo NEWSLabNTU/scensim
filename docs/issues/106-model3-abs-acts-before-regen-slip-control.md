@@ -185,12 +185,16 @@ Against the prediction:
   0.13, not 0.05.
 - **R:** as predicted. **Repeats:** within the prediction, in fact identical.
 
-What mu 0.2's B order costs: nothing in these runs. B's regen is 0 at every release on 0.2
-and 0.3, before ABS's first action as after it. In B the request (4 m/s^2) is twice the grip,
-so the friction brakes saturate at once and ABS must engage. Its first action one step before
-or after rsc's decides only whether `abs_event` ends regen that had already gone. The rule's
-condition 1 for B is a one-step race there. Per the rule, the spec stays at 0.15 until 133
-rules.
+**Correction (2026-11-23):** a first version of this paragraph said regen was already 0 when ABS
+acted in mu 0.2's B. That was wrong. It read the phase's mean past its first 10 rows, which
+is after ABS had removed regen. By ECU step, regen is at 100 % of its value at brake onset
+(3258 N) when ABS first acts (step 7), and goes to 0 at step 8, because ABS acted
+(`abs_event`). What the order costs: in B the request (4 m/s^2) is twice the grip, so ABS
+must engage within a step or two whatever comes first. With rsc first, as before issue 108
+(rsc 7, ABS 8), regen would have been cut at step 7 and removed at step 8. With ABS first it
+is removed at step 8. The difference is at most a step of regen. Per the rule, the spec stays
+at 0.15 until 133 rules (`amend.py` and `amend.out` beside judge3.py: regen's share at ABS's
+first action, every run).
 
 ## Fix
 
