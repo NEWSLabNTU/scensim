@@ -372,7 +372,7 @@ smoother's, not the map's, and a check that needs a curve's v^2/R must drive wit
 builds it) with a pure pursuit and a speed hold. In both, the bank's g sin(theta) (0.59 m/s^2)
 reaches PhysX's contact, not only the mesh.
 
-#### C5c's fixtures (spec written 2026-11-23, before they are built)
+#### C5c's fixtures (spec written 2026-11-23, approved by 133 the same day, before they are built)
 
 Two parts: the lip re-entry fixtures, and the record's shoulder and run-off strips as surface
 zones.
@@ -386,11 +386,14 @@ zones.
   | segment | lip (right) | face | the record's rule says |
   |---|---|---|---|
   | 0, control | none | | re-enters |
-  | 1, 2, 3 | 5 cm | 90, 45, 30 deg | re-enters (not over 5 cm) |
+  | 1 | 5 cm | 90 deg | boundary (not over 5 cm, but about) |
+  | 2, 3 | 5 cm | 45, 30 deg | re-enters (not over 5 cm) |
   | 4 | 10 cm | 90 deg | **held** |
-  | 5, 6 | 10 cm | 45, 30 deg | re-enters (face not steeper than 45 deg) |
+  | 5 | 10 cm | 45 deg | boundary (not steeper than 45 deg, but at it) |
+  | 6 | 10 cm | 30 deg | re-enters (face not steeper than 45 deg) |
   | 7 | 15 cm | 90 deg | **held** |
-  | 8, 9 | 15 cm | 45, 30 deg | re-enters (face not steeper than 45 deg) |
+  | 8 | 15 cm | 45 deg | boundary |
+  | 9 | 15 cm | 30 deg | re-enters |
   | 10, strips | none | | the right shoulder `gravel`, a 3 m `grass` run-off past it |
 
   The rule is 069's `lip` class: `lip_h` over about 5 cm with a face steeper than 45 deg; a
@@ -405,7 +408,12 @@ zones.
   pavement, runs 40 m parallel to the edge, then follows a line at 4 deg back toward the road
   to the right lane's middle. One Isaac process drives all eleven segments (teleporting
   between them), once with aib's default `wheel_query: raycast` and once with `sweep` (C9's),
-  on 118's GPU0.
+  on 118's GPU0. The teleport sets the car's velocity as well as its pose (issue 110), and each
+  case logs its actual start speed and lateral offset: a case more than 0.1 m/s or 5 cm off is
+  refused, not classified. Before the parallel leg each case also records whether its right
+  wheels are on the shoulder (in contact with it, not hanging), one check line per case.
+  At 15.6 m/s and 4 deg the lateral speed is about 1.09 m/s, so the control's right front
+  wheel crosses the edge about 0.46 s after the turn-in.
 - **Outcome.** The time the right front wheel's centre crosses the carriageway's edge, less
   the control's (the same drive with no lip): **re-enters** when it is 0.3 s or less,
   **held** when more, or when it never crosses within 4 s. Reported beside it, not judged:
@@ -416,7 +424,8 @@ zones.
   re-entering where the rule says held. If Isaac re-enters at 10 or 15 cm at 90 deg, that is
   the finding 066 R8 named: a lateral edge force in R5's corner-force layer is then the fix,
   planned as its own step, not part of C5c. A rule-to-plant mismatch is a result, not a
-  failed check. C5c's check is that every case ran and is classified, and that the control
+  failed check. The three boundary cases are reported but counted neither as agreements nor
+  as mismatches. C5c's check is that every case ran and is classified, and that the control
   crosses where its path says (within 0.3 s).
 - **The strips as zones.** At load the surface layer turns the record's `shoulder_surface`
   and `runoff_surface` into zones: for each side, each run of stations with the same
