@@ -1,7 +1,8 @@
 # 123: rocks collide with the base road although the roadBase filter should keep them off
 
-**Status:** open; the fix plan below is for 133's approval, before any code. **Severity:**
-medium: a loose rock rests on the base road mesh as well as on its collision tile, so where the
+**Status:** fixed on siw `086-c6b` (3f90fb3, 2ef3001), to land after 086 C6b's fixture rerun.
+A harness fault in `fixture_drive`: the world server never had the contact (see "The finding").
+**Severity:** medium, as first judged: a loose rock rests on the base road mesh as well as on its collision tile, so where the
 base and the true surface differ (a rut, a crowned road's sides without issue 120's tiles, the
 ditch) it would rest on the higher of the two, the thing the filter exists to prevent (066 R4).
 **Found:** 2026-11-23, scensim 118, issue 122's push trace.
