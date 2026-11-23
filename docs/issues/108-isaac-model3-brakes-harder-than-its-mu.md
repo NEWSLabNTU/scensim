@@ -1,7 +1,7 @@
 # 108: the Isaac Model 3 brakes about 7 % harder than its tyre's mu allows
 
-**Status:** open (cause found: PhysX's default load filter, confirmed by the restLoad-doubling
-stop; the fix to plan).
+**Status:** fixed (aib ff5e72b, scensim_isaac_world 7e01d7b): PhysX's default tyre load filter,
+confirmed by the restLoad-doubling stop, divided out by aib.
 **Severity:** medium: every braking comparison of Isaac against CARLA, or against a real car,
 carries it. **Found:** 2026-11-23, scensim 241, in issue 106's low-grip sweep (133 asked for it
 to be measured).
@@ -219,7 +219,87 @@ since filter(x) / x = 0.9231 + 0.2308 / x is 1 only at x = 3 and clamps above.
 
 ## Fix
 
-The term is found, and the plan above is under review. Until the fix lands, Isaac's tyre grip is
-1.154 times the spec's mu, which ABS turns into about 1.07 times mu g in a stop.
+**The change.**
+- **aib ff5e72b**: `aib.tyre_friction`.
+  - `LOAD_FILTER = ((0, 0.2308), (3, 3))`.
+  - `FILTER_GRIP = 1.15387`, the filter at one rest load.
+  - `physx_friction`, `wheel_share`, and `WheelFriction`.
+  - Every friction aib writes to a PhysX table goes through `WheelFriction`. That covers the table
+    default at build (the axle's `tire_friction`, which carries `--set` and the axle overrides) and
+    `set_wheel_friction`. It writes mu / FILTER_GRIP and keeps the spec's mu as the wheel's value.
+- **scensim_isaac_world 7e01d7b**: `surface_layer.PEAK_SPAN = 2.3 / FILTER_GRIP`.
+  Spike 4a's 2.3 was fitted with the filter in the cap. The friction that `rig_peaks` is scaled by
+  stays the spec's, so the factor is divided once.
 
-Data: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-23 issue 106 and 108 (241)/mueff`.
+**Every Isaac result that depends on grip and was made before aib's 108 commit carries the 1.154.**
+A cited number names its aib pin.
+
+**Checked (aib ff5e72b, GPU1, `limit_brake`).** The fix's own test, with the bars set before it:
+locked 0.83 mu within 0.01; with ABS 0.92 to 0.93 mu g, under 1.0 at every mu.
+
+| mu | locked / mu | with ABS / mu | with ABS, before the fix / 1.154 |
+|---|---|---|---|
+| 0.2 | 0.837 | 0.909 | 0.920 |
+| 0.5 | 0.826 | 0.940 | 0.936 |
+| 1.0 | 0.827 | 0.926 | 0.932 |
+
+- **Locked:** within its bar at every mu.
+- **With ABS:** every value is under 1.0 and matches the pre-fix stop divided by 1.154 to
+  0.011. But at mu 0.2 (0.909) and mu 0.5 (0.940) it falls outside the 0.92 to 0.93 bar written
+  before the run. That bar was the pre-fix runs' rounded range divided by 1.154, and ABS's
+  cycling moves a single stop by about 0.01. The bar is 133's to judge; it is not redrawn here.
+- **Data:** NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-23 issue 106 and 108 (241)/fixcheck`.
+  The first ABS run at mu 0.2 failed fetching Isaac's asset root, a network failure; its log is
+  kept, and it was run again.
+
+**Tests.**
+- aib's `test_tyre_friction.py`: the gain, the car's grip at any transfer, the per-wheel
+  shares, and all four write paths.
+- siw's `test_the_rig_peaks_are_spike_4as_over_the_filter`: the peaks fall by exactly
+  1/FILTER_GRIP.
+
+### Runs that stay on the pre-fix aib (133, 2026-11-23)
+
+So that their rows compare on one plant, these keep their pinned pre-108 aib:
+- P1;
+- P4 ours seeds 3 to 5;
+- 139's ECU-B and P2 row (b);
+- 118's row (a) seed 5;
+- 139's engine A reruns after issue 113.
+
+Roadmap 094 records it and names the factor.
+
+### Owed after the landing, on post-108 aib (nothing re-judged early)
+
+| item | who | when |
+|---|---|---|
+| Issue 106's full table (regen_60, regen_30; mu 0.2, 0.3, 1.0; release 0.15 and its neighbours), judged by its written rule | 241 | after 108 lands, the first GPU free |
+| The dry set: launch, brake_100 (predicted about 42 m against 39.54), start_flat, start_up, hold_camber | 241 | with 106's table |
+| Issue 100's Isaac validation and reference reruns (vehicle_check, the T3 Isaac suites) | 241 | after the P4 seeds free GPU1 |
+| 054 T1's surface-layer peaks: each class's peak lands where the class says | 241 | with issue 100's reruns |
+| Isaac-vs-CARLA braking and cornering comparisons made before 108 | 133 assigns; 241 lists the docs that cite one when 108 lands | after the list |
+| The drift retune and the race planner's refit (243's verdict below) | 243 | when the user resumes the drift work (on hold since 2026-11-02) |
+
+### The drift work (243, 2026-11-23, read only)
+
+**Verdict:** retune and rerun, folded into the rerun of 057/058 on issue 100's slip denominator
+that is already owed. Nothing is held before 108 lands. Results already recorded stand on their
+pinned pre-108 aib, and no drift number is cited as current until the rerun.
+
+- **057's ring drift** (R 100 m at 27 m/s, about 0.74 g) was tuned on 1.154 times the grip.
+  The same drift now needs about 15 % more of the grip there is, so its steady speed on that
+  radius is about 27 x 0.931 = 25.1 m/s. Its slip and countersteer gains need retuning.
+- **058's H1 hairpin parameters** have been void since issue 023. Nothing new is lost.
+- **The race planner** (autoware-drift `race_planner`) caps each wheel at mu fz, with no filter.
+  Its fits against Isaac absorbed the 1.154: L1's grip 0.92, the sliding share 0.8, the fixture
+  `test/data/isaac_drift_mustang_dry.npz`, and "model beta diverges from Isaac above 0.6 g".
+  All of them are refitted and the fixture regenerated. The planner adopts the per-wheel cap
+  exactly: mu (0.2308 fz0 + 0.9231 fz) / 1.154 for 0 <= fz <= 3 fz0, mirroring
+  `aib.tyre_friction`'s `LOAD_FILTER` and `FILTER_GRIP`, with a test that the two are equal.
+  Its own `PEAK_SPAN = 2.3` copy (`model.py`) becomes 2.3 / FILTER_GRIP.
+- **Peak slips fall 13 %.** The drift test (rear axle at least 3 deg past the tyre's peak)
+  stays defined, but every absolute slip threshold in the drift tasks and rewards is derived
+  again from the new peaks.
+
+Data: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-23 issue 106 and 108 (241)/mueff`,
+`.../restload`, `.../fixcheck`.

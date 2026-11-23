@@ -58,6 +58,15 @@ engine B, an articulation car like WheeledLab's, runs on the GPU pipeline. So a 
 comparison with stock is B against stock; A is reported as what seats fidelity costs, never
 as ours' rate.
 
+**The tyre's 1.154 (issue 108).** Every aib PhysX vehicle before issue 108's fix had 1.154 times
+its spec's grip. PhysX's default tyre load filter put it there, and aib.tyre_friction's
+FILTER_GRIP now divides it out. 094's runs stay on their pinned pre-fix aib so that P4's rows
+compare on one plant (133, 2026-11-23): P1, P4 ours seeds 3 to 5, 139's ECU-B and P2 row (b),
+118's row (a) seed 5, and 139's engine A reruns after issue 113. Engine A is aib's PhysX vehicle,
+so its numbers carry the 1.154. Engine B (an articulation car) and stock do not use PhysX's
+vehicle tyre. A 094 number cited next to a post-108 Isaac result names its aib pin and the
+factor.
+
 ### An exclusive GPU (found 2026-11-21, 241)
 
 A benchmark needs a GPU no other process is using. Idle CPUs are not enough. On 241, another
