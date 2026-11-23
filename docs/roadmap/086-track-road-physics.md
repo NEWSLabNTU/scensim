@@ -581,7 +581,9 @@ in `/mnt/renegade/aeon/isaac-ex/c5d`, a local testbench workspace there.
   but for the generator's name (`swb_isaac_world` then); the cloud 15,788,823 points in the
   same 140 tiles with the same metadata, 123 tiles point for point and 17 road tiles differing
   by under 0.1 % of their points (the road surface sampled anew; terrain and props identical).
-- **Autoware on Isaac** (Model 3, the scensim profile, `--stop-stack`):
+- **Autoware on Isaac** (Model 3, the scensim profile, `--stop-stack`; the stack w10c's build,
+  scensim 61ad6d58 with scensim_isaac_world b5de87b and aib 23ef5fb, as each run's `result.json`
+  records; the maps are the branch builder's, made offline):
 
   | run | maps | scenario | NVTL p05 (>= 2.5) | pose error p95 (<= 0.2 m) | max (reported) |
   |---|---|---|---|---|---|
@@ -636,7 +638,8 @@ lateral features (118)". Run on 118 in `/mnt/renegade/aeon/isaac-ex/c5d2`.
   1398 trees; the cloud 6,011,964 points in 16 tiles (C5d's 1,320,500 without them).
 - **Kept from C5b**: the mesh against the record 0.000 mm at the stations; Isaac's road by
   97968 rays, 0 missing, passes; the lanelets within 0.42 mm (nodes) and 0.88 mm (midway).
-- **Autoware on Isaac** (Model 3, the scensim profile, C5d's fixture scenario with the map's
+- **Autoware on Isaac** (the stack w10c's build, scensim 61ad6d58, as for C5d; Model 3, the
+  scensim profile, C5d's fixture scenario with the map's
   name changed: the builder's own names the drift Mustang; run 2026-11-23T12-03-03):
 
   | | scenario | NVTL p05 (>= 2.5) | pose error p95 (<= 0.2 m) | median | max (reported) |
@@ -673,26 +676,35 @@ sim_vehicle_ecu (ef6bfd8 to 99505b0) and sim_vehicle_spec (21bf3dc to 9ceb8cb).
   (B adds `regen_30`).
 - **haruna_down** on the published Haruna (dataset tag b12857ee, issue 072's 140 tiles), with
   Autoware's Model 3: none of C5's code acts on this map (no `road_detail.yaml` in its map
-  directory, its maps the dataset's), so a difference here comes from below C5.
+  directory, its maps the dataset's), so a difference here would come from below C5.
 
-  | run | main | scenario | NVTL p05 | pose error p95 | max |
+  **The first haruna pairing is void.** Its four runs went through one testbench workspace
+  built with B's install sourced, so that workspace's `setup.bash` chained
+  `/mnt/renegade/aeon/gate-c5c/install` (B) and put it over whatever the run script had sourced
+  first (CLAUDE.md's overlay-order trap). Every run's `result.json` records scensim f98f1cd1,
+  the two "A" runs included: they were a mix of A's and B's paths, not A. Their numbers, kept
+  for the record only:
+
+  | run, as labelled | scensim recorded | scenario | NVTL p05 | pose error p95 | max |
   |---|---|---|---|---|---|
   | B, 2026-11-23T12-23-52 | f98f1cd1 | passed, 383.5 s, 0 contacts | 3.12 | 0.178 m | 0.2025 m |
-  | A, 2026-11-23T12-31-00 | 8965a06a | passed, 385.5 s, 0 contacts | 3.12 | 0.115 m | 0.155 m |
+  | "A", 2026-11-23T12-31-00 | f98f1cd1 (mixed) | passed, 385.5 s, 0 contacts | 3.12 | 0.115 m | 0.155 m |
   | B2, 2026-11-23T12-39-00 | f98f1cd1 | passed, 406.6 s, 0 contacts | 3.12 | 0.183 m | 0.2024 m |
-  | A2, 2026-11-23T12-46-32 | 8965a06a | passed, 383.5 s, 0 contacts | 3.12 | 0.114 m | 0.151 m |
+  | "A2", 2026-11-23T12-46-32 | f98f1cd1 (mixed) | passed, 383.5 s, 0 contacts | 3.12 | 0.114 m | 0.151 m |
 
-  **The rule for the repeats (133, written before B2 and A2 finished):** if both repeat pairs
-  keep a p95 gap of about 0.05 m or more, B above A in each, the shift is real, and the
-  below-C5 pins are bisected as its own issue (its number asked of 133 first); otherwise it is
-  run-to-run spread. Either way: Haruna's p95 has little margin to the 0.2 m rule (B's maximum
-  0.2025 m, C5d's rebuilt-map run 0.183 m p95).
-- **Result: a real shift, not from C5.** Both pairs keep the gap, B above A: 0.063 m and
-  0.069 m at the p95 (0.178 and 0.183 m against 0.115 and 0.114 m), by the rule above. All four
-  runs pass every check (NVTL 3.12, 0 contacts). Since no C5 code acts on this map, the cause is
-  below C5 (aib, sim_vehicle_ecu or sim_vehicle_spec between A and B); its bisection is its own
-  issue. For C5's exit: aib's slope matrix is unchanged, and haruna_down passes on main after
-  C5 as before it, with the pose error shift recorded and handed on.
+  The "real shift" first read from them, and issue 116 opened on it (its bisection, run through
+  the same workspace, was on B's code throughout and was stopped), rest on a mixed overlay.
+  Issue 116 waits on the clean pairing.
+
+  **The clean pairing (written before its runs, 133):** one testbench workspace per side,
+  built against that side's install only; `haruna.sh` refuses a run unless the live world
+  server's and bridge's paths (`/proc/<pid>/exe` and command line) are under that side's
+  install and the run's `result.json` names that side's scensim commit. Three runs per side,
+  alternating. A real shift: the mean of B's three p95s at least 0.05 m above A's, and every B
+  run above every A run; otherwise run-to-run spread. If no shift, issue 116 closes as "not
+  reproduced; the premise came from a mixed overlay".
+- Either way, Haruna's pose error has little margin to the 0.2 m rule: B's maximum 0.2025 m,
+  and C5d's run 0.183 m at the p95.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
