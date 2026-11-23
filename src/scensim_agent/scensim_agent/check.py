@@ -144,7 +144,10 @@ class FakeRelay:
         with self._cond:
             sock = self.sock
         if sock is not None:
-            sock.shutdown(socket.SHUT_RDWR)
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:   # the agent closed first: ENOTCONN (issue 114)
+                pass
             sock.close()
 
     def close(self):
@@ -270,11 +273,15 @@ def run_check(agent_class, config=None, reset_timeout=30.0):
                      "registers again after a dropped connection")
         return report
     finally:
-        stop.set()
-        client.stop()
-        relay.close()
-        runner.join(timeout=3.0)
-        agent.close()
+        # the agent is closed whatever the teardown raises: a leaked agent (a ROS adapter's
+        # node) goes on publishing into the next check (issue 114)
+        try:
+            stop.set()
+            client.stop()
+            relay.close()
+            runner.join(timeout=3.0)
+        finally:
+            agent.close()
 
 
 def _describe(reply, dt):

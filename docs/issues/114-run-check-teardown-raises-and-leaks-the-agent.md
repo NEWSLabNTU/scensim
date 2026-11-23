@@ -1,6 +1,6 @@
 # 114: run_check's teardown raises when the connection is already gone, and leaks the agent
 
-**Status:** open (243 to fix). **Severity:** low: a flaky gate under a loaded host. A user's
+**Status:** fixed (243: `FakeRelay.drop` and `run_check`'s teardown, with tests). **Severity:** low: a flaky gate under a loaded host. A user's
 `check` run can end with a traceback instead of its report, and the agent it started is not
 closed. **Found:** 2026-11-23, scensim 241, in issue 104's landing gate.
 
@@ -80,3 +80,26 @@ In the same tree, right after the gate, with the load at 65 to 71:
 
 Evidence: the gate's log, lines 1890 to 1952, on the NAS at
 `~/nas/home/aeon/issue114/gate-here.101859.log`.
+
+## Resolution (243, 2026-11-23)
+
+**The interleaving.** The relay's heartbeat loop writes to the agent every half heartbeat
+period until the teardown's `stop.set()`. A heartbeat that reaches the agent's socket after the
+client's last read is still unread when `client.stop()` and the client close it. A TCP socket
+closed with unread data sends an RST, not a FIN, and the relay's end goes straight to closed:
+`shutdown` there raises ENOTCONN. Reproduced on loopback: with a heartbeat unread, the close
+gave `[Errno 107] Transport endpoint is not connected` at the relay's `shutdown`; with nothing
+unread, `shutdown` passed. Load widens the window between the last read and the close.
+
+**The fix.** `FakeRelay.drop()` takes an `OSError` from `shutdown` and closes the socket.
+`run_check` closes the agent in an outer `finally`, so a teardown step that raises can no
+longer leave it running, and the error still reaches the caller.
+
+**Tests** (`src/scensim_agent/test/test_check.py`), each failing before the fix and passing
+after it, 20 of 20 runs:
+- `test_drop_after_the_agent_closed_first`: the drop on a relay socket that a real RST reset
+  (the peer closes with a heartbeat unread; `select` waits for the RST, no sleeps);
+- `test_check_reports_and_closes_the_agent_when_its_connection_was_reset`: `run_check` with
+  the relay's socket reset before its teardown returns a passing report and closes the agent;
+- `test_the_agent_is_closed_when_the_relay_teardown_raises`: a teardown step that raises
+  still closes the agent, and the error propagates.
