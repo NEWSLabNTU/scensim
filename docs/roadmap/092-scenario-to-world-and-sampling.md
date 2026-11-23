@@ -430,3 +430,22 @@ commanded walker: its placement into SSv2's view, the storyboard's timing on it 
 decisions' sequencing, with the lockstep channel's lag included. Not covered, as planned: an
 engine in the loop (both sides driving the same ego), and the engines giving the map-frame
 velocity (a follow-up). With this, K10's row is done but for that.
+
+### K10's close-out (133, 2026-11-24): the engines' map-frame velocity, D3 out of draft, the row closed
+
+**(1) The engines give the map-frame velocity (plan, before any code).** A behaviour model reads
+the ego's velocity in the map frame (`ego_vx`, `ego_vy`), as the seats attachment reads the
+truth. Since the agreement, `Models.step` takes it from a backend's `vx_map`, `vy_map` when
+given; only the playback backend gives them. Both engines will:
+
+- engine B, `articulation.ArticulationModel.state`: the root's world linear velocity's x and y
+  (the env's origin moves positions, not velocities);
+- engine A, `physx_vehicle.PhysxVehicleBackend.state`: aib's base_link velocity rotated into the
+  map frame by the car's full orientation quaternion (not the yaw alone, so a pitched car's
+  vertical velocity does not leak into x and y).
+
+Checks: per engine, a sliding ego (body velocity 10 m/s forward and 2 m/s sideways, yawed 30
+degrees; for A also pitched 5 degrees) gives `vx_map`, `vy_map` equal to the body velocity
+rotated into the map frame, within 1e-12; and on each engine's state `Models.step` hands the
+model those numbers, not `v cos(yaw)`, `v sin(yaw)`. A batch run with a model entity beside a
+sliding ego changes; no landed result has one (the agreement's note), so nothing reruns.
