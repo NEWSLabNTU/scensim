@@ -1505,10 +1505,34 @@ map, interleaved (frame ms, medians):
   are the first tiles at the start, under the guard's 10 s; the self-check found no rock on
   the base road.
 
-**C6b's budget therefore fails on one line**: one ego's p95 rises about 3.5 ms with the rocks,
-on a quiet GPU0, beyond the baseline's spread. The p50, the localization, and the two cars stay
-within their lines. What in the rocks costs the p95 is not measured here (the step split was
-off in these runs); finding it is the next step, if 133 wants it.
+**C6b's budget fails on one line, and that verdict stands** (133): the p95 line fails as
+written, and no criterion is set after the fact. Its size: +3.5 ms at the median, every *rocks*
+run above every *none* run. The pair resolved it because *none*'s spread was 1.5 ms over its
+three runs. The p50, the localization and the two cars stay within their lines. Whether +3.5 ms
+on p95 matters to a study is a separate question for the plan's owner, not a reason to judge
+again.
+
+#### C6b's p95 diagnostic (approved by 133; what each outcome points to, before the run)
+
+One run on *rocks*, haruna_down, the step split logged every step (`SCENSIM_STEP_SPLIT_EVERY=1`),
+**not judged**, under the same quiet rule. Its *none* counterpart is the issue 134 live check
+(the same code, siw 31593ab, the split every step). The split's parts against *none*'s, in the
+steps that make the tail (over each run's own p95), point to:
+
+- *flush* (the frame end: `RockStream.update` streams the rocks' prims, wakes and sleeps them,
+  edits their groups, after the colliders): the rock stream's frame-end work, `rock_layer`.
+- *contacts* (`_collect_contacts`, with issue 123's self-check): the rocks' contact reports,
+  which every loose rock's prim carries since 123 (`PhysxContactReportAPI`). A cheap fix would
+  report only during each rock's checked first second.
+- *render* (the render substep's `world.step` less a physics substep's): drawing the rock prims
+  (the parked pool and the streamed tiles' static rocks).
+- *physics* (the physics substeps): PhysX with the rock prims in the scene, collision pairs and
+  awake rocks.
+- *road* (place, begin_step, update): the tyre contact on the rocks and their push.
+- none of these, the tail spread across parts or outside the split (commands, publishing): no
+  single cause, recorded as such.
+
+A cause with a cheap fix becomes an issue. The budget is not rerun unless 133 says so.
 
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
