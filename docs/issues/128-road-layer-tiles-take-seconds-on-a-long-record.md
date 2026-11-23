@@ -68,6 +68,22 @@ The C6b fixture set on fixture_c6b, raycast and sweep, siw `issue-128`. aib is s
   fails in sweep, loose_8 fails both, boulder_35 passes. loose_15's raycast travel may differ,
   because its outcome is sensitive to the start (issue 122).
 
+### The recheck's result (2026-11-24)
+
+siw `issue-128` 637b454, aib 4e8d684; NAS "2026-11-24 issue 128 road layer tiles (118)". The
+prediction holds. The self-check found 0 base contacts in both queries. Every case kept its
+verdict, and every measure equals 086's rerun to the last digit printed:
+
+| case | raycast | sweep |
+|---|---|---|
+| embedded_15 | J 303.1, fails | J 305.0, fails |
+| loose_15 | moved 1.674 m (5.5 m/s), passes | 2.5 cm (1.34 m/s), fails |
+| loose_8 | 1.1 cm, fails | 5.0 cm, fails |
+| boulder_35 | stops 0.35 s after the plate reaches it, passes | the same, passes |
+| placement | as before (fails as written, passes as amended) | the same |
+
+The whole set ran in 2.5 min (both queries), against 25 min before the fix.
+
 ## Measurements that may carry the cost
 
 No world-server run on a record loaded a road layer before this: C5's and C5d's Haruna runs
