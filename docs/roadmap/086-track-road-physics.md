@@ -1166,6 +1166,23 @@ siw `086-c6b` 3381a36 (5940bc2 the fixes), aib ff5e72b, fixture_c6a, 60 Hz, GPU0
   stage and the rocks awake, so that rocks present is measured, not inferred from the
   placement.
 
+#### C6b's runs: the reference and what is logged (2026-11-23, before the runs)
+
+- **fixture_c6b** (`courses/fixture_c6b.yaml`, built by siw 67af532): 520 m, the four fixtures
+  as fixed rocks (siw 67af532's `rocks: {at: ...}`), each a seeded hull scaled to stand proud
+  as asked: embedded_15 18.1 kg (16.7 cm tall, 10 % sunk), loose_15 13.2 kg, loose_8 2.0 kg,
+  boulder_35 327 kg (43.7 cm tall, 20 % sunk; R4's was 154 kg); the record's strips with a 1 m
+  run-off each side.
+- **The reference** for embedded_15, computed before the runs: R0's quarter car at 4 kHz (C6a's
+  constants) at 11.11 m/s over that rock's top along the track over its centre (14.7 cm
+  proud, 34.4 cm long there), the tyre's envelope: **J 653.9 N s**, peak 25.5 kN, the wheel
+  rising 16.4 cm, airborne 0.25 s. `course.rock_check` judges J against it; R4's live peak
+  (57.5 kN, its rock 16 cm and differently shaped) is reported beside ours.
+- **Logged** per PhysX step beside C6a's columns: PhysX's jounce per wheel, the plate's
+  clearance, the longitudinal acceleration, the front-left wheel centre's height, and the
+  rocks in the data, in the stage and awake, and the case's own rock's pose and speed (133's
+  note: the rocks there measured, not inferred).
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
