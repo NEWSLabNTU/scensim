@@ -52,8 +52,9 @@ Tests: the job-count choice is a pure function of the free memory, the CPU count
 host setting, tested without a build (memory far below and above the cores' need, the host
 setting over both, the existing `MAKEFLAGS` kept).
 
-acb's own `just build` (its workspace, which the gate builds first) has the same defaults. It
-builds no SSv2, so it is left as it is; that is noted, not changed here.
+**Follow-up, not in this fix (133):** acb's own `just build` (its workspace, which the gate
+builds first) has colcon's defaults too. It builds no SSv2, but carla-sys and the Rust crates
+compile at a job per core: the same script in acb's justfile.
 
 ## What the fix does
 
@@ -71,6 +72,18 @@ file's setting stands. `scripts/test_build_jobs.py` (in `just test`) checks the 
 memory caps it below the cores (16 GB: 3 jobs, one package at a time), plenty stops at the
 cores (24), no memory still builds with 1, the host setting wins, a bad one is refused, and
 settings already in the environment are kept.
+
+Measured in the gate on 2d718c87 (241, 2026-11-23, a fresh worktree, so SSv2's C++ built from
+nothing, P1 and P4 training on the host): `just build` chose 12 jobs (half of 63.6 GB available,
+24 CPUs), two packages of 6, and finished 75 packages in 22 min 10 s. Sampled every 5 s, the
+compilers' and linkers' summed RSS peaked at 14.6 GB (12 cc1plus and 11 rustc at that moment),
+against the 30 GB the choice allows at 2.5 GB a job; the host's used memory peaked at 66 GB from
+59 to 60 GB before the gate, and its available memory never fell below 52 GB. So 2.5 GB a job held
+with make and cargo in two workers side by side, with room: about 0.6 GB a compiler process on
+average at the peak. The counts include any other user's compilers on the host, and at times
+show more cc1plus (18) and rustc (29) than the jobs, which a job's helper processes and cargo's
+build scripts account for in part. The samples: `/var/tmp/aeon/wl-port/gate121-compilers.csv`
+and `gate121-mem.csv`.
 
 `SCENSIM_BUILD_JOBS` belongs beside the other host settings in CLAUDE.md, which this change
 does not edit.
