@@ -913,6 +913,48 @@ the 60 Hz rate (a load logged as each step's mean averages out washboard's 28.6 
 - **Approved by 133** (2026-11-23, as written): holding the vehicle's own integration at
   480 Hz while only our contact's and the logging's rate moves isolates the hypothesis. H1 to
   H4 are each judged alone; C6a's verdict stays failed.
+
+#### C6a2's result (2026-11-23, 118)
+
+siw `086-c6a2` (38ada7b), aib ff5e72b; GPU0 with nothing else on it in any run; every start
+within the check; logs on the NAS, "2026-11-23 086 C6a2 rate test (118)". Raycast / sweep:
+
+| | 60 Hz | 120 Hz | 240 Hz |
+|---|---|---|---|
+| washboard 20 m/s, min (kN; ref 1.43) | 2.62 / 2.66 | 1.97 / 1.95 | 1.77 / 1.76 |
+| cleat_10 20 m/s, offsets' range / mean | 0.28 / 0.41 | 0.30 / 0.10 | 0.18 / 0.18 |
+| landings at 31-35 ms, share | 0.18 / 0.13 | 0.05 / 0.08 | 0.03 / 0.00 |
+| landings outside 10-30 ms | 7 / 6 | 2 / 3 | 1 / 1 |
+| cleat_05 10 m/s, body rise (cm; ref 2.6) | 1.13 / 1.13 | 1.21 / 1.22 | 1.25 / 1.25 |
+| cleat_10 10 m/s, body rise (cm; ref 7.8) | 5.28 / 5.37 | 5.48 / 5.43 | 5.73 / 5.68 |
+| cleat_10 20 m/s, peak (kN; ref 24.0) | 17.1 / 27.7 | 28.9 / 39.5 | 48.9 / 43.6 |
+| cleat_15 10 m/s, peak (kN; ref 26.6) | 28.5 / 30.7 | 31.3 / 40.6 | 52.7 / 49.7 |
+| washboard 10 m/s, min (kN; ref 1.16) | 1.12 / 1.14 | 0.82 / 0.76 | 0.72 / 0.69 |
+
+- **H1 holds** under both queries: washboard's minimum at 20 m/s falls with rate and is in
+  the band at 240 Hz.
+- **H2 holds under sweep and fails under raycast**: sweep's spread at 240 Hz is 0.45 of its
+  60 Hz value, raycast's 0.62.
+- **H3 holds** under both: the 31-35 ms cluster goes, and one landing a query stays outside
+  10-30 ms at 240 Hz.
+- **H4 fails** under both, by its own rule: cleat_10's body rise moves 6-9 % and reaches the
+  band's edge (5.46 cm) at 120 Hz under raycast and at 240 Hz under both. cleat_05's stays half the
+  reference at every rate, moving 11 %. The rate does not explain the shortfall, which
+  stays near 30 % on cleat_10 and 50 % on cleat_05; the wheel mass is still the likely cause
+  and C6c's to test, but H4 as written did not hold.
+- **New, not predicted:** as the rate rises the peaks grow past the reference: cleat_10 at
+  20 m/s and cleat_15 reach about twice it at 240 Hz, and washboard's minimum at 10 m/s falls
+  under its band. At 60 Hz a step's mean hid this, so C6a's peak passes owed something to the
+  averaging. Two readings, neither tested: our contact is harsher than the 4 kHz quarter car
+  on a sharp edge, or its force held for a shorter step couples more stiffly with PhysX's
+  corner. C6c (a wheel mass between them) is where it is tested.
+- The cost line (reported; frame p50/p95 ms, our contact p50/p95 ms): at 60 Hz, raycast 1, 2,
+  4 cars 9.1/14.6 (1.9/3.1), 19.6/28.8 (4.7/7.1), 34.1/45.6 (8.7/12.9); sweep 7.8/13.6
+  (1.5/3.0), 13.1/17.8 (2.8/5.3), 22.3/27.7 (5.5/7.2). C6a's 2-car raycast stall did not
+  recur, but raycast ran slower than sweep and than C6a's raycast with the same code, right
+  after the docs gate's build ended, so its raycast-sweep gap is not a result. One car at 120
+  and 240 Hz: 13.8/16.5 and 26.6/32.1 (raycast), 13.4/16.4 and 27.5/33.0 (sweep); our contact
+  2.8/3.5 and 5.5/6.6: the frame's cost about doubles with each doubling of the rate.
 - **The cost line again**: `fixture_cost` with 1, 2 and 4 cars under both queries at 60 Hz,
   on GPU0 with nothing else on it if the other session's job allows (`nvidia-smi` before each
   run, in the log), else as it is and said so; and 1 car at 120 and 240 Hz. Reported, not
