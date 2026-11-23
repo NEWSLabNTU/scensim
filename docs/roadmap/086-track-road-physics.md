@@ -1245,6 +1245,42 @@ the table above.
   - Placement is unchanged: it is offline and does not depend on the order.
 
 
+#### C6b's fixtures rerun after issue 123: results (2026-11-23, 118)
+
+siw 2ef3001, aib ff5e72b, fixture_c6b (unchanged), 60 Hz, the plate and the detail's colliders
+on, GPU0 with nothing else on it, every start within the check; NAS "2026-11-23 086 C6b rock
+fixtures after issue 123 (118)". Raycast / sweep, with the earlier faulty-order run in brackets:
+
+| fixture | measured | check |
+|---|---|---|
+| embedded_15, 40 km/h | J 303.1 / 305.0 N s (303 / 305), peak 15.1 / 13.9 kN (15.1 / 13.9), wheel rise 9.5 / 9.7 cm, pitch 0.41 / 0.42 deg, no rigid-limit step | **J fails** as before; the rest pass |
+| loose_15, 40 km/h | moved **1.67 m** / 2.5 cm (1.5 / 1.5 cm), largest speed 5.5 / 1.3 m/s (0.01 / 0.007) | raycast **passes**; sweep: **moves fails**, the rest pass |
+| loose_8, 40 km/h | moved 1.1 / 5.0 cm (0.9 / 1.4 cm), largest speed 0.44 / 1.1 m/s (0.02 / 1.9) | **moves fails** in both (sweep just under 5 cm); the rest pass |
+| boulder_35, 10 km/h | stopped 0.35 s after the plate's front reached it, the front axle at 399.94 / 399.96 m (face 399.55), deceleration peak 169 m/s^2 | passes, as before |
+| placement | unchanged (0.227 % shoulder, 0.205 % run-off) | fails as written, passes as amended, as before |
+
+The self-check found no rock on the base road in either query (`base_contacts` empty, no error
+logged). Each load logged 1 "only in one collision group" warning.
+
+Against the predictions:
+
+- No base contact: holds.
+- loose_15 in raycast: **fails.** It moved 1.67 m at up to 5.5 m/s, not about 6.5 cm. The front
+  wheel climbed it at s = 200 m and moved it 9 cm aside. The rear wheel met it 2.9 m later and
+  threw it, 0.73 m on and 1.5 m aside by the end of the case. That is the order of R4's slice
+  (0.2 to 0.5 m on, 0.9 to 1.0 m aside).
+- loose_15 in sweep: holds (2.5 cm against 1.6, within 1 cm; speed 1.3 m/s).
+- loose_15's moves item, passing in raycast and failing in sweep: holds.
+- loose_8 moving more than before in both queries: holds. Its moves item passing in raycast:
+  **fails** (1.1 cm).
+- embedded_15, boulder_35 and placement unchanged: holds.
+
+Open, not tested: issue 123's single-case runs moved loose_15 6.5 cm in raycast, against 1.67 m
+here. Those runs ran with `--trace-push`, which applies PhysX's contact report to the rock's prim
+while it is being simulated and wraps `rocks.limit`. In this run every rock has the report from
+its creation, and nothing is wrapped. Whether the trace changed the rock's motion is not tested.
+
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
