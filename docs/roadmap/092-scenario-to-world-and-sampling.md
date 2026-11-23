@@ -222,3 +222,39 @@ joining follower is never waited for on a frame from before it joined, and comma
 are posed by one synchronous `apply_batch_sync` per step. The same asynchronous pose of other
 kinematic bodies is issue 127. The rule is unchanged; set 2 is the whole set again from scratch
 on a fresh stack (L seeds 1, 2, 3 and 31, F seed 1).
+
+**Exit set 2 (2026-11-23): failed, check 1.** Fresh stacks (an L stack, then an F stack;
+CARLA 0.9.16 at Epic), scensim 84eed895, scensim_carla_world a27b833. Every run passed.
+
+| run | lag (p50/p95/max) | lost | unmatched | gate misses | malformed | unknown | decision | check 2 (max xy) | check 3 |
+|---|---|---|---|---|---|---|---|---|---|
+| L seed 1 | 1/1/1 on 240 frames | 0 | 0 | 0 | 0 | 0 | rejects, then crosses | 1.49e-4 m, events match | pass |
+| L seed 2 | 1/1/1 on 229 frames | 0 | 0 | 0 | 0 | 1 | rejects, then crosses | 1.49e-4 m, events match | pass |
+| L seed 3 | 1/1/1 on 230 frames | 0 | 0 | 0 | 0 | 1 | rejects, then crosses | 1.49e-4 m, events match | pass |
+| L seed 31 | 1/1/1 on 191 frames | 0 | 0 | 0 | 0 | 1 | accepts | 1.50e-4 m, events match | pass |
+| F seed 1 (check 4) | 1/1/1 on 239 frames | 0 | 0 | 0 | 0 | 0 | rejects, then crosses | 1.49e-4 m, events match | |
+
+Check 1 failed on `unknown_entity` 1 in L seeds 2, 3 and 31, the runs that followed another
+run on the same stack. The cause: the previous run's walker controller answered that run's
+last frame after the world's last step in it, so its datagram waited unread in the gate's
+socket; the next run's Initialize (same map, no reload) cleared the gate, which also dropped
+the floor that the old walker's destruction had set; the next step's drain then stored that
+command and counted it for an entity not yet commanded. The new walker's spawn dropped it, so
+nothing moved on it. Cause B is fixed: no pose stalled in any run, and check 2's largest error
+went from 0.070 m to 1.5e-4 m. The synchronous pose costs about 0.2 ms a frame: frame p50 0.71
+to 0.76 ms against 0.56 ms in set 1, tick p50 1.01 to 1.22 ms against 1.08 ms, tick p95 1.34 to
+1.58 ms. L seed 31 has no frame metrics: they come in 200-frame windows, and its run was 193
+frames (a final partial window is a later item). Check 3 holds in every L run: each run's truth
+ends, on the event's `exitSuccess`, at the first frame whose SSv2 pose of the walker is within
+1.0 m of LanePosition s 47, offset 5.25 (the model's far anchor, recomputed from lanelet 6583).
+The first analysis compared the storyboard log's `time` with the truth's `sim_time`, but the
+interpreter counts that time from `npc_logic_started` (truth frames 26, 14, 15, 15 and 24
+here), which made the event look about 0.6 to 1.2 s early; corrected.
+
+Fixed in scensim_carla_world (the fix 133 chose on 2026-11-23): clearing the gate keeps one
+floor for every entity at the last step's frame, so a command answering a frame at or before
+it is stale; a stale command is dropped and counted in its own count, `stale` (each entity and
+frame once; `CommandCounts.stale` on the world protocol, the truth's `commands`, `result.json`
+beside `unknown_entity`), which is a record outside `commands.ok`; and a step whose frame is
+below a floor (the world's frames started again) resets that floor, logged. The rule is
+unchanged; set 3 is the whole set again on fresh stacks.
