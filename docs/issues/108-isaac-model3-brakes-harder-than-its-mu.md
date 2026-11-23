@@ -55,13 +55,13 @@ Roadmap 094 records it and names the factor.
 
 | item | who | when |
 |---|---|---|
-| Issue 106's full table (regen_60, regen_30; mu 0.2, 0.3, 1.0; release 0.15 and its neighbours), judged by its written rule | 241 | after 108 lands, the first GPU free |
-| The dry set: launch, brake_100 (predicted about 42 m against 39.54), start_flat, start_up, hold_camber | 241 | with 106's table |
+| Issue 106's full table (regen_60, regen_30; mu 0.2, 0.3, 1.0; release 0.15 and its neighbours), judged by its written rule | 241 | done 2026-11-23: 0.15 kept, one known one-step failure (issue 106) |
+| The dry set: launch, brake_100 (predicted about 42 m against 39.54), start_flat, start_up, hold_camber | 241 | done 2026-11-23: brake_100 44.58 m; start_flat a 2.5 % miss (below) |
 | Issue 100's Isaac validation and reference reruns (vehicle_check, the T3 Isaac suites) | 241 | after the P4 seeds free GPU1 |
 | 054 T1's surface-layer peaks: each class's peak lands where the class says | 241 | with issue 100's reruns |
 | Isaac-vs-CARLA braking and cornering comparisons made before 108 | 133 assigns; 241 lists the docs that cite one when 108 lands | after the list |
 | The drift retune and the race planner's refit (243's verdict below) | 243 | when the user resumes the drift work (on hold since 2026-11-02) |
-| A question, not yet an issue: do our Isaac runs need the network at start? One `limit_brake` failed fetching Isaac's asset root from S3 (`add_default_ground_plane` via `get_assets_root_path`) | 241 | with 106's table |
+| A question, not yet an issue: do our Isaac runs need the network at start? One `limit_brake` failed fetching Isaac's asset root from S3 (`add_default_ground_plane` via `get_assets_root_path`) | 241 | answered: yes, issue 117 |
 
 ### The dry set on post-108 aib: prediction (2026-11-23, before the run)
 
@@ -80,6 +80,25 @@ nothing.
 
 A value outside its range is a miss, reported as one, and looked into before anything is
 re-judged on it.
+
+### The dry set on post-108 aib: result (2026-11-23)
+
+| test | before 108 (aib 23ef5fb) | after (aib ff5e72b) | predicted | |
+|---|---|---|---|---|
+| brake_100 | 39.54 m, 10.62 m/s^2 mid-stop | 44.58 m, 9.29 m/s^2 | 42 to 46 m | in |
+| launch, 0-100 km/h | 6.428 s (rear slip peak 1.23) | 6.448 s (1.93) | 6.43 to 6.70 s | in |
+| start_flat | 0.2845 m | 0.2775 m (-2.5 %) | within 1 % | **miss** |
+| start_up | 3.6467 m | 3.6629 m (+0.4 %) | within 1 % | in |
+| hold_camber | 0.128 cm in 60 s | 0.128 cm | under 1 cm | in |
+| regen_60 dry | -1.5 m/s^2 all regen, 0 friction torque | the same | unchanged | in |
+
+**start_flat's miss:** the car creeps off the hold brake at about 1 cm/s (the release torque,
+issue 070). After the fix it is 0.0008 m/s slower over the first 2 s, and close after (v_end
+0.0159 against 0.0156). So the 2.5 % comes from the first seconds. Not looked into further:
+a tyre at 1 cm/s may read a large slip, which the friction cap could reach even at these
+forces, but that is not verified. Nothing depends on start_flat's distance beyond issue 070's
+check that the car creeps, which still holds. Data: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-23
+issue 106 and 108 (241)/dryset`.
 
 ### The drift work (243, 2026-11-23, read only)
 
