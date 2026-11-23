@@ -108,6 +108,11 @@ class RunSpec:
     # source}}, set before SSv2 starts; None when the scenario binds none
     anchors: dict = None
 
+    def __post_init__(self):
+        # its own parameters: binding the world's anchors writes into them, and the specs of
+        # one combination (repetitions, --seeds) were handed one dict (issue 126)
+        self.parameters = dict(self.parameters or {})
+
     @property
     def key(self) -> str:
         parts = [_token(self.scenario.stem)]

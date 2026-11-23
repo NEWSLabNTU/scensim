@@ -490,6 +490,27 @@ def test_a_scenarios_anchor_bindings_are_set_before_ssv2_starts(tmp_path):
         run.expand(sc, tmp_path, params={"cyclist_s": [31.0]})
 
 
+def test_repetitions_and_seeds_of_a_bound_scenario_each_bind_their_own_parameters(tmp_path):
+    """Issue 126: every RunSpec of one parameter combination shared its dict, so the first
+    spec's anchor binding wrote the bound value into the second's, which was then refused as
+    given. Repetitions, --seeds and a suite's repetitions each give a spec its own dict."""
+    sc = _cs7_on_a_resolved_exit(tmp_path)
+    for kw in ({"repeat": 2}, {"repeat": 3, "seed": 1}):
+        specs, _ = run.expand(sc, tmp_path, params={"cyclist_s": [20.0]}, **kw)
+        assert len(specs) == kw["repeat"]
+        assert len({id(s.parameters) for s in specs}) == len(specs)
+        assert all(s.parameters["exit_lane"] == "8" for s in specs)
+        if "seed" in kw:
+            assert [s.seed for s in specs] == [1, 2, 3]
+    suite = tmp_path / "rep.yaml"
+    suite.write_text(f"scenarios: [{sc.name}]\nrepetitions: 2\n"
+                     "parameters: {cyclist_s: [20.0, 10.0]}\n")
+    specs, _ = run.expand(suite, tmp_path)
+    assert len(specs) == 4
+    assert len({id(s.parameters) for s in specs}) == 4
+    assert [s.parameters["exit_lane"] for s in specs] == ["8", "8", "7", "7"]
+
+
 def test_a_record_off_its_lane_or_on_other_anchors_is_refused(tmp_path):
     """092 K9b: a sample record's bound values are checked against the world before SSv2
     starts, not replaced."""
