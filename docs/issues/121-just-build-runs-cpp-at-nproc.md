@@ -1,0 +1,56 @@
+# 121: just build compiles SSv2's C++ at one job per core, about 2 GB a compiler
+
+**Status:** open (doc first; the fix follows, gated). **Severity:** medium: a build beside
+running work can take a host's memory, and the kernel's OOM killer then picks a training run.
+**Found:** 2026-11-23, scensim 243, measuring a full gate's memory; assigned to 241 by 133.
+
+## What happened
+
+On 2026-11-23 the kernel's OOM killer ended row b's restarted P2 seeds 1 and 2 on 139, at
+iterations about 3349 and 3364 of 5000. A full `just build && just test` gate (issue 113's) had
+started on the same 60 GB host with 9 GB available beside the five drift seeds (roadmap 094,
+P2's "gate-memory incident"). Both seeds rerun from scratch.
+
+243 then measured where a full gate's memory goes. The peak, about 30 GB, is SSv2's C++:
+`openscenario_interpreter` and its neighbours, built whenever SSv2 is not already in the build
+tree (a fresh worktree, or a pin that moved it). Each compiler (`cc1plus`) on those sources
+holds about 2 GB, and the build runs one per core.
+
+## Why
+
+`just build` runs `colcon build` with colcon's defaults:
+
+- colcon starts one package per core at once (`--parallel-workers`, default the CPU count);
+- colcon-cmake builds each CMake package with `make -j N -l N`, N the CPU count, unless
+  `MAKEFLAGS` names a job count;
+- cargo builds with one job per core (`CARGO_BUILD_JOBS` unset).
+
+So a build asks for as many compilers as there are cores, whatever memory the host has free.
+On 241 that is 24 compilers, about 48 GB at 2 GB each, and colcon can run several C++ packages
+side by side. On a 60 GB host with training running, it does not fit.
+
+For the gates since then, the gate runs with `MAKEFLAGS=-j6`, `CARGO_BUILD_JOBS=6` and colcon at
+2 workers (`COLCON_DEFAULTS_FILE`), set by hand outside the recipe (243, 2026-11-23).
+
+## Fix (proposed)
+
+`just build` picks its job count from the memory the host has free, or takes it from a host
+setting, and says what it picked:
+
+- **`SCENSIM_BUILD_JOBS`** (a host setting, the environment or `.env`): the total number of
+  compile jobs. Unset: half of `MemAvailable` at the build's start divided by 2.5 GB a job
+  (2 GB measured, plus a margin), at least 1 and at most the CPU count. The other half stays
+  for what runs beside the build, which can grow while it compiles.
+- colcon runs **2 packages** at a time (1 when the total is under 4), and each package's make
+  and cargo get the total divided by that: `MAKEFLAGS=-jJ`, `CARGO_BUILD_JOBS=J`. So at most
+  the total runs at once, wherever the jobs come from.
+- A `MAKEFLAGS`, `CARGO_BUILD_JOBS` or colcon parallel-worker setting already in the
+  environment is kept, not overridden. The recipe prints the job counts it used, and where
+  they came from.
+
+Tests: the job-count choice is a pure function of the free memory, the CPU count and the
+host setting, tested without a build (memory far below and above the cores' need, the host
+setting over both, the existing `MAKEFLAGS` kept).
+
+acb's own `just build` (its workspace, which the gate builds first) has the same defaults. It
+builds no SSv2, so it is left as it is; that is noted, not changed here.
