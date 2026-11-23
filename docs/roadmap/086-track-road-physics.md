@@ -1222,6 +1222,29 @@ loose rock awake when the wheel reached it.
   passes (0.227 % and 0.205 % against 0.217 %). **The ditch is untested**: fixture_c6b has
   none, so its 3 % cover placed nothing.
 
+#### C6b's fixtures rerun after issue 123 (2026-11-23, predictions before the run)
+
+Issue 123 found that every C6b fixture run above was made in `fixture_drive`'s faulty order. The
+world's USD was added before play and `roadBase`'s members were set after it, so the loose rocks
+also touched the base road. The world server never had that contact. siw 2ef3001 sets the members
+before play in `fixture_drive` (133's ruling) and adds the load-time self-check (an error when a
+rock touches `roadBase` within its first second awake, listed in `cases.json`). The rerun uses
+the same fixture set, both queries and `rock_check` with the placement, and is reported against
+the table above.
+
+- **118's predictions:**
+  - The self-check finds no base contact in either query.
+  - loose_15 moves about 6.5 cm in raycast and 1.6 cm in sweep, as in issue 123's runs in the
+    server's order (within 1 cm). Its largest speed is about 1.4 m/s. The check's moves item
+    passes in raycast and fails in sweep.
+  - loose_8 moves more than before (0.9 / 1.4 cm) in both queries. Its moves item passes in
+    raycast and fails in sweep, as loose_15's.
+  - embedded_15 and boulder_35 are unchanged within 5 % in every measure, verdicts as before
+    (J fails, the boulder passes). Both are fixed rocks, static in `rockTiles`, and the wheel's
+    load is our contact's, so the base filter does not reach them.
+  - Placement is unchanged: it is offline and does not depend on the order.
+
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
