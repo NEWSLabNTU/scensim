@@ -105,6 +105,41 @@ The dry set is as issue 100 left it:
 - hold_camber 0.128 cm sideways in 60 s;
 - regen_60's -1.5 m/s^2 all regen, with no friction torque.
 
+## The full table on post-108 aib: rule and prediction (2026-11-23, before the runs)
+
+Owed by issue 108. Its fix lowered the car's grip to the spec's mu (aib ff5e72b; this issue's
+table above ran at about 1.07 mu at the peak), so the order of the two controls and B's
+deceleration are judged again, on aib ff5e72b with its pins (sim_vehicle_ecu 99505b0,
+sim_vehicle_spec 9ceb8cb).
+
+**Runs.** aib.steptest with STEP_LOG, GPU1. Release (`--set regen_slip_release`) 0.25, 0.19,
+0.18, 0.15 and 0.10. For each: `regen_60` and `regen_30` at tyre friction 0.2 and 0.3, three
+times each, for the spread of the ABS figures; both at 1.0 once. That is 70 runs.
+
+**Rule:** the one written above, with its two amendments, judged per ECU step on every run:
+1. **Order:** in R, regen slip control acts before ABS, or ABS never does. In B, regen slip
+   control's first action comes before ABS's.
+2. **No rear lockup.**
+3. **No yaw excursion:** |yaw rate| < 0.05 rad/s, and |y| moves < 0.2 m.
+4. **Deceleration:** R within 15 % of 1.5 m/s^2; B at least 0.85 mu g, with mu the set value
+   (now also the grip).
+
+A release passes only if all three repeats of every low-grip run pass. Dry (1.0) must be the
+same at every release. 0.15 stands if it is still the highest release that passes. If it is
+not, the table names the highest that does, and the spec changes only after 133 rules.
+
+**Prediction:**
+- **Order:** with less grip, each wheel's slip grows sooner at the same request, so both
+  controls' first actions come one step or so earlier, with their order unchanged. 0.15 still
+  passes every run, with ABS never acting in R; in B, rsc still acts a step ahead of ABS. 0.19
+  and 0.25 still fail.
+- **B's deceleration:** lower than before but above the bar. Expected about 0.9 mu g under
+  ABS (issue 108's ABS stops read 0.91 to 0.94 mu), against the 0.85 needed: a margin of
+  about 0.05 mu g, where the old grip gave about 0.15.
+- **R:** still 1.5 m/s^2 within 15 % at mu 0.2 and 0.3. It is 0.76 and 0.51 of the grip.
+- **Repeats:** run to run, the first-action steps within one step, and the decelerations
+  within 0.02 m/s^2.
+
 ## Fix
 
 - **sim_vehicle_spec:** the schema gains `powertrain.regen_slip_control`, its twelve fields.
