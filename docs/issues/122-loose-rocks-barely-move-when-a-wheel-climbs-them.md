@@ -147,3 +147,16 @@ slice (the contact's loads and shares: R2's damper and bump stop, R5's cam and c
 issue 108's grip; `reactions`, `limit`), or R4's table came from a state of the spike other than
 the one committed (its text names an unlimited first run before `limit`). R4's 0.2-1.0 m is not
 reproduced by its own spike today.
+
+## The fourth test: does the rock touch the base road (before the run)
+
+loose_15, raycast, tiles on, `--trace-push` naming each collider the rock touches with its normal
+force (siw fe69aa9). The rock is in the `rocks` group, which filters out `roadBase` (the world's
+ground: `/World/env/Terrain`, `/World/env/Road`, `/World/env/Lines` from world.yaml).
+
+- If `/World/env/Road`'s collider carries normal force, the filter does not hold: a fault of its
+  own (a number from 133).
+- If its force is zero, the report named it as a pair PhysX found and then filtered, and the rock
+  rests on its tile alone.
+- **118's prediction:** the base carries part of the force, since the report named it in every
+  step the rock was in contact.
