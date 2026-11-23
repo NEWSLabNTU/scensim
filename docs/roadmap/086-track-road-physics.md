@@ -11,7 +11,8 @@ courses' dataset revision prepared, not published. C4 landed 2026-11-20 (scensim
 6177ced, scensim 82787b91); its Town01 suite waits for 139. C5 started 2026-11-23 in four
 steps ("C5's steps" below); C5a done (scensim_isaac_world ea35f35), C5b done
 (scensim_isaac_world b5de87b, its fixture course and checks), C5c done (scensim_isaac_world
-086-c5c, the lip fixtures and the strips as zones).
+7eb96cc, the lip fixtures and the strips as zones), C5d done with one failed check
+(scensim_isaac_world 086-c5d: the maps pass, the fixture's localization fails; C5d2 follows).
 Issue 077's cause is confirmed (2026-11-20, 118): PhysX's raycast wheel query takes Town01's
 sharp curb face as the ground, and Town01 has no road layer. Its fix comes first, ahead of C5:
 recheck the sweep (066 R1's check, from C6). If the sweep no longer throws the car, aib switches
@@ -557,6 +558,72 @@ divided by hand for the dataset, not by the builder.
   cloud by the same rule, untested by a run here); C5's exit pairing (aib's
   slope matrix and haruna_down against main's baseline, on the same host and GPU0), which
   follows C5d.
+
+As built: the builder's `maps` step also runs alone on a published course (`<course.yaml>
+<map dir> maps`, or `record maps`), from its saved centreline, meshes and record, with no
+fetch; before it, a step list without `centreline` still fetched the DEM and photo tiles
+(seen once on a copy of Haruna: public GSI tiles into its `raw/`, nothing rebuilt). The pose
+judge is `scenarios/projects/courses/judges/pose_error.py`, beside `nvtl.py`.
+
+#### C5d's results (2026-11-23, 118, GPU0)
+
+scensim_isaac_world 086-c5d (3608e41: `course/maps.py`, `course/check.py`'s lanelet and cloud
+checks, the maps-only step). Logs and data: NAS "2026-11-23 086 C5d maps (118)". Runs on 118
+in `/mnt/renegade/aeon/isaac-ex/c5d`, a local testbench workspace there.
+
+- **Lanelets against the mesh** (`course.check`): fixture_c5's bound nodes within 0.42 mm,
+  midway 0.88 mm (C5b's maps, the centreline's height across: 195 mm on the bank);
+  fixture_c5c's within 0.20 mm (the right bound along the lips' top).
+- **The divided clouds**: fixture_c5 16 tiles, 1,320,500 points; fixture_c5c 48 tiles,
+  2,665,716; each tile in its cell, the metadata naming every tile, the count the build's.
+- **Haruna rebuilt** (`record maps` on a copy of 072's map): the lanelets identical to 072's
+  but for the generator's name (`swb_isaac_world` then); the cloud 15,788,823 points in the
+  same 140 tiles with the same metadata, 123 tiles point for point and 17 road tiles differing
+  by under 0.1 % of their points (the road surface sampled anew; terrain and props identical).
+- **Autoware on Isaac** (Model 3, the scensim profile, `--stop-stack`):
+
+  | run | maps | scenario | NVTL p05 (>= 2.5) | pose error p95 (<= 0.2 m) | max (reported) |
+  |---|---|---|---|---|---|
+  | haruna_down, 2026-11-23T10-29-29 | rebuilt | passed, 384.5 s, 0 contacts | 3.12 over 1470 m | **0.183, passes** | 0.202 |
+  | fixture_c5_down, 2026-11-23T10-26-37 | rebuilt | passed | 3.31 over 451 m | **1.33, fails** | 1.38 |
+  | fixture_c5_down (A/B), 2026-11-23T10-37-23 | C5b's | passed | 3.31 over 451 m | **1.29, fails** | 1.31 |
+
+  haruna_down beside 072's run on the dataset's map (382.4 s, 0 contacts), reported, not
+  judged. Its pose error passes with little margin: the p95 is 0.183 m against 0.2, and the
+  maximum 0.202 m.
+- **Finding: on fixture_c5 NDT does not hold the car's lateral position, and the check set in
+  advance fails.** Autoware held its pose at the lane's middle (1.6-1.8 m left of the
+  centreline) the whole run while the car, by the truth, ran from 0.3 to 2.9 m left (0.35 m
+  from the left edge on the banked arc); along the road NDT trailed the truth by up to 0.6 m
+  from the bend on. The same drive on C5b's maps fails the same way, so the cause is not the
+  new maps but the course: a fixture has nothing beside the road for NDT to fix a lateral
+  position by (flat ground 0.3 m below, no rails, trees or buildings), and a cloud without
+  lateral features matches almost anywhere across the road, so NVTL stays high (3.31) while
+  the pose is wrong. NVTL alone does not show a lateral error.
+
+**Amendment, made after the results** (133, 2026-11-23, as with issue 106): the result above
+stands as a failure of the rule written before the runs; the rule is not changed. C5d's map
+checks pass and land. The fixture's localization becomes its own step, C5d2.
+
+#### C5d2: the fixture with lateral features (spec written 2026-11-23, after C5d's results, before any run)
+
+- **The course.** fixture_c5 with guardrails and trees, through the course builder's props
+  step as a real course gets them (`course/props.py`, the USD step's guardrails and trees,
+  their points in `props_points.npy` and so in the cloud). The guardrails stand at the
+  record's `barrier_offset`, which fixture_c5's record has none of today: the fixture's table
+  gains `barrier_offset_left` and `barrier_offset_right` columns, a rail each side 0.5 m past
+  the shoulder over the whole course, so NDT has a lateral feature on both sides. The trees
+  are the props step's, at its spacing and band beside the road. The plan,
+  section, lanes and lip are C5b's; the course is built anew into its own map directory.
+- **The check, the same rule as C5d's, written before any run:** fixture_c5_down under
+  Autoware on Isaac (GPU0, the maps rebuilt by the builder, `--stop-stack`): the scenario
+  passes, NVTL p05 after the first 10 s at least 2.5 over at least 50 m, and the
+  localization's horizontal error against the truth at most 0.2 m at its 95th percentile (the
+  maximum reported, not judged).
+- **And kept from C5b**, since the props change the course: the road mesh against the record
+  (`course.check`) and Isaac's road (`isaac_check`) within C5b's limits, and the lanelets
+  within 5 mm.
+- Not started until C5d lands.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
