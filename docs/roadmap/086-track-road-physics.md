@@ -1345,6 +1345,14 @@ host and GPU): `tick_p50_ms` 45.1 to 45.3, `tick_p95_ms` 51.4 to 88.9 over six r
   stay as written.
 - 118's prediction under the new criterion: it passes.
 
+**Issue 128, before the runs (2026-11-24).** The first run (rocks, r1, on main 7cc930a0)
+ended in error: the world server's second step took 28.7 s, because the road layer's tiles
+took 7 s each on Haruna's 3055-station record (issue 128, rocks or not). The runs wait for its
+fix to land. Both maps' numbers then come without that cost, so the *none* baseline is
+post-128 and is not C5's (C5 ran no road layer). The criteria and predictions above are
+unchanged. The runner now accepts a provenance whose commit has the landed main's tree, with
+"+dirty" only for submodule Cargo.lock files (133).
+
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
