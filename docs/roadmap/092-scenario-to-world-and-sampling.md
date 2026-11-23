@@ -674,3 +674,35 @@ conditioned on the walker type and the light, which K11a refuses ("its lognormal
 values"). K11c's spec therefore fixes the cell (knobs or `scensim.cell.<attribute>`) and
 searches the variables with constant parameters, or K11 grows conditional variables first; the
 choice is made in K11c's spec, written here before its first run.
+
+### K11c's spec (2026-11-24, 241; the base and the cell chosen by 133, before any run)
+
+**The scenario.** The batch's CS1 is `examples/cases/cs1_walker_gap_acceptance.xosc`, not the
+walker_dartout example: its parameters are `ego_speed`, `walk_speed`, `ttc_entry` and
+`behaviour`, and it has no category, cell or distribution, which the sampler requires. K11c adds
+to it the category `R2.walker_crossing.dart_out` and a fixed cell, `scensim.cell.illumination`
+day, `surface` dry, `occluder` van, so the search runs inside one cell by construction. Adding
+header properties changes the file's hash, so K10's agreement records (run 2) name the earlier
+version; they stay replayable from git at their commit.
+
+**The base: invented.** `examples/cases/models/cs1_gap_acceptance_k11c.yaml`, with constant
+parameters, labelled invented in its file. **K11c's estimated rate is a rate under this
+invented base, not a risk rate**: K11c demonstrates purpose B (finding failures) and the
+search-to-rate mechanism, not purpose A.
+
+**The simplification: independence.** The four variables are drawn independently. The model
+the numbers come from, walker_dartout.yaml, draws `ego_speed` jointly with `van_offset` and
+conditions `walk_speed`, `behaviour` and `ttc_entry` on `walker_type` (`ttc_entry` on
+`illumination` too); here those conditions are fixed at the day / adult case. Where the numbers
+come from:
+
+| Variable | Base | From walker_dartout.yaml |
+|---|---|---|
+| `ego_speed` | normal 8.3, sd 1.265, range [1.0, 16.68] | no day / adult case (a joint group): the first mixture component's marginal (weight 0.7, mean 8.3, variance 1.6), truncated at its constraint `ego_speed <= 1.2 * speed_limit` (16.68 m/s); the lower bound 1 m/s is ours |
+| `walk_speed` | normal 1.4, sd 0.2, range [0.6, 2.4] | `walk_speed`, case adult |
+| `behaviour` | steady 0.75, hesitate 0.2, run 0.05 | `behaviour`, case adult |
+| `ttc_entry` | log-normal 2.6, sd 0.8, range [0.3, 8.0] | `ttc_entry` at adult (2.6) and day (factor 1.0) |
+
+**The search.** All four variables searched, none held; the threshold 0 (a closest gap at most
+0 m); the parameters of "K11's plan"; N the batch's slot count, and the seed, written here
+before the first run, with the batch's engine.
