@@ -184,3 +184,10 @@ explains the change and R4's figure was right for its plant; if not, the bisect 
   tyre's load times the face's gradient (`rocks.reactions`), bounded by the tyre surface's speed
   (`rocks.limit`); the tyre's friction does not enter it. The grip changes the wheel's PhysX
   force along the road, which hardly changes at a held 40 km/h.
+
+## The fifth test's result (2026-11-23)
+
+aib 3cd2b7d, siw fe69aa9's tree, GPU0; NAS "2026-11-23 issue 122 spike pre-108 (118)". loose_15
+moved 0.1 cm (0.19 m/s at most, push peak 17.5 kN), against 0.2 cm on today's plant; loose_8
+12.9 cm (10 cm today). **The prediction holds: issue 108 does not explain it.** The bisect (a)
+follows: R4's spike from swb_isaac_world 61bb368 forward, each with its own aib, on loose_15.
