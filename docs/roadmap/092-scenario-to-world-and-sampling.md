@@ -708,3 +708,47 @@ come from:
 model's path as the spec writes it (not this host's), so record ids do not depend on the host; the threshold 0 (a closest gap at most
 0 m); the parameters of "K11's plan"; N the batch's slot count, and the seed, written here
 before the first run, with the batch's engine.
+
+### K11b's check 4 (2026-11-24): passed as worded, exposed issue 130
+
+`python3 -m scensim.truth outcomes` (each batch slot's closest gap, by the same `closest()` the
+seats judge runs) on the batch's truth export (`agreement_run.py --ego-from-truth
+--truth-out`), against `python3 -m scensim.truth closest` on the seats runs, K10's run-2 set:
+
+| Run | Seats | Batch | Difference |
+|---|---|---|---|
+| L seed 2 | 0.443 m (frame 141) | 0.488 m (step 123) | +0.045 m |
+| L seed 31 | -1.231 m (frame 131) | -1.262 m (step 116) | -0.031 m |
+
+Within 0.05 m, so it passed as worded. Per frame it did not: the minima fall at different
+frames (seats 141 is step 127), and the gaps differed by up to 1.15 m, because the playback put
+the ego's body pose where the entity's belongs, 1.387 m ahead (issue 130). Fixed in both the
+playback and the seats attachment (133's decision: models read the entity's pose).
+
+**The rerun's bar, fixed before it.** The recorded seats walker decided against the ego's body
+pose (it ran before the fix), and the batch's walker now reads the entity's, 1.387 m behind: the
+two walkers may decide at other frames, so their poses may part. Hence, on both runs, at every
+paired frame (seats S + k, batch k):
+
+- the ego's box centres within 1e-3 m (the playback alone; the bar);
+- the walker's pose error and decisions against seats, reported with no bar;
+- the closest gaps within 1e-3 m at every frame where the walker's pose error is under 1e-3 m
+  (the bar), and the minimum on each side reported with its frame.
+
+A check 4 free of the old walker decisions needs seats runs recorded with the fixed attachment
+(CARLA), named as a follow-up, not run here.
+
+**The rerun** (the fix in the playback and the seats attachment; the same set 3 records):
+
+| Run | Ego box, max over frames | Walker pose error, max | Frames with walker under 1e-3 m | Gap difference there, max | Decisions (step, event), seats / batch |
+|---|---|---|---|---|---|
+| L seed 2 (218 frames) | 0 m | 0.210 m | 81 | 1.18e-4 m | 61 appear, 82 reject, 121 go_after / 64, 85, 124 |
+| L seed 31 (179 frames) | 0 m | 0.210 m | 62 | 1.15e-4 m | 61 appear, 82 go / 64, 85 |
+
+Both bars met: the played-back ego's box is the seats box at every frame, and where the walkers
+agree the gaps agree to 1.2e-4 m. As expected, the walkers part: every batch decision comes 3
+steps (0.15 s) after the recorded one, the ego's entity being 1.387 m behind its body at about
+8 m/s. Minima: L seed 2 seats 0.443 m and batch 0.488 m, both at step 126; L seed 31 seats
+-1.231 m at step 117, batch -1.262 m at step 119; each differs because the walkers do. Outcomes
+agree (passed on both). The decisions' agreement now waits on seats runs recorded with the
+fixed attachment (the follow-up above).

@@ -83,11 +83,20 @@ def from_truth(a, run_dir, trace, S, A):
     run.reset()
     rec = A.BatchRecorder(run)
     rec.record(run.obs)
+    truth = None
+    if a.truth_out:
+        # 092 K11b: the batch's own truth, for scensim.truth's closest gap per slot
+        from scensim_batch.truth import TruthRecorder
+        truth = TruthRecorder(run, map_name=trace.episode.map, step_time=step_time)
+        truth.begin(run.obs)
     end = {}
     cmd = {"valid": [True], "acceleration": [0.0], "velocity": [0.0], "gear": [2],
            "tire_angle": [0.0]}
     for _ in range(steps - 1 + END_SLACK):
-        rec.record(run.step(cmd, step_time))
+        obs = run.step(cmd, step_time)
+        rec.record(obs)
+        if truth is not None:
+            truth.record(obs)
         out = run.outcome()[0]
         if out != "running":
             end["outcome"], end["step"] = out, rec.k - 1
@@ -109,6 +118,8 @@ def from_truth(a, run_dir, trace, S, A):
              "outcome": {"success": "passed", "failure": "failed"}.get(outcome, outcome)}
     if a.dump:
         Path(a.dump).write_text(json.dumps({"seats": seats["poses"], "batch": batch["poses"]}))
+    if truth is not None:
+        truth.write(a.truth_out)
     row = {"scenario": Path(a.scenario).name, "engine": "none (the seats ego played back)",
            "S": S, "steps": steps, "batch_end_step": end.get("step"), "models": models,
            "record": record, **A.compare(seats, batch)}
@@ -140,6 +151,9 @@ def main(argv=None):
                          "max_physics_dt, 1/60: the bridge steps a frame in substeps of it)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--dump", default=None, help="both sides' poses per step, as JSON")
+    ap.add_argument("--truth-out", default=None,
+                    help="with --ego-from-truth: write the batch's truth export here "
+                         "(slot_0_ep0/), for `python3 -m scensim.truth outcomes` (092 K11b)")
     ap.add_argument("--route-points", type=int, default=121,
                     help="samples per default vehicle's 300 m route (ScensimEnvCfg.route_points)")
     a = ap.parse_args(argv)
@@ -277,6 +291,8 @@ def main(argv=None):
              "outcome": {"success": "passed", "failure": "failed"}.get(outcome, outcome)}
     if a.dump:
         Path(a.dump).write_text(json.dumps({"seats": seats["poses"], "batch": batch["poses"]}))
+    if truth is not None:
+        truth.write(a.truth_out)
     row = {"scenario": Path(a.scenario).name, "engine": a.engine, "S": S, "hold_steps": hold,
            "skipped_frames": skipped, "steps": steps, "batch_end_step": end.get("step"),
            "replay": replay, "preroll_steps": len(preroll), "route_points": a.route_points,

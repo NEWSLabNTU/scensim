@@ -1,6 +1,7 @@
 """scensim.behaviour.seats (roadmap 092 K12): models on the truth stream, their commands on the
 tick gate."""
 import io
+import math
 import json
 
 import numpy as np
@@ -68,6 +69,49 @@ def test_a_truth_frame_message_becomes_a_frame():
         names, present = ["ego", "walker"], [True, False]
         poses = [1, 2, 0, 0, 0, 0.5] + [0] * 6
         velocities = [4, 0.5, 0] + [0] * 3
-    f = seats.frame_of(Msg)
+    f = seats.frame_of(Msg, {"ego": (0.0, 0.0, 0.0), "walker": (0.0, 0.0, 0.0)})
     assert f == {"frame": 3, "sim_frame": 5003, "sim_time_ns": 1_000_150_000_000,
                  "entities": {"ego": (1, 2, 0.5, 4, 0.5), "walker": None}}
+    # an entity whose offset has not arrived (the latched entities topic) is absent
+    assert seats.frame_of(Msg, {})["entities"]["ego"] is None
+
+
+def test_a_model_reads_the_entitys_pose_as_boxes_takes_it_from_the_truth():
+    """Issue 130: on a truth whose ego body sits 1.387 m ahead of its entity, the model's ego
+    is the entity's pose, the one scensim.truth.boxes builds the ego's box from."""
+    from scensim import truth as T
+    gt, gg = T._module("gap_trace"), T._module("gap_geometry")
+    off = (1.387, 0.0, 0.0)
+    header = gt.EntityHeader(frame=0, name="ego", kind="ego",
+                             declared=gt.DeclaredBox((1.416, 0.0, 0.744), (4.792, 2.163, 1.488)),
+                             origin_offset=gt.OriginOffset(*off), sim_id=1, asset="t",
+                             asset_box=None)
+    body = gt.Pose6(317.8, -129.5, 0, 0, 0, math.pi - 0.01)
+    trace = gt.Trace(episode=gt.Episode(schema=2, episode=1, start_unix=0.0,
+                                        npc_motion="tracked", map="m", step_time=0.05))
+    trace.entities["ego"] = header
+    fr = gt.Frame(frame=7, sim_time=0.35, sim_frame=107, sim_time_ns=10**12, entities={
+        "ego": gt.EntityState(ssv2=body, sim_pose=body, velocity=(-8.0, 0.1, 0.0),
+                              angular_velocity=(0, 0, 0), velocity_source="measured")})
+    box = T.boxes(trace, fr)["ego"]
+
+    class Msg:
+        frame, sim_frame, sim_time_ns = 7, 107, 10**12
+        names, present = ["ego"], [True]
+        poses = [body.x, body.y, 0, 0, 0, body.yaw]
+        velocities = [-8.0, 0.1, 0.0]
+
+    class Ent:
+        name, origin_offset = "ego", off
+
+    gate, model = Gate(), Model()
+    r = seats.Runner({"walker": model}, "ego", gate, io.StringIO(), step_time=0.05)
+    f = seats.frame_of(Msg, seats.offsets_of(type("E", (), {"entities": [Ent]})))
+    f["entities"]["walker"] = (0.0, 0.0, 0.0, 0.0, 0.0)
+    r.on_frame(f)
+    seen = model.seen[0][0]
+    e = gg.entity_pose_from_actor(gg.Pose2D(body.x, body.y, body.yaw), *off)
+    assert abs(seen["ego_x"] - e.x) < 1e-12 and abs(seen["ego_y"] - e.y) < 1e-12
+    again = gg.ssv2_box(e, header.declared.center, header.declared.dimensions)
+    assert abs(again.cx - box.cx) < 1e-12 and abs(again.cy - box.cy) < 1e-12
+    assert abs(seen["ego_x"] - body.x) > 1.3                 # not the body's pose

@@ -78,8 +78,11 @@ def seats_poses(trace, start_frames, steps, entities, pose="ssv2", shift=None):
 
 def ego_states(trace, start_frames, steps, ego):
     """The seats ego at frames S + k, k in 0..steps-1, for TruthPlayback (092 K10): the
-    simulator's pose and the truth's map-frame velocity, as the seats attachment reads them.
-    A frame without the ego holds the last state."""
+    entity's pose (the simulator's body pose with the truth's `origin_offset` taken back off,
+    as scensim.truth.boxes does; issue 130) and the truth's map-frame velocity, as the seats
+    attachment reads them. A frame without the ego holds the last state."""
+    gg = _gap_geometry()
+    o = trace.entities[ego].origin_offset
     frames = sorted(trace.frames, key=lambda f: f.frame)
     first = frames[0].frame
     by = {f.frame: f for f in frames}
@@ -88,7 +91,8 @@ def ego_states(trace, start_frames, steps, ego):
         f = by.get(first + start_frames + k)
         st = None if f is None else f.entities.get(ego)
         if st is not None:
-            p = st.sim_pose
+            p = gg.entity_pose_from_actor(gg.Pose2D(st.sim_pose.x, st.sim_pose.y,
+                                                    st.sim_pose.yaw), o.x, o.y, o.yaw)
             last = {"x": p.x, "y": p.y, "yaw": p.yaw,
                     "vx_map": st.velocity[0], "vy_map": st.velocity[1]}
         if last is None:
@@ -269,6 +273,12 @@ class BatchRecorder:
 
 
 # --- the comparison ----------------------------------------------------------------------------
+
+def _gap_geometry():
+    """scensim_launch's gap_geometry (its scripts on the path, as the truth reader is)."""
+    import gap_geometry
+    return gap_geometry
+
 
 def _wrap(a):
     return (a + math.pi) % (2 * math.pi) - math.pi

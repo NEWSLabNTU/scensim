@@ -291,6 +291,56 @@ def _closest(args) -> int:
     return 1 if failed else 0
 
 
+def slot_outcomes(batch_dir, threshold=0.0) -> list:
+    """092 K11b: the outcome of each batch slot's episode, as the search reads them, from the
+    batch's truth export (scensim_batch.truth: `<dir>/slot_<k>_ep<e>/{truth.jsonl, sample.json,
+    outcome.json}`). The score is closest() on the slot's truth, the same box-to-box gap the
+    seats judge measures; a run fails when it is at most `threshold`. `[{record, outcome}]`."""
+    gt = _module("gap_trace")
+    rows = []
+    for d in sorted(Path(batch_dir).glob("slot_*_ep*"), key=_slot_key):
+        rec = json.loads((d / "sample.json").read_text())
+        rid = rec.get("id") if isinstance(rec, dict) else None
+        if not rid:
+            raise ValueError(f"{d}: sample.json has no record id")
+        try:
+            trace = gt.load_trace(d / "truth.jsonl", require_end=True)
+        except (OSError, ValueError) as e:
+            rows.append({"record": rid, "outcome": {"error": True, "message": str(e),
+                                                    "run": d.name}})
+            continue
+        c = closest([trace])
+        if c is None:
+            rows.append({"record": rid, "outcome": {
+                "error": True, "message": "no ego and other entity to measure", "run": d.name}})
+            continue
+        gap = float(c["gap"])
+        rows.append({"record": rid, "outcome": {
+            "score": gap, "failed": gap <= threshold, "contact": bool(trace.contacts),
+            "error": False, "closest": {"entity": c["entity"], "frame": c["frame"],
+                                        "sim_time": c["sim_time"]}, "run": d.name}})
+    return rows
+
+
+def _slot_key(d):
+    k, e = d.name[len("slot_"):].split("_ep")
+    return int(k), int(e)
+
+
+def _outcomes(args) -> int:
+    rows = slot_outcomes(args.batch_dir, args.threshold)
+    text = "".join(json.dumps(r, sort_keys=True) + "\n" for r in rows)
+    if args.output == "-":
+        sys.stdout.write(text)
+    else:
+        Path(args.output).write_text(text)
+        n = sum(1 for r in rows if r["outcome"].get("failed"))
+        e = sum(1 for r in rows if r["outcome"].get("error"))
+        print(f"{len(rows)} slot episodes: {n} failed (score at most {args.threshold}), "
+              f"{e} errors; {args.output}")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python3 -m scensim.truth", description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -298,7 +348,17 @@ def main(argv=None) -> int:
     c.add_argument("--min-gap", type=float, default=0.0,
                    help="fail below this gap, m (default 0: fail on contact)")
     c.add_argument("run_dir", type=Path)
+    o = sub.add_parser("outcomes", help="092 K11b: each batch slot's closest gap as the "
+                                        "search's outcomes (JSONL of {record, outcome})")
+    o.add_argument("batch_dir", type=Path, help="the batch's truth export (slot_<k>_ep<e>/)")
+    o.add_argument("--threshold", type=float, default=0.0,
+                   help="a run fails at a score (gap, m) at most this (default 0)")
+    o.add_argument("-o", "--output", default="-")
     args = ap.parse_args(argv)
+    if args.cmd == "outcomes":
+        if math.isnan(args.threshold):
+            ap.error("--threshold: not a number")
+        return _outcomes(args)
     if math.isnan(args.min_gap):
         ap.error("--min-gap: not a number")
     return _closest(args)

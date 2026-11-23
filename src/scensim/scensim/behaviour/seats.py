@@ -11,7 +11,10 @@ commands with the tick gate's datagrams, so the world server moves them.
 Each model is built as the batch builds it (scensim_batch: the scenario compiled for this run's
 record, the anchors by `model_anchors` on the run's map), for one slot, on numpy. Per truth
 frame it reads its own entity's pose and the ego's truth (the ego's acceleration differenced
-from its velocity over the frame), steps, and the frame's commands go out as one datagram
+from its velocity over the frame), each the entity's pose: the truth carries the simulator's
+body pose, and the body's `origin_offset` (the latched entities topic) is taken back off, as
+`scensim.truth.boxes` does (issue 130). A frame's entity whose offset has not arrived yet is
+absent for that frame. Velocities are the body origin's, as the truth carries them, steps, and the frame's commands go out as one datagram
 answering that frame's `sim_frame`. A model whose entity or the ego is absent from a frame
 sends nothing for it (the world keeps its last command). Its decisions (the model's events)
 are written, one JSON line per event, to `$SCENSIM_ATTACHMENT_DIR/decisions.jsonl` (D6),
@@ -130,15 +133,30 @@ def build(env) -> tuple:
     return models, names[egos[0]]
 
 
-def frame_of(msg) -> dict:
-    """A TruthFrame message as `Runner.on_frame` takes it."""
+def entity_pose(x, y, yaw, offset):
+    """The entity's (x, y, yaw) from the body's and its `origin_offset` (x, y m, yaw rad):
+    gap_geometry.entity_pose_from_actor, the inverse of where the world placed the body."""
+    from scensim.truth import _module
+    gg = _module("gap_geometry")
+    e = gg.entity_pose_from_actor(gg.Pose2D(x, y, yaw), *offset)
+    return e.x, e.y, e.yaw
+
+
+def offsets_of(msg) -> dict:
+    """{name: origin_offset} from a TruthEntities message."""
+    return {e.name: tuple(e.origin_offset) for e in msg.entities}
+
+
+def frame_of(msg, offsets) -> dict:
+    """A TruthFrame message as `Runner.on_frame` takes it, each pose the entity's (`offsets`,
+    {name: origin_offset}); an entity without an offset yet is absent."""
     ents = {}
     for k, name in enumerate(msg.names):
-        if not msg.present[k]:
+        if not msg.present[k] or name not in offsets:
             ents[name] = None
             continue
         p, v = msg.poses[6 * k:6 * k + 6], msg.velocities[3 * k:3 * k + 3]
-        ents[name] = (p[0], p[1], p[5], v[0], v[1])
+        ents[name] = (*entity_pose(p[0], p[1], p[5], offsets[name]), v[0], v[1])
     return {"frame": msg.frame, "sim_frame": msg.sim_frame, "sim_time_ns": msg.sim_time_ns,
             "entities": ents}
 
@@ -146,7 +164,8 @@ def frame_of(msg) -> dict:
 def main(argv=None) -> int:
     import rclpy
     from rclpy.qos import QoSProfile, ReliabilityPolicy
-    from scensim_interfaces.msg import TruthFrame
+    from rclpy.qos import DurabilityPolicy
+    from scensim_interfaces.msg import TruthEntities, TruthFrame
 
     from scensim.attachments import CommandGate, TRUTH_TOPIC
     env = dict(os.environ)
@@ -158,8 +177,14 @@ def main(argv=None) -> int:
         runner = Runner(models, ego, gate, decisions, step)
         rclpy.init()
         node = rclpy.create_node("scensim_behaviour_seats")
-        node.create_subscription(TruthFrame, env.get("SCENSIM_TRUTH_TOPIC") or TRUTH_TOPIC,
-                                 lambda m: runner.on_frame(frame_of(m)),
+        topic = env.get("SCENSIM_TRUTH_TOPIC") or TRUTH_TOPIC
+        offsets = {}
+        node.create_subscription(TruthEntities, topic + "/entities",
+                                 lambda m: offsets.update(offsets_of(m)),
+                                 QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                            durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        node.create_subscription(TruthFrame, topic,
+                                 lambda m: runner.on_frame(frame_of(m, offsets)),
                                  QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
         signal.signal(signal.SIGTERM, lambda *_: rclpy.try_shutdown())
         try:

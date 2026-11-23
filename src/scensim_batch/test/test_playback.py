@@ -15,6 +15,7 @@ sys.path.insert(0, str(HERE.parents[1] / "scensim_sampler"))
 sys.path.insert(0, str(HERE.parents[1] / "sim_vehicle_ecu"))
 sys.path.insert(0, str(HERE.parents[1] / "scensim"))
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parents[1] / "scensim_launch" / "scripts"))   # gap_geometry
 
 try:
     import torch
@@ -167,6 +168,12 @@ def trace(n=5):
         velocity=(vx, vy, 0.0), angular_velocity=(0.0, 0.0, 0.0), velocity_source="measured")
     t = gt.Trace(episode=gt.Episode(schema=3, episode=1, start_unix=0.0, npc_motion="tracked",
                                     map="Town01", step_time=0.05))
+    for i, (name, kind, off) in enumerate((("ego", "ego", (1.387, 0.0, 0.0)),
+                                           ("walker", "pedestrian", (0.0, 0.0, 0.0)))):
+        t.entities[name] = gt.EntityHeader(
+            frame=0, name=name, kind=kind,
+            declared=gt.DeclaredBox(center=(1.416, 0.0, 0.744), dimensions=(4.792, 2.163, 1.488)),
+            origin_offset=gt.OriginOffset(*off), sim_id=i, asset="t", asset_box=None, index=i)
     for k in range(n):
         f = 10 + k
         t.frames.append(gt.Frame(frame=f, sim_time=0.05 * k, sim_frame=100 + k,
@@ -178,11 +185,30 @@ def trace(n=5):
 
 @unittest.skipIf(torch is None, "no torch, sim_vehicle_ecu or the trace reader")
 class SeatsSide(unittest.TestCase):
-    def test_ego_states_are_the_simulators_pose_and_the_truths_velocity(self):
+    def test_ego_states_are_the_entitys_pose_and_the_truths_velocity(self):
+        """Issue 130: the body's pose with the truth's origin_offset taken back off."""
         from scensim_batch import agreement as A
         s = A.ego_states(trace(), 1, 3, "ego")
-        self.assertEqual([round(x["x"], 6) for x in s], [1.01, 2.01, 3.01])
+        dx = 1.387 * math.cos(0.1)
+        self.assertEqual([round(x["x"], 6) for x in s],
+                         [round(k + 0.01 - dx, 6) for k in (1, 2, 3)])
+        self.assertAlmostEqual(s[0]["y"], -1.387 * math.sin(0.1), places=12)
         self.assertEqual((s[0]["vx_map"], s[0]["vy_map"], s[0]["yaw"]), (8.0, 0.5, 0.1))
+
+    def test_the_played_back_egos_box_is_the_seats_truths_box_at_every_frame(self):
+        """Issue 130: the batch's ego box (its entity pose and declared box) against
+        scensim.truth.boxes on the seats truth, frame S + k against step k."""
+        from scensim import truth as T
+        from scensim_batch import agreement as A
+        gg = T._module("gap_geometry")
+        t = trace()
+        h = t.entities["ego"].declared
+        frames = sorted(t.frames, key=lambda f: f.frame)
+        for k, st in enumerate(A.ego_states(t, 1, 4, "ego")):
+            b = gg.ssv2_box(gg.Pose2D(st["x"], st["y"], st["yaw"]), h.center, h.dimensions)
+            s = T.boxes(t, frames[1 + k])["ego"]
+            self.assertLess(math.hypot(b.cx - s.cx, b.cy - s.cy), 1e-12, k)
+            self.assertAlmostEqual(b.yaw, s.yaw, places=12)
 
     def test_a_commanded_entity_is_read_a_frame_on(self):
         from scensim_batch import agreement as A
@@ -243,6 +269,12 @@ class FromTruth(unittest.TestCase):
             velocity_source="measured")
         t = gt.Trace(episode=gt.Episode(schema=3, episode=1, start_unix=0.0,
                                         npc_motion="tracked", map="x", step_time=DT))
+        for i, name in enumerate(("ego", "walker")):     # the body is the entity here
+            t.entities[name] = gt.EntityHeader(
+                frame=0, name=name, kind="ego" if i == 0 else "pedestrian",
+                declared=gt.DeclaredBox(center=(0.0, 0.0, 0.0), dimensions=(1.0, 1.0, 1.0)),
+                origin_offset=gt.OriginOffset(0.0, 0.0, 0.0), sim_id=i, asset="t",
+                asset_box=None, index=i)
         n_frames = S + steps + 1
         w0 = ref.poses["walker"][0]
         for j in range(n_frames):
@@ -266,7 +298,7 @@ class FromTruth(unittest.TestCase):
             Path(d, "result.json").write_text(json.dumps({"verdict": None}))
             Path(d, "rec.json").write_text(json.dumps(REC[0]))
             a = argparse.Namespace(world="", map="", record=str(Path(d, "rec.json")),
-                                   route_points=121, attachment="", dump=None,
+                                   route_points=121, attachment="", dump=None, truth_out=None,
                                    out=str(Path(d, "row.json")), scenario=str(CASE))
             import scensim_batch.world_lanelet as wl
             load = wl.LaneletWorld.load
