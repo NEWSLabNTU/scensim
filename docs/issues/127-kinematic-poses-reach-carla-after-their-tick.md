@@ -1,6 +1,6 @@
 # 127: a kinematically posed body's CARLA pose can lag its tick by a frame
 
-**Status:** open; the fix planned and its judgement written first (2026-11-24, 133 approved). Filed 2026-11-23 (243, by 133). **Severity:** low.
+**Status:** open, a record: the fix's prediction failed (no stall in the "before" runs, below); the fix is parked, not landed (2026-11-24, 133). Filed 2026-11-23 (243, by 133). **Severity:** low.
 
 ## What is wrong
 
@@ -114,19 +114,37 @@ p99 1.009. The four repeats of each set gave the same numbers. The walker walks 
 too small to judge. Read at 0.02 m instead (not the written rule), its 952 moving frames have no
 stall and no error.
 
-So the predictions failed: no stall in any set where 5 or more were predicted, and by the rule
-written before the runs the work stopped here. Why the kinematic NPCs never showed what K12's
+**The prediction failed.** It said 5 or more stalls before the fix in the kinematic set; there
+were none, in that set or any other, and by the rule written before the runs the work stopped
+here. Why the kinematic NPCs never showed what K12's
 walker did: the walker was posed inside the step (`advance_commanded`, in `tick_frame`), one
 asynchronous call sent immediately before `world.tick()`; a kinematic NPC is posed while
 `UpdateEntityStatus` is handled, a request of its own that SSv2 sends and waits for before it
 asks for the frame, so its call has long landed when the tick comes. The race issue 127 names is
 real in the code (the calls are asynchronous), but at this load it does not show for NPCs.
 
-Two corrections made on the way, both before any "before" number was read against the
-predictions: the detector first compared the body's pose with SSv2's entity pose (a constant
+Two corrections were made on the way, both before any comparison with the predictions: the detector first compared the body's pose with SSv2's entity pose (a constant
 1.387 m, issue 130's mistake), now the entity's; and a first attempt at the runs was void (two
 scripts overlapped on one CARLA, and a `pkg://` path is refused on the command line).
 
-The batched actuation (scensim_carla_world 9947fef, branch `127-npc-batch`, not pushed: one
-`apply_batch_sync` of every NPC command per status request, unit tests for its order and its
-failure mapping) is kept but not landed; whether to land it on the code argument alone is open.
+## When the race would show again
+
+Whenever the world server poses or commands an NPC after the last request it answers before
+the frame's tick: a path that actuates an NPC inside the step (as `advance_commanded` did for
+K12's walker, before its batch), or a change in SSv2's order (`UpdateEntityStatus` sent without
+waiting for its answer, or after the frame is asked for). Either would put an asynchronous call
+next to `world.tick()` again; the detector here (`scensim_launch/scripts/pose_stalls.py`) and
+these runs are the check to repeat.
+
+## The parked fix
+
+scensim_carla_world 9947fef (on 507d66c, branch `127-npc-batch`, not pushed): every NPC command
+of an `UpdateEntityStatus` (kinematic poses, the fallback's physics off and pose, a snap's pose,
+a tracked vehicle's target velocity, yaw rate and steer, a tracked walker's control) in one
+`Actuation`, in the order it used to be called, sent with one `apply_batch_sync` before the
+answer; a failed command fails only its own NPC. Unit tests for the order per NPC and the
+failure mapping; the crate's 217 tests pass and clippy is clean. Not landed: the runs above give
+it nothing to fix at this load, and it changes every tracked NPC's actuation path. To pick it
+up: `~/nas/home/2026-11-24 issue 127 parked fix (243)/` holds a git bundle of the branch
+(`git fetch <bundle> 127-npc-batch`), the commit as a patch, and SHA256SUMS. The predictions'
+timestamps are in `~/nas/home/2026-11-24 issue 127 predictions (243)/`.
