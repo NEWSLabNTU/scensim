@@ -599,12 +599,10 @@ class Models:
             obs = {"x": self.x[:, j], "y": self.y[:, j], "ego_x": st["x"], "ego_y": st["y"],
                    "ego_vx": vx, "ego_vy": vy, "ego_ax": ax, "ego_ay": ay, "valid": valid}
             act, ev = m.step(obs, dt)
-            lim = act["accel_limit"] * dt
-            v = self.v[:, j] + torch.maximum(torch.minimum(act["speed"] - self.v[:, j], lim), -lim)
-            self.v[:, j] = v
+            self.x[:, j], self.y[:, j], self.v[:, j] = model_law(
+                self.x[:, j], self.y[:, j], self.v[:, j],
+                act["speed"], act["heading"], act["accel_limit"], dt)
             self.yaw[:, j] = act["heading"]
-            self.x[:, j] = self.x[:, j] + v * torch.cos(act["heading"]) * dt
-            self.y[:, j] = self.y[:, j] + v * torch.sin(act["heading"]) * dt
             self.events[self.run.c.entities[self.idx[j]].name] = ev
 
     def place(self, obs):
@@ -619,6 +617,17 @@ class Models:
     def records(self):
         """Per model entity, each slot's record (the model's own `record()`)."""
         return {self.run.c.entities[i].name: m.record() for i, m in zip(self.idx, self.models)}
+
+
+def model_law(x, y, v, speed, heading, accel_limit, dt):
+    """A behaviour model's command moves its entity (092 K10, K12 D5): the speed toward the
+    commanded speed by at most `accel_limit` dt, then `v dt` along the heading (the yaw is the
+    heading). The new (x, y, v), torch tensors. The CARLA world server integrates a COMMANDED
+    body by the same law (scensim_carla_world's commanded.rs), checked against this one on a
+    shared fixture (tests/fixtures/k12_models_law.json there; test_model_law here)."""
+    lim = accel_limit * dt
+    v = v + torch.maximum(torch.minimum(speed - v, lim), -lim)
+    return x + v * torch.cos(heading) * dt, y + v * torch.sin(heading) * dt, v
 
 
 def _first_crossing(points, a, b):
