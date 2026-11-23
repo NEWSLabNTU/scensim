@@ -1,6 +1,7 @@
 # 106: since issue 100, ABS acts before regen slip control on the Model 3
 
-**Status:** fixed (sim_vehicle_spec 9ceb8cb, sim_vehicle_ecu 99505b0, autoware_sim_vehicle 2b4a665, aib 23ef5fb). **Severity:**
+**Status:** 0.15 kept after issue 108; one known one-step order failure at mu 0.2 B
+(sim_vehicle_spec 9ceb8cb, sim_vehicle_ecu 99505b0, autoware_sim_vehicle 2b4a665, aib 23ef5fb). **Severity:**
 medium: on low grip, a regen-only stop lost all regen for the rest of the stop. **Found:**
 2026-11-23 by 139, in 241's review of EvBatch.
 
@@ -195,6 +196,19 @@ must engage within a step or two whatever comes first. With rsc first, as before
 is removed at step 8. The difference is at most a step of regen. Per the rule, the spec stays
 at 0.15 until 133 rules (`amend.py` and `amend.out` beside judge3.py: regen's share at ABS's
 first action, every run).
+
+## Ruling after issue 108 (133, 2026-11-23)
+
+**0.15 is kept. No amendment is made.** An exemption for B's order was proposed after the
+results and dropped: it would have fitted the rule to the data. Under the written rule:
+- **A known failure:** mu 0.2's B from 30 fails at every release, 0.10 included (ABS at step
+  7, rsc at step 8). Its cost is at most one ECU step of regen: rsc first would cut regen at 7,
+  and ABS removes it at 8 either way.
+- **0.15's case** rests on mu 0.2's R. There the higher releases lose regen for real: 0.15
+  keeps 1254 N, and 0.18, 0.19 and 0.25 keep 0 N (ABS acts first with regen at 51 % to 100 %
+  of its onset value).
+- **The prediction's misses** stay recorded above: mu 0.2's B order, and B's deceleration
+  (0.97 to 1.01 mu g against the predicted 0.9).
 
 ## Fix
 
