@@ -544,24 +544,8 @@ class Models:
 
     def _anchors(self, j, i):
         """Per slot, entity i's crossing in the map frame."""
-        c, run = self.run.c, self.run
-        e = c.entities[i]
-        ego = run.ego
-        route = run.world.route(c.x[:, ego:ego + 1].cpu(), c.y[:, ego:ego + 1].cpu(),
-                                c.yaw[:, ego:ego + 1].cpu(), run.route_length, run.points)
-        out = []
-        for k in range(c.n):
-            p, a = e.model["params"][k], e.model["anchors"][k]
-            x0, y0, h = float(c.x[k, i]), float(c.y[k, i]), float(c.yaw[k, i])
-            dx, dy = math.cos(h), math.sin(h)
-            ap = a.get("approach", p.get("approach") or 0.0)
-            cross = a.get("crossing", 7.0)
-            kx, ky = x0 + ap * dx, y0 + ap * dy
-            fx, fy = kx + cross * dx, ky + cross * dy
-            cp = _first_crossing(route[k, 0].tolist(), (kx, ky), (fx, fy))
-            out.append({"kerb": [kx, ky], "far": [fx, fy],
-                        "conflict": list(cp) if cp else [(kx + fx) / 2, (ky + fy) / 2]})
-        return out
+        run = self.run
+        return model_anchors(run.c, run.world, i, run.ego, run.route_length, run.points)
 
     def reset(self, mask):
         if not self.idx:
@@ -617,6 +601,30 @@ class Models:
     def records(self):
         """Per model entity, each slot's record (the model's own `record()`)."""
         return {self.run.c.entities[i].name: m.record() for i, m in zip(self.idx, self.models)}
+
+
+def model_anchors(c, world, i, ego, route_length=300.0, points=121):
+    """Per slot of compiled scenario `c`, model entity i's crossing in the map frame: `kerb`
+    `anchor.approach` m ahead of its Init pose along its heading (default the model's
+    `approach`, else 0), `far` `anchor.crossing` m further (default 7), `conflict` where that
+    line first meets the ego's route on `world` (else its middle). The batch's models (Models)
+    and the seats runner (scensim.behaviour.seats) both take their anchors from here."""
+    e = c.entities[i]
+    route = world.route(c.x[:, ego:ego + 1].cpu(), c.y[:, ego:ego + 1].cpu(),
+                        c.yaw[:, ego:ego + 1].cpu(), route_length, points)
+    out = []
+    for k in range(c.n):
+        p, a = e.model["params"][k], e.model["anchors"][k]
+        x0, y0, h = float(c.x[k, i]), float(c.y[k, i]), float(c.yaw[k, i])
+        dx, dy = math.cos(h), math.sin(h)
+        ap = a.get("approach", p.get("approach") or 0.0)
+        cross = a.get("crossing", 7.0)
+        kx, ky = x0 + ap * dx, y0 + ap * dy
+        fx, fy = kx + cross * dx, ky + cross * dy
+        cp = _first_crossing(route[k, 0].tolist(), (kx, ky), (fx, fy))
+        out.append({"kerb": [kx, ky], "far": [fx, fy],
+                    "conflict": list(cp) if cp else [(kx + fx) / 2, (ky + fy) / 2]})
+    return out
 
 
 def model_law(x, y, v, speed, heading, accel_limit, dt):

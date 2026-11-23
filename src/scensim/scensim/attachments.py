@@ -25,7 +25,7 @@ group. It runs in the project directory with the scenario domain's ROS environme
   which it joins as a follower (``HELLO``, ``DONE <frame>`` after each frame, ``BYE``;
   docs/design/time-and-ticking.md). CARLA only: Isaac's world server has no gate yet.
 - ``SCENSIM_SCENARIO`` and ``SCENSIM_PARAMETERS`` (JSON): the scenario file the run plays and
-  the parameter values it was given.
+  the parameter values it was given; ``SCENSIM_MAP_DIR``: the map directory it runs on.
 
 ``commands: [<entity>, ...]`` (roadmap 092 K12): the attachment moves those entities. Each is a
 pedestrian whose controller is ``model`` (its role is ``model`` in ``SCENSIM_ROLES``); the
@@ -178,7 +178,7 @@ def gate_wanted(attachments) -> bool:
 
 
 def env_for(a: dict, base: dict, run_dir: Path, seed, roles: dict, tick_gate=None,
-            scenario=None, parameters=None) -> dict:
+            scenario=None, parameters=None, map_dir=None) -> dict:
     """The environment attachment `a` runs with: `base` (the scenario domain's ROS environment)
     plus scensim's variables."""
     env = dict(base)
@@ -190,6 +190,7 @@ def env_for(a: dict, base: dict, run_dir: Path, seed, roles: dict, tick_gate=Non
         "SCENSIM_TRUTH_TOPIC": TRUTH_TOPIC,
         "SCENSIM_SCENARIO": "" if scenario is None else str(scenario),
         "SCENSIM_PARAMETERS": json.dumps(parameters or {}, sort_keys=True),
+        "SCENSIM_MAP_DIR": "" if map_dir is None else str(map_dir),
     })
     if a.get("commands"):
         env["SCENSIM_COMMANDS"] = json.dumps(a["commands"])

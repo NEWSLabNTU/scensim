@@ -1561,7 +1561,9 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                         a, env, run_dir, spec.seed,
                         attachmentsmod.roles(sc.entities if sc is not None else [], pilots),
                         rec.get("tick_gate"), scenario=spec.scenario,
-                        parameters=spec.parameters),
+                        parameters=spec.parameters,
+                        map_dir=(stackmod.map_dir(project, rec["map"]) if rec.get("map")
+                                 else None)),
                     run_dir, project)
                 attached.append(r)
                 run_events.append({"t_wall": time.time(), "event": "attachment.start",
