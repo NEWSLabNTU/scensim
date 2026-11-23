@@ -118,9 +118,30 @@ suspension's load. The ratio force / (mu frictionVsSlip(s) load) distinguishes t
   whatever the load.
 - **The curve's abscissa:** 1.0 when the friction is taken at PhysX's own slip.
 
-A whole-car check needs no new tool: set every `restLoad` to twice g sprungMass. Under the filter
-the locked stop goes from 0.953 mu g to (0.4616 + 0.9231) x 0.826 = 1.14 mu g. Under the other two
-candidates it does not move.
+### The restLoad-doubling stop (predictions written 2026-11-23, before the run)
+
+A whole-car check: the locked `limit_brake` stop (ABS off) with every `restLoad` set to twice
+g sprungMass, through a test-only aib field that writes `restLoad` explicitly. A control run sets
+it at once g sprungMass, the value Isaac computes itself, to show the explicit path changes
+nothing.
+
+| candidate | locked, shipped (restLoad auto) | restLoad x 1 (control) | restLoad x 2 |
+|---|---|---|---|
+| filter | 0.953 mu g | 0.953 | (0.4616 + 0.9231) x 0.826 = 1.14 |
+| wheel weight | 0.86 | 0.86 | 0.86 |
+| abscissa | 0.83 | 0.83 | 0.83 |
+
+Why the doubling changes one thing. In PhysX's vehicle source (`physx/source/physxvehicle`,
+grepped in full), `restLoad` is read in two places only: `computeTireLoad`, the load filter, and
+`computeTireForceMichiganModel`, the lateral stiffness. The suspension force, the sprung mass,
+the wheel's rotation and the sticky-tyre state do not read it.
+- **Lateral stiffness:** `latStiffY * smooth(3 * filteredLoad / restLoad / latStiffX)` falls
+  from 0.92 to 0.72 of `latStiffY` with the doubling. It enters the force only through the
+  lateral slip, which a straight stop does not have. The run's yaw is checked to be sure.
+- **Longitudinal smoothing:** `FBar` stays 1. K = longStiff |s| / (mu f load) is about 9 / mu
+  shipped and 7.5 / mu doubled, both over 3 for mu <= 1.
+- **omni.physx:** the plugin is not open source. It computes the automatic restLoad, and the
+  control run covers that.
 
 ### If it is the filter
 
