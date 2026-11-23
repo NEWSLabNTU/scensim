@@ -160,3 +160,13 @@ ground: `/World/env/Terrain`, `/World/env/Road`, `/World/env/Lines` from world.y
   rests on its tile alone.
 - **118's prediction:** the base carries part of the force, since the report named it in every
   step the rock was in contact.
+
+## The fourth test's result (2026-11-23)
+
+siw fe69aa9, GPU0; NAS "2026-11-23 issue 122 base contact (118)". Over the 63 steps the rock is in
+contact, both its tile (`/World/RoadCollision/t_12_0_9`) and the base road mesh
+(`/World/env/Road`) carry normal force in every step: 18.9 kN summed on the tile (4.7 kN at
+most), 23.2 kN on the base (7.5 kN at most). **The prediction holds: the `roadBase` filter does
+not keep the rock off the base.** A fault of its own (number to come from 133). It does not by
+itself explain the pinning: the rock's total support and its friction are what they would be on
+one surface, and R4's spike, whose rocks collide with its base on purpose, pins loose_15 too.
