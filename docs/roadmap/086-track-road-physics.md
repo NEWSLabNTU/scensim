@@ -14,8 +14,8 @@ steps ("C5's steps" below); C5a done (scensim_isaac_world ea35f35), C5b done
 7eb96cc, the lip fixtures and the strips as zones), C5d done with one failed check
 (scensim_isaac_world 33c6aae: the maps pass, the fixture's localization fails), C5d2 done
 (scensim_isaac_world 41a0102: the fixture with guardrails and trees passes). C5's exit
-pairing done (2026-11-23): the slope matrix and haruna_down unchanged by C5; every C5 exit
-item met (133 to close C5).
+pairing done (2026-11-23): the slope matrix and haruna_down unchanged by C5; C5 closed
+2026-11-23 (133's review).
 Issue 077's cause is confirmed (2026-11-20, 118): PhysX's raycast wheel query takes Town01's
 sharp curb face as the ground, and Town01 has no road layer. Its fix comes first, ahead of C5:
 recheck the sweep (066 R1's check, from C6). If the sweep no longer throws the car, aib switches
@@ -725,7 +725,9 @@ sim_vehicle_ecu (ef6bfd8 to 99505b0) and sim_vehicle_spec (21bf3dc to 9ceb8cb).
 - **C5's exit, by the pairing:** aib's slope matrix unchanged (17 tests identical), and
   haruna_down unchanged by C5 (it passes on both sides alike). Haruna's pose error has little
   margin to the 0.2 m rule on both: four of the six clean runs had a maximum over 0.2 m (not
-  judged), and most p95s are about 0.18 m.
+  judged), and most p95s are about 0.18 m. **Open observation, not an issue yet:** Haruna's
+  pose error p95 is bimodal, about 0.12 m or about 0.18 m from run to run on either main, and 4
+  of the 6 clean runs' maxima were over 0.2 m; its margin to the 0.2 m rule is thin.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
