@@ -42,10 +42,29 @@ rock's travel and largest speed, tiles off (on the base mesh) / on:
 | raycast | 1.7 / 1.5 cm | 0.15 / 0.007 m/s |
 | sweep | 7.2 / 7.9 cm | 1.2 / 1.0 m/s |
 
-**The tiles are not the cause**, as predicted: off and on move the rock alike under each query.
-So it is not a regression from issue 119's fix. Two things the test also shows: under sweep the
-rock moved 7-8 cm here where C6b's sweep run moved it 1.5 cm (the same code and course: the
-rock's push varies from run to run by several times), and every run is far under R4's
-0.2-1.0 m. The next lead is the push path: `RockStream.push`, its speed bound (`rocks.limit`:
+**The tiles are not the cause**, as predicted (133: issue 119's fix is cleared): off and on move the rock alike under each query.
+So it is not a regression from issue 119's fix. Every run is far under R4's 0.2-1.0 m.
+
+**The push varies several times from run to run under sweep**: the rock moved 7-8 cm here where
+C6b's sweep run, the same code and course, moved it 1.5 cm; under raycast 1.5-1.7 cm each time. The next lead is the push path: `RockStream.push`, its speed bound (`rocks.limit`:
 no faster than the tyre surface at the push's height), the reaction's direction and share
 (`rocks.reactions`), and how long the rock is awake under the tyre.
+
+## The second test: the push path, instrumented (before the run)
+
+loose_15 under both queries (sweep moved the rock five times as far), with every
+`RockStream.push` call logged per PhysX step while a tyre is on the rock: the reaction from
+`rocks.reactions` (its horizontal and vertical parts), the bound `rocks.limit` takes it to
+(`v_push`, the scale), the force applied, and the rock's velocity; and the rock's own contact
+with what it rests on, from PhysX's contact report on its prim (133): the normal force and the
+friction (tangential) force, summed over its contacts.
+
+- **118's prediction:** the rock is pressed down harder than it is pushed. Its share of the
+  tyre's load goes on it downward (`-fv`), and its horizontal push is that times the face's
+  gradient, then scaled down by `limit` to what takes it to the tyre surface's speed in one
+  step. The friction under it, about 0.7 of (its share of the load + its weight), exceeds the
+  limited push at nearly every step, so it slides only in the steps where the tyre's load on it
+  is light. The contact report shows friction near its limit (tangential about 0.7 x normal)
+  while the push lasts. Under sweep the share is spread differently over the footprint, which
+  would explain its larger travel; R4's larger travel is not explained by this, and is a
+  question for the second test's result.
