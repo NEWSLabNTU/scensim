@@ -509,7 +509,7 @@ the control to 5 deg at 10 cm and 7 deg at 15 cm.
 - **Next, beside 066 R8's edge force: a speed sweep** around 15.6 m/s for the lips at 90 deg
   (both wheel queries), to find where the outcome changes. Not run in C5c.
 
-#### C5d's maps (spec written 2026-11-23, before they are built)
+#### C5d's maps (spec written 2026-11-23, approved by 133 the same day, before they are built)
 
 What there is: the course builder's `maps` step (`course/maps.py`, 058 C7) samples the point
 cloud from `meshes.npz`, which since C5b carries the record's section, so the cloud already
@@ -540,14 +540,18 @@ divided by hand for the dataset, not by the builder.
   builder):
   - `fixture_c5_down` (the nonzero crown course): the scenario passes, and the nvtl judge's
     rule (058 C9): NDT's nearest voxel transformation likelihood, its 5th percentile after
-    the first 10 s, at least 2.5, over at least 50 m. Reported beside it, not judged: the
-    localization's horizontal error against the truth (`/localization/kinematic_state`
-    against the ego_trace attachment's pose, matched by simulation time), its 95th
-    percentile and maximum.
+    the first 10 s, at least 2.5, over at least 50 m. And the localization's horizontal
+    error against the truth (`/localization/kinematic_state` against the ego_trace
+    attachment's pose, matched by simulation time): its 95th percentile at most 0.2 m,
+    judged; its maximum reported beside it, not judged.
   - `haruna_down` on Haruna rebuilt by the builder (lanelets unchanged, the record level;
-    the cloud divided by the builder in place of by hand): the scenario passes, NVTL as
-    above. Its lap time and contacts set beside issue 072's run on the dataset's map
-    (382.4 s, 0 contacts).
+    the cloud divided by the builder in place of by hand): the scenario passes, NVTL and the
+    pose error as above. Its lap time and contacts are reported beside issue 072's run on
+    the dataset's map (382.4 s, 0 contacts), not judged: they depend on Autoware's planning,
+    not only on the map. The rebuilt maps go to a new directory,
+    `/mnt/renegade/aeon/isaac-ex/c5d/haruna` on 118; 072's hand-divided map
+    (`/mnt/renegade/aeon/isaac-ex/haruna-072/dataset/haruna`, and the NAS copy) is left as
+    it is, so 072's run stays reproducible.
 - **Not in C5d.** Publishing a dataset revision with the rebuilt maps (the user's call);
   driving Tsukuba (its record is level, so its lanelets do not change; a rebuild divides its
   cloud by the same rule, untested by a run here); C5's exit pairing (aib's
