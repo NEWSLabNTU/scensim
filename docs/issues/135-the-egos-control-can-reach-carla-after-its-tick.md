@@ -64,7 +64,10 @@ applied before that tick, so `control` at frame k is the control CARLA ran in ti
 second did not show: the asynchronous call never landed late, in 4400 ticks. One client's calls
 travel in order on one connection, so its `apply_control` reaches the server before its own
 `tick()`; the race this issue names needs two clients, as acb (its own client) and the world
-server (the one that ticks) are. That is what the field now lets a run see. One caution: K12's walker
+server (the one that ticks) are. **So step 1's alignment check covers one client only, and acb's case, two clients, is
+still open:** whether a control acb sends for tick k from its own connection is held at tick k
+is what this issue asks, and nothing here answers it; the field is what lets a run with acb see
+it, with acb's send times (step 2, acb's). One caution: K12's walker
 stalls (issue 127) came from one client too, the world server's own `set_transform` before its
 own tick, so for a pose (a body without physics) the order of the calls alone did not keep it
 in its tick; for a vehicle's control it did, in all of these.
@@ -78,11 +81,17 @@ repeats, on the build that reports the control (scensim on 79775334 with scensim
 | before | 0.53, 0.52, 0.55, 0.52 | 0.73, 0.74, 0.78, 0.72 | 2.89, 2.81, 2.86, 2.95 |
 | with `control` | 0.58, 0.59, 0.59, 0.56 | 0.81, 1.42, 1.22, 0.82 | 2.91, 2.99, 2.94, 2.87 |
 
-The step's processing grew by about 0.05 ms at p50 (0.53 to 0.58 on the means), at the bound
-the prediction set ("under 0.05 ms"), not under it. Two of the four p95s are well above the
-others (1.42 and 1.22 ms), which these four runs do not separate from the host's load; the
-frame budget judge passed all four. The tick itself did not move. The live check held: every
+**The cost prediction was not met.** It said "under 0.05 ms"; the step's processing grew by
+0.05 ms at p50 (0.53 to 0.58 ms on the means), at the bound, not under it. Two of the four p95s
+are well above the others (1.42 and 1.22 ms against about 0.75): unresolved in four runs, not
+told apart from the host's load. The frame budget judge passed all four. The tick itself did not move. The live check held: every
 tracked vehicle had `control` at every frame with a world pose (12010 of 12010 in each run), all
 in range, throttle and brake 0 at every frame and the steer varying (246 values a run). The set
 has no body that is not a tracked vehicle, so "no `control` on such a body" is shown only by the
 unit tests (`only_physics_vehicles_report_a_control`).
+
+**The ego run (133: required before landing; written before it runs):** one run of
+`k12_commanded_free` (CS1 on Town01, CARLA's BasicAgent as the ego, `carla_basic`, which drives
+it from its own client) on the same build. Prediction: the ego carries `control` at every frame
+with a world pose from its first nonzero control on, all values in range, and throttle and
+brake never both above 0.5 at one frame.
