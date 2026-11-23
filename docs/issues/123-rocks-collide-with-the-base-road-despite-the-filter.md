@@ -193,3 +193,31 @@ Open, for 133:
   `--groups-early`), so that its order matches the server's condition;
 - whether the per-pair filter (`FilteredPairsAPI`, the plan's fallback) is still wanted to cover a
   future load that steps between the map's USD and the road.
+
+## The finding (133, 2026-11-23)
+
+**The world server's order never had the base contact.** Issue 123 was a fault in the harness,
+`fixture_drive`. It added the world's USD before the simulation started and set `roadBase`'s
+members after PhysX had taken that ground in. The pool's warnings were noise on top. Every result
+measured with `fixture_drive` before siw 2ef3001 carries the fault; 086 C6b's fixtures are rerun.
+
+**The condition** for the rocks' filter: `roadBase`'s members are set before the first physics
+step after the world's ground enters the stage. Making the groups early is not enough on its own.
+The world server meets the condition because it adds its map's ground after the simulation starts
+and sets the members at the road's load, before the next step. No per-pair filter
+(`FilteredPairsAPI`) is added (133).
+
+## The fix, as landed (siw 3f90fb3 and 2ef3001)
+
+- `rock_layer.define_groups` makes the road's groups. `world.py` calls it before play, and the
+  stream and the colliders call it again (idempotent).
+- The rock pool's prims join `rocks` at a frame's end. The warnings drop from 771 to 1 per load.
+- `fixture_drive` and `fixture_cost` set `roadBase`'s members before play (`groups_before_play`).
+  `--groups-late` keeps the faulty order as a test switch.
+- **The load-time self-check**: every rock reports its contacts, and `RockStream.check_base`
+  logs an error naming the rock and the collider when a rock touches `roadBase` within its first
+  second awake (each rock once). `world.py` runs the check on each physics step's contact report,
+  and `fixture_drive` does too, listing the hits as `base_contacts` in `cases.json`.
+- Tests: `test/test_issue_123.py` (the groups and filters, idempotence, the world's order, the
+  pool grouped at a frame's end, the self-check) and `test_rock_layer`'s wake test (a rock woken
+  begins its check).
