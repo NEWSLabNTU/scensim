@@ -988,6 +988,36 @@ the same contact, so this comes before C6b (133); C6c keeps the unsprung mass.
 - If the verdict is a sampling artefact, which physics rate scensim defaults to is a
   separate decision (the frame's cost doubles with each doubling), not part of C6a3.
 - **Approved by 133** (2026-11-23, as written).
+
+#### C6a3's result (2026-11-23, 118)
+
+siw 38ada7b, aib ff5e72b; GPU0 with nothing else on it; every start within the check; 60-240 Hz
+from C6a2's runs; logs on the NAS, "2026-11-23 086 C6a3 impulse (118)". J in N s, D in N,
+peak (washboard: the minimum's distance from static) in kN; raycast, then sweep:
+
+| | ref | 60 Hz | 120 Hz | 240 Hz | 480 Hz | verdict |
+|---|---|---|---|---|---|---|
+| cleat_10 20 m/s, J | 376.8 | 391 / 404 | 395 / 399 | 403 / 404 | 402 / 404 | artefact / artefact |
+| peak | 24.0 | 17.1 / 27.7 | 28.9 / 39.5 | 48.9 / 43.6 | 53.6 / 55.0 | |
+| cleat_15 10 m/s, J | 733.0 | 796 / 815 | 805 / 815 | 839 / 853 | 882 / 887 | artefact / artefact |
+| peak | 26.6 | 28.5 / 30.7 | 31.3 / 40.6 | 52.7 / 49.7 | 58.2 / 58.0 | |
+| washboard 10 m/s, D | 1858 | 1976 / 1974 | 2152 / 2157 | 2206 / 2208 | 2223 / 2225 | unsettled / unsettled |
+| swing | 3.31 | 3.38 / 3.35 | 3.68 / 3.74 | 3.78 / 3.81 | 3.87 / 3.86 | |
+
+- **The cleats: a sampling artefact**, as predicted. The impulse stays put while the peak
+  triples (cleat_10 at 20 m/s: J within 4 % from 60 to 480 Hz, 7 % over the reference; the
+  peak 17 to 55 kN). cleat_15's J creeps up 5 % from 240 to 480 Hz, inside the rule's 10 %, and
+  ends 20 % over the reference. So C6a's peak rule, judged on a step's mean at any one rate,
+  measures the rate as much as the contact; the impulse is the rate-free measure. The 480 Hz
+  peak, still growing, says the contact's force is narrower than the reference's.
+- **Washboard: unsettled** by the rule, not as predicted. D converges (0.8 % from 240 to
+  480 Hz) and ends 20 % over the reference, but the swing grew 14 % from 60 Hz, under the
+  rule's 30 %: there was little peak growth for an artefact to explain. Read plainly, the
+  contact swings about 20 % harder than the quarter car on washboard at every rate, within
+  C6a's band.
+- Neither is *too stiff* by the rule (no impulse more than 30 % over the reference, none
+  still rising 10 %). C6b's rock checks may rest on this contact, judged by impulse or at a
+  rate stated with the check; which rate scensim defaults to is a separate decision.
 - **The cost line again**: `fixture_cost` with 1, 2 and 4 cars under both queries at 60 Hz,
   on GPU0 with nothing else on it if the other session's job allows (`nvidia-smi` before each
   run, in the log), else as it is and said so; and 1 car at 120 and 240 Hz. Reported, not
