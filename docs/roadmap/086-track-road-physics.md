@@ -372,6 +372,62 @@ smoother's, not the map's, and a check that needs a curve's v^2/R must drive wit
 builds it) with a pure pursuit and a speed hold. In both, the bank's g sin(theta) (0.59 m/s^2)
 reaches PhysX's contact, not only the mesh.
 
+#### C5c's fixtures (spec written 2026-11-23, before they are built)
+
+Two parts: the lip re-entry fixtures, and the record's shoulder and run-off strips as surface
+zones.
+
+- **The lip course, `fixture_c5c`.** One straight, level course (grade 0), built by C5b's
+  fixture builder: 2 x 3.25 m lanes, crown 2 % each side about the centreline, left shoulder
+  0.75 m, right shoulder 2.0 m (wide enough for the right wheels with the left ones on the
+  pavement). Eleven 120 m segments, each with its own right lip, the lip's height ramped over
+  2 m between segments:
+
+  | segment | lip (right) | face | the record's rule says |
+  |---|---|---|---|
+  | 0, control | none | | re-enters |
+  | 1, 2, 3 | 5 cm | 90, 45, 30 deg | re-enters (not over 5 cm) |
+  | 4 | 10 cm | 90 deg | **held** |
+  | 5, 6 | 10 cm | 45, 30 deg | re-enters (face not steeper than 45 deg) |
+  | 7 | 15 cm | 90 deg | **held** |
+  | 8, 9 | 15 cm | 45, 30 deg | re-enters (face not steeper than 45 deg) |
+  | 10, strips | none | | the right shoulder `gravel`, a 3 m `grass` run-off past it |
+
+  The rule is 069's `lip` class: `lip_h` over about 5 cm with a face steeper than 45 deg; a
+  lip that is not one re-enters, one that is holds a tyre on a shallow re-entry (scrubs).
+  The fixture file holds each segment's expected outcome as a column, written before any
+  run. So the fixture's table gains `lip_angle_right` and `shoulder_right` columns, and
+  `shoulder_surface_right`, `runoff_len_right` and `runoff_surface_right` per segment.
+- **The re-entry drive.** aib's Model 3 without Autoware, as C5b's `arc_drive` (the ego
+  config's rig, a pure pursuit, a speed hold), at 15.6 m/s (35 mph, the speed at which Zimmer
+  and Ivey found a vertical 11 cm edge unsafe). Each case starts 10 m into its segment with
+  the right wheels' centres 0.5 m past the carriageway's edge and the left ones on the
+  pavement, runs 40 m parallel to the edge, then follows a line at 4 deg back toward the road
+  to the right lane's middle. One Isaac process drives all eleven segments (teleporting
+  between them), once with aib's default `wheel_query: raycast` and once with `sweep` (C9's),
+  on 118's GPU0.
+- **Outcome.** The time the right front wheel's centre crosses the carriageway's edge, less
+  the control's (the same drive with no lip): **re-enters** when it is 0.3 s or less,
+  **held** when more, or when it never crosses within 4 s. Reported beside it, not judged:
+  the peak yaw rate and lateral acceleration in the 1 s after the crossing, against the
+  control's (the yaw spike), and the body's roll as the wheel climbs.
+- **What the plant is expected to do.** The survey's inference (not measured): PhysX's wheel
+  finds the ground with a ray or a sweep and has no sidewall, so it may climb every lip,
+  re-entering where the rule says held. If Isaac re-enters at 10 or 15 cm at 90 deg, that is
+  the finding 066 R8 named: a lateral edge force in R5's corner-force layer is then the fix,
+  planned as its own step, not part of C5c. A rule-to-plant mismatch is a result, not a
+  failed check. C5c's check is that every case ran and is classified, and that the control
+  crosses where its path says (within 0.3 s).
+- **The strips as zones.** At load the surface layer turns the record's `shoulder_surface`
+  and `runoff_surface` into zones: for each side, each run of stations with the same
+  non-empty class becomes one polygon, from the carriageway's edge to the shoulder's end
+  (shoulder), and from there `runoff_len` on (run-off); ids `record_<side>_shoulder_<n>` and
+  `record_<side>_runoff_<n>`, so a scenario can name them as any zone. They lie under the
+  map's own zones: a map's zone wins where they overlap. Checks: offline, a point on each
+  strip reads its class and a point on the carriageway the map's; in Isaac, on segment 10
+  the right wheels read `gravel` (wheels.py's `class` and `zone`) while they are on the
+  shoulder, and the left ones the reference class.
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
