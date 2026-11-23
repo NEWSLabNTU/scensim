@@ -86,5 +86,13 @@ seeds.
   about +0.1 to 0.3 ms on the tick's p50 at under 10 NPCs; measured from result.json's frame
   metrics and a timing of the batch call per step.
 
+**The walker set** (added 2026-11-24, 133; written before its runs): the bench scenario has no
+pedestrian, so `town01_pedestrian.xosc` (scensim_examples basic: an ego, one walker crossing,
+two barriers) runs as a set of its own, `npc_motion: kinematic`, four repeats, CARLA's
+BasicAgent as the ego (`carla_basic`, as `k12_commanded`), before and after the fix. Its
+prediction: before, at least one stall over the walker's frames in which SSv2 moves it more
+than 0.05 m (K12's walker: 1 to 2 per about 230 frames); after, 0. With fewer than 200 such
+frames over the four runs, the set is reported as too small to judge, not as a pass.
+
 If the "before" runs show 0 stalls, the work stops there and is reported: the race is then too
 rare at this load to show, and the fix would rest only on the code argument and K12's set 3.
