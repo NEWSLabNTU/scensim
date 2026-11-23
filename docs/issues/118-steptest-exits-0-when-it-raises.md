@@ -1,8 +1,8 @@
 # 118: steptest exits 0 when it raises
 
-**Status:** fixed (aib a838261, scensim_isaac_world eba244c): the five entry points exit
+**Status:** fixed (aib a838261, scensim_isaac_world 74aa94c): the five entry points exit
 nonzero when they raise, through `aib.app_exit`; the follow-up (aib 4e8d684,
-scensim_isaac_world a61f975) covers the other entry points but `spikes/`. **Severity:** low: a failed step test
+scensim_isaac_world c2afbc0) covers the other entry points but `spikes/`. **Severity:** low: a failed step test
 looks like a passed run with nothing measured. A sweep reads it as a run, and the cause is lost.
 **Found:** 2026-11-23, scensim 241, in issue 106's table on post-108 aib.
 
@@ -178,7 +178,7 @@ it lands. `aib.runner`, the stand-alone Isaac ego: its `try` now starts right af
 built the World and the ROS node before it) and ends through `close`; its own SIGINT and SIGTERM
 handlers still stop the loop and end with 0.
 
-**Step 3.** scensim_isaac_world (a61f975): `course/fixture_drive.py` and
+**Step 3.** scensim_isaac_world (c2afbc0): `course/fixture_drive.py` and
 `course/fixture_cost.py` as lip_drive (the `try` right after the app); `course/isaac_check.py`
 closed its app and then returned its check's status, which Kit's close never let out, so a
 failed check now ends with 1 as one that raises; `scripts/step_response/isaac_step.py`, a
