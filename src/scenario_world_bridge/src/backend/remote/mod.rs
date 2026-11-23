@@ -536,6 +536,9 @@ struct Entity {
     agent: bool,
     /// Controller `simulator_autopilot`: the simulator's traffic drives it.
     autopilot: bool,
+    /// Controller `model` (a pedestrian): the world server moves it by a behaviour model's
+    /// commands (Motion COMMANDED, roadmap 092 K12).
+    commanded: bool,
     /// The server's last pose of it, map frame, and its motion.
     pose: Pose,
     pose6: gap_trace::Pose6,
@@ -1816,7 +1819,8 @@ impl SimBackend for RemoteBackend {
         type Measured = Option<([f64; 3], [f64; 3])>;
         // And the command an ego ran, where the server reports it (092 K2.4).
         type Taken = Option<gap_trace::TakenCommand>;
-        let mut trace_states: BTreeMap<u32, (gap_trace::Pose6, Measured, Taken)> = BTreeMap::new();
+        let mut trace_states: BTreeMap<u32, (gap_trace::Pose6, Measured, Taken, u64)> =
+            BTreeMap::new();
         for state in &step.states {
             let Some(pose) = state.pose.as_ref() else {
                 continue;
@@ -1835,7 +1839,7 @@ impl SimBackend for RemoteBackend {
                 gear: c.gear,
                 arrived: c.arrived,
             });
-            trace_states.insert(state.handle, (now, velocity, taken));
+            trace_states.insert(state.handle, (now, velocity, taken, state.cmd_frame));
             let Some(name) = self.names.get(&state.handle) else {
                 continue;
             };
@@ -1866,7 +1870,7 @@ impl SimBackend for RemoteBackend {
                 .entities
                 .values()
                 .filter_map(|e| {
-                    let (pose, measured, command) = trace_states.get(&e.handle)?;
+                    let (pose, measured, command, cmd_frame) = trace_states.get(&e.handle)?;
                     let (velocity, angular_velocity) =
                         measured.unwrap_or((e.motion.velocity, [0.0, 0.0, e.motion.yaw_rate]));
                     Some((
@@ -1877,6 +1881,8 @@ impl SimBackend for RemoteBackend {
                             angular_velocity,
                             measured: measured.is_some(),
                             command: *command,
+                            // a commanded body's only (schema 3); 0 before its first command
+                            cmd_frame: e.commanded.then_some(*cmd_frame),
                         },
                     ))
                 })
@@ -1934,6 +1940,20 @@ impl SimBackend for RemoteBackend {
         let sim = self.sim().to_string();
         let tracked_npcs = self.config.npc_motion == NpcMotion::Tracked;
         let server_tracks = self.offers(C::TracksTargets);
+        let commanded = matches!(req.kind, EntityKind::Pedestrian { model: true });
+        if commanded {
+            // The world server integrates the model's commands, which reach it with its tick
+            // gate's acknowledgements, and reads the body back (roadmap 092 K12, D3).
+            let what = format!(
+                "Cannot spawn '{name}' (controller {})",
+                crate::backend::MODEL_BEHAVIOR
+            );
+            for needs in [C::Commands, C::ReadsBack] {
+                if !self.offers(needs) {
+                    return Err(unsupported(&what, needs, &sim));
+                }
+            }
+        }
         let (kind, entity_type, subtype, mover, role_name, agent, autopilot) = match &req.kind {
             EntityKind::Vehicle {
                 driver, subtype, ..
@@ -2003,13 +2023,15 @@ impl SimBackend for RemoteBackend {
                     }
                 }
             }
-            EntityKind::Pedestrian => (
+            EntityKind::Pedestrian { .. } => (
                 wire::Kind::Pedestrian,
                 EntityType::Pedestrian,
                 "pedestrian".to_string(),
                 // A server that tracks walks its pedestrians (CARLA's WalkerControl); this
                 // backend's law is for vehicles.
-                if tracked_npcs && server_tracks {
+                if commanded {
+                    Mover::Simulator
+                } else if tracked_npcs && server_tracks {
                     Mover::ServerTracked
                 } else {
                     Mover::Kinematic
@@ -2086,6 +2108,7 @@ impl SimBackend for RemoteBackend {
             Mover::Kinematic => wire::Motion::Kinematic,
             Mover::BridgeTracked | Mover::ServerTracked => wire::Motion::Tracked,
             Mover::Simulator if autopilot => wire::Motion::Autopilot,
+            Mover::Simulator if commanded => wire::Motion::Commanded,
             Mover::Simulator => wire::Motion::External,
         };
         let reply = self.call(
@@ -2164,6 +2187,7 @@ impl SimBackend for RemoteBackend {
                 mover,
                 agent,
                 autopilot,
+                commanded,
                 pose,
                 pose6: p6,
                 motion: Motion::default(),
@@ -2188,6 +2212,8 @@ impl SimBackend for RemoteBackend {
                 gap_trace::Role::Agent
             } else if autopilot {
                 gap_trace::Role::Autopilot
+            } else if commanded {
+                gap_trace::Role::Model
             } else {
                 gap_trace::Role::Scenario
             };
@@ -2223,6 +2249,8 @@ impl SimBackend for RemoteBackend {
                 gap_trace::Role::Agent
             } else if autopilot {
                 gap_trace::Role::Autopilot
+            } else if commanded {
+                gap_trace::Role::Model
             } else {
                 gap_trace::Role::Scenario
             };

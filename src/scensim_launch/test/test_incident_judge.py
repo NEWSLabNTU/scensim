@@ -87,6 +87,35 @@ class IncidentJudge(unittest.TestCase):
         self.assertAlmostEqual(m["stop_gap"], 3.0, places=1)
         self.assertGreaterEqual(m["lead_peak_decel"], 5.5)
 
+    def test_a_schema_3_trace_with_a_commanded_lead_judges_the_same(self):
+        # Roadmap 092 K12: schema 3 (neutral names, role `model`, a commanded entity's
+        # cmd_frame) judges exactly as the schema 1 trace of the same motion.
+        rename = {"carla": "sim_pose", "carla_frame": "sim_frame", "actor_id": "sim_id",
+                  "blueprint": "asset", "blueprint_box": "asset_box"}
+        out, index = [], 0
+        for line in trace_lines(lead_brake_frames(3.0)):
+            r = {rename.get(k, k): v for k, v in json.loads(line).items()}
+            if r["type"] == "episode":
+                r.update(schema=3, map="Town01", step_time=0.05)
+            elif r["type"] == "entity":
+                r.update(index=index, subtype="car",
+                         role={"ego": "ego", "i1_lead": "model"}[r["name"]])
+                index += 1
+            elif r["type"] == "frame":
+                for name, e in r["entities"].items():
+                    e["sim_pose"] = e.pop("carla")
+                    e.update(angular_velocity=[0.0, 0.0, 0.0], velocity_source="measured")
+                    if name == "i1_lead":
+                        e["cmd_frame"] = r["frame"] - 1
+            out.append(json.dumps(r))
+        ctx = context(("i1_start", 0.5), ("i1_lead_brake", 2.0))
+        self.assertEqual(gt.load_trace(out).entities["i1_lead"].role, "model")
+        three = self.judge(out, 1, ctx)
+        one = self.judge(trace_lines(lead_brake_frames(3.0)), 1, ctx)
+        self.assertEqual(three["verdict"], "PASS", three["reasons"])
+        self.assertEqual((three["stop_gap"], three["lead_peak_decel"]),
+                         (one["stop_gap"], one["lead_peak_decel"]))
+
     def test_lead_brake_short_gap_fails(self):
         m = self.judge(trace_lines(lead_brake_frames(1.2)), 1, context(("i1_lead_brake", 2.0)))
         self.assertEqual(m["verdict"], "FAIL")

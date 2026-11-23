@@ -275,8 +275,8 @@ class MalformedTrace(unittest.TestCase):
         self.assertTraceError(lines(SAMPLE[1:]), 1, "type")
 
     def test_unsupported_schema(self):
-        err = self.assertTraceError(mutate(0, lambda r: r.update(schema=3)), 1, "schema")
-        self.assertIn("3", str(err))
+        err = self.assertTraceError(mutate(0, lambda r: r.update(schema=4)), 1, "schema")
+        self.assertIn("4", str(err))
 
     def test_second_episode(self):
         text = lines(SAMPLE)
@@ -383,6 +383,7 @@ class MalformedTrace(unittest.TestCase):
             with self.assertRaises(gt.TraceError) as cm:
                 gt.load_trace(path)
         self.assertIn("bad.jsonl line 2", str(cm.exception))
+
 
 
 if __name__ == "__main__":
@@ -514,3 +515,57 @@ class SchemaTwo(unittest.TestCase):
         bad[1]["role"] = "npc"
         with self.assertRaises(gt.TraceError):
             gt.load_trace(lines(bad))
+
+# --- schema 3 (roadmap 092 K12): the role `model` and a commanded entity's cmd_frame ---------
+
+def to_v3(records):
+    """SAMPLE2 at schema 3, the truck commanded by a behaviour model (lag 1)."""
+    out = copy.deepcopy(records)
+    for r in out:
+        if r["type"] == "episode":
+            r["schema"] = 3
+        elif r["type"] == "entity" and r["name"] == "truck":
+            r["role"] = "model"
+        elif r["type"] == "frame" and "truck" in r["entities"]:
+            r["entities"]["truck"]["cmd_frame"] = max(r["frame"] - 1, 0)   # 0: none yet
+    return out
+
+
+SAMPLE3 = to_v3(SAMPLE2)
+
+
+class SchemaThree(unittest.TestCase):
+    def test_reads_the_model_role_and_cmd_frame(self):
+        trace = gt.load_trace(lines(SAMPLE3))
+        self.assertEqual(trace.episode.schema, 3)
+        self.assertEqual(trace.entities["truck"].role, "model")
+        frames = [f for f in trace.frames if "truck" in f.entities]
+        self.assertTrue(frames)
+        for f in frames:
+            self.assertEqual(f.entities["truck"].cmd_frame, max(f.frame - 1, 0))
+            self.assertIsNone(f.entities["ego"].cmd_frame)
+
+    def test_older_schemas_have_no_cmd_frame(self):
+        for sample in (SAMPLE, SAMPLE2):
+            trace = gt.load_trace(lines(sample))
+            self.assertTrue(all(s.cmd_frame is None
+                                for f in trace.frames for s in f.entities.values()))
+
+    def test_round_trips(self):
+        trace = gt.load_trace(lines(SAMPLE3))
+        self.assertEqual([gt.to_json(r) for r in trace.records()], SAMPLE3)
+        self.assertEqual(gt.load_trace(gt.dumps(trace).splitlines()), trace)
+
+    def test_the_model_role_is_schema_3s(self):
+        bad = copy.deepcopy(SAMPLE3)
+        bad[0]["schema"] = 2
+        with self.assertRaisesRegex(gt.TraceError, "role"):
+            gt.load_trace(lines(bad))
+
+    def test_a_negative_cmd_frame_is_refused(self):
+        bad = copy.deepcopy(SAMPLE3)
+        f = next(r for r in bad if r["type"] == "frame" and "truck" in r["entities"])
+        f["entities"]["truck"]["cmd_frame"] = -1
+        with self.assertRaisesRegex(gt.TraceError, "entities.truck.cmd_frame"):
+            gt.load_trace(lines(bad))
+

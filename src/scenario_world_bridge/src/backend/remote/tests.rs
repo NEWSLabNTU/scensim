@@ -59,6 +59,8 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
     let mut velocity: HashMap<u32, [f64; 3]> = HashMap::new();
     let mut staged: Vec<wire::EntityPose> = Vec::new();
     let mut server_tracked: Vec<u32> = Vec::new();
+    // COMMANDED bodies: each step answers the previous frame's command (092 K12, lag 1)
+    let mut commanded: Vec<u32> = Vec::new();
     let mut time = 0.0;
     let mut frame = 0u64;
     let reads_back = caps.contains(&wire::Capability::ReadsBack);
@@ -87,6 +89,9 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
                 let h = next;
                 next += 1;
                 bodies.insert(h, (s.pose.unwrap(), s.kind == wire::Kind::Ego as i32));
+                if s.motion == wire::Motion::Commanded as i32 {
+                    commanded.push(h);
+                }
                 if s.motion == wire::Motion::Tracked as i32 {
                     if reads_back {
                         server_tracked.push(h);
@@ -125,6 +130,7 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
                                 }),
                                 accel: v3([0.25, 0.0, 0.0]),
                                 linear_jerk: 0.5,
+                                cmd_frame: 0,
                             });
                         }
                     }
@@ -210,6 +216,7 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
                                 arrived: 1,
                                 ..Default::default()
                             }),
+                            cmd_frame: if commanded.contains(h) { frame - 1 } else { 0 },
                         })
                         .collect(),
                     contacts,
@@ -1475,10 +1482,144 @@ fn a_map_loaded_between_scenarios_is_a_world_load_and_no_episode() {
     assert_eq!(b.episode, 2);
 }
 
-/// Roadmap 092 S4: the run's truth file at schema 2, as the bridge writes it from a world
-/// server's replies (docs/design/truth-stream.md).
+/// A server that commands bodies (092 K12): `COMMANDS` with the `READS_BACK` it needs.
+const COMMANDING: &[wire::Capability] = &[
+    wire::Capability::Signals,
+    wire::Capability::ReadsBack,
+    wire::Capability::Commands,
+    wire::Capability::Contacts,
+];
+
+fn walker(name: &str, model: bool, x: f64) -> SpawnRequest {
+    SpawnRequest {
+        name: name.into(),
+        asset_key: String::new(),
+        pose: Some(pose(x, 0.0)),
+        bounding_box: None,
+        kind: EntityKind::Pedestrian { model },
+    }
+}
+
+/// `behaviour`, with the motion of every Spawn it is sent recorded.
+fn spawn_motions(
+    mut behaviour: Behaviour,
+) -> (Behaviour, std::sync::Arc<std::sync::Mutex<Vec<i32>>>) {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = seen.clone();
+    let wrapped: Behaviour = Box::new(move |req| {
+        if let Some(wire::request::Request::Spawn(s)) = &req.request {
+            log.lock().unwrap().push(s.motion);
+        }
+        behaviour(req)
+    });
+    (wrapped, seen)
+}
+
+/// Roadmap 092 K12 (133): a world server that does not offer `COMMANDS` never receives a
+/// `COMMANDED` body. A `model` pedestrian is refused before any Spawn goes out, naming what the
+/// server lacks (Isaac's world server today); other pedestrians spawn as before.
 #[test]
-fn the_truth_file_is_schema_2_from_the_servers_replies() {
+fn a_server_without_commands_never_receives_commanded() {
+    for (caps, lacks) in [(ISAAC_LIKE, "COMMANDS"), (CARLA_LIKE, "COMMANDS")] {
+        let (behaviour, seen) = spawn_motions(honest_with(caps, "one"));
+        let mut b = backend(&server(behaviour));
+        b.initialize(&episode()).unwrap();
+        let e = b.spawn(&walker("modelled", true, 0.0)).unwrap_err();
+        assert!(matches!(e, BackendError::Unsupported(_)), "{e:?}");
+        assert!(
+            e.to_string().contains(&format!("does not offer {lacks}")),
+            "{e}"
+        );
+        assert!(e.to_string().contains("controller model"), "{e}");
+        assert!(!b.entities.contains_key("modelled"));
+        b.spawn(&walker("plain", false, 5.0)).unwrap();
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(seen.len(), 1, "{seen:?}");
+        assert!(
+            !seen.contains(&(wire::Motion::Commanded as i32)),
+            "{seen:?}"
+        );
+    }
+    // COMMANDS without READS_BACK is refused too, naming READS_BACK.
+    const NO_READ_BACK: &[wire::Capability] = &[wire::Capability::Commands];
+    let (behaviour, seen) = spawn_motions(honest_with(NO_READ_BACK, "one"));
+    let mut b = backend(&server(behaviour));
+    b.initialize(&episode()).unwrap();
+    let e = b.spawn(&walker("modelled", true, 0.0)).unwrap_err();
+    assert!(e.to_string().contains("does not offer READS_BACK"), "{e}");
+    assert!(seen.lock().unwrap().is_empty());
+}
+
+/// Roadmap 092 K12: a `model` pedestrian is the simulator's (read back, never posed), spawned
+/// COMMANDED, and the truth file (schema 3) gives it the frame of the command that moved it;
+/// no other entity has `cmd_frame`.
+#[test]
+fn a_model_pedestrian_is_commanded_and_its_cmd_frame_is_in_the_truth() {
+    let dir = std::env::temp_dir().join(format!("scensim-truth-k12-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (behaviour, seen) = spawn_motions(honest_with(COMMANDING, "one"));
+    let mut config = BridgeConfig {
+        npc_motion: NpcMotion::Kinematic,
+        gap_trace_dir: dir.display().to_string(),
+        ..Default::default()
+    };
+    config.world.endpoint = server(behaviour);
+    config.world.request_timeout_seconds = 1;
+    config.contact_report_dir = Some(contact_report::OFF.to_string());
+    config.agent_relay = "tcp://127.0.0.1:9".into();
+    let shutdown = AtomicBool::new(false);
+    let mut b = connect(config, &shutdown).unwrap().expect("connected");
+    b.initialize(&episode()).unwrap();
+    b.spawn(&walker("walker", true, 0.0)).unwrap();
+    b.spawn(&vehicle("npc", Driver::Scenario, -10.0)).unwrap();
+    assert_eq!(b.entities["walker"].mover, Mover::Simulator);
+    assert!(b.entities["walker"].commanded && !b.entities["npc"].commanded);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            wire::Motion::Commanded as i32,
+            wire::Motion::Kinematic as i32
+        ]
+    );
+    for frame in 1..=3 {
+        b.update_entity_status(batch(vec![
+            status("walker", 0.0),
+            status("npc", -10.0 + frame as f64),
+        ]));
+        b.update_frame(0.05 * frame as f64).unwrap();
+    }
+    drop(b);
+    let path = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.extension().is_some_and(|x| x == "jsonl"))
+        .expect("a trace file");
+    let lines: Vec<serde_json::Value> = std::fs::read_to_string(&path)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let _ = std::fs::remove_dir_all(&dir);
+    let of = |t: &str| lines.iter().filter(|l| l["type"] == t).collect::<Vec<_>>();
+    assert_eq!(of("episode")[0]["schema"], 3);
+    let frames = of("frame");
+    assert!(!frames.is_empty());
+    for f in &frames {
+        let w = &f["entities"]["walker"];
+        // the stand-in answers the previous server frame's command: lag 1
+        assert_eq!(
+            w["cmd_frame"].as_u64(),
+            Some(f["sim_frame"].as_u64().unwrap() - 1),
+            "{f}"
+        );
+        assert!(f["entities"]["npc"].get("cmd_frame").is_none(), "{f}");
+    }
+}
+
+/// Roadmap 092 S4: the run's truth file at schema 2, as the bridge writes it from a world
+/// server's replies (docs/design/truth-stream.md); schema 3 since 092 K12 (cmd_frame).
+#[test]
+fn the_truth_file_is_schema_3_from_the_servers_replies() {
     let dir = std::env::temp_dir().join(format!("scensim-truth-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut config = BridgeConfig {
@@ -1516,7 +1657,7 @@ fn the_truth_file_is_schema_2_from_the_servers_replies() {
     let _ = std::fs::remove_dir_all(&dir);
     let of = |t: &str| lines.iter().filter(|l| l["type"] == t).collect::<Vec<_>>();
     let ep = of("episode")[0];
-    assert_eq!(ep["schema"], 2);
+    assert_eq!(ep["schema"], 3);
     assert_eq!(ep["map"], "Town01");
     assert_eq!(ep["step_time"], 0.05);
     let ents = of("entity");

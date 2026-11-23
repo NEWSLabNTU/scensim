@@ -119,7 +119,9 @@ impl Coordinator {
             asset_key: req.asset_key.clone(),
             pose: req.pose,
             bounding_box: parameters.and_then(|p| p.bounding_box),
-            kind: EntityKind::Pedestrian,
+            kind: EntityKind::Pedestrian {
+                model: req.behavior == crate::backend::MODEL_BEHAVIOR,
+            },
         };
         api::SpawnPedestrianEntityResponse {
             result: Some(reply(self.backend.spawn(&request))),
@@ -604,8 +606,20 @@ mod tests {
         };
         assert_eq!(
             (request.name.as_str(), &request.kind),
-            ("walker", &EntityKind::Pedestrian)
+            ("walker", &EntityKind::Pedestrian { model: false })
         );
+        c.spawn_pedestrian_entity(api::SpawnPedestrianEntityRequest {
+            parameters: Some(ts::PedestrianParameters {
+                name: "modelled".into(),
+                ..Default::default()
+            }),
+            behavior: "model".into(),
+            ..Default::default()
+        });
+        let Call::Spawn(request) = fake.last_call() else {
+            panic!("no spawn");
+        };
+        assert_eq!(request.kind, EntityKind::Pedestrian { model: true });
         c.spawn_misc_object_entity(api::SpawnMiscObjectEntityRequest {
             parameters: Some(ts::MiscObjectParameters {
                 name: "cone".into(),

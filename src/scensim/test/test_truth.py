@@ -83,6 +83,24 @@ def test_a_schema_1_trace_reads_the_same(tmp_path):
     assert math.isclose(c["gap"], 1.0, abs_tol=1e-9)
 
 
+def test_a_schema_3_trace_with_a_commanded_walker_reads_the_same(tmp_path):
+    # roadmap 092 K12: the role `model` and the walker's cmd_frame change nothing a judge reads
+    walker = entity("walker", "pedestrian", 1, dims=(0.6, 0.6, 1.8)) | {"role": "model"}
+    lines = [EP | {"schema": 3}, entity("ego", "ego", 0), walker]
+    for n, x in ((1, 5.0), (2, 4.0), (3, 4.5)):
+        f = frame(n, {"ego": (0, 0, 0), "walker": (x, 0, 0)})
+        f["entities"]["walker"]["cmd_frame"] = n - 1
+        lines.append(f)
+    write(tmp_path, [*lines, END])
+    (trace,) = truth.load(tmp_path)
+    assert trace.episode.schema == 3 and trace.entities["walker"].role == "model"
+    assert [f.entities["walker"].cmd_frame for f in trace.frames] == [0, 1, 2]
+    assert trace.frames[0].entities["ego"].cmd_frame is None
+    c = truth.closest([trace])
+    # ego 4 m long, walker 0.6 m: box to box at x = 4.0 is 4.0 - 2.0 - 0.3
+    assert c["entity"] == "walker" and c["frame"] == 2 and math.isclose(c["gap"], 1.7, abs_tol=1e-9)
+
+
 def test_start_frames_counts_the_frames_before_npc_logic(tmp_path):
     lines = [EP, entity("ego", "ego", 0)]
     for k, started in enumerate([False, False, False, True, True]):

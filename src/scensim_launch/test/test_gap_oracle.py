@@ -537,6 +537,39 @@ class G3PoseDivergence(unittest.TestCase):
         self.assertEqual(notes[0]["entities"], ["car"])
         self.assertAlmostEqual(notes[0]["numbers"]["match_fraction"], 1.0, places=6)
 
+    def test_a_commanded_walker_in_a_schema_3_trace_is_read_back(self):
+        # Roadmap 092 K12: a walker the world server moves on a behaviour model's commands
+        # (role `model`) is read back like an autopilot NPC: SSv2's pose trails the world's by
+        # a tick. The oracle finds it from the poses, as before; `cmd_frame` changes nothing.
+        import dataclasses
+
+        def three(trace):
+            t = gt.Trace(episode=dataclasses.replace(trace.episode, schema=3, map="Town01",
+                                                     step_time=0.05))
+            for i, h in enumerate(trace.headers):
+                h = dataclasses.replace(h, index=i, subtype="car",
+                                        role="model" if h.name == "walker" else "ego")
+                t.headers.append(h)
+                t.entities[h.name] = h
+            for f in trace.frames:
+                t.frames.append(dataclasses.replace(f, entities={
+                    n: dataclasses.replace(
+                        e, angular_velocity=(0.0, 0.0, 0.0), velocity_source="measured",
+                        cmd_frame=f.frame - 1 if n == "walker" else None)
+                    for n, e in f.entities.items()}))
+            t.end = trace.end
+            return gt.load_trace(gt.dumps(t).splitlines())
+
+        frames = [frame(i, ("ego", state("ego", 50.0)),
+                        ("walker", state("walker", 0.07 * i, dx=0.07))) for i in range(1, 15)]
+        t = three(make_trace(["ego", "walker"], frames))
+        self.assertEqual((t.episode.schema, t.entities["walker"].role), (3, "model"))
+        self.assertEqual(t.frames[3].entities["walker"].cmd_frame, 3)
+        r = run(t)
+        self.assertEqual(checks(r, "G3"), [])
+        notes = [n for n in info(r, "G3") if n["kind"] == "read_back"]
+        self.assertEqual([n["entities"] for n in notes], [["walker"]])
+
     def test_a_moving_puppet_off_its_pose_is_still_judged(self):
         # Moving at 0.4 m per frame, 0.5 m beside its pose: neither on its own pose nor on
         # CARLA's previous one, so a pose divergence, not a read-back.

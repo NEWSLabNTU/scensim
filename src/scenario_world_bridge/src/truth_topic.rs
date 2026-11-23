@@ -188,6 +188,7 @@ mod tests {
             angular_velocity: [0.0, 0.0, 0.1],
             measured,
             command: None,
+            cmd_frame: None,
         }
     }
 

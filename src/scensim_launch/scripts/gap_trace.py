@@ -1,4 +1,4 @@
-"""Reader for the bridge's gap trace, the run's truth file (roadmap 024; schema 2 in
+"""Reader for the bridge's gap trace, the run's truth file (roadmap 024; schemas 2 and 3 in
 docs/design/truth-stream.md, schema 1 in docs/design/gap-campaign.md, appendix "Gap trace
 format").
 
@@ -17,7 +17,8 @@ Each file is read by its schema (the `episode` line's): schema 1 named the simul
 after CARLA (`carla`, `carla_frame`, `actor_id`, `blueprint`, `blueprint_box`), schema 2 names
 them neutrally (`sim_pose`, `sim_frame`, `sim_id`, `asset`, `asset_box`). The records here use
 schema 2's names for both; schema 2's additions are None in a schema 1 trace (an entity's
-`index` is its header's position).
+`index` is its header's position). Schema 3 (roadmap 092 K12) adds the role `model` and a
+commanded entity's `cmd_frame`, None in older traces and for every other entity.
 """
 
 import json
@@ -25,8 +26,8 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SCHEMA = 2
-SCHEMAS = (1, 2)
+SCHEMA = 3
+SCHEMAS = (1, 2, 3)
 # The file's key for each value, per schema.
 KEYS = {
     1: {"sim_pose": "carla", "sim_frame": "carla_frame", "sim_id": "actor_id",
@@ -34,7 +35,9 @@ KEYS = {
     2: {"sim_pose": "sim_pose", "sim_frame": "sim_frame", "sim_id": "sim_id",
         "asset": "asset", "asset_box": "asset_box"},
 }
-ROLES = ("ego", "scenario", "autopilot", "agent")
+KEYS[3] = KEYS[2]
+ROLES = ("ego", "scenario", "autopilot", "agent", "model")
+ROLES_2 = ROLES[:4]  # `model` is schema 3's
 VELOCITY_SOURCES = ("measured", "derived")
 
 ENTITY_KINDS = ("ego", "vehicle", "pedestrian", "misc_object")
@@ -138,6 +141,7 @@ class EntityState:
     angular_velocity: object = None  # schema 2: (wx, wy, wz) rad/s, or None with `sim_pose`
     velocity_source: object = None  # schema 2: one of VELOCITY_SOURCES, or None
     command: object = None  # schema 2, optional: the ego's TakenCommand this frame, or None
+    cmd_frame: object = None  # schema 3: a commanded entity's command frame (0: none yet), or None
 
     @property
     def spawn(self):
@@ -378,7 +382,7 @@ def _entity(ln, position):
         asset=ln.str_(o, k["asset"]),
         asset_box=bp,
         index=ln.int_(o, "index", minimum=0) if two else position,
-        role=ln.str_(o, "role", choices=ROLES) if two else None,
+        role=ln.str_(o, "role", choices=ROLES if ln.schema >= 3 else ROLES_2) if two else None,
         subtype=ln.str_(o, "subtype") if two else None,
     )
 
@@ -427,8 +431,12 @@ def _state(ln, name, s):
             tire_angle=ln.number_(c["tire_angle"], f"{cp}.tire_angle"),
             gear=ln.integer(c["gear"], f"{cp}.gear"),
             arrived=ln.integer(c["arrived"], f"{cp}.arrived", minimum=0))
+    cmd_frame = None
+    if ln.schema >= 3 and s.get("cmd_frame") is not None:
+        cmd_frame = ln.integer(s["cmd_frame"], f"{path}.cmd_frame", minimum=0)
     return EntityState(ssv2=ssv2, sim_pose=sim_pose, velocity=velocity, flags=tuple(flags),
-                       angular_velocity=angular, velocity_source=source, command=command)
+                       angular_velocity=angular, velocity_source=source, command=command,
+                       cmd_frame=cmd_frame)
 
 
 def _frame(ln, known):
@@ -677,6 +685,8 @@ def to_json(record, schema=SCHEMA):
                 e["velocity_source"] = s.velocity_source
                 if s.command is not None:
                     e["command"] = {k: getattr(s.command, k) for k in COMMAND_KEYS}
+            if schema >= 3 and s.cmd_frame is not None:
+                e["cmd_frame"] = s.cmd_frame
             if s.flags:
                 e["flags"] = list(s.flags)
             entities[name] = e
