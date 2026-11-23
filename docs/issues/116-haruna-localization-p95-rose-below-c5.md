@@ -55,3 +55,6 @@ Each step runs haruna_down twice on GPU0. A step **explains** the shift when bot
 back toward A: p95 at least 0.05 m under B's (0.178 and 0.183 m), that is 0.13 m or less. Then
 `git bisect` inside that component's range, two runs a step, by the same threshold. A step that
 moves neither run is not the cause; one run each side of the threshold is reported and rerun.
+If no single component's step comes back to 0.13 m or less, the next step is pairs of
+components, an interaction (for example sim_vehicle_ecu and sim_vehicle_spec together, issue
+106 having changed both), not more runs of the single steps (133, written before the results).
