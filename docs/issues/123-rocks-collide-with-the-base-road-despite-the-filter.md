@@ -83,3 +83,31 @@ parent's path; a static collider PhysX parsed before its group existed may likew
 group. Test (iv): the same run with `roadBase` (the world's ground) and the `rocks` group's
 filter on it made before the simulation starts. **118's prediction:** the rock then touches its
 tile alone.
+
+## Test (iv)'s result (2026-11-23)
+
+siw 17aa0d9 (`--groups-early`), the rest as the diagnosis; NAS "2026-11-23 issue 123 diagnosis
+(118)". With `roadBase` and the rocks' groups made before `world.play`, **the rock touches its
+tile alone** (36.0 kN summed over its contact, nothing on the base), the load logs one warning,
+not 769, and loose_15 moves 6.5 cm (1.5 cm with the groups made at the load). The prediction holds:
+groups made while the simulation runs, around ground PhysX already holds, are not applied to it.
+
+`fixture_drive` adds the world's USD before the simulation starts and the road after; the world
+server (`world.py`) starts the simulation at its own start, then adds the map's USD and its road
+in `load`, so whether its ground keeps the filter is not shown by this run. That is the fix's
+first question.
+
+## Fix plan, revised (for 133's approval, before any code)
+
+1. **The world server's order, reproduced**: `fixture_drive --server-order` (the simulation
+   started first, then the world's USD, then the road, as `world.py` does), the groups as today:
+   does the rock touch the base there?
+2. **The fix**, if it does (or regardless, so the order cannot break it): the groups' prims made
+   with the vehicles' groups before the simulation starts (`ensure_vehicle_scene`'s place in
+   `world.py`, and `RockStream` taking them as they are), and `roadBase`'s members set in the same
+   stage edit that adds the map's ground, before the first physics step after it. Where that
+   still does not hold, the rock-base pairs filtered per pair (`UsdPhysics.FilteredPairsAPI`) on
+   each rock prim as it is made.
+3. **Tests**: a unit test with a stand-in for pxr of the order of the group edits; live, in the
+   server's order, the rock touching its tile alone, one warning at the load, loose_15's travel
+   recorded.
