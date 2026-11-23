@@ -1464,6 +1464,29 @@ steps that make the tail (over each run's own p95), point to:
 
 A cause with a cheap fix becomes an issue. The budget is not rerun unless 133 says so.
 
+**The diagnostic's result (2026-11-24, not judged).** *rocks*, siw 31593ab, 05:55 to 06:02, no
+foreign process on GPU0; the run passed (tick p50 51.2 ms, p95 79.5 ms). The world server's own
+step, over the steps after the first second (*none* 7032, *rocks* 6981), ms:
+
+| part | *none* p50 | *none* p95 | *rocks* p50 | *rocks* p95 | p95 change |
+|---|---|---|---|---|---|
+| the step | 48.6 | 61.0 | 49.7 | 64.8 | +3.8 |
+| flush (the frame end) | 0.1 | 0.2 | 0.3 | 1.7 | +1.5 |
+| render | 10.3 | 12.8 | 10.9 | 14.0 | +1.2 |
+| road (tyre contact, push) | 4.4 | 5.3 | 4.7 | 6.0 | +0.7 |
+| physics | 3.9 | 4.9 | 4.0 | 5.2 | +0.3 |
+| contacts | 0.3 | 0.4 | 0.4 | 0.4 | 0 |
+| ego, commands, publishing | | | | | 0 or less |
+
+The step's p95 rises 3.8 ms, matching the budget's +3.5 ms. **The outcome is the last one
+written: no single cause.** The rise is spread over the rock stream's frame end (+1.5 ms at p95),
+the render (+1.2 ms; the parked pool is already invisible, so it is the streamed rocks that are
+drawn), the tyre contact on the rocks (+0.7 ms) and PhysX (+0.3 ms). The contacts, with issue
+123's reports on every loose rock, do not change, so that fix would buy nothing. The steps over
+each run's own p95 (349 a run) are where *none* has its rare large PhysX steps (their mean 29 ms)
+and *rocks* does not. No cause with a cheap fix was found, so no issue is opened, and the budget
+is not rerun. NAS "2026-11-24 086 C6b Haruna budget (118)", `diagnostic/`.
+
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
