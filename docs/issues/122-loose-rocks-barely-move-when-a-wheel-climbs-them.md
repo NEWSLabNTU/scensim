@@ -206,9 +206,13 @@ queries after 123's fix and recorded; this issue's close waits for it.
 because the rerun disproves it. The ruling, as recorded:
 
 "Not a defect in today's code. The pinning came from issue 123's harness fault: the base carried
-55 % of the rock's normal force (23.2 of 42.1 kN). With the fault fixed, raycast reproduces R4's
-throw (loose_15: 1.67 m, by the rear wheel, 0.73 m on and 1.5 m aside). Sweep moves the same rock
-2.5 cm."
+55 % of the rock's normal force (23.2 of 42.1 kN). Raycast can reproduce R4's throw: 1.67 m in
+the full set, while the same case run alone moved 6.6 cm from a nearly identical start (11.168
+against 11.170 m/s, 1.06 against 1.05 cm). The outcome is sensitive to the start state, so one run
+does not fix it. Sweep moves the same rock 2.5 cm."
+
+(Amended by 133 after issue 123's trace hypothesis' result. The first text said "raycast
+reproduces R4's throw".) In the full set the rear wheel threw loose_15 0.73 m on and 1.5 m aside.
 
 - The numbers: 086's C6b fixtures rerun after issue 123 (siw 2ef3001, NAS "2026-11-23 086 C6b
   rock fixtures after issue 123 (118)"). loose_15 moved 1.67 m in raycast and 2.5 cm in sweep;
