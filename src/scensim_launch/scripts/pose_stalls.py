@@ -9,8 +9,11 @@ the world's step (`sim_pose`, in x and y) from k-1 to k is under STALL_M while S
 DOUBLE_HI times SSv2's step from k to k+1. Frames k-1, k and k+1 must be consecutive and carry
 the entity's world pose, and none of them its spawn frame.
 
-The tracking error of a frame is the distance in x and y from `sim_pose` to `ssv2`: for a
-kinematic body it is the pose it was not given; for a tracked one, how far physics is from SSv2.
+The world's pose is the entity's: the truth's `sim_pose` is the body's, and the entity header's
+`origin_offset` is taken back off (gap_geometry.entity_pose_from_actor, as scensim.truth.boxes
+does; issue 130), so it compares with SSv2's entity pose. The tracking error of a frame is the
+distance in x and y between the two: for a kinematic body the pose it was not given; for a
+tracked one, how far physics is from SSv2.
 Prints one JSON object: per run its entity-frames, its stalls (entity, frame and the steps) and
 the tracking error's p50, p95 and max, then the totals.
 """
@@ -26,6 +29,7 @@ DOUBLE_LO = 1.5
 DOUBLE_HI = 2.5
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gap_geometry  # noqa: E402
 import gap_trace  # noqa: E402
 
 
@@ -37,15 +41,28 @@ def _step(a, b):
     return math.hypot(b[0] - a[0], b[1] - a[1])
 
 
+def _entity_xy(p, offset):
+    e = gap_geometry.entity_pose_from_actor(gap_geometry.Pose2D(p.x, p.y, p.yaw), *offset)
+    return (e.x, e.y)
+
+
 def series(trace, skip=()):
-    """{entity: [(frame, world (x, y) or None, ssv2 (x, y), spawn)]} in frame order."""
-    out = {}
+    """{entity: [(frame, world (x, y) or None, ssv2 (x, y), spawn)]} in frame order, the world's
+    pose the entity's (the latest header's origin_offset taken off; none before a header: no
+    world pose)."""
+    headers = sorted(trace.headers, key=lambda h: h.frame)
+    offsets, out = {}, {}
     for f in trace.frames:
+        while headers and headers[0].frame <= f.frame:
+            h = headers.pop(0)
+            o = h.origin_offset
+            offsets[h.name] = (o.x, o.y, o.yaw)
         for name, s in f.entities.items():
             if name in skip:
                 continue
-            out.setdefault(name, []).append(
-                (f.frame, None if s.sim_pose is None else _xy(s.sim_pose), _xy(s.ssv2), s.spawn))
+            w = (None if s.sim_pose is None or name not in offsets
+                 else _entity_xy(s.sim_pose, offsets[name]))
+            out.setdefault(name, []).append((f.frame, w, _xy(s.ssv2), s.spawn))
     return out
 
 

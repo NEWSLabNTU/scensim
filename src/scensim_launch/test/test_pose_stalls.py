@@ -10,11 +10,19 @@ import gap_trace as gt  # noqa: E402
 import pose_stalls as ps  # noqa: E402
 
 
-def trace(world_x, ssv2_x=None, flags=None, frames=None):
-    """One NPC moving along x: its world and SSv2 x per frame; an ego that never moves."""
+def header(name, offset=(0.0, 0.0, 0.0)):
+    return gt.EntityHeader(frame=1, name=name, kind="vehicle",
+                           declared=gt.DeclaredBox((0.0, 0.0, 0.0), (4.0, 2.0, 1.5)),
+                           origin_offset=gt.OriginOffset(*offset), sim_id=1, asset="x",
+                           asset_box=None)
+
+
+def trace(world_x, ssv2_x=None, flags=None, frames=None, offset=(0.0, 0.0, 0.0)):
+    """One NPC moving along x: its world (body) and SSv2 x per frame; an ego that never moves."""
     ssv2_x = ssv2_x or [0.5 * k for k in range(len(world_x))]
     t = gt.Trace(episode=gt.Episode(schema=3, episode=1, start_unix=0.0,
                                     npc_motion="kinematic", map="Town01", step_time=0.05))
+    t.headers = [header("npc", offset), header("ego")]
     pose = lambda x: gt.Pose6(x, 0.0, 0.0, 0.0, 0.0, 0.0)   # noqa: E731
     for k, (w, s) in enumerate(zip(world_x, ssv2_x)):
         st = gt.EntityState(ssv2=pose(s), sim_pose=None if w is None else pose(w),
@@ -59,6 +67,18 @@ class Stalls(unittest.TestCase):
         tr = ps.tracking(trace([0.0, 0.6, 1.0, 1.9]), skip=("ego",))
         self.assertEqual(tr["entity_frames"], 4)
         self.assertAlmostEqual(tr["max"], 0.4)
+
+    def test_the_world_pose_is_the_entitys_not_the_bodys(self):
+        # a body 1.387 m ahead of its entity, following SSv2 exactly: no error (issue 130)
+        x = [0.5 * k for k in range(4)]
+        t = trace([v + 1.387 for v in x], ssv2_x=x, offset=(1.387, 0.0, 0.0))
+        self.assertLess(ps.tracking(t, skip=("ego",))["max"], 1e-9)
+        self.assertEqual(ps.stalls(t, skip=("ego",)), [])
+
+    def test_an_entity_before_its_header_has_no_world_pose(self):
+        t = trace([0.0, 0.5])
+        t.headers = [header("ego")]
+        self.assertEqual([r[1] for r in ps.series(t, skip=("ego",))["npc"]], [None, None])
 
     def test_the_ego_is_left_out(self):
         self.assertNotIn("ego", ps.series(trace([0.0, 0.5]), skip=("ego",)))
