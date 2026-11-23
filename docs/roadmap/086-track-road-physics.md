@@ -1009,12 +1009,15 @@ peak (washboard: the minimum's distance from static) in kN; raycast, then sweep:
   peak 17 to 55 kN). cleat_15's J creeps up 5 % from 240 to 480 Hz, inside the rule's 10 %, and
   ends 20 % over the reference. So C6a's peak rule, judged on a step's mean at any one rate,
   measures the rate as much as the contact; the impulse is the rate-free measure. The 480 Hz
-  peak, still growing, says the contact's force is narrower than the reference's.
+  peak, still growing, says the contact's force is narrower than the reference's. cleat_15 is
+  an artefact at the rule's edge, not a clean one: its J ends 20 % over the reference and
+  still rose 5 % from 240 to 480 Hz (133).
 - **Washboard: unsettled** by the rule, not as predicted. D converges (0.8 % from 240 to
   480 Hz) and ends 20 % over the reference, but the swing grew 14 % from 60 Hz, under the
   rule's 30 %: there was little peak growth for an artefact to explain. Read plainly, the
   contact swings about 20 % harder than the quarter car on washboard at every rate, within
-  C6a's band.
+  C6a's band. 118's prediction (an artefact) missed here. That steady excess is a contact
+  finding and goes to C6c beside the wheel mass (133).
 - Neither is *too stiff* by the rule (no impulse more than 30 % over the reference, none
   still rising 10 %). C6b's rock checks may rest on this contact, judged by impulse or at a
   rate stated with the check; which rate scensim defaults to is a separate decision.
