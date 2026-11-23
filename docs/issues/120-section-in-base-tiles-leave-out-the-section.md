@@ -1,6 +1,6 @@
 # 120: on a section_in_base corridor, the detail's tiles, render mesh and rock rests leave out the section
 
-**Status:** open; the fix plan below is for 133's approval, before any code. **Severity:**
+**Status:** fixed on siw `086-c6b` (5940bc2, with tests), not landed; the plan was approved by 133. **Severity:**
 medium: on such a corridor the render mesh hovers, the collision tiles stand and the rocks rest
 2-7 cm above the true road. **Found:** 2026-11-23, scensim 118, while checking issue 119.
 
@@ -34,7 +34,7 @@ match the true surface but for the roughness (mean +0.005 m, p95 0.06 m over 715
 so no world-server run so far loaded a road layer on them. `fixture_drive` (086 C6a) loaded
 the course's directly, without rocks, so without tiles; its render mesh was not made.
 
-## Fix plan (for approval, before any code)
+## Fix plan (approved by 133, 2026-11-23)
 
 - `road_detail.Corridor` gains the true surface's base, `surface_base(u, v)`: `base_z(u)`, plus
   the record's section (`StationSection(stations).height_uv(u, v)`) on a `section_in_base`

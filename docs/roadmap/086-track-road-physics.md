@@ -1122,6 +1122,45 @@ C6b run a skid plate (118)"), raycast / sweep, against C6a2's 60 Hz runs without
 - The deceleration is the wheels' impact, with no plate contact in this run; it is the
   baseline (b) is set against. No step at PhysX's rigid limit.
 
+#### C6b: issues 119 and 120 fixed, the replay, the cost and run (b) (2026-11-23, 118)
+
+siw `086-c6b` 3381a36 (5940bc2 the fixes), aib ff5e72b, fixture_c6a, 60 Hz, GPU0; NAS
+"2026-11-23 086 C6b issues 119 120 fix runs (118)".
+
+- **The replay** of run (a) with the detail's colliders built, no rocks, raycast / sweep
+  against run (a): cleat_10 at 10 m/s J -0.0 % / -5.0 %, at 20 m/s -2.8 % / -0.1 %; body rise
+  within 0.3 cm. Two runs of the same code differ by up to 8 % (C6a2 against run (a)), and the
+  runs are not bit-identical between processes (loads part in the run-up, before any
+  fixture), so the spread is known from two or three runs a case. PhysX's jounce over the
+  cleats matches run (a) under both queries: no sign of the wheels' query meeting the tiles
+  (the road counted twice would compress it at the cleat). cleat_15: the plate now stops at
+  +1.3 mm (raycast; -5 mm before, through the cleat) and +1.9 mm (sweep), J -11.0 % / -1.1 %,
+  body rise -2.5 / -0.2 cm, the deceleration peak 16.3 / 21.5 m/s^2 (19.7 / 23.9 before): the
+  plate strikes and takes load off the wheel.
+- **Issue 119's cost** (medians of three a side, interleaved; frame ms):
+
+  | query, cars | p50 with / without the colliders | p95 with / without |
+  |---|---|---|
+  | raycast, 1 | 6.41 / 6.64 | 21.0 / 8.6 |
+  | raycast, 2 | 11.27 / 12.05 | 27.3 / 15.0 |
+  | raycast, 4 | 20.57 / 20.35 | 35.3 / 24.0 |
+  | sweep, 1 | 6.72 / 6.48 | 21.3 / 8.3 |
+  | sweep, 2 | 12.35 / 12.34 | 28.1 / 16.3 |
+  | sweep, 4 | 20.69 / 20.76 | 34.4 / 126.1 |
+
+  The p50 does not move (-0.8 to +0.25 ms, inside the runs' spread). The p95 rises by about
+  12 ms: the frames in which a tile collider is made, PhysX taking in a new mesh (the tile's
+  own frame-end work is 0.06-0.09 ms p50, its p95 14 ms with two cars or more; 10-14 tiles
+  held). Not explained: sweep with four cars and no colliders had a p95 of 122-142 ms in all
+  three runs, against 34 with them. Rep 1's runs from 17:08 to 17:27 shared GPU0 with another
+  session's job, and every run to 17:40 shared the host with row (a)'s training on GPU1; the
+  medians and reps 2 and 3 alone agree. C6b's budget judges this, on Haruna.
+- **Run (b)**, the record's rock cover on fixture_c6a (shoulder 1 %, run-off 1 %, ditch 3 %,
+  carriageway 0): the same as the replay to the bit, both queries. The rocks lie on the
+  shoulders and in the ditches (offline, 76 placed between s 180 and 320, 37 on the shoulders,
+  39 in the ditches), off the car's path, and the tiles they rest on were already there: what
+  (b) was to show (the plate against a cleat that collides) the replay shows.
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once

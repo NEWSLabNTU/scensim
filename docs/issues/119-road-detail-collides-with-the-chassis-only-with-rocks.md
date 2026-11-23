@@ -1,6 +1,6 @@
 # 119: the road detail collides with the chassis and skid plate only when the corridor has rocks
 
-**Status:** open; the fix plan below is for 133's approval, before any code. **Severity:**
+**Status:** fixed on siw `086-c6b` (5940bc2), not landed; the plan was approved by 133. **Severity:**
 medium: whether a car's underbody meets a road's cleats, potholes, ruts and lips depends on
 whether the same road also has rocks. **Found:** 2026-11-23, scensim 118, writing 086 C6b's
 spec.
@@ -28,7 +28,16 @@ against 137 mm before the cleat: with a collider it would strike; here it passes
 cleat_10 leaves 38-54 mm. Run (b), with rocks, waits for this fix and issue 120's: with rocks
 the tiles lie 2-7 cm above the true road on that course.
 
-## Fix plan (for approval, before any code)
+## The groups, and the resolution (133's conditions)
+
+- The tiles are in the `roadDetail` collision group, which filters out aib's `groundQuery`:
+  the wheels' suspension queries never hit them (their road is the base plus our contact's
+  detail, R5). The chassis box, the skid plate (both `chassis`) and the rocks collide with
+  them. The replay's jounce traces show no double count.
+- The tiles sample the detail every 10 cm (`COLLISION_STEP`): a vertical face is a 10 cm ramp
+  to the underbody. That is the limit of what plate-strike geometry can show; not changed.
+
+## Fix plan (approved by 133, 2026-11-23)
 
 - The detail's collision tiles become the road layer's own, built for every corridor whether
   or not it has rocks: a `TileColliders` stream (the code now in `RockStream`'s tile part,
@@ -46,3 +55,9 @@ the tiles lie 2-7 cm above the true road on that course.
   and p95 and the tiles' own cost (their prims made a frame, ms).
 - Behaviour, reported: C6b's run (a) cases again with the fix (the plate's clearance and
   strikes, J and body rise against run (a)).
+
+## Measured with the fix
+
+086, "C6b: issues 119 and 120 fixed": J within the runs' spread on cleat_10 under both queries,
+no double count, the plate striking cleat_15 (+1.3 mm instead of -5 mm); frame p50 unchanged,
+p95 about 12 ms higher with one to four cars (a tile collider's first step).
