@@ -828,6 +828,26 @@ table, the reference's numbers per lane, the runs) is written next, before its f
     and 4 vehicles driving the course, PhysX's query and our contact.
 - Not in C6a: the corner's wheel hop (C6c), and any A/B: C6a measures one build against the
   reference.
+- **133's additions (approved with the spec, before any run):**
+  - *Both wheel queries*, every case run with `wheel_query: raycast` and with `sweep`, as in
+    C5c, a prediction beside each written now. 133's reading: a raycast wheel has no
+    footprint, so it cannot feel a cleat ahead of the hub, and "load rising ahead of the hub"
+    should fail under raycast. 118's prediction differs: on a course with a road layer,
+    PhysX's query sees only the smooth base road (`road_layer`: the base under a tire's patch is
+    a plane), and the cleat's load is our contact's (R5's tandem cam, a footprint over the
+    effective road) whichever query PhysX runs, so both queries should pass alike and differ
+    by little. Whichever holds is the result; a mismatch with a prediction is not a failed run.
+  - *The rate*: PhysX steps at 60 Hz, three a 50 ms frame (`physics_dt` 1/60 s), the vehicle
+    integrating 8 substeps a step (480 Hz, aib's `physx_substeps`); our contact runs once a
+    PhysX step and its force holds for the step. The tyre load is logged at that rate, every
+    PhysX step, the finest our contact has; PhysX's internal substeps are not reachable from
+    Python. At 20 m/s a 0.2 m cleat lasts 10 ms, under one 16.7 ms step: each peak is reported
+    with its sample count (the steps whose load is over twice static), and if a peak misses,
+    the 60 Hz rate is named as a likely cause (R5's cam spreads the load over the footprint,
+    which is what should carry it).
+  - *The plant*: each run names the aib it used (its commit, from the workspace's
+    `src/autoware_isaac_bridge`), since issue 108's grip fix lands meanwhile; loads hardly
+    depend on friction.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
