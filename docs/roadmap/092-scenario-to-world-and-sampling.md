@@ -48,7 +48,7 @@ From the design's section 10.
 | K9 | 093 D2's world interface beyond knobs: anchors (lanes, regions, conflict points, curves) declared by a world and checked by `testbench check`, knob profiles (`profile: true`, CS5), the pilot's map variants (`maps.pilot_variants`, CS3) | spec, component | K1 | | in progress (swb 243): K9a done 2026-11-22, a map's lanes: `<map dir>/anchors.yaml`, resolved by the map's author with `python3 -m scensim_batch.anchors resolve` (torch) into `anchors.resolved.json` (length, speed limit, ends, a heading table within 1e-3 rad in SSv2's arc length, the map's digest), read by the sampler and scensim with ROS 2 alone and merged with `world.anchors`; `anchor.<lane>.heading(s)`; the record's `anchor_source`; Town01's anchors (west_street, west_left_turn) published 2026-11-22 as the maps dataset's revision deb23e3a, tag v2026.11d, with the user's OK; every testbench's lock on it; K9b done 2026-11-22: FileHeader `scensim.anchor.<parameter> = <anchor>.<attribute>` or `<anchor>.<function>(<arg>)`, `$<parameter>` for a drawn anchor or argument; resolved lanes gain `lanelet_at(s)` and `local_s(s)`, a stated lane its `lanelet`; the sampler checks bindings before drawing and rejects a draw off its lane by name; `scensim run` sets a scenario's bound parameters before SSv2 starts, checks a record's against the world, refuses a given value and SSv2's own distribution of a bound scenario, and records `result.json` `anchors`; `compilable` refuses a named laneId with the binding as its fix; CS6 and CS7 bind their lanes. K9c done 2026-11-22: conflicts (two lanes crossing once: `s_<lane>`, `x`, `y`, `angle`, `position_error`), curves (`length`, `turn`, `direction`, `min_radius` over 2 m, `mean_radius`) and regions (polygon: `area`, centroid, each lane's `from_`/`to_`) resolved from the map's file; Town01's conflict west_left_turn x north_through (the turn crossing the northbound through lane) with its bend and junction, published 2026-11-22 with the user's OK as the maps dataset's revision 19d52699, tag v2026.11e, every testbench's lock on it. K9d done 2026-11-22: `testbench check` refuses a scenario's bindings the world cannot satisfy (an anchor or attribute it lacks, a function on a stated anchor, a bare heading, a constant s off the lane, a stale resolved file); `anchor_source` names the lock's dataset and commit when the lock holds the file read; a stated lane's `lanelet` passes `testbench check`. The anchors are done (K9a-d). Knob profiles built 2026-11-22 (CS5): `profile: true` knobs (a range, the field they set), bound to breakpoints along `time` or `s(<lane>)`, applied by the bridge each frame (`set_knob_profiles`; a send when the value moved by its step and `min_interval`, 1 s by default, has passed, or at once on a crossed breakpoint: a send every frame took CARLA's frame p95 to 21-222 ms, one a second kept it at 1-4 ms), read back by the world servers (`ENVIRONMENT_APPLIED`), recorded per frame in the gap trace's `knob` lines and judged in `result.json` `knobs.profiles` (`knob_profile` error runs); resolved lanes gain their centreline (`x`, `y`). The pilot's map variants (CS3) remain. Before: K8 built the minimal anchor declaration it extends (`world.anchors` in testbench.yaml, numbers the project states): K9 adds anchors a world declares beside its map, attributes computed from the map (`heading(s)`, length and speed limit from lanelets, conflict points), regions and curves, binding entities to anchors, and the check |
 | K10 | 093 D3's behaviour models (scenario-description.md section 4): the model interface (a parameter schema, `reset`, `step`, one array API code for numpy on seats and `step_batch` in torch; truth in, a kinematic command out, decisions into the truth), the starter model (a gap-acceptance walker for CS1, from a published model named before any coefficient), batched in scensim_batch, on seats as a K4 attachment that commands its entity through K12; the agreement check in K2.4's style (the same records on both forms: decisions and their frames, the walker's trajectory error, trigger times, verdict); the latency from a truth frame to the command taking effect measured free-running and in lockstep (093's open question 1) | component | K2, K4, K12 | swb 241 | done 2026-11-24 (the close-out below: the engines' map-frame velocity, D3's section 4 out of draft; not covered: a vehicle model, parked with the user, and an agreement with an engine in the loop, until both targets share an ego). Before: planned 2026-11-22 (133 approved), the section 4 draft corrected (SSv2 takes a world-owned pose for any entity; pilots do not see truth, attachments do); (i)-(ii) landed ce760b69: `scensim.behaviour`, the walker on numpy and torch bit for bit (0 of 2800 arrays differ on an RTX 5090), its coefficients the cited set `khaki2021_restricted` (Khaki and Mohammadnazar 2021, CC0; the gap's 2.021 against the 2021 meta-analysis's pooled 1.98); (iii) in the batch: a model entity (role `model`) compiled from its ObjectController (its properties per slot, `anchor.*` for the crossing, its seed from `seeds.pilots.<entity>`), stepped after the ego's physics on its truth and moved kinematically within its acceleration limit; CS1's start trigger is the model's `start_gap` (`$ttc_entry`), as the subset keeps ActivateControllerAction seats-only; the walker decides where it can still stop at the kerb; `cs1_walker_gap_acceptance.xosc` the batch example (the description's CS1 stays refused: a storyboard SpeedAction on a model entity); (iv) the agreement with seats passed 2026-11-24 on K12's exit set 3 ("K10's agreement" below: the seats ego played back, no engine; the batch now takes a model entity as world-owned with the channel's lag 1), (v) the latency is K12's (set 3: lag 1 in lockstep and free-running); not covered: an engine in the loop, the engines' map-frame velocity |
 | K12 | Truth-fed pilots: a command channel from a K4 attachment to the world server (`entity_command`: an entity's kinematic command, carried with the tick gate's acknowledgement, integrated and applied by the world, read back to SSv2, whose fork adopts it for a simulator-driven pedestrian), under lockstep held to one frame; for K10's behaviour models and learned background agents | component | K4 | swb 243 | landed 2026-11-23 (scensim 0cc054d8; the SSv2 fork's model pedestrian, COMMANDED on the world protocol, the CARLA world server's integrator, the bridge, truth schema 3, attachments' `commands:`, `scensim.behaviour.seats`); pedestrians first, CARLA only; exit passed 2026-11-23 on set 3, by the rule fixed before the runs ("K12's exit runs" below) |
-| K11 | 093 D4's search (purpose B): an adaptive search over cells that writes the record's reserved `search` | component | K1, K7 | | open |
+| K11 | 093 D4's search (purpose B): an adaptive search over cells that writes the record's reserved `search` | component | K1, K7 | swb 241 | planned 2026-11-24 ("K11's plan" below): the cross-entropy method per cell, each generation a proposal file |
 | E1 | Examples | examples | the above | | open |
 
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
@@ -455,3 +455,175 @@ it; the first draft's car-follower and aggressive driver named as not built (a v
 parked with the user, 133, 2026-11-24), and the engine-in-the-loop agreement as not covered.
 
 **(4) K10 closed** in this row and in 093 (D3 done; its list's K10 done).
+
+## K11's plan: the search, purpose B (2026-11-24, 241; approved by 133 with five changes, in here, before any code)
+
+K11 is 093 D4's last open part: an adaptive search that moves draws toward failures and writes
+the sample record's reserved `search` (`{id, generation}`, sample-record.md section 1).
+survey-risk-categories.md section 4 names three candidates (Bayesian optimisation,
+cross-entropy, a bandit over cells) and one requirement that decides between them: **B's
+failure regions sharpen A's proposal**, and each failure keeps its likelihood under the base, so
+a realistic failure ranks above a contrived one.
+
+### The method: the cross-entropy method, with likelihood-ratio weights
+
+Chosen from three sources:
+
+- **Corso, Moss, Koren, Lee, Kochenderfer, "A Survey of Algorithms for Black-Box Safety
+  Validation of Cyber-Physical Systems", JAIR 72, 2021, pp. 377-428**
+  (https://doi.org/10.1613/jair.1.12716; already F63 in survey-multi-vehicle-cooperation.md).
+  It sorts black-box validation into falsification (optimisation), most-likely failure
+  (planning) and failure probability estimation (importance sampling), and places the
+  cross-entropy method in both the first and the last: the iterations that find failures leave
+  a proposal for estimating their probability. That is A and B fed by one loop.
+- **de Boer, Kroese, Mannor, Rubinstein, "A Tutorial on the Cross-Entropy Method", Annals of
+  Operations Research 134, 2005, pp. 19-67** (https://doi.org/10.1007/s10479-005-5724-z), for
+  the algorithm: per generation, draw N from the current density, take the elite (the most
+  critical fraction rho by the score), set the level gamma_t to the elite's least critical
+  score (never past the failure threshold), and refit the density to the elite with each sample
+  weighted by base / current density, the likelihood ratio that makes the last density a
+  proposal for the rare event under the base, not just a point near it; smooth the update by
+  alpha.
+- **O'Kelly, Sinha, Namkoong, Duchi, Tedrake, "Scalable End-to-End Autonomous Vehicle Testing
+  via Rare-event Simulation", NeurIPS 2018** (https://arxiv.org/abs/1811.00145; [29] in the same
+  survey), which ran this on an autonomous vehicle stack in simulation: adaptive importance
+  sampling by cross-entropy, with a continuous score (not pass or fail) so the levels can move
+  before any failure is seen.
+
+Against the other two candidates: Bayesian optimisation proposes one point at a time from a
+surrogate, fine for seats but a poor fit for the batch's thousands of slots a step, and its
+result is a point, not a density A can use. A bandit over cells chooses which cell to spend
+runs on but says nothing inside a cell; it is the natural layer above this one (as in 077's gap
+campaign, gap-campaign.md) and is left for after K11.
+
+### What it is, in scensim's terms
+
+- **One search is one (scenario, base, cell).** The cell's attributes are fixed for the search
+  (a catalogue's cell, or `scensim.cell.<attribute>`), so its rate and its failures are a
+  cell's, as K7 reports them. Several cells: several searches.
+- **The searched variables** are the base model's drawn variables named by the search, each
+  replaced as a proposal replaces it today (`proposal: 1`, the importance plug-in): a `normal`
+  or `lognormal` refitted to the weighted elite, keeping the base's `range`; a `uniform` refitted
+  as a normal within its range; a `categorical` refitted to the elite's weighted frequencies
+  with a floor of 0.01 on every category. Derived values, constraints, latent variables and the
+  rest of the base are drawn as the base draws them. A `poisson`, `histogram` or `constant`
+  variable, a latent one, or one in a joint group is not searched in K11 (refused by name).
+- **Each generation is a proposal file.** Generation t's density is written as
+  `search/<id>/g<t>.yaml` in the existing `proposal: 1` format. Its records are drawn by the
+  importance plug-in, so they carry `proposal` (that file, by hash), `weight` and `log_weight`
+  as any proposal's do, plus `search: {id, generation}`. K7's report and K3's replay read them
+  as they read any record.
+- **The score and the failure threshold.** The score is the ego's closest approach to any
+  entity, box to box, in metres, as `python3 -m scensim.truth closest` gives it on seats (K4):
+  lower is more critical, 0 is touching. **A run fails when its score is at most 0** (contact),
+  the threshold every K11 search uses. The score enters as a new optional field of the outcome
+  K7 reads, `score`, so the search does not care who ran the samples: a JSONL of `{record,
+  outcome: {failed, contact, error, score}}`, the format another simulator's runs already use.
+  A run with an error or no score is left out of the elite and counted.
+- **The loop is stepped from outside**, so the same search runs on seats, on the batch, or on
+  another simulator: `scensim-sample search init <spec>` writes g0 (the base, or a given
+  proposal) and its draws; `scensim-sample search next <dir> --outcomes <jsonl>` reads the
+  generation's outcomes, refits, writes g(t+1) and its draws, and a `state.json` (levels,
+  elite sizes, failures so far, the search's seed). Once the stop rule holds, `next` writes the
+  estimation stage instead (below). `scensim-sample search report <dir>` gives the estimate and
+  lists the failures found, each with its record id, score and log base density, highest first.
+  Deterministic: the same spec, seed and outcomes give the same files, byte for byte.
+
+### Support and normalised weights
+
+The estimate below is the plain likelihood-ratio estimator, so the weights must be exact density
+ratios, not ratios up to a constant as the importance plug-in's are today (its docstring: fine
+for the self-normalised estimate, biased for a plain mean).
+
+- **Every g_t covers the base's support.** A refitted normal or lognormal keeps the base's
+  range, and so its support; a categorical keeps every category at 0.01 or more; and each
+  generation is drawn from the defensive mixture (next item), which contains the base itself.
+- **Defensive mixture.** Each generation, and the estimation stage, draws from
+  q_t = (1 - beta) g_t + beta base, beta = 0.1 (Hesterberg, "Weighted Average Importance
+  Sampling and Defensive Mixture Distributions", Technometrics 37(2), 1995, pp. 185-194). Every
+  weight base / q_t is then at most 1/beta = 10, and a g_t narrower than the base (the case
+  sample-record.md section 8 measured at 0.61 coverage) cannot make the weights' variance
+  infinite. The importance plug-in gains `defensive: beta` in a proposal file.
+- **Truncation renormalised.** A variable with a `range` has density f(x) / (F(hi) - F(lo)) in
+  both base and g_t, computed in closed form for normal and lognormal, so the ratio is exact.
+- **Constraints.** A base with constraints (CS1's has three) draws from base(x) 1_C(x) / Z_b,
+  and the mixture from q(x) 1_C(x) / Z_q, so the weight is (base / q) (Z_q / Z_b). Constraints
+  need no simulation, so both acceptance probabilities are estimated by drawing: Z_b from 10^5
+  draws of the base, Z_q from 10^5 draws of the generation's mixture, each with its binomial
+  error, which is added to the estimate's relative standard error in quadrature and reported.
+  The rejection count the sampler already records is kept as well. With constraints the weight bound
+  of the mixture becomes 10 Z_q / Z_b, not 10; the report gives the largest weight of every
+  generation and of the fresh stage.
+- **The test of it** (part of check 1): for an event that always holds, the weights' mean is an
+  unbiased estimate of 1; at N = 10^4 draws, per variable kind (truncated normal, truncated
+  lognormal, normal refit of a uniform, categorical with the floor), with constraints and with
+  none, and through the mixture, |mean(w) - 1| is within 3 standard errors in every case.
+
+### Parameters, fixed before any run
+
+- elite fraction rho = 0.1;
+- smoothing alpha = 0.7 on every refitted parameter (mean, sd, category probabilities):
+  theta_t = alpha theta_fit + (1 - alpha) theta_(t-1);
+- defensive fraction beta = 0.1;
+- N per generation: 1000 for check 1; for K11c, the batch's slot count, written into its spec and
+  into this document before its first run; the estimation stage draws the same N;
+- the stop rule: stop when the level reaches the threshold (gamma_t at most 0, so at least
+  rho N of the generation's runs fail) or after 20 generations, whichever is first; the report
+  says which.
+
+From the tutorial's ranges (rho 0.01 to 0.1, alpha 0.4 to 0.9), at the safe end for a small N.
+
+### The estimate: a fresh stage, the plain estimator
+
+The generations choose each density from their own samples, so a rate estimated from those
+samples carries adaptive bias. The rate is therefore estimated from a **fresh stage**: after the
+stop rule holds, N new draws from the last mixture q_T, used for nothing else. With w_i the
+normalised weight and f_i 1 for a failure:
+
+- p_hat = (1/N) sum w_i f_i, the plain likelihood-ratio estimator;
+- its standard error s / sqrt(N), s the sample standard deviation of w_i f_i (with the
+  constraints' relative error added as above);
+- a normal 95 % interval, p_hat plus or minus 1.96 standard errors;
+- Kish's effective count n_eff = (sum w)^2 / sum w^2, reported beside it.
+
+The generations' own estimate is reported next to it, marked as a diagnostic, never as the rate.
+K7's report gets the same plain estimator for a search's fresh stage, with `interval_method`
+naming it; its self-normalised estimate stays for every other weighted cell.
+
+### Steps
+
+1. **K11a, the search, pure Python** (`scensim_sampler`, no simulator): the spec, `init`,
+   `next`, the fresh stage, `report`; the importance plug-in's `defensive:` and normalised
+   weights; the outcome's `score`; sample-record.md section 9's line replaced by the search's
+   section; scenario-description.md section 5's row as built.
+2. **K11b, the batch's score**: the closest gap per slot, box to box, as the truth judge measures
+   it, so a batch generation yields the outcome JSONL directly.
+3. **K11c, CS1's search**: walker dart-out, one cell, on the batch; then its failures replayed on
+   seats through K3's replay.
+
+### Exit checks, with predictions (fixed before any run)
+
+1. **A known rare event** (K11a, a test; no simulator): base N(0, I) in two dimensions, failure
+   x1 + x2 > 5.2 (as a score, 5.2 - (x1 + x2) at most 0), so p = Phi(-5.2 / sqrt 2) = 1.18e-4.
+   Prediction, at N = 1000 and the parameters above: the level reaches the threshold within 4
+   generations in 20 of 20 seeds; the fresh stage's 95 % interval contains p in at least 18 of
+   20 seeds, with n_eff / N above 0.1 in every seed; every weight is at most 10 (no constraints here), and the largest is reported. Plain sampling
+   with the same total budget (4 generations and the fresh stage, at most 5000) expects 0.59 failures and finds none in most seeds.
+   With it, the unit-mean weight test of "Support and normalised weights".
+2. **Determinism** (test): two runs of the same spec, seed and outcomes give identical files.
+3. **The records** (test): every drawn record passes `scensim-sample check`, carries `search`,
+   `proposal` and `weight`, and K7's coverage report reads a search's outcomes.
+4. **K11b**: the batch's closest gap within 0.05 m of the seats judge's on K10's agreement
+   records (run 2's set), reported per record.
+5. **K11c**: on CS1, the search's stop rule and the fresh stage's estimate with its interval and
+   n_eff are reported, and every failure it found is replayed on seats through K3's replay. The
+   count that fail on seats too is reported **with no bar**: the batch's ego is a model (engine A
+   or B), the seats ego is the stack, so how many transfer is what the check measures, not
+   something to predict. Each failure that does not fail on seats is listed with its cause
+   (its seats score and what differed), as a finding.
+
+### Not in K11
+
+Failure-mode clustering (by parameters and by the autopilot's behaviour, survey-risk-categories.md
+section 4) and the bandit over cells: each its own item after K11, once runs exist to cluster.
+Latent variables, joint groups, and the other variable kinds as searched variables.
