@@ -222,3 +222,14 @@ and sets the members at the road's load, before the next step. No per-pair filte
 - Tests: `test/test_issue_123.py` (the groups and filters, idempotence, the world's order, the
   pool grouped at a frame's end, the self-check) and `test_rock_layer`'s wake test (a rock woken
   begins its check).
+
+## The trace hypothesis (133, 2026-11-23; prediction before the runs)
+
+Issue 123's single-case runs (`--trace-push`) moved loose_15 6.5 cm in raycast. The C6b rerun
+on siw 2ef3001, without the trace and with the whole fixture set, moved it 1.67 m. Runs on siw
+2ef3001: loose_15 alone, raycast, once with `--trace-push` (133's run) and once without (a
+control that separates the trace from running the case alone).
+
+- **118's prediction:** with the trace, about 6.5 cm; without it, about 1.67 m. The trace
+  applies the contact report to the rock's prim while PhysX simulates it, and that changes the
+  rock's motion.
