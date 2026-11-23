@@ -50,3 +50,32 @@ jounce and PhysX's, the effective road under it, a rim strike and PhysX's rigid 
   magnitude at the pothole's far edge, while PhysX's own stays bounded: the applied vertical
   force difference throws the body. If so, whether the edge's slope in the contact's sampling
   (its stencil spacing over the 3 cm edge) makes a near-vertical normal is checked next (133).
+
+### The contact probe's result (2026-11-24)
+
+*rough_none*, siw 31593ab, one car, raycast, GPU0 quiet; the trace (120 PhysX steps, t 16.0 to
+17.95 s) was written at t 18.05 s, and the run then hung until its 15 min timeout (issue 139).
+Wheels in aib's order: front left, front right, rear left, rear right. The launch repeats the
+*rough_rocks* probe's (t 17.30 s, s 193.4 m).
+
+- **The throw (step 1040, t 17.30 s):** under the rear-left wheel our contact's effective road
+  (`w`, the envelope it makes from the road's samples) rose **1.00 m** for one step (-109.320,
+  -108.315, then -109.347 m on the next) while the other wheels' moved by 2 cm. The wheel's jounce
+  read 0.581 m, its rim struck (0.889), and our load was **1.60 MN** (its inner peak 2.34 MN)
+  against PhysX's 25.6 kN. The body rose 0.58 m in that step and its speed fell from 8.68 to 2.83
+  m/s; from there it flew.
+- **Before it (t 16.45 to 17.30 s):** the front-left wheel dropped into a pothole at s 186 m
+  (our load 0, then 11.7 kN at its far edge, both within a factor 2.5 of the static load). Two
+  steps later (t 16.55 s, step 994) the body's speed fell by 1.40 m/s in one step (about 25 g)
+  with every wheel's longitudinal force under 0.5 kN, and from step 996 three wheels were off the
+  ground, in our contact and in PhysX's alike, for 0.7 s, the car on its rear-right wheel with
+  its roll growing to 0.33 rad and coming back to 0.06 rad at the throw. No force we apply
+  accounts for that step; what PhysX touched is not in this trace.
+- **118's prediction:** the order-of-magnitude load on the rear left from our contact, PhysX's
+  bounded, **held**. "At the pothole's far edge" **failed**: the load came from a one-step jump of
+  our road envelope by 1 m, not from an edge's slope, and the car was already on one wheel. The
+  stencil-slope question (133) does not arise: a 3 cm edge cannot make a 1 m envelope.
+
+Two questions are open, each for a probe of its own: where the 1 m in `w` comes from (the road's
+samples `h` under the rear-left wheel at steps 1038 to 1041, and the tile each came from), and
+what PhysX's body touched at step 994 (the chassis's contact report, t 16.45 to 16.7 s).
