@@ -93,14 +93,24 @@ def read_spec(path):
     base = path.parent
     return {"id": doc["id"], "scenario": (base / doc["scenario"]).resolve(),
             "model": (base / doc["model"]).resolve() if doc.get("model") else None,
+            "model_as_written": doc.get("model"),
             "variables": list(v), "n": doc["n"], "seed": doc["seed"], "threshold": float(th),
             "knobs": knobs, "acceptance_draws": m,
             "sha256": hashlib.sha256(data).hexdigest(), "path": path.resolve()}
 
 
 def _sampler(spec, proposal=None):
-    return Sampler.from_file(spec["scenario"], model=spec["model"], proposal=proposal,
-                             knobs=spec["knobs"] or None)
+    s = Sampler.from_file(spec["scenario"], model=spec["model"], proposal=proposal,
+                          knobs=spec["knobs"] or None)
+    if spec["model_as_written"]:
+        # the base's id is the model's path as the spec writes it, not where this host keeps
+        # it: the id is part of the record's identity
+        base = dict(s.base, id=spec["model_as_written"])
+        s.base = base
+        for p in s.plugins:
+            if getattr(p, "base", None) is not None:
+                p.base = base
+    return s
 
 
 def _joint(sampler):

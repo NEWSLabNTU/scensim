@@ -679,11 +679,12 @@ choice is made in K11c's spec, written here before its first run.
 
 **The scenario.** The batch's CS1 is `examples/cases/cs1_walker_gap_acceptance.xosc`, not the
 walker_dartout example: its parameters are `ego_speed`, `walk_speed`, `ttc_entry` and
-`behaviour`, and it has no category, cell or distribution, which the sampler requires. K11c adds
-to it the category `R2.walker_crossing.dart_out` and a fixed cell, `scensim.cell.illumination`
-day, `surface` dry, `occluder` van, so the search runs inside one cell by construction. Adding
-header properties changes the file's hash, so K10's agreement records (run 2) name the earlier
-version; they stay replayable from git at their commit.
+`behaviour`, and it has no category, cell or distribution, which the sampler requires. K11c runs a sibling,
+`examples/cases/cs1_walker_gap_acceptance_k11c.xosc`: the same scenario below its header, with
+the category `R2.walker_crossing.dart_out` and a fixed cell (`scensim.cell.illumination` day,
+`surface` dry, `occluder` van), so the search runs inside one cell by construction. It is a
+sibling, not an edit (133), because landed records (K10's agreement, run 2) name the original's
+hash. Its header says what it is. It passes `compilable` with the walker's batched model.
 
 **The base: invented.** `examples/cases/models/cs1_gap_acceptance_k11c.yaml`, with constant
 parameters, labelled invented in its file. **K11c's estimated rate is a rate under this
@@ -703,6 +704,7 @@ come from:
 | `behaviour` | steady 0.75, hesitate 0.2, run 0.05 | `behaviour`, case adult |
 | `ttc_entry` | log-normal 2.6, sd 0.8, range [0.3, 8.0] | `ttc_entry` at adult (2.6) and day (factor 1.0) |
 
-**The search.** All four variables searched, none held; the threshold 0 (a closest gap at most
+**The search.** All four variables searched, none held; the base's id in each record is the
+model's path as the spec writes it (not this host's), so record ids do not depend on the host; the threshold 0 (a closest gap at most
 0 m); the parameters of "K11's plan"; N the batch's slot count, and the seed, written here
 before the first run, with the batch's engine.
