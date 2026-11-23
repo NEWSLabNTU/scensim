@@ -31,7 +31,17 @@ built. Test: `test_repetitions_and_seeds_of_a_bound_scenario_each_bind_their_own
 ## What it touched
 
 The refusal comes at expansion, before any run starts, so no run ever ran with another run's
-parameters; an invocation was refused whole. The only anchor-bound scenario in this repository
-is `scenarios/projects/k12_commanded/scenarios/cs1_town01.xosc`, whose suite
-`suites/lockstep.yaml` repeats; K12's exit runs (092) used one invocation per seed instead.
-Sample records (`sample:`) were not affected: each record's spec is built with its own values.
+parameters; an invocation was refused whole. Only a binding is written: `bind_anchors` loops
+over the scenario's `scensim.anchor.<parameter>` properties and writes each bound value into
+`spec.parameters`. A read of an anchor attribute in a model's derived value (CS7's
+`anchor.exit_n.heading` in `models/cs7_cyclist.yaml`) is evaluated by the sampler when a record
+is drawn and becomes one of the record's values; it never reaches that write.
+
+Three scenarios in this repository carry bindings: `scenarios/projects/k12_commanded/scenarios/
+cs1_town01.xosc`, and the sampler's cases `cs6_cut_out_stopped_car.xosc` and
+`cs7_cyclist_low_sun.xosc` (`src/scensim_sampler/examples/cases/`). A direct `scensim run` of any
+of them with more than one run per combination was refused. CS1's suite `suites/lockstep.yaml`
+repeats, and K12's exit runs (092) used one invocation per seed instead. CS6 and CS7 are run
+through `sample:` from their `_dist` files, and no suite in the repository names their
+scenario files directly. Sample records (`sample:`) were not affected: `sample_spec` builds each
+record's spec with its own values.
