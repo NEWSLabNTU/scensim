@@ -655,3 +655,37 @@ def test_an_uncommitted_change_in_a_component_not_landing_refuses_by_name(world,
     r = world.land("--onto", "feat", "A", a2)
     assert r.returncode == 1, r.stdout + r.stderr
     assert "src/B: " in r.stderr and "nothing pushed" in r.stderr
+
+
+def test_the_pins_commit_moves_no_branch_another_worktree_holds(world):
+    """Issue 115: `checkout -B land-pin` moved the branch other worktrees had checked out. The pins
+    are committed on a detached HEAD now, so a worktree on any branch keeps it."""
+    other = world.tmp / "other"
+    git(world.super, "branch", "land-pin", "main")
+    git(world.super, "worktree", "add", "-q", str(other), "land-pin")
+    before = git(world.super, "rev-parse", "refs/heads/land-pin")
+    a2 = world.advance("A")
+    r = world.land("A", a2)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert world.remote_pin("A") == a2
+    assert git(world.super, "rev-parse", "refs/heads/land-pin") == before
+    assert git(other, "symbolic-ref", "--short", "HEAD") == "land-pin"
+    assert git(other, "diff", "--cached", "--name-only") == ""
+    assert run("git", "symbolic-ref", "-q", "HEAD", cwd=world.super, check=False).returncode != 0
+    assert git(world.super, "rev-parse", "HEAD") == git(world.super, "rev-parse", "origin/main")
+
+
+def test_a_component_whose_main_another_worktree_holds_is_refused(world):
+    """Issue 115: a landing resets a cascading component's main to origin/main; with main checked
+    out in another worktree of that repository, that would move it under it: refused, nothing
+    pushed."""
+    c = world.super / "src" / "C"
+    git(c, "checkout", "-q", "--detach")
+    other = world.tmp / "c-other"
+    git(c, "worktree", "add", "-q", str(other), "main")
+    a2 = world.advance("A")
+    remote_c = world.remote_pin("C")
+    r = world.land("A", a2)
+    assert r.returncode == 1
+    assert "C: its main is checked out in another worktree" in r.stderr
+    assert world.remote_pin("A") == world.sha["A"] and world.remote_pin("C") == remote_c

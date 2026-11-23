@@ -23,7 +23,10 @@ keeps scripts/check_pins.py green on main (scripts/land_pin.sh runs this):
    pins, one commit for the whole cascade. check_pins runs on that. Only then is anything pushed: the
    components in dependency order, then this repository. A failed check pushes nothing; a component
    whose main moved meanwhile stops the push before this repository's pins, so main never names a
-   partial cascade.
+   partial cascade. This repository's pin commit is made on a detached HEAD, on no branch; a
+   component's main, which it resets to origin/main, is refused when another worktree of that
+   repository has main checked out (issue 115: a branch reset under another worktree leaves it
+   with its old files staged against the new commit).
 
 5. --onto <branch>: this repository's pins go on origin/<branch> instead of origin/main, so a change here that
    needs them (code using a component's new interface) lands with them, as one tip. The branch must be pushed
@@ -61,6 +64,30 @@ def git(*a, cwd=ROOT, check=True, capture=True):
     if check and r.returncode:
         raise SystemExit(f"git -C {cwd} {' '.join(a)}: {(r.stderr or '').strip()}")
     return (r.stdout or "").strip()
+
+
+def checked_out_elsewhere(branch, cwd=ROOT):
+    """The other worktrees of `cwd`'s repository that have refs/heads/<branch> checked out (issue
+    115), by their git directories, `cwd`'s own left out: the repository's (its main worktree's;
+    a submodule's is under the superproject's .git/modules, which `git worktree list` names in
+    place of its checkout) and each `worktrees/<name>` of it."""
+    def absolute(p):
+        p = Path(p)
+        return (p if p.is_absolute() else Path(cwd) / p).resolve()
+
+    own = absolute(git("rev-parse", "--absolute-git-dir", cwd=cwd))
+    common = absolute(git("rev-parse", "--git-common-dir", cwd=cwd))
+    linked = sorted((common / "worktrees").glob("*")) if (common / "worktrees").is_dir() else []
+    out = []
+    for d in [common, *linked]:
+        d = d.resolve()
+        head = d / "HEAD"
+        if d == own or not head.exists():
+            continue
+        if head.read_text().strip() == f"ref: refs/heads/{branch}":
+            where = d / "gitdir"  # a linked worktree's: the path of its .git file
+            out.append(str(Path(where.read_text().strip()).parent) if where.exists() else str(d))
+    return out
 
 
 def ok(*a, cwd=ROOT):
@@ -429,6 +456,14 @@ def main(argv):
         if dry:
             continue
         cd = src / c
+        # its main is reset to origin/main here: refused when another worktree of its repository
+        # has main checked out, which the reset would move under it (issue 115)
+        others = checked_out_elsewhere("main", cd)
+        if others:
+            print(f"{c}: its main is checked out in another worktree ({', '.join(others)}), which "
+                  "the landing would move under it: switch that worktree off main; nothing pushed",
+                  file=sys.stderr)
+            return 1
         git("checkout", "-q", "-B", "main", "origin/main", cwd=cd)
         for d in mv:
             git("submodule", "update", "-q", "--init", f"deps/{d}", cwd=cd)
@@ -454,7 +489,9 @@ def main(argv):
         print("dry run: nothing changed")
         return 0
 
-    git("checkout", "-q", "-B", "land-pin", base)
+    # the pins are committed on a detached HEAD, no branch: `checkout -B land-pin` moved a branch
+    # other worktrees had checked out, under them (git 2.34 allows it; issue 115)
+    git("checkout", "-q", "--detach", base)
     for c in landing:
         git("checkout", "-q", target[c], cwd=src / c)
         sync_deps(src, c)
