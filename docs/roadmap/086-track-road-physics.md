@@ -13,7 +13,9 @@ steps ("C5's steps" below); C5a done (scensim_isaac_world ea35f35), C5b done
 (scensim_isaac_world b5de87b, its fixture course and checks), C5c done (scensim_isaac_world
 7eb96cc, the lip fixtures and the strips as zones), C5d done with one failed check
 (scensim_isaac_world 33c6aae: the maps pass, the fixture's localization fails), C5d2 done
-(scensim_isaac_world 41a0102: the fixture with guardrails and trees passes).
+(scensim_isaac_world 41a0102: the fixture with guardrails and trees passes). C5's exit
+pairing done (2026-11-23): the slope matrix and haruna_down unchanged by C5; every C5 exit
+item met (133 to close C5).
 Issue 077's cause is confirmed (2026-11-20, 118): PhysX's raycast wheel query takes Town01's
 sharp curb face as the ground, and Town01 has no road layer. Its fix comes first, ahead of C5:
 recheck the sweep (066 R1's check, from C6). If the sweep no longer throws the car, aib switches
@@ -703,8 +705,27 @@ sim_vehicle_ecu (ef6bfd8 to 99505b0) and sim_vehicle_spec (21bf3dc to 9ceb8cb).
   alternating. A real shift: the mean of B's three p95s at least 0.05 m above A's, and every B
   run above every A run; otherwise run-to-run spread. If no shift, issue 116 closes as "not
   reproduced; the premise came from a mixed overlay".
-- Either way, Haruna's pose error has little margin to the 0.2 m rule: B's maximum 0.2025 m,
-  and C5d's run 0.183 m at the p95.
+- **The clean pairing's result: run-to-run spread, no shift.** Every run passed `haruna.sh`'s
+  check (the live bridge and world server under its own side's install, `result.json` naming
+  its commit) and every scenario passed (0 contacts, NVTL p05 3.12):
+
+  | run | scensim | pose error p95 | max | simulated |
+  |---|---|---|---|---|
+  | cB1, 2026-11-23T13-27-25 | f98f1cd1 | 0.181 m | 0.203 m | 388.5 s |
+  | cA1, 2026-11-23T13-34-42 | 8965a06a | 0.182 m | 0.202 m | 386.5 s |
+  | cB2, 2026-11-23T13-41-58 | f98f1cd1 | 0.126 m | 0.155 m | 387.5 s |
+  | cA2, 2026-11-23T13-49-14 | 8965a06a | 0.184 m | 0.203 m | 394.5 s |
+  | cB3, 2026-11-23T13-56-37 | f98f1cd1 | 0.180 m | 0.201 m | 385.5 s |
+  | cA3, 2026-11-23T14-03-53 | 8965a06a | 0.185 m | 0.201 m | 391.5 s |
+
+  B's mean p95 0.162 m against A's 0.184 m: B is not above A, so by the rule above there is
+  no shift. The runs fall in two groups, about 0.18 m and about 0.12 m, on either side; the
+  void pairing's mixed "A" runs were two of the lower. Issue 116 is closed: not reproduced, its
+  premise came from a mixed overlay.
+- **C5's exit, by the pairing:** aib's slope matrix unchanged (17 tests identical), and
+  haruna_down unchanged by C5 (it passes on both sides alike). Haruna's pose error has little
+  margin to the 0.2 m rule on both: four of the six clean runs had a maximum over 0.2 m (not
+  judged), and most p95s are about 0.18 m.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
