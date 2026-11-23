@@ -1183,6 +1183,43 @@ siw `086-c6b` 3381a36 (5940bc2 the fixes), aib ff5e72b, fixture_c6a, 60 Hz, GPU0
   rocks in the data, in the stage and awake, and the case's own rock's pose and speed (133's
   note: the rocks there measured, not inferred).
 
+#### C6b's fixture results (2026-11-23, 118)
+
+siw `086-c6b` 975871e (8ff67e1 for rock_check's output), aib ff5e72b, fixture_c6b, 60 Hz, the
+plate and the detail's colliders on, GPU0 with nothing else on it, every start within the
+check; NAS "2026-11-23 086 C6b rock fixtures (118)". Raycast / sweep:
+
+| fixture | measured | check |
+|---|---|---|
+| embedded_15, 40 km/h | J 303 / 305 N s (reference 653.9), peak 15.1 / 13.9 kN (R4 57.5), wheel rise 9.5 / 9.7 cm, pitch 0.41 / 0.42 deg, no rigid-limit step | **J fails** (-54 %); the rest pass |
+| loose_15, 40 km/h | moved 1.5 / 1.5 cm, its largest speed 0.01 / 0.007 m/s, woken | **moves fails**; not lost, no faster than the car, no rigid-limit step pass |
+| loose_8, 40 km/h | moved 0.9 / 1.4 cm (2.1 at most), largest speed 0.02 / 1.9 m/s, woken | **moves fails**; the rest pass |
+| boulder_35, 10 km/h | stopped 0.35 s after the plate's front reached it, the front axle past its face (399.94 / 399.97 m, face 399.55), deceleration peak 169 m/s^2 at 60 Hz (R4 22), no rigid-limit step | passes |
+
+The rocks were there, measured (133): 66 to 253 in the data, 35 to 49 in the stage, the case's
+loose rock awake when the wheel reached it.
+
+- **embedded_15** rides up as R4's did (9.5 cm against its 11.1), but carries half the
+  reference's impulse. A likely cause, not tested: the reference is a 1-D profile, the rock as
+  wide as the tyre's whole contact, while this rock (about 23 cm across, the tyre 23.5) meets
+  only part of R5's cams across the width.
+- **The loose rocks did not move**: the wheel climbed loose_15 (its load 12.7 kN) and left it
+  where it lay, 1.5 cm on; R4's slice shoved the same rock 0.2-0.5 m on and 0.9-1.0 m aside, on
+  a flat base without collision tiles. Not explained: the rock wakes, rests 7 mm lower on the
+  tiles, and takes the push (`RockStream.push`) only as a rigid body; why its speed stays near
+  zero is open.
+- **boulder_35** high-centres the car. Its 169 m/s^2 is one 60 Hz sample of a stop against a
+  327 kg static hull (R4's boulder was 154 kg); the car did not stand still 3 s at once after
+  it (`stuck_at_s` none), so the case ran its 60 s.
+- **Placement fails as written:** none on the carriageway, but the placed cover is 0.227 % on
+  the shoulders (138 rocks) and 0.205 % on the run-off (168), against k = 1 %, outside a factor
+  of 2. The written expectation was wrong: k is Golombek and Rapp's cover by rocks of every
+  size, and placement starts at 9 cm (smaller is gravel, a surface class), so the placed share
+  is the truncation factor exp(-q 0.09), about 0.22, of k (q = 1.79 + 0.152 / k = 17.0). **The
+  check amended after the results** (133): placed cover within a factor of 2 of 0.22 k. It
+  passes (0.227 % and 0.205 % against 0.217 %). fixture_c6b has no ditch, so its 3 % is not
+  tested.
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
