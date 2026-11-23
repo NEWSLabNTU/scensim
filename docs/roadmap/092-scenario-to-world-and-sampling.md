@@ -111,6 +111,11 @@ accepted by SSv2. Predicted besides the above: no SSv2 error; `result.json` `kno
 (illumination day), `anchors.barrier_lane` 6583, `maps` with the variant's and Town01's
 lanelet2 digests.
 
+**Attempt 2 (2026-11-24): refused by SSv2, the scenario's.** SSv2's preprocessor accepted the
+FileHeader (issue 131 holds) and refused the barriers' `miscObjectCategory="barrier"`, a valid
+OpenSCENARIO category it does not implement; they are `obstacle` (as K12's van) for attempt 3,
+with the same predictions. The stack again switched to the variant alone (8.8 s).
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned

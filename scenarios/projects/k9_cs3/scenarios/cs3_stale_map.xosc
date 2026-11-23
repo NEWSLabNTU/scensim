@@ -37,13 +37,13 @@
 			</ObjectController>
 		</ScenarioObject>
 		<ScenarioObject name="barrier_a">
-			<MiscObject name="static.prop.streetbarrier" miscObjectCategory="barrier" mass="50"><BoundingBox><Center x="0" y="0" z="0.55"/><Dimensions length="0.4" width="1.2" height="1.1"/></BoundingBox><Properties/></MiscObject>
+			<MiscObject name="static.prop.streetbarrier" miscObjectCategory="obstacle" mass="50"><BoundingBox><Center x="0" y="0" z="0.55"/><Dimensions length="0.4" width="1.2" height="1.1"/></BoundingBox><Properties/></MiscObject>
 		</ScenarioObject>
 		<ScenarioObject name="barrier_b">
-			<MiscObject name="static.prop.streetbarrier" miscObjectCategory="barrier" mass="50"><BoundingBox><Center x="0" y="0" z="0.55"/><Dimensions length="0.4" width="1.2" height="1.1"/></BoundingBox><Properties/></MiscObject>
+			<MiscObject name="static.prop.streetbarrier" miscObjectCategory="obstacle" mass="50"><BoundingBox><Center x="0" y="0" z="0.55"/><Dimensions length="0.4" width="1.2" height="1.1"/></BoundingBox><Properties/></MiscObject>
 		</ScenarioObject>
 		<ScenarioObject name="barrier_c">
-			<MiscObject name="static.prop.streetbarrier" miscObjectCategory="barrier" mass="50"><BoundingBox><Center x="0" y="0" z="0.55"/><Dimensions length="0.4" width="1.2" height="1.1"/></BoundingBox><Properties/></MiscObject>
+			<MiscObject name="static.prop.streetbarrier" miscObjectCategory="obstacle" mass="50"><BoundingBox><Center x="0" y="0" z="0.55"/><Dimensions length="0.4" width="1.2" height="1.1"/></BoundingBox><Properties/></MiscObject>
 		</ScenarioObject>
 	</Entities>
 	<Storyboard>
