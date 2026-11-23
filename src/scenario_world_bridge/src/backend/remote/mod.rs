@@ -1888,24 +1888,23 @@ impl SimBackend for RemoteBackend {
                 })
                 .collect();
             // The time SSv2 is told (below): the server's, else the bridge's own.
-            let sim_time_ns = Some(if step.sim_time_ns != 0 {
+            let sim_time_ns = if step.sim_time_ns != 0 {
                 step.sim_time_ns
             } else {
                 (self.sim_time * 1e9).round() as i64
-            });
+            };
             if self.gap_trace.recording() {
-                self.gap_trace
-                    .emit_staged_at(self.frame, Some(step.frame), sim_time_ns, |id| {
-                        by_id.get(&id).copied()
-                    });
-            }
-            if let Some(t) = self.truth.as_mut() {
-                let msg = t.state.frame(
+                self.gap_trace.emit_staged_at(
                     self.frame,
-                    sim_time_ns.unwrap_or_default(),
-                    step.frame,
+                    Some(step.frame),
+                    Some(sim_time_ns),
                     |id| by_id.get(&id).copied(),
                 );
+            }
+            if let Some(t) = self.truth.as_mut() {
+                let msg = t.state.frame(self.frame, sim_time_ns, step.frame, |id| {
+                    by_id.get(&id).copied()
+                });
                 t.publish_frame(msg);
             }
         }
