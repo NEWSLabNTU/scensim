@@ -48,7 +48,7 @@ ACCEPTANCE_DRAWS = 100_000
 Z95 = 1.959963984540054
 STATE = "state.json"
 SPEC_KEYS = {"search", "id", "scenario", "model", "variables", "n", "seed", "threshold", "knobs",
-             "acceptance_draws"}
+             "acceptance_draws", "map"}
 
 
 class SearchError(SpecError):
@@ -96,12 +96,25 @@ def read_spec(path):
             "model_as_written": doc.get("model"),
             "variables": list(v), "n": doc["n"], "seed": doc["seed"], "threshold": float(th),
             "knobs": knobs, "acceptance_draws": m,
+            # the map whose anchors the scenario binds (its anchors.resolved.json, checked
+            # against the map's digest), as `scensim run` reads them for a project's map
+            "map": (base / doc["map"]).resolve() if doc.get("map") else None,
             "sha256": hashlib.sha256(data).hexdigest(), "path": path.resolve()}
 
 
 def _sampler(spec, proposal=None):
+    anchors = None
+    if spec["map"] is not None:
+        from . import anchors as A
+        f = spec["map"] / A.RESOLVED
+        if not f.is_file():
+            raise SearchError(f"{spec['map']}: no {A.RESOLVED} (the map's resolved anchors)")
+        try:
+            anchors = A.merge(None, A.load_resolved(f, map_dir=spec["map"]))
+        except A.AnchorError as e:
+            raise SearchError(str(e)) from None
     s = Sampler.from_file(spec["scenario"], model=spec["model"], proposal=proposal,
-                          knobs=spec["knobs"] or None)
+                          knobs=spec["knobs"] or None, anchors=anchors)
     if spec["model_as_written"]:
         # the base's id is the model's path as the spec writes it, not where this host keeps
         # it: the id is part of the record's identity

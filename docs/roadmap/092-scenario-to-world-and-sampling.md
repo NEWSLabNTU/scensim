@@ -822,9 +822,13 @@ of the ego's behaviour.
 `cs1_town01_k11c.xosc`: the category and the fixed cell (illumination day, surface dry, occluder
 van), nothing else changed, so a failure found is replayable on seats in the same project (K3).
 The examples sibling (`cs1_walker_gap_acceptance_k11c.xosc`) names `maps/town_street`, which no
-world provides; it stays as the description's example. The world: the map export of the
+world provides: it is an example for the description, not runnable, and stays as one. The world: the map export of the
 project's Town01 (`scensim.lock`, carla-town-autoware-maps 19d52699), the one K10's recheck used
-(map_sha256 ee291b6e), and its `anchors.resolved.json` for the sampler.
+(map_sha256 ee291b6e), and its `anchors.resolved.json` for the sampler: the search spec's new
+`map:` key (the map whose resolved anchors the scenario binds, checked against its digest).
+Fetched with `scensim assets fetch` into the project; `scensim assets check --hash` passed
+against `scensim.lock` (anchors.resolved.json 428462cc, lanelet2_map.osm a85836f5), and the
+export's map_sha256 is the fetched map's.
 
 **The runner: `scensim_batch/scripts/search_run.py`, interim.** One generation a call: a
 generation's records, compiled, run in one BatchRun of N slots (the point mass, `aeb_ttc`) to

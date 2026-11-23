@@ -223,6 +223,15 @@ class Refusals(unittest.TestCase):
                      "  - {name: gap, normal: {mean: \"speed\", sd: 1}}\n",
                      "[gap]", "gap: its normal reads other values")
 
+    def test_a_map_without_resolved_anchors(self):
+        d = Dir()
+        d.write("m.yaml", TAIL_MODEL)
+        (d.path / "map").mkdir()
+        d.write("spec.yaml", spec(1, n=10, extra="map: map\n"))
+        with self.assertRaisesRegex(S.SearchError, "no anchors.resolved.json"):
+            S.init(d.path / "spec.yaml", d.path / "r")
+        d.close()
+
     def test_a_poisson(self):
         self.refused("  - {name: speed, normal: {mean: 0, sd: 1}}\n"
                      "  - {name: gap, normal: {mean: 0, sd: 1}}\n"
