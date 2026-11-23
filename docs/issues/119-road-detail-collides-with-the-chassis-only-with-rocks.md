@@ -1,6 +1,6 @@
 # 119: the road detail collides with the chassis and skid plate only when the corridor has rocks
 
-**Status:** fixed on siw `086-c6b` (5940bc2), not landed; the plan was approved by 133. **Severity:**
+**Status:** fixed, landed as siw 3fa5690 (on the branch 5940bc2); the plan was approved by 133. **Severity:**
 medium: whether a car's underbody meets a road's cleats, potholes, ruts and lips depends on
 whether the same road also has rocks. **Found:** 2026-11-23, scensim 118, writing 086 C6b's
 spec.

@@ -1,6 +1,6 @@
 # 120: on a section_in_base corridor, the detail's tiles, render mesh and rock rests leave out the section
 
-**Status:** fixed on siw `086-c6b` (5940bc2, with tests), not landed; the plan was approved by 133. **Severity:**
+**Status:** fixed, landed as siw 3fa5690 (on the branch 5940bc2, with tests); the plan was approved by 133. **Severity:**
 medium: on such a corridor the render mesh hovers, the collision tiles stand and the rocks rest
 2-7 cm above the true road. **Found:** 2026-11-23, scensim 118, while checking issue 119.
 
