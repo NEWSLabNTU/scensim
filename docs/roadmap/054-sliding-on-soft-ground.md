@@ -812,6 +812,51 @@ Predicted, with the reasoning:
   friction aib writes, it is now 0.237 / 1.154 = 0.205; if the soil layer's force bypasses the
   PhysX cap, it stays 0.237. The run says which; its peak slip angle is predicted either way.
 
+### T1's peaks after issue 108: the result (2026-11-23)
+
+Run as predicted above, plus a control the prediction did not plan: the same sweeps on the
+same tree with the pre-fix pair checked out (siw `41a0102`, aib `3cd2b7d`), since 4b's
+numbers come from older code. Both on GPU1, `spikes/manoeuvres.py` with
+`MANOEUVRES=sweep_lat,sweep_long PADS=dry,wet,mud`; frames and summaries on the NAS,
+`~/nas/home/aeon/issue108/t1peaks-2026-11-23/` (`pre/`, `post/`, the script and the
+comparison). Each axle's peak force over load, and the slip where it was:
+
+| case | axle | pre-fix | post-fix | pre / post |
+|---|---|---|---|---|
+| dry sideways | front | 1.242 at 13.2 deg | 1.076 at 11.2 deg | 1.154 |
+| dry sideways | rear | 0.888 at 5.2 deg | 0.799 at 5.2 deg | 1.111 |
+| wet sideways | front | 0.926 at 12.3 deg | 0.796 at 10.2 deg | 1.163 |
+| wet sideways | rear | 0.704 at 5.8 deg | 0.632 at 5.5 deg | 1.114 |
+| mud sideways | front | 0.322 at 24.2 deg | 0.277 at 18.9 deg | 1.162 |
+| mud sideways | rear | 0.277 at 11.3 deg | 0.236 at 11.2 deg | 1.174 |
+| dry lengthways | front | 1.061 at 0.30 | 0.932 at 0.26 | 1.138 |
+| dry lengthways | rear | 1.257 at 0.20 | 1.078 at 0.22 | 1.166 |
+| wet lengthways | front | 0.796 at 0.40 | 0.704 at 0.24 | 1.131 |
+| wet lengthways | rear | 0.910 at 0.21 | 0.788 at 0.25 | 1.155 |
+| mud lengthways | front | 0.293 at 0.47 | 0.254 at 0.50 | 1.154 |
+| mud lengthways | rear | 0.309 at 0.86 | 0.275 at 0.86 | 1.124 |
+
+Against the prediction:
+- **The force level: as predicted, on every pad.** Pre over post is 1.11 to 1.17, about
+  FILTER_GRIP. Dry front sideways 1.076 is just outside the predicted 1.0 +- 0.07.
+- **Mud goes through the PhysX cap too:** its forces fell by the same factor, the second of
+  the two cases left open. 4b's 0.237 does not reproduce on today's code either way (0.277
+  front, 0.236 rear after the fix).
+- **The peak slips: not as predicted, and this measure cannot settle it.** On today's code
+  the pre-fix control does not reproduce 4b's dry 8.8 deg (13.2 deg front), and the
+  sideways sweeps turn the car 230 to 320 deg. The summary takes the largest force over
+  load anywhere in that motion, so its slip is not a point on a steady tire curve. What it
+  shows: dry and wet front peaks came earlier by about the factor (tan 13.2 / tan 11.2 =
+  1.18), as the rig's peaks should. Mud's rear and both mud lengthways peaks stayed put, as
+  a class's own peak should. Mud's front came earlier (24.2 to 18.9 deg), which was not
+  predicted.
+- **Past the peak:** dry front keeps 0.59 of its peak at 29 deg (0.55 pre-fix), well
+  below the predicted 0.80 to 0.88, on the same measure.
+
+Open: whether each class's peak lands where the class says needs a steady measure. That
+means 4b's binned curve, or a sweep that holds the car's path, not this summary's maximum.
+The force level, the part issue 108 changed, is confirmed.
+
 ## Open questions
 
 - Whether T2 later needs our own tire on soil (option A): PhysX's wheel with near-zero
