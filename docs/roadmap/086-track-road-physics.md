@@ -660,6 +660,32 @@ course is synthetic, not a measured road, and its guardrails stand at the centre
   them only beside the road. The commit's message lost "`photo: forest`" to the shell (it was
   already pushed to the branch; no force-push).
 
+#### C5's exit pairing (2026-11-23, 118, GPU0; in progress)
+
+A = scensim main 8965a06a, the last main before C5a's pin; B = main f98f1cd1, after C5d. Both
+full builds on 118 (A on the root disk, `/var/tmp/aeon/pair-a`: `/mnt/renegade` was 99 % full),
+run one after the other on GPU0. Below C5, A and B also differ in aib (401bd27 to 3cd2b7d),
+sim_vehicle_ecu (ef6bfd8 to 99505b0) and sim_vehicle_spec (21bf3dc to 9ceb8cb).
+
+- **aib's slope matrix** (`aib.steptest`, every test): it builds the car on a flat ground plane
+  with gravity tilted and never loads the world server, so it cannot see C5's changes; the
+  pairing's real C5 check is haruna_down. All 17 tests both have are identical, A against B
+  (B adds `regen_30`).
+- **haruna_down** on the published Haruna (dataset tag b12857ee, issue 072's 140 tiles), with
+  Autoware's Model 3: none of C5's code acts on this map (no `road_detail.yaml` in its map
+  directory, its maps the dataset's), so a difference here comes from below C5.
+
+  | run | main | scenario | NVTL p05 | pose error p95 | max |
+  |---|---|---|---|---|---|
+  | B, 2026-11-23T12-23-52 | f98f1cd1 | passed, 383.5 s, 0 contacts | 3.12 | 0.178 m | 0.2025 m |
+  | A, 2026-11-23T12-31-00 | 8965a06a | passed, 385.5 s, 0 contacts | 3.12 | 0.115 m | 0.155 m |
+
+  **The rule for the repeats (133, written before B2 and A2 finished):** if both repeat pairs
+  keep a p95 gap of about 0.05 m or more, B above A in each, the shift is real, and the
+  below-C5 pins are bisected as its own issue (its number asked of 133 first); otherwise it is
+  run-to-run spread. Either way: Haruna's p95 has little margin to the 0.2 m rule (B's maximum
+  0.2025 m, C5d's rebuilt-map run 0.183 m p95).
+
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
 and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6. 069 E1 and E2 (Track B, unassigned) can start once
