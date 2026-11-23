@@ -738,7 +738,8 @@ A/B comparison in one testbench workspace per side, each run refused unless its 
 and `result.json` name that side (C5's lesson). Four steps, each with its own spec, written
 into its section before its runs, and its rule set before them:
 
-- **C6a. The fixtures on a record course, and R1's checks.** R0's nine lanes (5, 10, 15 cm
+- **C6a. The fixtures on a record course, and R1's checks.** Failed 2026-11-23 (below);
+  C6a2 tests the causes. R0's nine lanes (5, 10, 15 cm
   cleats, the 8 cm pothole, 30 m of washboard, the kicker, the 20 cm boulder, the loose 10 kg
   rock) as a fixture course the builder makes (C5b's `fixture:` path), the lanes the road
   layer's features on its record, driven by `road_fixtures` through the world server's road
@@ -848,6 +849,71 @@ table, the reference's numbers per lane, the runs) is written next, before its f
   - *The plant*: each run names the aib it used (its commit, from the workspace's
     `src/autoware_isaac_bridge`), since issue 108's grip fix lands meanwhile; loads hardly
     depend on friction.
+
+#### C6a's result: failed (2026-11-23, 118)
+
+Run as specified (siw `086-c6a`: 72082f5, 6596f9a, 02ced99; aib 23ef5fb, before issue 108's
+grip fix; GPU0 shared with another job; logs on the NAS, "2026-11-23 086 C6a fixtures on a
+record course (118)"). Two departures from the spec: the 20 m/s cases start 95 m before
+their fixture, since 60 m cannot reach 20 m/s at the speed hold's 3 m/s^2 before the start
+check; and the first raycast run refused two cases at that check (10.10 m/s, the hold
+overshooting), so the hold was fixed (a ramped target) and both queries run again, every
+start then within it. The check itself is as specified. Front-left wheel, reference, then
+raycast / sweep:
+
+| case | peak load (kN) | body rise (cm) | first rise (m) | samples over 2x static |
+|---|---|---|---|---|
+| cleat_05, 10 m/s | 13.3: 11.2 / 10.3 | 2.6: **1.2 / 1.2** | -0.18: -0.30 / -0.26 | 1 / 1 |
+| cleat_10, 10 m/s | 20.2: 16.2 / 16.9 | 7.8: **5.3 / 4.9** | -0.24: -0.34 / -0.39 | 2 / 1 |
+| cleat_10, 20 m/s | 24.0: 26.3 / 27.2 | 5.1: 5.6 / 6.0 | -0.24: -0.35 / -0.55 | 1 / 1 |
+| cleat_15, 10 m/s | 26.6: 32.1 / 32.0 | 20.2: 21.6 / 20.3 | -0.28: -0.45 / -0.43 | 3 / 3 |
+
+- The pothole: the wheel unloads to 0, the far-edge peak 10.3 / 10.3 kN (10.1) 33 ms later.
+- Washboard at 10 m/s: 1.18-7.90 / 1.14-7.83 kN (1.16-7.36). At 20 m/s: **2.64** / **2.72**
+  to 6.23 / 6.21 kN (1.43-8.24): the minimum fails.
+- cleat_10 at 20 m/s from five offsets: peaks 23.6-28.0 / 17.2-28.1 kN, each in one or two
+  samples; no miss, no throw.
+- Landings: 36 / 33, spreads 15-38 / 15-42 ms, **six outside 10-30 ms** under each query,
+  nearly all at 31-35 ms.
+- The cost line (reported): frame p50/p95 7.3/10.3, 13.6/153.9 (a stall), 22.3/29.2 ms with
+  1, 2, 4 cars under raycast; 7.4/9.6, 12.8/17.2, 21.9/27.3 ms under sweep; our contact
+  1.4-2.4, 2.8-4.8 (raycast's two: 3.2/38.5), 5.4-8.0 ms.
+
+**C6a failed**: body rise on the 5 and 10 cm cleats at 10 m/s, washboard's minimum at
+20 m/s, and the landing spread. The rule is not amended after the result. Both queries put
+the load ahead of the hub on every cleat and differ little: 118's prediction held, and 133's
+(a raycast wheel cannot feel a cleat ahead of its hub) did not, since the cleat's load is our
+contact's footprint whichever query PhysX runs. The causes are hypotheses, which C6a2 tests:
+the 60 Hz rate (a load logged as each step's mean averages out washboard's 28.6 Hz troughs at
+20 m/s, a 10 ms cleat falls into one or two steps, and a landing's spread is read to a step,
+16.7 ms), and PhysX's corner lacking the reference's 42 kg unsprung mass (the body rise).
+
+#### C6a2: testing C6a's causes (spec written 2026-11-23, before any run; for 133's approval)
+
+- **The plant and the code**: aib after issue 108 (ff5e72b, the corrected grip), siw `086-c6a`
+  rebased onto cb4d749 as `086-c6a2`; each run names both.
+- **The rate**: C6a's 12 cases under both wheel queries at a physics rate of 60, 120 and
+  240 Hz (`physics_dt` 1/60, 1/120, 1/240 s; 3, 6, 12 steps a 50 ms frame). aib's
+  `physx_substeps` goes 8, 4, 2 so the vehicle's own integration stays at 480 Hz: only our
+  contact's rate (once a PhysX step, its force held for the step) and the logging change.
+  The tyre load is logged at every PhysX step, the finest our contact has.
+- **The hypotheses, each judged on its own** (C6a's 30 % rule unchanged, its checks
+  reported at each rate, C6a's verdict unchanged):
+  - *H1, washboard's minimum is the rate*: washboard at 20 m/s's minimum falls with rate and
+    is within 30 % of the reference's (at most 1.86 kN) at 240 Hz.
+  - *H2, the offsets' spread is the rate*: cleat_10 at 20 m/s's five peaks, their range over
+    their mean, at 240 Hz under half of 60 Hz's.
+  - *H3, the landings are read to a step*: the landings at 31-35 ms, as a share of all, at
+    240 Hz under half of 60 Hz's.
+  - *H4, the body rise is the missing unsprung mass*: cleat_05's and cleat_10's at 10 m/s stay
+    more than 30 % under the reference's at every rate, moving by less than 20 % of their
+    60 Hz value between 60 and 240 Hz. If it holds, the shortfall goes to C6c; if the body
+    rise reaches the band with rate, the cause was the rate.
+  - 118's prediction: H1, H2, H3 and H4 hold.
+- **The cost line again**: `fixture_cost` with 1, 2 and 4 cars under both queries at 60 Hz,
+  on GPU0 with nothing else on it if the other session's job allows (`nvidia-smi` before each
+  run, in the log), else as it is and said so; and 1 car at 120 and 240 Hz. Reported, not
+  judged.
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
 C6 follows C5 (rocks and wheel hop on the record's road). C7 can start after C2 on 0.9.16,
