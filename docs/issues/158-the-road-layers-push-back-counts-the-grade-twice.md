@@ -66,3 +66,27 @@ judged or reported against a fixed bar or a reference.
   the layer's model at all; that is the plane fit's approximation, not 158's.) Today's code
   fails each case by the load times the plane's slope, 260 to 475 N a wheel on the grades.
 - Then issue 157's P2 probe, and the results above rerun or annotated, named for 133.
+
+## F1, written and tested offline (2026-11-25; siw local branch `issue-158`, 31adacc, not pushed)
+
+- **The fix.** `TireContact.step` takes out the base's slope as the cams read it
+  (`TireContact.base_slope`: the base's height at the first and last cams' stations, rounded to
+  the DU grid as `envelope` rounds them, over the cams' spacing), then gives `dfx` from the rest.
+  A first form, the base's slope from two points 5 cm either side of the contact, left 4.7 to
+  5.3 N a wheel on 6 %: the cams' stations are rounded to 1 cm, so their slope reads a plane
+  about 2 % under its grade (-0.0589 on -0.06). Taking the base at the cams' own stations
+  cancels a plane exactly. On a level road the base's slope is 0 and `dfx` is unchanged bit
+  for bit, so the level fixture checks (C6a, C6b, C6c) cannot move.
+- **The tests.** On today's code the bare corridor failed, 260 to 291 N a wheel on 6 % (118's
+  prediction: the load times the grade, held). With F1:
+  - the bare corridor at 0, 6, 10 and -6 %, and on a 100 m crest and sag at 0 and 6 %: under
+    1 N a wheel. The crest and sag prediction (within 1 N, by construction) held;
+  - *the water bar, amended before any Isaac run:* the test as planned (the bar's push over the
+    load at the same hub place, level against 6 %, within 1 %) cannot hold, and not because of
+    158: a disc on a grade meets the road r sin(grade) uphill of below its hub (2.2 cm here), so
+    at the same hub place the two read different points of the bar's flank (0.129 against
+    0.076 at 9.95 m). The test now compares the flank's largest slope (within 1 %, held) and its
+    place, shifted by r sin(grade) (within 1 cm, held).
+  - the rest of siw's suite as before F1 (the same environment's errors, none new).
+- **Next:** issue 157's P2 probe on F1 (Isaac, GPU0, non-timing), then the landing with its
+  results, after 133's word.
