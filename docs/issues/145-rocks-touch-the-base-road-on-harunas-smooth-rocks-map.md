@@ -287,3 +287,8 @@ base contacts and end heights, and omni.physx's "only in one collision group" wa
   118. D: none meet it, with 1 warning at most. The fix takes D's or C's order, whichever holds
   with no warnings: D, if both. D's filter is the rock's own and needs no group timing. The
   `rocks` membership stays, for `groundQuery`.
+- **Amended before the runs (118).** D cannot be the fix alone. `rocks` filters `groundQuery` as
+  well as `roadBase`, and a pool prim taken in before it joins `rocks` lacks both filters, so
+  the wheels' ground query may also take a rock for ground (not yet measured). A pair filter
+  for the base mends one of the two. The fix needs the membership in before intake, B's or C's
+  order. D stays in the runs, as a measure of the pair filter alone.
