@@ -670,7 +670,12 @@ message RoadConditionReply {
 
 No `PROTOCOL_VERSION` bump, by the file's own rule: only a server declaring `ROAD_ZONES` sends
 the reply, the bridge reads it only from one, and a capability an older peer does not know is
-one it never declares. The bridge records the reply in the gap trace (a `road` line per
+one it never declares. 118's C7 plan (086, cba0fbfe, with 133) takes it as written: CARLA reads
+each named zone's `mu` back from its trigger boxes (per zone, not per wheel), leaves
+`water_depth` unset and refuses a zone water depth by name (no fords on CARLA), and may have to
+refuse a zone one side of a car cannot sit in alone (split-mu), if its P0 finds that CARLA's
+friction trigger acts on the whole car: a CARLA server-side refusal, which K9f-a's check then
+reports by C7's words; the messages stay as they are. The bridge records the reply in the gap trace (a `road` line per
 `SetRoadCondition`), and `scensim run` judges each knob-set zone against it: `result.json`
 `knobs.<knob>.zones.<id>` with the fields sent and read back, a mismatch an error run.
 
