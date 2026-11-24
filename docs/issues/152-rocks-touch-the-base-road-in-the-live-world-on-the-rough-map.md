@@ -222,3 +222,30 @@ found (133's check (b)), so the probe cannot read it.
   mesh, with and without a 768-rock pool, counting the warnings and the contacts).
 - **133's prediction, if the probe finds a second group:** the fix is to exclude
   `/World/RoadRocks` from it. In a second fix run the env contacts go to 0 and the warnings to 2.
+
+### The second probe's result (2026-11-24, 21:35 to 21:43)
+
+Probe v2 on the fix (2fcbdd1), the same package and drive. The run passed haruna_down.
+
+- Every collision group on the stage is under `/World/vehicleCollisionGroups`: `chassis`,
+  `groundQuery`, `roadBase`, `rocks`, `rockTiles` and `roadDetail`. None has includeRoot, a merge
+  group, invert or excludes. All expand by expandPrims. None includes an ancestor of
+  `/World/RoadRocks`: `chassis` holds the ego's body and skid plate, `roadBase` the three env
+  prims, `rocks` the 768 pool prims, and the rest are empty at that step.
+- UsdPhysics' collision group table: `rocks` against `roadBase` do not collide; `rocks` against
+  `roadDetail` do.
+- A pool rock (`r1`) is in `rocks` alone among all of them. So is each rock met.
+- 13 contacts, every one with `/World/env/Road` or `/World/env/Terrain`, at the same placed poses
+  as before. r195, r2 and r404 came this time. The warnings: 770.
+
+**118's prediction: held**, except the contacts: 13 against about 10, within the runs' spread so
+far (10 to 13). **133's prediction (a second group): not found.** In USD there is no second group
+for PhysX to pick, and the table says the pair is filtered, yet PhysX reports the pair's contacts.
+
+What the runs leave. In this world, a pool rock in `rocks` that rests where the base is within
+about 1 cm of the detail meets the base when it wakes, although every USD view filters the pair.
+It also comes with one "only in one collision group" warning per pool rock at intake. Issue 145's
+stage test (64 pool prims, a tile at z 0, the base 5 cm above it, the fix's order) had 0 of 64
+meeting the base. The live world differs from it in the base's height (flush, not 5 cm above),
+the pool's size (768) and the base's kind (the world's large env meshes, not a box). The next
+step is to put those differences into the stage test one at a time (prediction first).
