@@ -81,7 +81,8 @@ judged or reported against a fixed bar or a reference.
   prediction: the load times the grade, held). With F1:
   - the bare corridor at 0, 6, 10 and -6 %, and on a 100 m crest and sag at 0 and 6 %: under
     1 N a wheel. The crest and sag prediction (within 1 N, by construction) held;
-  - *the water bar, amended before any Isaac run:* the test as planned (the bar's push over the
+  - *the water bar, amended after the offline test result, before any Isaac run* (the reason:
+    the geometry, r sin(grade)): the test as planned (the bar's push over the
     load at the same hub place, level against 6 %, within 1 %) cannot hold, and not because of
     158: a disc on a grade meets the road r sin(grade) uphill of below its hub (2.2 cm here), so
     at the same hub place the two read different points of the bar's flank (0.129 against
