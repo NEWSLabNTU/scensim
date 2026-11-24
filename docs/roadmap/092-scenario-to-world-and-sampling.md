@@ -206,8 +206,36 @@ python (9.5 GB) and CARLA 0.9.15 (on RPC 41000, 9.0 GB), and my CARLA took 2.0 G
 The node's parameters work on Jazzy: the server listened on 5691, which only the ROS parameter
 `port` names (the config file has no world port, and the default is 5591), and connected to
 CARLA on 2100. Afterwards my CARLA was stopped by its process group: no member of either group
-left, and ports 2100 to 2102, 8100, 5691 and 5655 to 5657 free. The Humble launch respawned its
-world server once under the stop's SIGINT, and the SIGTERM after it ended both.
+left, and ports 2100 to 2102, 8100, 5691 and 5655 to 5657 free.
+
+**The respawn under the stop: my harness, not launch.** The Humble control ran under plain
+`ros2 launch` (ros-humble-launch 1.0.14), started by the run script as `setsid env -i ... bash
+-c "...; exec ros2 launch scensim_carla_world scensim_carla_world.launch.xml ..." &`, where the
+node is `respawn="true" respawn_delay="2.0"`. The stop sent SIGINT to the process group
+(`kill -INT -<pgid>`), then SIGTERM 5 s later. The log:
+
+```
+16:43:13.304  scensim_carla_world: signal received, stopping
+16:43:13.404  scensim_carla_world: Stopping: undoing what this server did to CARLA
+[INFO] [scensim_carla_world-1]: process has finished cleanly [pid 2660099]
+[INFO] [scensim_carla_world-1]: process started with pid [2694003]
+16:43:15.443  scensim_carla_world: CARLA world server on tcp://127.0.0.1:5691 (pid 2694003) ...
+```
+
+launch's own `user interrupted with ctrl-c (SIGINT)` is not in the log: launch never saw the
+SIGINT. A non-interactive bash starts a command run with `&` with SIGINT and SIGQUIT ignored,
+and an ignored signal stays ignored across exec (the child's `SigIgn` is `0x6`; a Python started
+so has `signal.getsignal(SIGINT) == SIG_IGN`). launch learns of SIGINT only through Python's
+handler (`AsyncSafeSignalManager`, on `set_wakeup_fd`), so it never ran its shutdown. The
+world server sets its own handler, so it stopped, and launch, not shutting down, respawned it
+after its 2 s delay; the SIGTERM then ended launch and the new server. So it is not launch's
+respawn racing its own shutdown. The product's stops are not of this shape: `stack_up.bash`
+stops with SIGTERM, and `scensim`'s stack starts its trees with `subprocess.Popen` from a
+Python whose SIGINT handler is set, so they start with SIGINT at its default. The recipes
+`two-av` and `demo-tour` stop their screencast's `setsid ffmpeg ... &` with SIGINT; ffmpeg sets
+its own handler, as the world server does, so it is unaffected. A harness that means to SIGINT
+a `ros2 launch` it started with `&` from a script has to start it in the foreground of its own
+session, or send SIGTERM.
 
 **A host hazard found on the way.** On this Humble host a pip numpy 2.2.6 in `~/.local`
 shadows apt's numpy 1.21, and apt's torch then fails at import (`_ARRAY_API not found`); a
@@ -217,7 +245,11 @@ beside the setuptools rule.
 **Lapses.** Containers ran with `--rm` after `just setup` had installed apt packages in
 them, so the next step started without them; one kept container, committed as an image, fixed
 it. Issue 146's first gate ran beside my own Jazzy image build and was stopped by its memory
-guard. And the load reading above was reported before it was tested against a quiet run.
+guard. And the load reading above was reported before it was tested against a quiet run. Item 3's
+first waiter refused to start the run for "another gate" when none was running: its test was
+`ps ... | grep ... | cut ... && refuse`, and a pipe's status is its last command's, `cut`'s, so
+it held whatever `grep` found; the run was started by hand after the same check read empty.
+A test of a pipe's match uses `set -o pipefail` or tests the matched output itself.
 
 ## K9's CS3: the pilot's map variants (2026-11-24, 243; reviewed by 133)
 
