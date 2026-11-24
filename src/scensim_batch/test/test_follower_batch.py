@@ -36,7 +36,7 @@ class Follower(unittest.TestCase):
         from scensim_batch import compile as C, core
         c = C.compile_scenario(CASE, recs, StraightWorld())
         comp = ecu_batch.load_batch(Accel, {}, {}, [7] * len(recs))
-        return c, core.BatchRun(c, StraightWorld(), PointMass(c.n), comp,
+        return c, core.BatchRun(c, StraightWorld(), PointMass(c.n), comp, model_dt=DT,
                                 anchors={"straight": LANE} if anchors is None else anchors)
 
     def test_it_compiles_as_a_model_with_its_lane(self):
@@ -50,6 +50,31 @@ class Follower(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "lane 'straight': no such anchor"):
             self.run_of(records(1), anchors={"other": LANE})
 
+    def test_its_first_command_is_pending_after_reset_and_moves_it_at_step_1(self):
+        """Issue 165: the model decides on the reset observation, so its first command is
+        pending and its event recorded before any step; the entity stays put at reset and
+        first moves at step 1, as on seats and as SSv2's own NPCs first move."""
+        c, run = self.run_of(records(1))
+        f = c.index("follower")
+        obs = run.reset()
+        j = run.models.idx.index(f)
+        self.assertIsNotNone(run.models.pending[j])
+        self.assertGreater(float(run.models.pending[j]["speed"][0]), 0.0)
+        self.assertEqual(int(obs["model_events"]["follower"][0]), 1)     # follow, at step 0
+        x0 = float(obs["x"][0, f])
+        self.assertEqual(x0, float(c.x[0, f]))
+        obs = run.step(cmds(c.n, 0.0), DT)
+        self.assertNotEqual(float(obs["x"][0, f]), x0)
+
+    def test_a_model_without_a_step_to_decide_over_is_refused_at_reset(self):
+        from scensim_batch import compile as C, core
+        c = C.compile_scenario(CASE, records(1), StraightWorld())
+        comp = ecu_batch.load_batch(Accel, {}, {}, [7])
+        run = core.BatchRun(c, StraightWorld(), PointMass(c.n), comp,
+                            anchors={"straight": LANE})
+        with self.assertRaisesRegex(ValueError, "model_dt"):
+            run.reset()
+
     def test_it_follows_the_lead_to_rest_and_stops_behind_it(self):
         """The follower starts at rest 25.3 m (rear to its front) behind a lead at 12 m/s,
         catches up under IDM (a 1.5 m/s^2, toward the lane's 15 m/s), and stops behind the
@@ -57,8 +82,9 @@ class Follower(unittest.TestCase):
         follows."""
         c, run = self.run_of(records(2, time_gap=0.8) + records(2, time_gap=2.4))
         n, f, l = c.n, c.index("follower"), c.index("lead")
-        run.reset()
-        gaps, evs = [], []
+        obs = run.reset()
+        gaps = []
+        evs = [obs["model_events"]["follower"].clone()]   # its first decision, at reset (165)
         for k in range(int(25.0 / DT)):
             obs = run.step(cmds(n, 0.0), DT)
             gaps.append((obs["x"][:, l] - obs["x"][:, f] - 4.7).clone())

@@ -38,7 +38,7 @@ class Playback(unittest.TestCase):
     def batch(self, backend, comp):
         from scensim_batch import compile as C, core
         c = C.compile_scenario(CASE, REC, StraightWorld())
-        return c, core.BatchRun(c, StraightWorld(), backend, comp)
+        return c, core.BatchRun(c, StraightWorld(), backend, comp, model_dt=DT)
 
     def record(self, c, run, command, steps):
         from scensim_batch import agreement as A

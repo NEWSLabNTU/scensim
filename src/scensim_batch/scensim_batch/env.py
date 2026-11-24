@@ -266,7 +266,7 @@ class ScensimEnv(DirectRLEnv):
                                  allow_loop=cfg.allow_loop or cfg.bypass_component,
                                  start_frames=cfg.start_frames,
                                  step_time=self.step_dt if cfg.start_frames else None,
-                                 device=dev)
+                                 model_dt=self.step_dt, device=dev)
         self.commands = None
         self.stepped = False
         self.obs = None

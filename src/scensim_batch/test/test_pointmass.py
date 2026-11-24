@@ -60,7 +60,7 @@ class PointMassEgo(unittest.TestCase):
         recs = [{"values": {}, "seeds": {"scenario": 1, "pilots": {"walker": 2}}}]
         c = compile_scenario(CASE, recs, StraightWorld())
         r = core.BatchRun(c, StraightWorld(), P.PointMass(c.n),
-                          ecu_batch.load_batch(P.Accel, {}, {}, [0]))
+                          ecu_batch.load_batch(P.Accel, {}, {}, [0]), model_dt=DT)
         r.reset()
         v0 = float(r.obs["v"][0, r.ego])
         for _ in range(10):

@@ -93,12 +93,15 @@ def request_motion(kind, commands):
 class BatchRun:
     def __init__(self, compiled, world, backend, component, route_length=300.0,
                  points=121, speed_limit=None, allow_loop=False, start_frames=0,
-                 step_time=None, device=None, sync_every=None, anchors=None):
+                 step_time=None, device=None, sync_every=None, anchors=None, model_dt=None):
         """`allow_loop`: accept a LoopBatch component (one Python step per slot), for checking
         a component before it has a batched form; never for a throughput number, and the run
         says so (`self.looped`). `anchors`: the map's resolved anchors ({name: anchor}, K9's
-        anchors.resolved.json), which a car-follower's lane is taken from (092 K13)."""
+        anchors.resolved.json), which a car-follower's lane is taken from (092 K13).
+        `model_dt` (s; default `step_time`): the step a behaviour model decides over at reset
+        (issue 165), needed when the scenario has model entities."""
         self.anchors_resolved = dict(anchors or {})
+        self.model_dt = model_dt if model_dt is not None else step_time
         from sim_vehicle_ecu import batch as ecu_batch
         # `device` (092 K2.2c): the run's tensors live there (the compiled scenario must be
         # compiled there too), and a component on array_api "torch" gets its commands and
@@ -214,7 +217,12 @@ class BatchRun:
         # first step's after_physics makes (092 K2.4: the batch evaluated at 0 too, a step
         # ahead of seats on every element's start)
         prev = self.obs
-        self.obs = self._observe(self.backend.state(), None)
+        st = self.backend.state()
+        self.obs = self._observe(st, None)
+        # the models decide on the reset observation, so their first command moves their
+        # entities at step 1, as on seats (a model's first command answers the first frame of
+        # NPC logic) and as SSv2's own NPCs first move (issue 165)
+        self.models.decide_at_reset(st, self.obs, mask, self.model_dt)
         self.ctx.obs = self.obs
         self.route.reset(mask)
         if self.c.goal_waypoints:
@@ -608,15 +616,51 @@ class Models:
             ax, ay = (vx - self._prev_v[0]) / dt, (vy - self._prev_v[1]) / dt
         self._prev_v = (vx, vy)
         valid = torch.ones(n, dtype=torch.bool, device=vx.device)
-        for j, m in enumerate(self.models):
+        for j in range(len(self.models)):
             self._move(j, dt)
+        self._decide(st["x"], st["y"], vx, vy, ax, ay, valid, dt)
+
+    def _decide(self, ex, ey, vx, vy, ax, ay, valid, dt, mask=None):
+        """The ego-reading models' decisions on the ego's state; a command where `mask` (every
+        slot: None) becomes pending, the others keep theirs."""
+        for j, m in enumerate(self.models):
             if self.follower[j]:
                 continue
-            obs = {"x": self.x[:, j], "y": self.y[:, j], "ego_x": st["x"], "ego_y": st["y"],
+            obs = {"x": self.x[:, j], "y": self.y[:, j], "ego_x": ex, "ego_y": ey,
                    "ego_vx": vx, "ego_vy": vy, "ego_ax": ax, "ego_ay": ay, "valid": valid}
             act, ev = m.step(obs, dt)
-            self.pending[j] = {k: act[k] for k in ("speed", "heading", "accel_limit")}
+            self._pend(j, act, mask)
             self.events[self.run.c.entities[self.idx[j]].name] = ev
+
+    def _pend(self, j, act, mask):
+        new = {k: act[k] for k in ("speed", "heading", "accel_limit")}
+        old = self.pending[j]
+        if mask is not None and old is not None:
+            new = {k: torch.where(mask, new[k], old[k]) for k in new}
+        self.pending[j] = new
+
+    def decide_at_reset(self, st, obs, mask, dt):
+        """Issue 165: every model decides once on the reset observation (`obs`, the ego's
+        state `st`), for the reset slots (`mask`) only, so its first command is pending for
+        step 1 and moves its entity there; nothing moves now. On seats a model's first command
+        answers the first frame of NPC logic (issue 163) and moves the entity a frame later, as
+        SSv2's own NPCs first move."""
+        if not self.idx:
+            return
+        if dt is None:
+            raise ValueError("a scenario with behaviour models needs BatchRun's model_dt (or "
+                             "step_time): the step its models decide over at reset")
+        if "vx_map" in st:
+            vx, vy = st["vx_map"], st["vy_map"]
+        else:
+            vx = st["v"] * torch.cos(st["yaw"])
+            vy = st["v"] * torch.sin(st["yaw"])
+        z = torch.zeros_like(vx)
+        self._prev_v = (vx, vy) if self._prev_v is None else (
+            torch.where(mask, vx, self._prev_v[0]), torch.where(mask, vy, self._prev_v[1]))
+        self._decide(st["x"], st["y"], vx, vy, z, z, mask, dt, mask)
+        self.step_followers(obs, dt, valid=mask, mask=mask)
+        obs["model_events"] = dict(self.events)
 
     def _move(self, j, dt):
         """The previous step's command moves model j's entity first: the lockstep channel's lag
@@ -628,7 +672,7 @@ class Models:
                 p["speed"], p["heading"], p["accel_limit"], dt)
             self.yaw[:, j] = p["heading"]
 
-    def step_followers(self, obs, dt):
+    def step_followers(self, obs, dt, valid=None, mask=None):
         """The car-followers (092 K13), each on its own pose and its leader's in `obs` (every
         entity where this step left it, the models placed), as on seats a follower reads one
         truth frame; their poses and events placed back into `obs`."""
@@ -636,7 +680,8 @@ class Models:
             return
         n = self.run.c.n
         names = [e.name for e in self.run.c.entities]
-        valid = torch.ones(n, dtype=torch.bool, device=obs["x"].device)
+        if valid is None:
+            valid = torch.ones(n, dtype=torch.bool, device=obs["x"].device)
         for j, m in enumerate(self.models):
             if not self.follower[j]:
                 continue
@@ -654,7 +699,7 @@ class Models:
             act, ev = m.step({"x": self.x[:, j], "y": self.y[:, j], "vx": vx, "vy": vy,
                               "leader_x": lx, "leader_y": ly, "leader_vx": lvx,
                               "leader_vy": lvy, "leader_valid": lvalid, "valid": valid}, dt)
-            self.pending[j] = {k: act[k] for k in ("speed", "heading", "accel_limit")}
+            self._pend(j, act, mask)
             self.events[self.run.c.entities[self.idx[j]].name] = ev
         obs["model_events"] = dict(self.events)
 

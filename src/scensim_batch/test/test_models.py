@@ -35,7 +35,7 @@ class Models(unittest.TestCase):
         from scensim_batch import compile as C, core
         c = C.compile_scenario(CASE, recs, StraightWorld())
         comp = ecu_batch.load_batch(Accel, {}, {}, [7] * len(recs))
-        return c, core.BatchRun(c, StraightWorld(), PointMass(c.n), comp)
+        return c, core.BatchRun(c, StraightWorld(), PointMass(c.n), comp, model_dt=DT)
 
     def test_the_walker_compiles_as_a_model_with_its_anchors(self):
         c, run = self.run_of(records(2))
