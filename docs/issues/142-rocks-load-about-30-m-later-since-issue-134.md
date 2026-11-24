@@ -446,3 +446,24 @@ before it existed, no local makes, 9 base contacts (as on main).
 So at real time, with steps (i) to (v), the worker is no longer what decides when a rock loads on
 Haruna: every in-path rock but the one at the drive's start loaded when its tile came within the
 32 m reach. The 35 m bar asks for more than the reach can give for every rock.
+
+## The bar, amended after the results (133)
+
+**Amended after the results:** a rock loads when its tile comes within ROCK_REACH (32 m) of the
+car, so a rock near its tile's near edge loads about 32 m ahead whatever the code: the bar of
+35 m for every in-path rock asks more than the reach can give. The original bar (at least 35 m
+at haruna_down's speeds) is recorded as **failed** in each run above. The amended bar: at real
+time, every in-path rock loads when its tile first comes within ROCK_REACH (the tile worker never
+the limit), and no tile is made on the caller's thread. The paced Haruna run meets it but for
+its first rock, at `fixture_cost`'s start, which made its car without `placed`; siw 77075e3 adds
+`placed` there (see below).
+
+## The like-for-like base contacts (133's condition for landing, before the runs)
+
+Issue 145 takes the base contacts. Before 142 lands: at the same speed and pace, does 142 raise
+them? At 10 m/s, about real time: main 56b8e39 9 (21.9 frames/s), 142 9 (20.0 frames/s). The
+32 were at 13.9 m/s and 2.8 times real time, with no main run alike. The pair at 13.9 m/s, both
+paced to the wall clock: siw 56b8e39 and siw issue-142 (with `fixture_cost`'s `placed`).
+
+- **118's prediction:** the two within a few of each other (base contacts are not 142's); the
+  32 came with the pace.
