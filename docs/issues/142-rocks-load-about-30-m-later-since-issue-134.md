@@ -66,8 +66,9 @@ the run); the first case's start, s 43 m, is at the run's beginning.
 - **While driving, no in-path rock was missed at this speed**, by a thin margin: the least lead
   was 14.1 m, against a stopping distance of about 14 m at 11.1 m/s. At a higher speed the
   margin would go: by estimate (two or three new tiles every 16 m of travel), the tiles ahead
-  come faster than 2.6 a second from about 15 to 20 m/s, and Haruna's study speeds reach
-  80 km/h. Not measured.
+  come faster than 2.6 a second from about 15 to 20 m/s, and Haruna's course allows 60 km/h
+  (16.7 m/s). Not measured. (Corrected after the results: first written as "Haruna's study
+  speeds reach 80 km/h", a figure from a code comment on R3's test road.)
 - **At a case start the car is placed where its rocks are not loaded yet**: four in-path rocks
   loaded within 0 to 0.33 s of the placing with leads of 0 to 12 m. The car stands there, so it
   can still stop; a car placed at speed (a teleported ego, a scenario's start) would not.
