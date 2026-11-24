@@ -142,6 +142,10 @@ setup:
         pip install --quiet --user huggingface_hub yamale
         pip install --quiet --user --upgrade brotli
     fi
+    # rosdep's database: initialised once per host (`rosdep init`, root) and fetched once per
+    # user (`rosdep update`); a fresh host or account has neither (092 K6)
+    [ -d /etc/ros/rosdep/sources.list.d ] || sudo rosdep init
+    [ -d "$HOME/.ros/rosdep/sources.cache" ] || rosdep update --rosdistro "${ROS_DISTRO:-humble}"
     # python-yamale-pip (SSv2's scenario_test_runner) resolves only from a rosdep source some
     # hosts add (autonomoustuff's), not from rosdistro, so not in the Autoware 2.0.0 image: skipped
     # here and installed with pip.
