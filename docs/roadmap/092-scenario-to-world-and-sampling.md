@@ -355,6 +355,87 @@ OK) adds `Town01_west_street_closed/`; the tag's files match the staged copy and
 Only k9_cs3's lock moves to it: no other testbench takes the variant,
 and every file they take is unchanged, so moving their locks would be churn.
 
+## K9e: the same names on Isaac (plan, 2026-11-25, 243; approved by 133, before any code or run)
+
+**What is unproven.** D2 says a CARLA town and an Isaac stage of one place declare the same
+anchors and knobs, so one scenario runs on both. Every K9 run so far (K9a-d, the profiles, CS3)
+was on CARLA. The anchors file is shared by construction: it sits beside the Lanelet2 map,
+which both targets read. Three things have never been shown on Isaac: SSv2 placing a bound
+entity there; Isaac's world server reading back a knob a binding set; and a pilot-map switch
+on an Isaac stack, where aib's Autoware restarts on the variant with no stage reload.
+
+**Step 1 (offline).** A project, `scenarios/projects/k9_cs3_isaac`: k9_cs3's scenario byte for
+byte, `simulator: isaac`, Town01 and Town01_west_street_closed (v2026.11f) with
+carla-0.9.16-isaac-usd's Town01, the Autoware pilot on aib (scensim's profile, tesla_model3),
+the same `pilot_maps`. Its lock holds the same dataset commits as k9_cs3 and isaac_basic.
+
+*Found in step 1 (2026-11-25):* `testbench check` passed both projects, yet CS3 cannot run
+on Isaac as declared. Its illumination knob's value is `{weather: {sun_altitude_angle: 60}}`,
+and on Isaac `knobs.plan` refuses every weather value by name (Isaac has no weather service);
+the run would end as a `knob_refused` error run after the stack's start. Two findings: the
+check did not hold a value to its simulator, issue 154 (fixed apart, 2f2c7a01); and no static
+knob form was portable, though both world servers apply and read back the scenario
+environment (`SetEnvironment`, `ENVIRONMENT_APPLIED`) that K9's profiles use. 133 chose to make
+one (option A), rather than an Isaac copy of the scenario without the knob (option B), which
+would prove less than K9 claims.
+
+**The portable form (133's conditions).** A static knob value may carry `environment: {field:
+number}`, the fields the profiles set: `sun_elevation`, `sun_azimuth`, `fog_visual_range`,
+`precipitation_intensity` (both targets) and `cloud_cover_oktas` (CARLA only, as for a
+profile). `weather:` stays, CARLA only. One value may not set the same quantity in both forms
+(`environment.sun_elevation` and `weather.sun_altitude_angle`; `sun_azimuth` and
+`sun_azimuth_angle`; `fog_visual_range` and `fog_density` or `fog_distance`;
+`precipitation_intensity` and `precipitation`; `cloud_cover_oktas` and `cloudiness`): refused
+by name, in `testbench check` and in the run. The run sends an `environment:` value as a
+profile held constant from time 0 (one per field, named `<knob>.<field>`), through the
+bridge's `set_knob_profiles`: the same send and read-back path, no bridge or world-server
+change. A field set by the scenario's EnvironmentAction too, or by a profile knob, is two
+writers and refused, as for a profile. `result.json` judges each field: every frame's
+read-back after its send within the field's tolerance (half an okta; otherwise 1e-3 plus 1e-4
+of the value), and none missing; a field off makes the run a `knob_profile` error run.
+scenario-description.md section 3 says which form to use when. k9_cs3 and k9_cs3_isaac both
+declare `illumination: {values: {day: {environment: {sun_elevation: 60}}}, default: day}`.
+
+Step 1's checks, before the runs: `testbench check` passes both projects; a unit test checks
+that the same CS3 spec gets the same bound values on both simulators (barrier_lane 6583, light
+day) and the same knob plan (one constant profile, `illumination.sun_elevation` at 60).
+
+**Step 2a, CARLA under the new form (pm=current only).** k9_cs3 on CARLA 0.9.16 at Epic, seat 0,
+predicted before the run: the same result as attempt 3: Autoware's route 28257, 41654, 6583,
+42451, 32189; the ego enters 6583 and stops before the barriers for good, exitFailure at the
+240 s limit; no contact; `anchors.barrier_lane` 6583 with attempt 3's `anchor_source`; `maps`
+with Town01's lanelet2 digest a85836f5. The read-back is the same quantity, now through
+`ENVIRONMENT_APPLIED`: `knobs.ok` true, `illumination.sun_elevation` read back 60 on every
+frame after its send. Times (entry into 6583, the stop) are recorded, not judged.
+
+**Step 2b, the runs on Isaac.** Isaac Sim 6.2 from NVMe; run when the card has room for Isaac
+and Autoware with 4 GB left for the others' jobs, no CARLA of mine up, one heavy job on the
+host; the others' jobs recorded; timing not judged. pm=current, then pm=works, on one stack.
+Predicted, before any run:
+- no SSv2 error;
+- `result.json` `anchors.barrier_lane` 6583 with the same `anchor_source` as CARLA's (file
+  digest, dataset and commit); `knobs.ok` true, with `illumination.sun_elevation` read back 60
+  from Isaac's `ENVIRONMENT_APPLIED` on every frame after its send; `maps` with the two lanelet2
+  digests as on CARLA (Town01 a85836f5..., the variant a2daf41c...);
+- the barriers' truth positions within 0.05 m in x and y of CARLA's (305.64; -128.21,
+  -129.51, -130.81), compared in the map frame (SSv2's, right-handed): CARLA's numbers are
+  after its world server's Y-flip, as the truth file holds them, and Isaac's need no flip;
+- Autoware's routes the same lanelet lists as on CARLA (lanelet2 on the same map);
+- pm=current: the ego enters 6583 and stops before the barriers until the 240 s limit
+  (exitFailure; on Isaac the barriers are the bounding box's 0.4 x 1.2 x 1.1 m, and lidar
+  clustering sees them); a contact also counts as the stale map's case, a route without 6583
+  does not;
+- pm=works: the route holds no 6583, the ego never enters it and reaches the goal, about
+  490 m (exitSuccess); the switch restarts the pilots alone, with no stage reload.
+
+Named risks: a 490 m Autoware drive on Isaac Town01 has not been run before, and a drive
+failure not of K9's making is the pilot's result, not a binding failure; a stage reload on the
+switch, or aib not restarting on the variant, is a K9 finding, reported before any rerun.
+
+**Step 3, the close-out.** K9's row to done, with the Isaac result; scenario-description.md's
+"the same names on every target" marked built. D2's region-scoped knobs (`applies:`) and
+`zone_layout` are K9f (243, plan only; it says how its CARLA side relates to 086 C7).
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
