@@ -81,3 +81,21 @@ the run); the first case's start, s 43 m, is at the run's beginning.
 So 142 is real and grows with speed. The cause is the worker's time a tile; the cure is to make
 the look's part of it cheap again (or a second worker), and its proof a lead over the in-path
 rocks at Haruna's speeds at least the stopping distance with a margin, written before the run.
+
+## The cause and the fix's bar (before the fix)
+
+The worker's time a tile, split offline on fixture_c6b's record (a tile that touches the road):
+`_uvs` 213 ms, `_make` 27, `_look` 13, rock placement 58. From the probe's worker log: a tile the
+road does not touch took 44 ms before 134 and 424 ms after; one it touches 299 and 316 ms.
+Before 134 `_make` skipped a corridor that cannot reach the tile (the centre test of
+`Detail.touches`); 134's `_uvs` projects every tile's 103 041 points on every corridor, and most
+tiles prefetched ahead do not touch the road.
+
+The bar (133, written before the runs; the first one mixed physics with perception, issue 143):
+
+- **while driving**, every in-path rock's prim and collider exist at least (the prim's creation
+  latency times v) plus 10 m ahead of the car, at up to 60 km/h (Haruna's course limit);
+- **no regression**: at haruna_down's speeds (45 to 50 km/h) the in-path leads are back to at
+  least pre-134's, 35 m or more;
+- **at a case start** (a car placed), every in-path rock within reach exists before the first
+  physics step.
