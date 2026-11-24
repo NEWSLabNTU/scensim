@@ -106,3 +106,18 @@ beside it get no lead, and a tile takes 134 to 823 ms to make here.
     to the baseline's and between the fix's two paces. The unpaced rate stays at least the
     baseline's 49.1. Runs: the fix's pair (real time and unpaced), against today's baseline
     pair, under the same quiet rule, with the load recorded.
+  - **The throughput check (133; before the runs).** Along the baseline's drive (its poses every
+    4 frames, Haruna's rocks map), the corridor tiles entering the 48 m square number 4 per row
+    (median), at most 10, and at most 47 are in it at once, under `max_tiles` 96. A row's work
+    on the one tile worker is read from the baseline's own waits: a frame's end that waited for a
+    row waited 134 to 823 ms, so a row takes at most about 0.8 s here. That is under the 1.6 s of
+    lead one row gives at 10 m/s held to the wall clock, so one row is enough at real time and two
+    rows (64 m) are not needed. Unpaced, the run goes
+    about 2.5 times real time, so one row's lead is about 0.64 s of wall time, under the longest
+    rows. The prediction for the unpaced run is therefore fewer waits than the baseline's 50, not
+    under 5.
+  - The 48 m set includes the beside-road column of issue 144: over the drive the frame end's
+    32 m reach held 163 distinct corridor tiles, and the 48 m square holds them all (169). v1's
+    "touches a corridor" already took the column. v1 missed in time (no lead), not in place.
+  - Built: siw issue-147 26a3573 on 07bf74c (local). Runs: the v2 pair, real time and unpaced,
+    against the baseline pair above (46c09ec, 22:54 and 22:58), under the same quiet rule.
