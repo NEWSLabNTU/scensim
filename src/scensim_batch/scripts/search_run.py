@@ -43,7 +43,11 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
     r = core.BatchRun(c, world, PointMass(c.n), comp, step_time=step_time)
     r.reset()
     pilot = AebTtc(r, names.index(walker))
-    truth = TruthRecorder(r, step_time=step_time, start_unix=0.0)
+    # outcome.json names the scenario as the records do (the search spec's written path), so a
+    # run's files do not depend on where this checkout is
+    paths = {(x.get("scenario") or {}).get("path") for x in records}
+    label = paths.pop() if len(paths) == 1 and None not in paths else str(scenario)
+    truth = TruthRecorder(r, step_time=step_time, start_unix=0.0, scenario=label)
     truth.begin(r.obs)
     k = 0
     for k in range(1, steps + 1):

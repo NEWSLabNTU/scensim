@@ -102,11 +102,15 @@ class Runner(unittest.TestCase):
         sr = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(sr)
         recs = [{"id": f"{i:064x}", "values": {"ttc_entry": t},
+                 "scenario": {"path": "cases/cs1.xosc", "sha256": "0" * 64},
                  "seeds": {"scenario": 1 + i, "pilots": {"walker": 2 + i}}}
                 for i, t in enumerate((0.5, 3.0, 6.0))]
         with tempfile.TemporaryDirectory() as d:
             s = sr.run(recs, CASE, StraightWorld(), Path(d), steps=240, step_time=DT)
             rows = [json.loads(x) for x in Path(d, "outcomes.jsonl").read_text().splitlines()]
+            named = {json.loads(p.read_text())["scenario"]
+                     for p in Path(d, "truth").glob("slot_*_ep0/outcome.json")}
+        self.assertEqual(named, {"cases/cs1.xosc"})       # the records' path, not the host's
         self.assertEqual(s["slots"], 3)
         self.assertEqual([r["record"] for r in rows], [r["id"] for r in recs])
         for r in rows:

@@ -41,8 +41,10 @@ class _Frame:
 
 
 class TruthRecorder:
-    def __init__(self, run, map_name="", step_time=None, start_unix=None):
+    def __init__(self, run, map_name="", step_time=None, start_unix=None, scenario=None):
+        """`scenario`: the name outcome.json gives the scenario (default the compiled path)."""
         self.run, self.map, self.step_time = run, map_name, step_time
+        self.scenario = scenario
         self.start_unix = time.time() if start_unix is None else start_unix
         n = run.c.n
         self.rows = []                       # per step: {x, y, yaw, v [N, E], t [N], ...}
@@ -108,7 +110,8 @@ class TruthRecorder:
             (d / "sample.json").write_text(json.dumps(rec, indent=1) + "\n")
             row = self.rows[last]
             (d / "outcome.json").write_text(json.dumps({
-                "outcome": outcome, "slot": k, "episode": e, "scenario": c.scenario,
+                "outcome": outcome, "slot": k, "episode": e,
+                "scenario": self.scenario if self.scenario is not None else c.scenario,
                 "storyboard_complete": bool(row["complete"][k]),
                 "storyboard_stopped": bool(row["stopped"][k]),
                 "seed": c.seeds[k] if k < len(c.seeds) else None,

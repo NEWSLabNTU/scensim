@@ -94,6 +94,7 @@ def read_spec(path):
     return {"id": doc["id"], "scenario": (base / doc["scenario"]).resolve(),
             "model": (base / doc["model"]).resolve() if doc.get("model") else None,
             "model_as_written": doc.get("model"),
+            "scenario_as_written": doc["scenario"],
             "variables": list(v), "n": doc["n"], "seed": doc["seed"], "threshold": float(th),
             "knobs": knobs, "acceptance_draws": m,
             # the map whose anchors the scenario binds (its anchors.resolved.json, checked
@@ -271,8 +272,11 @@ def draw_stage(spec, out, state, t, stage):
     batch = s.draw(n=spec["n"], seed=_seed(spec["seed"], *key))
     recs, cells = [], set()
     for r in batch.records:
+        # the scenario's path as the spec writes it, not this host's (not part of the identity,
+        # but what a run's outcome.json names; 133)
         r = dict(r, search={"id": spec["id"], "generation": t, "stage": stage,
-                            "normaliser": norm})
+                            "normaliser": norm},
+                 scenario=dict(r["scenario"], path=spec["scenario_as_written"]))
         r.pop("id")
         r["id"] = R.record_id(r)
         recs.append({k: r[k] for k in R.KEYS if k in r})
