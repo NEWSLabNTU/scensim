@@ -146,3 +146,67 @@ class (the resistance's size and its low-speed creep), not an ECU or brake fault
    plan's speed, and it changed nothing here (the ECU did not brake for it).
 
 157 stays open as a modelling question; a plan for it comes after C6c's.
+
+## The missing force, found offline, and the fix plan (2026-11-25, before any run; for 133's review)
+
+133 asked first for the unexplained forward force of about 1000 N, the speed the ramp reads, and
+PhysX's own tyre forces at low speed.
+
+- **The speed the ramp reads is the right one.** `SurfaceLayer.update` is given
+  `ego.state.velocity[0]` (`world.py`, the substep loop): the body's base_link speed along its
+  x axis from PhysX's tensor view, the same speed the probe logged (0.052 to 0.055 m/s). So
+  `resistance_scale` gave 0.52 to 0.56, and its input explains nothing.
+- **The force is the road layer's, and it is the grade counted twice.** Haruna has a road
+  detail, so the probe's car ran on R5's contact (the run's log: "road detail ...
+  road_detail.yaml: 1 corridor(s)"). Its `dfx`, "the effective plane's push back along the
+  wheel's heading", is minus the tire's load times the cams' slope (`road_contact.step`). The
+  cams read the true road, `base + detail` (`road_layer`'s `road`), so their slope holds the base
+  road's grade as well as the detail's: on a plane of -0.06 the envelope's slope is -0.0589
+  (checked offline). PhysX already carries the base grade (the body pitched on it, gravity
+  along it), so `dfx` adds the load times the grade a second time: forward on a downhill,
+  backward on an uphill.
+- **Its size is the missing force.** `test_road_layer`'s stand-in car on a bare corridor (no
+  detail) with a 6 % grade gets `dfx` summing to 1102 N against the slope (10 %: 1801 N; level:
+  0), the load times the grade. On the probe's 3.4 degree downhill that is about 1000 N forward,
+  the force the ramp's equilibrium was missing: with it the equilibrium speed is
+  RESIST_V0 x (pull + load x grade) / resistance, twice the 0.027 m/s without it, the 0.055
+  measured.
+- **Not PhysX's tyres.** A free-rolling wheel with aib's 1 N m release torque passes about
+  T / r = 2.7 N to the road, and its brake was 0. The probe did not log the tyre forces, so
+  this is reasoning, not a measurement; P2 logs them.
+- `test_no_detail_no_force_on_a_grade` asserts the vertical force only, which is why this
+  passed: its name says no force, and the push along the road was never checked.
+
+**What it touches beyond 157.** Every run on a road-layer world with a grade: the car felt the
+grade's pull twice (downhill and uphill), on Haruna since R5 went into the world server (C4,
+C5's Haruna runs, C6b's budget, C6d). C6d's rocks-or-not pairs had it on both sides, so their
+deltas stand; absolute speeds and braking on Haruna's grades do not. aib's slope matrix and
+055's suite run on worlds without a road detail and are untouched. Which recorded results
+depend on it is listed with the fix, not before.
+
+**The plan** (each step's runs on GPU0, non-timing, codec told):
+
+- **F1, the fix.** `dfx` from the cams' slope less the base road's slope along the same
+  heading (`base` at the contact plus and minus a few cm), so a plane gives no push and only the
+  detail's own slope does. A test first, failing on today's code: the bare corridor at 0, 6 and
+  10 % gives `dfx` within 1 N of 0 on every wheel; a water bar's push is unchanged on a level
+  road (the existing test) and on a 6 % one, within 1 % of the level one's.
+  118's prediction: today's code fails it by the load times the grade per wheel (260 to 475 N),
+  the fix passes; the fixture course checks (C6a's, C6b's, C6c's, all level) unchanged within
+  their noise.
+- **P2, the probe again, after F1** (the free arm, 157's map and scenario, siw with F1 and the
+  probe's logging, local): logged as before plus each wheel's PhysX tyre force along it
+  (`WheelState.force`), the road layer's `dfx` and the soil's applied force, and the
+  residual m a minus the known forces along the road. 118's prediction: the car creeps at
+  0.026 to 0.028 m/s (the ramp alone, the offline number), `dfx` under 50 N in all, the tyres'
+  under 20 N, the residual under 100 N.
+- **F2, the ramp, a choice for 133 after P2.** The ramp makes a standing car creep wherever the
+  resistance exceeds the pull. RESIST_V0 can come down only so far: the resistance's slope
+  R / RESIST_V0 at 60 Hz on the body is stable for R dt / (m RESIST_V0) under 2, so with R about
+  3.7 kN and m about 1900 kg RESIST_V0 must stay above about 0.016 m/s; 0.03 m/s would leave a
+  creep near 0.008 m/s here. Or a hold that resists up to the full value at rest (a static
+  friction), which is a model change. Options with their numbers go to 133 after P2.
+- **Then** the Haruna results that depend on it, rerun or annotated, named for 133.
+
+Not in this plan: the size of the sand's 0.21 (054's question, hypothesis 1 above) and
+Autoware's slope compensation (hypothesis 3).
