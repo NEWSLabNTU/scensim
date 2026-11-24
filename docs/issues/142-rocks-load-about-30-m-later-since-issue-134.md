@@ -372,3 +372,44 @@ that keeps to it.
 - **118's prediction:** in both, 0 tiles made on the caller's thread, and the least in-path prim
   lead at least 35 m while the car is on the road. At 13.9 m/s the car leaves the road at the
   first tight hairpin (pursuit at a fixed speed); the leads up to there count.
+
+### The Isaac proof's results (2026-11-24)
+
+siw 8547b30, GPU0 quiet. A rock is in a wheel's path when a wheel's line (the car's position
+plus or minus half the tread across its path) passes within 1 m of it at the car's closest
+approach; its lead is the path the car drives from the rock's first prim (or its data's load)
+to that approach. (First analysed by u along the centreline, which is ambiguous on hairpins and
+which counted a pushed rock's prim, re-made where it lay, as new; the numbers here are by the
+car's path, a pushed rock's prims within 0.5 m counted once.)
+
+| run | pace (frames/s, real time 20) | in-path rocks | least prim lead while driving | under 35 m | passed before it existed | local makes | base contacts |
+|---|---|---|---|---|---|---|---|
+| fixtures, default (11.1 m/s) | about 66 | 18 (12 placed) | 29.0 m | 1 | 0 | 0 | 0 |
+| fixtures at 13.89 m/s | 66 | 13 (4 placed) | 29.3 m | 1 | 0 | 0 | 0 |
+| fixtures at 16.67 m/s | about 66 | 13 (4 placed) | 35.1 m | 0 | 0 | 0 | 0 |
+| Haruna at 13.9 m/s, 1.33 km | 55 | 64 | **1.9 m** | 62 | 0 | 0 | **32** |
+| Haruna at 10 m/s, 1.02 km | 80 | 35 | **2.9 m** | 30 | 0 | 0 | **8** |
+
+Placings: every in-path rock within 32 m ahead of a placed car had its prim before the next
+frame, and no tile was reported not ready. The data's leads are the prims' to within 1 m. The
+default verdicts are issue 140's (embedded_15, loose_15 and loose_8 fail in raycast,
+boulder_35 passes).
+
+- **These runs step 2.8 to 4 times faster than real time** (`fixture_cost` and `fixture_drive`
+  do not wait for the wall clock). The tile worker is a separate process on the wall clock,
+  about 5 tiles a second in these runs, so a world stepped faster than real time outruns it on
+  Haruna, where the tiles ahead are many, and the rocks come just in time (2 to 3 m) in sim
+  metres. In the offline driver, at real time, the same code had the road's tiles ready 43 m
+  ahead at 13.9 m/s. It also means which rocks exist, and when, depends on the wall clock:
+  a run's rocks are not reproducible when it steps faster than the worker.
+- **118's predictions:** 133's first bar (latency x v + 10 m) **held** on the fixtures and
+  **failed** on Haruna; at least 35 m at 11.1 and 13.89 m/s on the fixtures **failed** (29.0,
+  29.3: one rock each, its tile made just before); the placings **held**; no local makes
+  **held**; the default verdicts and 0 base contacts on the fixtures **held**; on Haruna "at
+  least 35 m" **failed** and "0 local makes" **held**; the car did not leave the road at
+  13.9 m/s, which I had predicted it would (**failed**).
+- **Base contacts on Haruna's rocks map** (issue 123's self-check): 32 and 8, where issue 128's
+  guard found 0 on this map (siw 637b454). Not attributed yet: the next run is the same drive
+  at 10 m/s on siw main 56b8e39 (issues 137, 139, 140; not 142).
+- **118's prediction for it:** base contacts again (a few), so they are not 142's; the rocks'
+  leads on Haruna as short (the pace).
