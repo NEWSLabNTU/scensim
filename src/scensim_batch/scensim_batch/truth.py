@@ -49,6 +49,9 @@ class TruthRecorder:
         self.start = [0] * n                 # each slot's episode's first row
         self.episode = [0] * n
         self.done = []                       # (slot, episode, first row, last row, outcome)
+        # (row, entity) -> the ego's overlap with that entity in every slot [N], computed once:
+        # a slot's lines index it, so writing N slots costs N, not N^2 (092 K11c)
+        self._overlaps = {}
         self.open = [False] * n
 
     def _row(self, obs):
@@ -113,6 +116,13 @@ class TruthRecorder:
             dirs.append(d)
         return dirs
 
+    def _overlap(self, r, i):
+        key = (r, i)
+        if key not in self._overlaps:
+            ctx = _Frame(self.run, self.rows[r])
+            self._overlaps[key] = sbmod.overlap(ctx, self.run.ego, i).detach().cpu()
+        return self._overlaps[key]
+
     def lines(self, k, e, first, last, outcome):
         run, c = self.run, self.run.c
         dt = self.step_time
@@ -153,11 +163,10 @@ class TruthRecorder:
                                   "flags": flags}
             yield {"type": "frame", "frame": f, "sim_time": t,
                    "sim_time_ns": int(round(t * 1e9)), "sim_frame": f, "entities": ents}
-            ctx = _Frame(run, row)
             for i, ent in enumerate(c.entities):
                 if i == run.ego:
                     continue
-                hit = bool(sbmod.overlap(ctx, run.ego, i)[k])
+                hit = bool(self._overlap(r, i)[k])
                 if hit and i not in touching:
                     yield {"type": "contact", "frame": f, "sim_frame": f, "sim_time": t,
                            "ego_id": run.ego, "subject": c.entities[run.ego].name,
