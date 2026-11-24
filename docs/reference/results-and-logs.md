@@ -132,6 +132,7 @@ class a report can count (`scensim runs coverage` lists the error runs by kind).
 | `knob_refused`, `knob_mismatch` | a bound knob the world cannot honour, or whose read-back differs |
 | `attachment` | a required attachment failed |
 | `clock_lag` | a paced run fell behind wall time by more than its budget |
+| `command_lag` | under lockstep, a commanded entity's commands were not the previous frame's at every frame (`commands` below) |
 | `knob_profile` | a knob profile the world did not follow within its tolerance, or whose read-back the gap trace lacks |
 
 `clock` is the run's clock ([`clock:`](project-file.md#the-clock)): its `mode`, the frames
@@ -140,6 +141,20 @@ measured, and their lag behind wall time in seconds, `lag_s: {max, p50, p99, fin
 when it is not 1. A lockstep run records its lag and is
 always `ok`; a paced run over its budget is not, and is an error run (`clock_lag`). It is
 absent when the truth file has no wall stamps (`logging.gap_trace: false`).
+
+`commands` is present when the run commands entities (an attachment with `commands:`, such as
+a behaviour model on seats): its `mode` (`lockstep` or `free`), and per commanded entity
+`commanded_frames` (frames a command moved it), `held_frames` (frames before SSv2 started its
+NPCs, which carry no command: a model waits for them, as SSv2's own NPCs do),
+`uncommanded_frames` (other frames before its first command), `lost_frames` (frames after its
+first command with none), `unmatched_frames` (commands answering a frame the truth does not
+have) and `lag_frames: {p50, p95, max}`, the frames from the truth frame a command answered to
+the frame it moved the entity in. Then the world server's counts since the world loaded:
+`unknown_entity`, `gate_misses`, `malformed`, and `stale` (commands dropped as older than the
+entity's body or the run; a record, never a failure). `ok` holds under lockstep when every
+frame after an entity's first command has lag 1, with at most one uncommanded frame and no lost
+or unmatched frame; otherwise the run is an error run (`command_lag`). Free running, the lag is
+a record and `ok` is true.
 
 ## The timeline
 

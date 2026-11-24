@@ -1725,3 +1725,21 @@ resolved anchors to `BatchRun` (its `--map`, as the seats runner reads them), wh
 car-follower's lane needs; without it the batch side could not start. Check 2 is rerun after 163
 (133), then run 2.
 
+**Check 2 rerun after issue 163 (2026-11-25): holds.** k13dev 7138959c (the seats runner holds a
+model until NPC logic starts). A first rerun (d3c756f4) ended in three error runs on the run's
+own command check, lag 1 throughout: the frames before S carried no command by design and the
+check allowed one; 163 now counts them as `held_frames` (`~/nas/autoveh/logs/k13-check2/
+rerun1-held-error/`). The second, on 7138959c, passed all three runs (`~/nas/autoveh/logs/
+k13-check2/rerun2/`):
+
+| decel | check 1: lag, misses, unknown; held / uncommanded | check 2: lateral max | check 3: final gap, min gap, events, capped, contacts | check 4: trail, follower and ego | stop s (FAILED prediction) |
+|---|---|---|---|---|---|
+| 2 m/s^2 | 1/1/1, 0, 0; 9 / 1 | 0.0001 m | 2.652 m, 2.652 m, follow then stopped, 0, none | 1 frame, 1 frame | 135.8 m (132.8) |
+| 4 m/s^2 | 1/1/1, 0, 0; 13 / 1 | 0.0001 m | 2.652 m, 2.652 m, follow then stopped, 0, none | 1 frame, 1 frame | 130.2 m (124.8) |
+| 6 m/s^2 | 1/1/1, 0, 0; 10 / 1 | 0.0002 m | 2.652 m, 2.652 m, follow then stopped, 0, none | 1 frame, 1 frame | 129.5 m (122.1) |
+
+The follower's first decision is now at the first frame of NPC logic (truth frames 11, 15 and
+12), where attempt 6's was at frame 2; its outcome is unchanged. Check 3's run 2 reads these
+runs, not attempt 6's, whose seats runner stepped the follower before S (the code that lands is
+this one).
+
