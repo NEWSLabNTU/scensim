@@ -1,6 +1,7 @@
 # 144: a run stepped faster than real time gets rocks that depend on the wall clock
 
-**Status:** open; the fix follows issue 142 (133). **Severity:** high: a run's rocks, and so its
+**Status:** fixed, siw 19ad467: a frame's end waits for the road's tiles in reach; the
+look-ahead's misses are issue 147. **Severity:** high: a run's rocks, and so its
 physics, are not reproducible. **Found:** 2026-11-24, scensim 118, issue 142's Isaac proof.
 
 ## What happens
