@@ -576,11 +576,16 @@ state").
 region-scoped knob reaches either world as `scensim.zone.<id>.<field>` in a RoadCondition, the
 form both servers will take:
 - Isaac's surface layer takes it today.
-- CARLA takes it once C7 lands.
+- CARLA 0.9.16 cannot: see the amendment below.
 
-Until then, K9f's check refuses a zone-scoped value on CARLA by name, giving C7 as the reason.
-It does not refuse once the CARLA world server declares zones. That needs one capability bit,
-`ROAD_ZONES` (below), which C7 sets on CARLA when it lands, and K9f sets on Isaac.
+K9f's check refuses a zone-scoped value on a world server that does not declare `ROAD_ZONES`
+(below), which K9f sets on Isaac.
+
+*Amended 2026-11-25, after C7's probes (086, P0's and P0b's results; 133 chose C7's option 2).*
+On CARLA 0.9.16 zones stay refused and the CARLA world server does not declare `ROAD_ZONES`:
+CARLA 0.9.16's friction trigger sets all four wheels of a car by its body's overlap, and its value reaches every car of the same blueprint, in the box or not; a per-wheel `apply_physics_control` stays on its car, but every apply rebuilds the PhysX vehicle (a 0.14-0.15 m/s step whatever the friction, and a yaw chatter of about +-1.1 deg/s when the wheels differ). So K9f-a's refusal on CARLA cites that measured limit, not "until C7", and zones on
+CARLA are revisited on CARLA 1.0 (Chaos) after 083 step 5. On 0.9.16, C7 adds the world-wide
+read-back instead (`ROAD_CONDITION_APPLIED`, below). K9f still adds no CARLA code.
 
 **Zones, not anchor regions, carry state.** A knob `applies:` to zone ids of the map's surface
 record, never to K9c's anchor regions, so there is one polygon per place that has state. Where a
@@ -607,16 +612,17 @@ refused.
   - a zone id that the map's surface record (or the named map the scenario picks) lacks;
   - a class not in the table;
   - a `class` on a soil zone (refused as C4 refuses it);
-  - a zone-scoped value on a simulator whose world server lacks `ROAD_ZONES`, which is CARLA
-    until C7 lands.
+  - a zone-scoped value on a simulator whose world server lacks `ROAD_ZONES`: on CARLA 0.9.16,
+    naming the measured limit above (*amended*: was "until C7 lands").
 
   This is issue 154's one-rule pattern: the check and the run use the same function.
 - **The read-back.** Issue 095 left surface maps `unverified`. K9f-a adds the applied zones to
   the world's answer: `ROAD_ZONES`, a `SetRoadCondition` reply listing each zone's applied
   fields, recorded in `result.json` `knobs.<knob>.zones`. A mismatch is an error run.
   - Isaac's surface layer already holds the overridden zones and answers from them.
-  - CARLA answers when C7 implements the capability: C7 gains one acceptance line, its
-    trigger boxes' friction and wetness per zone, read back.
+  - *Amended:* CARLA 0.9.16 answers the world-wide part only (`ROAD_CONDITION_APPLIED`, C7:
+    friction scale and wetness read back from the cars' physics control, zones empty), which
+    closes issue 095's "unverified" for CARLA's world-wide condition; it lists no zone.
   - This is the one protocol change, a reply field with a capability bit. It is
     scensim_world_protocol's, pinned in lockstep.
 - **Exit checks, with predictions before any run.**
@@ -624,22 +630,27 @@ refused.
     applied zone is read back. The ego's stopping distance across the zone differs as the
     class table's wet factor predicts, within C7's 25 % band, so the same number later checks
     CARLA.
-  - CARLA: the same suite refused by name before C7. After C7, the same scenario and knob pass
-    with the zone read back, and C7's own acceptance runs it.
+  - CARLA 0.9.16 (*amended*): the same scenario refused by name, before any run, citing the
+    measured limit; no zone run on CARLA. C7's own 0.9.16 acceptance covers the world-wide
+    read-back.
 
-### The protocol change, shared with 086 C7 (fixed 2026-11-25, for 118's C7 plan)
+### The protocol change, shared with 086 C7 (fixed 2026-11-25, for 118's C7 plan; amended the same day: two capabilities)
 
 One change to `scensim_world.proto`, shared by K9f-a (Isaac's side, the bridge's read) and C7
 (CARLA's side). Whichever lands first adds it as written here; the other cites it.
 
 ```proto
 // in enum Capability:
-  // `scensim.zone.<id>.<field>` properties in `SetRoadCondition` (092 K9f-a, 086 C7): the server
-  // applies each field to that zone of its map's surface record and answers every
-  // `SetRoadCondition` with a `RoadConditionReply`, read back from what it now applies. Needs
-  // `ROAD_CONDITION`. A server without it is sent no `scensim.zone.` property by a check that
-  // knows; one that is sent one anyway refuses it, as before.
+  // `scensim.zone.<id>.<field>` properties in `SetRoadCondition` (092 K9f-a): the server applies
+  // each field to that zone of its map's surface record and lists every zone the condition named
+  // in `RoadConditionReply.zones`. Needs `ROAD_CONDITION_APPLIED`. A server without it is sent no
+  // `scensim.zone.` property by a check that knows; one that is sent one anyway refuses it, as
+  // before.
   CAPABILITY_ROAD_ZONES = 13;
+  // `RoadConditionReply` to `SetRoadCondition` (092 K9f-a, 086 C7): the road state the world
+  // applies after it, read back from the simulator, for the world-wide part (and, with
+  // `ROAD_ZONES`, the zones). Needs `ROAD_CONDITION`.
+  CAPABILITY_ROAD_CONDITION_APPLIED = 14;
 
 // A zone's state as the server applies it after a `SetRoadCondition`.
 message ZoneApplied {
@@ -654,10 +665,10 @@ message ZoneApplied {
   double mu = 4;
 }
 
-// A server with `ROAD_ZONES` answers `SetRoadCondition` with the road state it now applies,
-// read from its own model (Isaac: the surface layer; CARLA: its friction trigger boxes and
-// tyre friction), for the world-wide part and every zone the condition named. A zone the
-// condition did not name is as the map has it and is not listed.
+// A server with `ROAD_CONDITION_APPLIED` answers `SetRoadCondition` with the road state it now
+// applies, read from its own model (Isaac: the surface layer; CARLA: the cars' physics control),
+// for the world-wide part; with `ROAD_ZONES` also every zone the condition named (empty
+// otherwise). A zone the condition did not name is as the map has it and is not listed.
 message RoadConditionReply {
   double friction_scale_factor = 1;
   string wetness = 2;
@@ -668,14 +679,21 @@ message RoadConditionReply {
     RoadConditionReply road_condition = 12;
 ```
 
-No `PROTOCOL_VERSION` bump, by the file's own rule: only a server declaring `ROAD_ZONES` sends
-the reply, the bridge reads it only from one, and a capability an older peer does not know is
-one it never declares. 118's C7 plan (086, cba0fbfe, with 133) takes it as written: CARLA reads
-each named zone's `mu` back from its trigger boxes (per zone, not per wheel), leaves
-`water_depth` unset and refuses a zone water depth by name (no fords on CARLA), and may have to
-refuse a zone one side of a car cannot sit in alone (split-mu), if its P0 finds that CARLA's
-friction trigger acts on the whole car: a CARLA server-side refusal, which K9f-a's check then
-reports by C7's words; the messages stay as they are. The bridge records the reply in the gap trace (a `road` line per
+No `PROTOCOL_VERSION` bump, by the file's own rule, for each capability: only a server declaring
+`ROAD_CONDITION_APPLIED` sends the reply, and the bridge reads it only from one; only a server
+declaring `ROAD_ZONES` fills its `zones`, and is sent zone properties by a check that knows;
+a capability an older peer does not know is one it never declares. This mirrors
+`ENVIRONMENT_APPLIED`. Who declares what: CARLA 0.9.16 declares `ROAD_CONDITION_APPLIED` only
+(C7); Isaac declares both (K9f-a).
+
+*Amended 2026-11-25 (118's proposal, endorsed by 133).* The first text (28574f29) had one
+capability, `ROAD_ZONES`, gating the whole reply. C7's probes then found zones not expressible
+on CARLA 0.9.16 (above), while a world-wide read-back there is: 133 wanted it, to close issue
+095 for CARLA's world-wide condition. With one capability that reply could not be sent without
+claiming zones, and the no-bump argument rested on that one gate; with two, each holds alone.
+118's C7 plan (086, cba0fbfe) had already taken per-zone `mu`, no fords on CARLA and the
+split-mu question; the last is now answered by the measured limit, and zones are not declared
+on CARLA 0.9.16 at all. The bridge records the reply in the gap trace (a `road` line per
 `SetRoadCondition`), and `scensim run` judges each knob-set zone against it: `result.json`
 `knobs.<knob>.zones.<id>` with the fields sent and read back, a mismatch an error run.
 
@@ -708,8 +726,8 @@ reports by C7's words; the messages stay as they are. The bridge records the rep
 ### Order and dependencies
 
 1. K9f-b first. It needs nothing from C7, and CS3 is its exit.
-2. Then K9f-a: Isaac's half and the protocol field. Its CARLA half is checked when C7 lands,
-   in C7's acceptance, not in K9f.
+2. Then K9f-a: Isaac's side and the protocol field. *Amended:* CARLA 0.9.16 has no zone half;
+   its world-wide read-back is C7's, and zones on CARLA wait for 1.0 (083 step 5).
 
 Both start after K9e lands.
 
@@ -717,7 +735,8 @@ Both start after K9e lands.
 
 1. **One implementation, agreed:** K9f's CARLA side is C7. 133 tells 118, who owns C7. C7 gains
    one acceptance line, the zones' read-back on CARLA, and sets `ROAD_ZONES`. When K9f-a lands,
-   this is recorded both here and in 086's C7 row.
+   this is recorded both here and in 086's C7 row. *Amended after C7's probes:* on 0.9.16, C7
+   sets `ROAD_CONDITION_APPLIED` (the world-wide read-back) and not `ROAD_ZONES`.
 2. **The run's copy, on four conditions:**
    - the copy is saved in the run record beside the source;
    - both digests are in `resolved.yaml`;
