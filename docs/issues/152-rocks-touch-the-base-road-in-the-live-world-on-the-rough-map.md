@@ -349,7 +349,7 @@ made again at a removed one's path taken for one in two groups. They are not the
     kept. The scenario's load still logs about 770 warnings: the pool's reused paths, issue
     034's class, recorded here and not fixed.
 
-### Part 2's live proof (2026-11-24, 22:05 to 22:13)
+### Part 2's live proof (2026-11-24, 22:05 to 22:13; one run)
 
 siw 46c09ec (parts 1 and 2, no probe) in the gate checkout for the run, restored after; the same
 package and drive; GPU0 shared with another session's encode job (nothing timed). The preload
@@ -361,5 +361,6 @@ named the world file's ground paths, and the scenario's load kept the preloaded 
 - The "only in one collision group" warnings: 770 in the run's log, the pool's reused paths
   (issue 034's class), as predicted.
 
-**118's prediction: held.** Status: fixed by parts 1 and 2 (siw 46c09ec, with e0559e5), once
+**118's prediction: held**, on one run (133: one run at 0 against 10 to 13 on every run before
+is enough for the proof). Status: fixed by parts 1 and 2 (siw 46c09ec, with e0559e5), once
 landed. The pool-path warnings stay recorded here as issue 034's class, not fixed.
