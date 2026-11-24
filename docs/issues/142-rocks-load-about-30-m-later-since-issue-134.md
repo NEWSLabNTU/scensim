@@ -317,3 +317,20 @@ siw a547571, host load 1.8 at the start.
 **118's prediction:** the least lead at least 40 m at 13.9, 30 m at 16.7 and 15 m at 20 m/s
 **held** (43.5, 41.7, 28.4); the worker's median under 200 ms **held** from 11.1 m/s up and
 **failed** at 8.3 m/s (207 ms).
+
+## Step (v): a placed car's tiles and rocks before its first step (before its tests run)
+
+`RoadLayer.ready_around(points, reach, timeout)` asks for the road's tiles within `reach` of
+the points and waits until each is made with its rocks' placement (`extra`), at most `timeout`
+(5 s), returning the ones not ready. `SurfaceLayer.placed(path, pose)`, called where a car is
+placed (the world server's ego spawn, before its warm-up steps, and its teleport; fixture_drive's
+case start), resets the car's filters as `reset` did, waits for the tiles within the rocks' and
+colliders' reach (32 m), puts the car's new pose in the vehicles' poses, and runs the collision
+tiles' and the rock stream's update until every rock prim of those tiles is made (the stream
+makes 4 a frame otherwise). Tests (no Isaac): `ready_around` inline and with a slow fake pool (a
+timeout returns the keys not ready); `placed` with stand-ins drains the rock queue, keeps the
+other cars' poses, and logs the tiles not ready.
+
+- **118's prediction:** the tests pass. In the Isaac proof (C6b's fixtures through the 142
+  probe) every in-path rock within 32 m of a case start is loaded and its prim made before the
+  first step after the placing, and no tile is made on the caller's thread.
