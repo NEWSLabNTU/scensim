@@ -6,7 +6,20 @@ stack, and finding your way around the code and the design documents. Users star
 
 ## Set up
 
-On top of the user prerequisites (ROS 2 Humble, Autoware, CARLA 0.9.16, maps):
+On top of the user prerequisites (ROS 2 Humble, Autoware, CARLA 0.9.16, maps), the
+developer workflow needs [`just`](https://github.com/casey/just) 1.40.0 or newer. Ubuntu's apt
+package is older (24.04 ships 1.21; 22.04 has none), so install the release binary:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to ~/.local/bin
+# or, with Rust installed: cargo install just --locked
+```
+
+An older `just` stops while reading the justfile, before any recipe runs. Versions 1.29 to
+1.39 print ``error: Non-default parameter `args` follows default parameter``; older ones print
+``error: Unknown attribute `positional-arguments` ``. Either message means: upgrade `just`.
+
+Then:
 
 ```bash
 git clone --recurse-submodules https://github.com/NEWSLabNTU/scensim.git
