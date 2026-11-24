@@ -45,21 +45,9 @@ if [ -z "$VERSION" ]; then
     VERSION=$(git -C "$ROOT" describe --tags --always --dirty)
 fi
 
-# The packages of the simulation side (082's table) and everything they build against;
-# the vehicle side is left out even where a simulation package names it (082 fix 3).
-SIM_PACKAGES=(scenario_world_bridge scenario_agent_relay scensim scensim_launch
-    scensim_interfaces scensim_examples scensim_carla_world scensim_isaac_world
-    scensim_world_check scenario_test_runner
-    colcon-scensim  # colcon's scensim_testbench build type (081): no ROS package depends on it
-    coop_pilots     # scripts/coop as data, for the coop study testbenches (081 step 4, group C)
-    scensim_study_scenarios  # the studies' shared bench/ and gap/ scenarios (081 step 4, group B)
-    # SSv2 loads its entity behaviours with pluginlib at run time; nothing depends on them
-    behavior_tree_plugin do_nothing_plugin
-    # the vehicle side every non-Autoware pilot on CARLA starts (133, 2026-11-18): acb's
-    # bridge (with the blueprint pedal maps) and the car's descriptions
-    acb_bridge tesla_model3_description tesla_model3_sensor_kit_description)
-VEHICLE_SIDE=(acb_launch aib_launch autoware_sim_profile individual_params tesla_model3_launch
-    tesla_model3_sensor_kit_launch)
+# The packages of the simulation side and the vehicle side left out: scripts/sim_side.bash
+# (shared with the justfile's Jazzy build, 092 K6)
+source "$ROOT/scripts/sim_side.bash"
 
 cd "$ROOT"
 VENDOR=build/release-vendor
@@ -71,15 +59,8 @@ vcs import --shallow --input "$ROOT/sim.repos" "$VENDOR" >/dev/null
 # into the release. Only ROS, then this build.
 clean_env=(env -i HOME="$HOME" USER="${USER:-}" TERM=dumb LANG=C.UTF-8
     PATH="$HOME/.cargo/bin:$(dirname "$(command -v python3)"):/usr/local/bin:/usr/bin:/bin")
-# carla-sys 0.15.1 (carla-rust) generates its C++ bindings with autocxx, which reads the
-# headers through libclang. With libclang 18 (Ubuntu 24.04's default) the generated wrappers
-# drop `const` and fail to compile ("invalid conversion from 'const ...*'"); libclang 14
-# (Ubuntu 22.04's default, and apt's libclang-14-dev on 24.04) works. Use 14 when it is
-# there, unless LIBCLANG_PATH names another.
-LIBCLANG_PATH=${LIBCLANG_PATH:-}
-if [ -z "$LIBCLANG_PATH" ] && [ -d /usr/lib/llvm-14/lib ]; then
-    LIBCLANG_PATH=/usr/lib/llvm-14/lib
-fi
+# carla-sys needs libclang 14 (scripts/sim_side.bash, scensim_libclang_path)
+LIBCLANG_PATH=$(scensim_libclang_path)
 if [ -n "$LIBCLANG_PATH" ]; then
     clean_env+=(LIBCLANG_PATH="$LIBCLANG_PATH")
 else
@@ -107,7 +88,7 @@ start=$(date +%s)
     fi
     exec "$@"' _ "$ROS_SETUP" \
     python3 -m colcon build --base-paths src "$VENDOR" --merge-install \
-        --packages-up-to "${SIM_PACKAGES[@]}" --packages-ignore "${VEHICLE_SIDE[@]}" \
+        --packages-up-to "${SCENSIM_SIM_PACKAGES[@]}" --packages-ignore "${SCENSIM_VEHICLE_SIDE[@]}" \
         ${JOBS:+--parallel-workers "$JOBS"} \
         --cargo-args --release \
         --cmake-args "${cmake_args[@]}" \

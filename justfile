@@ -57,6 +57,10 @@ ros_setup := env_var_or_default('ROS_SETUP', '/opt/ros/' + env_var_or_default('R
 # Autoware packages carried with fixes 1.5.0 lacks (roadmap 042), built by
 # `just build-autoware-overlay` from the commit pinned in scripts/autoware_overlay.bash.
 autoware_overlay_dir := justfile_directory() + '/third_party/autoware_overlay'
+# The simulation side's Autoware message packages (sim.repos), built once for a distro Autoware
+# 1.5.0 does not support (Jazzy): `just build` sources it there in place of Autoware (092 K6,
+# scripts/sim_side.bash)
+sim_vendor_dir := justfile_directory() + '/third_party/sim_vendor'
 # NEWSLabNTU's cuda_ndt_matcher (a submodule), built in its own workspace by `just
 # build-cuda-ndt`; the ego recipes source its install when it is there, and the profile's
 # ndt:=cuda runs it (roadmap 057).
@@ -87,6 +91,21 @@ setup:
         source "$HOME/.cargo/env"
     fi
 
+    # Humble builds everything against Autoware 1.5.0; another distro (Jazzy) the simulation
+    # side only, over third_party/sim_vendor (092 K6, scripts/sim_side.bash)
+    distro=${ROS_DISTRO:-humble}
+    case "$distro" in
+        humble) sim_only= ;;
+        jazzy) sim_only=1 ;;
+        *) echo "setup: ROS_DISTRO=$distro is not supported (humble, or jazzy for the simulation side)" >&2; exit 2 ;;
+    esac
+    if [ -n "$sim_only" ]; then
+        source scripts/sim_side.bash
+        [ -n "$(scensim_libclang_path)" ] || { echo "setup: carla-sys needs libclang 14 on $distro: sudo apt install libclang-14-dev (or LIBCLANG_PATH=<its lib dir>)" >&2; exit 2; }
+        # Python 3.12 is externally managed (PEP 668): pip installs for this user beside apt's
+        export PIP_BREAK_SYSTEM_PACKAGES=1
+    fi
+
     # colcon's Rust plugin. The older colcon-cargo/colcon-ros-cargo pair conflicts with it.
     if python3 -c "import colcon_cargo" &>/dev/null || python3 -c "import colcon_ros_cargo" &>/dev/null; then
         echo "Removing conflicting colcon-cargo/colcon-ros-cargo..."
@@ -104,15 +123,31 @@ setup:
 
     # System dependencies, exactly as a user installs them
     source "{{ros_setup}}"
-    source "{{autoware_setup}}"
-    # The packages colcon builds, not `--from-paths src`: rosdep's crawl walks into the
-    # components' deps/ copies (COLCON_IGNORE does not stop it) and fails on their templates
-    # ("@KIT@_description does not follow naming conventions").
+    if [ -z "$sim_only" ]; then
+        source "{{autoware_setup}}"
+        # The packages colcon builds, not `--from-paths src`: rosdep's crawl walks into the
+        # components' deps/ copies (COLCON_IGNORE does not stop it) and fails on their templates
+        # ("@KIT@_description does not follow naming conventions").
+        paths=$(colcon list --base-paths src -p)
+    else
+        # the simulation side and its vendored message packages, as the release reads them
+        command -v vcs >/dev/null || sudo apt-get install -y python3-vcstool
+        mkdir -p "{{sim_vendor_dir}}/src"
+        vcs import --shallow --force --input sim.repos "{{sim_vendor_dir}}/src" >/dev/null
+        paths="$(colcon list --base-paths src -p --packages-up-to "${SCENSIM_SIM_PACKAGES[@]}" \
+            --packages-ignore "${SCENSIM_VEHICLE_SIDE[@]}") {{sim_vendor_dir}}/src"
+        # rosdep's pip keys, as this user: rosdep runs pip under sudo, which drops what PEP 668
+        # needs here, and Debian owns typing_extensions (082 step 7, 118's notes); brotli >= 1.2
+        # for huggingface_hub 2.x (24.04 has 1.1.0)
+        pip install --quiet --user huggingface_hub yamale
+        pip install --quiet --user --upgrade brotli
+    fi
     # python-yamale-pip (SSv2's scenario_test_runner) resolves only from a rosdep source some
     # hosts add (autonomoustuff's), not from rosdistro, so not in the Autoware 2.0.0 image: skipped
     # here and installed with pip.
-    rosdep install --from-paths $(colcon list --base-paths src -p) --ignore-src -y --skip-keys python-yamale-pip
+    rosdep install --from-paths $paths --ignore-src -y --skip-keys python-yamale-pip
     python3 -c "import yamale" &>/dev/null || pip install --user yamale
+    [ -z "$sim_only" ] || just build-sim-vendor
 
     # Developer extras
     rustup toolchain list | grep -q nightly || rustup toolchain install nightly
@@ -167,7 +202,17 @@ build: _check-setuptools
     PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/\.venv/bin$' | paste -sd:)
     cd "{{project}}"
     source "{{ros_setup}}"
-    source "{{autoware_setup}}"
+    select=()
+    if [ "${ROS_DISTRO:-humble}" = humble ]; then
+        source "{{autoware_setup}}"
+    else
+        # the simulation side only, over the vendored message packages (092 K6)
+        source scripts/sim_side.bash
+        [ -f "{{sim_vendor_dir}}/install/setup.bash" ] || { echo "build: no {{sim_vendor_dir}} on $ROS_DISTRO (just setup, or just build-sim-vendor)" >&2; exit 2; }
+        source "{{sim_vendor_dir}}/install/setup.bash"
+        export LIBCLANG_PATH=$(scensim_libclang_path)
+        select=(--packages-up-to "${SCENSIM_SIM_PACKAGES[@]}" --packages-ignore "${SCENSIM_VEHICLE_SIDE[@]}")
+    fi
     # CARLA_DIR (a host setting, .env) is CARLA's install; carla-sys would take it for a
     # CARLA source tree to build from, and the build fails.
     unset CARLA_DIR
@@ -180,6 +225,7 @@ build: _check-setuptools
         --base-paths src \
         ${COLCON_WORKERS:+--parallel-workers "$COLCON_WORKERS"} \
         --symlink-install \
+        "${select[@]}" \
         --cargo-args --profile dev-release \
         --cmake-args -DBUILD_TESTING=OFF
     # what this install was built from, for every run's result.json (roadmap 077, G29)
@@ -211,6 +257,17 @@ build-autoware-overlay:
     PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/\.venv/bin$' | paste -sd:)
     source "{{project}}/scripts/autoware_overlay.bash"
     scensim_autoware_overlay_build "{{autoware_overlay_dir}}" "{{autoware_setup}}"
+
+# Fetch sim.repos' pinned message packages into third_party/sim_vendor and build them against
+# ROS alone: the simulation side's Autoware messages on a distro Autoware 1.5.0 does not support
+# (Jazzy), sourced by `just build` there in place of Autoware (092 K6). `just setup` runs it;
+# re-run after sim.repos changes.
+build-sim-vendor:
+    #!/usr/bin/env bash
+    set -e
+    PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/\.venv/bin$' | paste -sd:)
+    source "{{project}}/scripts/sim_side.bash"
+    scensim_sim_vendor_build "{{sim_vendor_dir}}" "{{ros_setup}}" "{{project}}/sim.repos"
 
 # Build cuda_ndt_matcher (third_party/cuda_ndt_matcher, a submodule) in its own workspace
 # against Autoware 1.5.0, from a clean environment: Rust (colcon-cargo-ros2) and CUDA. Host

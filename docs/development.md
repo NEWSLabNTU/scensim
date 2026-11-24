@@ -28,6 +28,17 @@ just setup      # rustup, colcon-cargo-ros2, submodules, rosdep, and the dev too
 just build      # the user's colcon build plus --symlink-install and a dev-release profile
 ```
 
+On Ubuntu 24.04 with ROS 2 Jazzy the same commands build the simulation side only, as the
+release's Jazzy tarball does: Autoware 1.5.0 is Humble only, so there is no Autoware to build
+against. With Jazzy sourced, `just setup` checks for libclang 14 (carla-sys needs it; `sudo apt
+install libclang-14-dev`), installs pip packages for your user beside apt's (Python 3.12 is
+externally managed, PEP 668), and fetches the Autoware message packages `sim.repos` pins into
+`third_party/sim_vendor` (git-ignored) and builds them there against ROS alone; `just
+build-sim-vendor` rebuilds it after `sim.repos` changes. `just build` then sources
+`third_party/sim_vendor` where Humble sources Autoware, and builds the simulation packages
+(`scripts/sim_side.bash`) with the same install layout. The vehicle side's Autoware packages
+are not built on Jazzy.
+
 An unreleased colcon-cargo-ros2 (a commit of its repository rather than PyPI's wheel)
 does not install from git with Ubuntu 22.04's pip 22: the plugin builds with maturin, and
 pip's isolated build environment does not put `maturin` on `PATH`

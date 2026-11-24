@@ -97,6 +97,30 @@ Jazzy build and test of the same commit; pushes asked of 133 one by one.
   another path, that is a break;
 - the conformance check passes on Jazzy as on Humble (the world protocol carries no ROS types).
 
+**Seen so far** (2026-11-24, in `scensim-jazzy-k6`: `ros:jazzy` plus the build tools and
+libclang 14, 1.4 GB; with rosdep's keys installed 5.39 GB; a 1.8 GB home volume for rustup,
+cargo and pip; `/` kept 909 GB free):
+
+- **not predicted**: the justfile needs `just` 1.40.0 or newer; 1.29 to 1.39 refuse it
+  ("Non-default parameter `args` follows default parameter"), 24.04's apt `just` (1.21)
+  refuses `[positional-arguments]`. An older `just` cannot parse the file, so no recipe can
+  refuse it: development.md names the version, its install line and both errors (133).
+- **as predicted**: `just setup`'s pip stops on PEP 668; rosdep's pip keys fail under sudo,
+  which drops `PIP_IGNORE_INSTALLED` (Debian owns `typing_extensions`; 118's notes).
+- **not predicted, outside Jazzy**: release.yml's rosdep step lacked `src/scensim_sampler`,
+  which `scensim` depends on since K3; issue 146, fixed apart.
+- **not predicted**: acb_bridge, which 0.2.0's simulation set builds on purpose (the vehicle
+  side every non-Autoware pilot on CARLA starts), found no Rust bindings for
+  `autoware_adapi_v1_msgs` when the vendored message packages were built in the same colcon
+  run: colcon-cargo-ros2 resolves the bindings once, when the first Cargo package starts, and
+  looks in `install/` and `/opt/ros/jazzy` only. On Humble the messages come from
+  /opt/autoware, there before the build. The fix (133: option a): `third_party/sim_vendor`,
+  sim.repos' message packages built once against ROS alone and sourced by `just build` on
+  Jazzy where Humble sources Autoware, as `third_party/autoware_overlay` is built and sourced;
+  the install layout stays Humble's. With it the simulation set built: the vendored packages
+  (39) in 2 min 11 s, the simulation packages (45, acb_bridge included) in 11 min 21 s, 4
+  workers.
+
 ## K9's CS3: the pilot's map variants (2026-11-24, 243; reviewed by 133)
 
 **The plumbing.** `world.pilot_maps` in testbench.yaml declares, per world map, the maps a pilot
