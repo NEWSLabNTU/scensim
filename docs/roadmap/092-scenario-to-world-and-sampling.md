@@ -177,6 +177,20 @@ under `docker run --init` all 29 t3 tests pass in 22.6 s. check.sh runs with `--
 f8e65c58. t3 itself would hang the same way in any container without an init, a released
 stack's included: issue 153 (241).
 
+**Item 3, the conformance check on Jazzy: plan and prediction** (133's OK, 2026-11-24, before
+the run). The CARLA world server and `scensim_world_check` as `jazzy-check` built them (f8e65c58),
+run in `scensim-jazzy-check` with the host's network and an init, against a CARLA 0.9.16 of my
+own on the host (RPC 2100, Epic, Town01, the NVIDIA card; world port 5691, SSv2's 5655, so its
+sensor-release sockets are 5656 and 5657), started only after 10 minutes with no other compute
+on the GPU and stopped by its pid afterwards. `scensim_world_check conformance
+tcp://127.0.0.1:5691 --map <Town01>`. The control: the Humble build of the same CARLA world
+server (scensim_carla_world's pin is the same at 59439b38) checked against the same CARLA right
+after. Prediction: the Jazzy server passes every check the Humble one passes, with the same
+capabilities declared, since the world protocol carries no ROS types and both builds of
+carla-sys use libclang 14. What could break is the one ROS-facing part, the node's parameters
+(rclrs on Jazzy), which no test reads; if it does, the server starts on the config file's
+values instead of the arguments, so the config given names port 2100 too.
+
 **A host hazard found on the way.** On this Humble host a pip numpy 2.2.6 in `~/.local`
 shadows apt's numpy 1.21, and apt's torch then fails at import (`_ARRAY_API not found`); a
 torch test K11d added failed `just test` here for it (issue 151). development.md now names it
