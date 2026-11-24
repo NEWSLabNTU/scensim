@@ -2159,6 +2159,32 @@ rule then: a kept step of 0.05 m/s or more puts C7 on option (2); under it with 
 option (1) for whole-car zones, split-mu out unless the chatter is shown to be the split's
 physics. By these predictions, option (2).
 
+**P0b's result (2026-11-25, 06:17 to 06:18, 118; the same CARLA, started and stopped by its
+process group, codec told; the blueprint's physics, as P0; `p0b.py`, `p0b.jsonl`).** The step is
+net of R0's (the coast's own loss over the same ticks, 0.030 m/s):
+
+| arm | the change at tick 50 | step, m/s | chatter, deg/s |
+|---|---|---|---|
+| R0 | the velocities set back, no apply | 0.000 | 0.000 |
+| R1 | an apply that changes nothing, both set back | 0.154 | 0.000 |
+| R2 | every wheel 1.0, both set back | 0.143 | 0.000 |
+| R3 | the left wheels 1.0, the velocity set back only | 0.148 | 1.085 |
+| R4 | the left wheels 1.0, both set back | 0.148 | 1.086 |
+
+- **Every prediction held.** The step is the apply's rebuild (R1, with nothing changed), not the
+  restore (R0), and about the same whatever the friction; the chatter comes only with a split
+  (R3, R4; none with an equal change, R2), and the angular velocity's restore does not cause it.
+- **133's rule: option (2).** The kept step, 0.14 to 0.15 m/s, is over 0.05 m/s, so no apply per
+  zone crossing. C7 on CARLA 0.9.16 stays whole-world (today's road condition), zones and their
+  `scensim.zone.` properties refused by name, the zone checks on Isaac only, and this recorded as
+  0.9.16's limit; C7 is revisited on CARLA 1.0 (Chaos) after 083 step 5, P0 first there. The
+  chatter's nature (the split's physics, or a numerical oscillation: its sign alternates every
+  tick, as a step-rate mode would) is not settled, and with option (2) it need not be.
+- What C7 keeps on 0.9.16: the protocol's CARLA side for the world-wide part. Whether the CARLA
+  server should declare `ROAD_ZONES` at all with no zones (a reply listing none) is 133's and 243's
+  call; 118's proposal: not declared on 0.9.16, so K9f-a's checks see a server without zones and
+  skip, as they do now.
+
 **The hosts.** CARLA on 118 (its own CARLA on port 2010; issue 005 is Isaac's SimReady render on
 118's driver, not CARLA's, so 118 runs C7's CARLA side, P0 included). The Isaac reference is
 K9f-a's own Isaac Town01 run on 243's host for the same zone and class; if K9f-a's run cannot
