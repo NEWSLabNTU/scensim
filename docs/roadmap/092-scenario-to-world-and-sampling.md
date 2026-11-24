@@ -921,3 +921,38 @@ table's ego row compared the batch's entity pose with the seats body pose and so
 (the ego is played back; its row is 0 with the fix), and 243 found `k12_walker_replay.py` (K12's
 check 2) still fed its model the body pose (every event 3 frames early, 0.21 m), fixed by 243
 in scensim 79775334.
+
+### K11c, an observation during the run (2026-11-24, 241; offline, the run untouched): the score's plateau
+
+The scores of g0 and g1 (1000 each), histogrammed from the runs' `outcomes.jsonl`:
+
+| Closest gap (m) | g0 | g1 |
+|---|---|---|
+| (-2, -1] | 9 | 9 |
+| (-1, -0.5] | 5 | 5 |
+| (-0.5, 0] | 3 | 1 |
+| (0, 0.2] | 0 | 0 |
+| (0.2, 0.4] | 5 | 6 |
+| (0.4, 0.44] | 170 | 187 |
+| (0.44, 0.5] | 496 | 525 |
+| (0.5, 0.6] | 283 | 238 |
+| (0.6, 2] | 29 | 29 |
+
+The scores are bimodal. A walker that goes in front of the car makes contact (gap at most 0:
+17 and 15). One that waits at the kerb as the car passes sits on a plateau, 0.40 to 0.60 m,
+95 % of the draws, its gap set by the kerb's offset, not by how near a failure it came. No draw
+falls in (0, 0.2]. So the elite (the lowest 100) is the failures plus about 80 plateau draws,
+and the plateau's are not nearer a failure than the rest: the level moves only with the
+plateau's own spread (0.430, then 0.427 m), and cross-entropy has no slope to climb.
+
+Nor do the searched variables separate the two: the failures' means (g0: ego 8.5 m/s, walk
+1.54 m/s, ttc_entry 2.63 s; g1: 8.0, 1.49, 2.69) are close to the plateau's (8.3, 1.39, 2.55;
+7.9, 1.39, 2.56). Which branch a draw takes is mostly the walker model's own decision (its
+gap-acceptance draw, from the record's pilot seed), which the search does not move.
+
+**A score-design finding, not a bug**: the closest gap is flat on the waiting branch. If the
+run ends at the cap, this is the likely reason. The fix belongs to the next search's spec,
+written before its run: a score with a slope on the waiting branch (the time margin the walker
+leaves, say, or the gap acceptance's own margin, U against its threshold), or the decision's
+noise as a searched variable.
+
