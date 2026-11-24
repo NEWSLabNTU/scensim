@@ -24,3 +24,22 @@ On siw 6c6a044 (before 134) and on main: for each rock, the car's s when it load
 rock's own s, and each tile's worker time. The key number is the least lead (the rock's s less
 the car's at its load) over the rocks a wheel passes within 1 m of; under the car's stopping
 distance at its speed, rocks are being missed.
+
+## The probe as built (before the runs)
+
+C6b's fixtures on fixture_c6b (raycast, the whole set) through a wrapper of `fixture_drive`
+(`probe142.py`) that logs every rock tile loaded into the rock data (`RockStream._load`: the
+tile, its rocks' positions, the car's position then), the car's position every frame, every tile
+the worker made (its key and worker time) and every tile made on the caller's thread instead.
+Run on siw 6c6a044 (before 134) and on siw main 56b8e39, GPU0 quiet and the host otherwise idle
+(the loading depends on the worker's pace). A rock's lead is its s along the course less the
+car's (its rear axle, `fixture_drive`'s origin) when its tile loaded; a rock is in a wheel's path
+when it lies within 1 m of a wheel's line (the car's lateral place at the rock's s, plus or minus
+half the tread, 0.83 m). The car's stopping distance at 11.1 m/s, braking at 7 m/s^2 after
+0.5 s, is about 14 m (5.6 + 8.8).
+
+- **118's prediction:** the worker's time a tile rose with 134 (its look is now made there): at
+  least 1.5 times 6c6a044's median. On 6c6a044 every rock in a wheel's path loads at least 25 m
+  ahead of the car. On main the least lead over those rocks is under 14 m: rocks are being
+  missed in effect, since a wheel can reach one before the car could stop for it. Tiles are made
+  on the caller's thread on main and not, or far less, on 6c6a044.
