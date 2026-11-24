@@ -11,9 +11,13 @@ developer workflow needs [`just`](https://github.com/casey/just) 1.40.0 or newer
 package is older (24.04 ships 1.21; 22.04 has none), so install the release binary:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to ~/.local/bin
+curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --tag 1.40.0 --to ~/.local/bin
 # or, with Rust installed: cargo install just --locked
 ```
+
+Any release from 1.40.0 on will do. Name one with `--tag`: without it the installer asks
+GitHub's API for the latest release, which answers a host past its anonymous rate limit with
+`curl: (22) The requested URL returned error: 403`.
 
 An older `just` stops while reading the justfile, before any recipe runs. Versions 1.29 to
 1.39 print ``error: Non-default parameter `args` follows default parameter``; older ones print
