@@ -1676,3 +1676,8 @@ lead's spawn points, both on west_street's centreline (the street is straight). 
 at the matched trail is 0.0 m for both bodies, with the 1.387 m origin offset applied. The
 contact monitor recorded no contact in any run, the ego's included.
 
+**Landed** at scensim 73575ba9 (2026-11-25) with one gate test waived by 133:
+`scensim_isaac_world`'s `test_course_c6c` golden hash, issue 162 (the hash is the host's, not
+the heights': it fails the same at isaac main without K13). Gate log:
+`~/nas/autoveh/logs/k13-gate/gate-53a15bf9.log`.
+
