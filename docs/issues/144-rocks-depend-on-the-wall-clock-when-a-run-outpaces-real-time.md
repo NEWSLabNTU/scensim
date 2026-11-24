@@ -52,3 +52,8 @@ quiet rule.
   - Caveat, stated before: the lists match only if the car's path is the same to the frame. If a
     tile's arrival differs by one frame where the car crossed a reach boundary, that is the
     physics' own spread, not the wall clock, and will be shown as such (its car positions).
+  - **The caveat tightened (133, before the runs).** A one-frame difference counts as the
+    physics' own spread only if the car's pose differs between the two paces before that frame.
+    If the poses are the same up to that frame and the tile lists still differ, the wait failed.
+    `probe144.py` logs every frame end's car pose (x, y, yaw, speed) on every run, so the
+    comparison can tell the two apart.
