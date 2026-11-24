@@ -26,3 +26,22 @@ each car that touches a corridor, so the worker has made them before the frame's
   drop from 48 to under 5, their total from 27 s to under 2 s. The (frame, tile) lists stay
   identical to 19ad467's real-time run, since what a frame has is set by the wait, not by when
   the worker began. The unpaced run's rate rises above 19ad467's 33.7 frames a second.
+
+## The fix as built, and the runs (before any run)
+
+siw issue-147 07bf74c on main 46c09ec (local). `RoadLayer._ahead` returns, with the tiles along
+the corridors, every tile within `AROUND` (32 m, equal to the larger of ROCK_REACH and
+COLLISION_REACH; a test holds it) of the car that touches a corridor: the set the frame's end
+waits for (`ready_around`). `SurfaceLayer._wait_for_tiles` logs a WARN ("issue 147: a frame's
+end waited N ms ...") for each wait over `SLOW_WAIT_MS`, 50 ms. Tests without Isaac
+(`test_issue_147.py`): the reach, every tile the frame's end waits for asked for ahead along a
+winding road, none off every corridor, and the WARN over the bound and none under it.
+
+The runs: probe144, Haruna's rocks map, 10 m/s, 1900 frames, under the quiet rule on GPU0 (the
+waits are timings), each held to the wall clock and unpaced.
+
+- **Amended before the runs (118, labelled):** a same-day baseline pair on main 46c09ec (the same
+  drive, real time and unpaced) beside the fix's pair. Main has moved since 19ad467 (issues 145
+  and 152), so the fix is judged against both: the filed numbers (19ad467: 48 waits over 50 ms,
+  27 s, 33.7 frames a second unpaced) and the baseline's. The filed prediction stands as written.
+  The (frame, tile) lists are compared with the baseline's real-time run.
