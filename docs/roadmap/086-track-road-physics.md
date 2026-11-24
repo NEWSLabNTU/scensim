@@ -2235,6 +2235,16 @@ server from that tree on port 5594, conformance with Town01's map (`isaac-ex/c7a
   **held** on the rerun. The breaking test (a car's friction at another factor reads back that
   factor) is a unit test, not live.
 - `ROAD_ZONES` is not declared; a zone is refused, in the reply, naming the limit.
+- **Who writes the wet look** (133's question; agreed with 243, 2026-11-25): CARLA's `wetness` and
+  `precipitation_deposits` are the road condition's alone during a scenario, a dry one included
+  (4aeceff). SetEnvironment and K9e's environment form cannot write them (their sky maps to
+  cloudiness, precipitation, fog and the sun only), so a scenario's rain falls but does not wet the
+  road, as OpenSCENARIO keeps `Weather.precipitation` and `RoadCondition.wetness` apart. The one
+  other writer is a static knob's older `weather:` form (CARLA only), set before SSv2 starts: a
+  knob value whose `weather:` names `wetness` or `precipitation_deposits` in a scenario with a
+  RoadCondition anywhere is refused, in check and run, as two writers, by name (a `knobs.py` rule,
+  243's, K9e; without a RoadCondition the knob's look stands, as before). Where it lands is 133's
+  call.
 
 **The hosts.** CARLA on 118 (its own CARLA on port 2010; issue 005 is Isaac's SimReady render on
 118's driver, not CARLA's, so 118 runs C7's CARLA side, P0 included). The Isaac reference is
