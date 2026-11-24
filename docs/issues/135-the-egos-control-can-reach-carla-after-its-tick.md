@@ -184,3 +184,44 @@ stack): every frame step 2's rule calls `late` is `after_tick` here, sent after 
 truly `late` frames are 0; if no such stretch recurs in three runs, that is said, and step 2's
 nine frames stay unjudged (their tick times were not recorded); the tick's p50 is unchanged
 within noise (one more `clock_gettime` a tick).
+
+**Results** (2026-11-24, dev_trace, `town01_ego_drive`, three runs on one stack started 12:42:19;
+acb bf96de9, world server a7a7570, protocol d11b744; `scensim_launch/scripts/apply_alignment.py`,
+outputs in `/var/tmp/aeon/i135/step3/`). The boot ids matched in both judged runs, so the timed
+comparison ran.
+
+| run | outcome | frames with `control` | in_time | ambiguous | no_send | late | after_tick | in_time after the stamp |
+|---|---|---|---|---|---|---|---|---|
+| 1 (12-43-35) | passed | 677 | 475 | 4 | 198 | 0 | 0 | 0 |
+| 2 (12-44-50) | error at 82 frames | 81 | 0 | 0 | 81 | 0 | 0 | 0 |
+| 3 (12-45-51) | passed | 679 | 475 | 12 | 192 | 0 | 0 | 0 |
+
+The tick call (return minus start), in us:
+
+| run | stamped frames | min | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 1 | 678 | 732 | 1173 | 1644 | 3197 | 14746 |
+| 2 | 82 | 794 | 1306 | 1632 | 1843 | 1843 |
+| 3 | 680 | 553 | 1234 | 1766 | 2973 | 6609 |
+
+Run 2 is not a result about controls. Autoware's `pose_instability_detector` aborted ("cannot
+store a negative time point in rclcpp::Time", docs/issues/027) and the run ended as an error
+after 82 frames, before the ego sent anything (81 `no_send`). This worktree had no Autoware overlay
+built, so the stack ran the stock detector without 027's fix. It has nothing to do with this
+step's change.
+
+Against the prediction:
+
+- **No late stretch recurred.** In runs 1 and 3, 1356 frames with `control`, step 2's rule
+  calls none `late`. There was nothing for the stamps to split, so the prediction's main claim,
+  that such frames are `after_tick`, is untested. As the prediction said for this case, step 2's
+  nine frames (1482 to 1492, untimed) stay unjudged.
+- **Truly `late` frames: 0**, as predicted, but with nothing to compare that adds no evidence.
+- **Every expected send left before its tick's start stamp.** No `in_time` frame's send left after
+  the stamp, so the RPC send window the start stamp cannot see was never tested here.
+- **Tick p50 unchanged within noise**, as predicted. The bridge's tick p50 was 1.36 ms in step 2's
+  run and 1.24 ms in runs 1 and 3; p95 was 2.81 ms then and 1.81 and 2.36 ms now.
+
+Step 2's stretch was a single event: eleven frames, which ended when acb's follower skipped a
+frame. Three runs did not reproduce it. The instruments are now in place, so the next stretch,
+in any traced run, will be judged where it happens.
