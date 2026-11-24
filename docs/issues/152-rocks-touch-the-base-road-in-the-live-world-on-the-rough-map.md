@@ -332,7 +332,18 @@ made again at a removed one's path taken for one in two groups. They are not the
   - (a) `preload_list` reads each world file's `ground_paths`, and `preload(usd, ground_paths)`
     passes them to `load`, so `roadBase` is right at the env's first intake.
   - (b) `_load_env` keeps a preloaded world only when the request's ground paths are the ones it
-    was loaded with, else it loads the env again.
-  - Tests without Isaac for both.
-  - **118's prediction:** the live haruna_down drive on *rough_rocks* logs 0 base contacts, and
-    the scenario's load still logs about 770 warnings (the pool's paths, not touched here).
+    was loaded with, else it loads the env again, with a WARN that names issue 152 and both
+    ground lists (133: a reload, not a refusal, since a changed world configuration on the same
+    USD is legitimate; the WARN because it costs a preload's minutes and means the preload was
+    wrong).
+  - Tests without Isaac for both: the preload's (USD, ground paths) from a world file, a match
+    keeping the world and a mismatch loading it again (`names.keep_loaded_world`), and
+    `_load_env` keeping only through that rule and warning with both lists.
+  - Built: siw issue-152 46c09ec on e0559e5 (local). 133: parts 1 and 2 land together after
+    part 2's live proof, one siw gate and one scensim gate; if the proof fails, part 1 lands
+    alone and part 2 stays open.
+  - **118's prediction (before the run):** the live haruna_down drive on *rough_rocks*, on
+    46c09ec with no probe, passes, and logs 0 base contacts (issue 123's check) and no issue 152
+    WARN, because the bridge's ground paths are the world file's, so the preloaded world is
+    kept. The scenario's load still logs about 770 warnings: the pool's reused paths, issue
+    034's class, recorded here and not fixed.
