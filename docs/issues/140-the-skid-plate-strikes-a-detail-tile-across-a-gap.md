@@ -1,7 +1,7 @@
 # 140: the skid plate takes a 6.3 kN s impulse from a detail collision tile across an 8 cm gap
 
-**Status:** open, a record; a geometric probe comes before any change to contact offsets
-(133). **Severity:** medium: it costs the car 1.4 m/s in one step and puts it on one wheel for
+**Status:** fixed, landed as siw 56b8e39 (scensim main 75626c3b): the tiles' contact offset
+0.02 m, rest offset 0. **Severity:** medium: it costs the car 1.4 m/s in one step and puts it on one wheel for
 0.7 s, which brought issue 137's throw about. **Found:** 2026-11-24, scensim 118, issue 137's
 source probe on 086 C6d's *rough_none* map.
 
