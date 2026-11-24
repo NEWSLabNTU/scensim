@@ -258,3 +258,34 @@ The driver now calls `RoadLayer._ahead` itself (the car's yaw along the centreli
   heights 27, the look 13, the rocks' placement 58); the least road-tile lead at least 35 m at
   13.9 m/s (pre-134's, the no-regression bar), at least 20 m at 16.7 m/s, and at least 0 at
   20 m/s.
+
+### The throughput with all three steps (2026-11-24)
+
+| speed | worker median, tiles/s | least lead (p05), m |
+|---|---|---|
+| 8.3 m/s | 248 ms, 1.16 | 49.5 (53.0) |
+| 11.1 m/s | 240 ms, 1.55 | 41.9 (51.8) |
+| 13.9 m/s | 234 ms, 1.97 | 34.3 (54.9) |
+| 16.7 m/s | 240 ms, 2.39 | 26.4 (44.7) |
+| 20 m/s | 237 ms, 2.91 | 11.0 (40.4) |
+
+**118's prediction:** the worker's median at most 180 ms **failed** (234 to 248); at least 35 m at
+13.9 m/s **failed** (34.3); at least 20 m at 16.7 m/s **held** (26.4); at least 0 at 20 m/s
+**held** (11.0). A rock loads once its tile is ready and within 32 m of the car, so a tile ready
+about 40 m before its centre adds no delay: at 13.9 m/s and up the worker still costs some.
+
+A Haruna road tile with its rocks, split offline: 417 ms in all, `_uvs` 103, `_make` 87 (most of
+it the roughness fields, made once and kept), `_look` 17, and **the rocks' placement 212**: it
+projects 580 small sets of points, each culling over all 3054 segments (0.5 ms a call).
+
+## Step (iv): a segment grid for the cull (before it is timed)
+
+`Corridor._candidates` takes its first bound from the segments in the grid cells (16 m) around
+the points instead of from every segment, then the gap test over the segments in the cells
+within that bound. The set kept is a superset of today's (the bound can only be larger), and it
+holds every segment that can be nearest; the loop's order is kept, so u, v and near are the
+same bit for bit.
+
+- **118's prediction:** bit for bit on the 23 road tiles and on every rock's placement of 16
+  Haruna tiles; the rocks' placement of a Haruna tile from 212 ms to under 60 ms, the whole tile
+  under 250 ms (first make, the roughness fields included).
