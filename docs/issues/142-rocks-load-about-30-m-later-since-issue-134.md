@@ -211,3 +211,28 @@ exact rule, and visits them in order.
 
 - **118's prediction:** bit for bit the same u, v and near as today's on every tile of both
   records (fixture_c6b and Haruna); `_uvs` on a Haruna road tile at least 3 times faster.
+
+### Step (iii)'s prototype, timed (2026-11-24)
+
+`Corridor.uv` with 2 m blocks, each culled among the tile's own candidates (a block's nearest
+segments are among the tile's; the bound over that subset is still an upper bound, so the cull
+stays exact), and a block's segments taken at once as a (points x segments) array, the first
+nearest by `argmin` (the loop's strict `<` in order keeps the first too). On 12 Haruna and 11
+fixture_c6b road tiles: u, v and near bit for bit the per-tile cull's on all 23; a tile 227 ms
+to 63 ms on Haruna, 246 to 66 ms on fixture_c6b (3.6 and 3.7 times). Culling per block alone
+(the loop kept) gave 2.4 times. A Haruna 2 m block keeps 21 segments on average (36 at most) of
+the tile's 91. **118's prediction: held** (at least 3 times, bit for bit).
+
+## Step (ii), the prefetch along the corridors (before its test runs)
+
+`RoadLayer._ahead`: for every corridor whose reach the car is within, the points along its
+centreline from the car's u to u + max(REACH, LEAD_S v) (or u less that, the corridor's
+direction taken from the car's heading: its velocity above 1 m/s, its yaw below, so a standing
+car no longer aims at a velocity's noise); the heading's straight line only when no corridor is
+within reach. Tests (no Isaac): on a two-corridor record (a junction) the keys follow both
+corridors and stay on them; a car off every corridor gets today's line; a standing car's keys
+do not change with a velocity's noise; a hairpin's tiles round the bend are asked for before
+the car turns.
+
+- **118's prediction:** all pass, and on siw c6ec980 (today's `_ahead`) the hairpin and the
+  standing-car tests fail.
