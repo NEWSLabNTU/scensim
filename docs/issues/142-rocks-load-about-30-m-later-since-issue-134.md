@@ -467,3 +467,15 @@ paced to the wall clock: siw 56b8e39 and siw issue-142 (with `fixture_cost`'s `p
 
 - **118's prediction:** the two within a few of each other (base contacts are not 142's); the
   32 came with the pace.
+
+### The like-for-like base contacts (2026-11-24)
+
+The Haruna drive at 13.9 m/s, both held to the wall clock: siw main 56b8e39, 36 base contacts
+(16.6 frames a second: it also waited for its tiles); siw issue-142 77075e3, 37 (20.0). With the
+10 m/s pair (9 and 9) 142 does not raise them; they grow with the speed, not the pace (the 32 at
+2.8 times real time). **118's prediction: held.** They are issue 145's.
+
+The same pair's leads: in-path rocks under 35 m, 46 of 67 on main and 6 of 68 with 142 (31.2 to
+34.2 m: the reach). In both, one rock counts as passed before its prim (-143 and -144 m): a loose
+rock the car knocked, which rolled more than 3 m and whose prim was made again where it stopped
+(its data had loaded at its first place); not a rock missed.
