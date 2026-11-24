@@ -175,7 +175,10 @@ orphaned, stayed a zombie, and a zombie still counts as a member of its process 
 `stop_group` waited out every grace. With pytest as PID 1 the sigterm test fails at 30.3 s;
 under `docker run --init` all 29 t3 tests pass in 22.6 s. check.sh runs with `--init` since
 f8e65c58. t3 itself would hang the same way in any container without an init, a released
-stack's included: issue 153 (241).
+stack's included: issue 153 (241), fixed on main as 564600f8: t3's `stop_group`, `scensim`'s
+stop and `scensim-agent supervise` count a group whose only members left are zombies as gone,
+so the four tests pass without an init too (241, under a non-reaping subreaper). check.sh keeps
+`--init`: the container's PID 1 reaps, as a host's does, for whatever else a test leaves.
 
 **Item 3, the conformance check on Jazzy: plan and prediction** (133's OK, 2026-11-24, before
 the run). The CARLA world server and `scensim_world_check` as `jazzy-check` built them (f8e65c58),
