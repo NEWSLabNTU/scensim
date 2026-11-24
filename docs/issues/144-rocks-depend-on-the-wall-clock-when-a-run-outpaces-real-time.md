@@ -1,6 +1,6 @@
 # 144: a run stepped faster than real time gets rocks that depend on the wall clock
 
-**Status:** fixed, siw 19ad467: a frame's end waits for the road's tiles in reach; the
+**Status:** fixed, siw 19ad467 (its test made load-proof in ac008bd): a frame's end waits for the road's tiles in reach; the
 look-ahead's misses are issue 147. **Severity:** high: a run's rocks, and so its
 physics, are not reproducible. **Found:** 2026-11-24, scensim 118, issue 142's Isaac proof.
 
@@ -28,7 +28,9 @@ identical rock load frames.
 updated, waits for the road's tiles within their reach (32 m) of every car, rocks' placement
 included (`RoadLayer.ready_around`, as a placed car's), at most `FRAME_WAIT_S` (2 s). Tiles still
 not ready after that are logged and counted (`wait_missed`), and each frame's wait is kept
-(`wait_ms`). The collision tiles want only ready tiles within their reach, and the rocks only
+(`wait_ms`). **Under load the live wait can give up too** (133): a run whose `wait_missed` is
+above 0 had frames whose tiles depended on the wall clock, so it is not pace-reproducible. Check
+it before comparing two runs. The collision tiles want only ready tiles within their reach, and the rocks only
 tiles with collision tiles; after the wait every tile within reach is ready. So the frame at which
 a tile's collision tile and rocks arrive depends only on where the cars are. Tests:
 `test/test_issue_144.py`, including the offline form of the proof (a slow worker, two paces, the
@@ -125,3 +127,12 @@ no reruns now). None of them had these tiles, at any pace:
 **The prefetch is issue 147 (133).** 144 lands as the correctness fix. Making the look-ahead ask
 for every tile within the reach, so the wait seldom blocks, is speed only, with its own measure
 and prediction.
+
+### The gate's failure and the test's fix (2026-11-24, found after the results)
+
+The first full gate of the landing (16:17, pin of 19ad467) failed on the offline two-pace test
+(`Paces`), not on the live code. On the gate host at load 59, the first frame's dozens of tiles
+from the test's slow stand-in worker took longer than FRAME_WAIT_S (2 s), and the wait gave up with
+two tiles left. The test proves that a completed wait gives the same tiles at both paces, so it now
+waits up to 60 s, and `Wait` tests the 2 s bound (siw ac008bd, on main). It was a wall-clock bound
+in a test on a loaded host, issue 132's lesson met again.
