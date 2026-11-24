@@ -72,6 +72,44 @@ def test_carla_refuses_friction_and_surface_maps_but_runs_a_look():
     assert p["notes"] == {"surface": "visual only: the friction was not applied"}
 
 
+def test_issue_154_the_check_holds_each_value_to_the_testbenchs_simulator():
+    """Issue 154: `testbench check` refuses, by name, a value its simulator's run would refuse
+    (one rule, shared with plan): weather on Isaac; a surface map, or a friction that is not
+    physics: none, on CARLA. Without a simulator only the shape is checked, as before."""
+    assert K.problems(WORLD) == []
+    isaac = K.problems(WORLD, simulator="isaac")
+    assert [w for w, _ in isaac] == ["world.knobs.illumination.values.day",
+                                     "world.knobs.illumination.values.night",
+                                     "world.knobs.surface.values.wet_look"]
+    assert all("Isaac has no weather service" in m for _, m in isaac)
+    carla = K.problems(WORLD, simulator="carla")
+    assert [w for w, _ in carla] == ["world.knobs.surface.values.dry",
+                                     "world.knobs.surface.values.wet"]
+    assert all("a surface map, which CARLA cannot apply" in m for _, m in carla)
+    friction = {"surface": {"values": {"wet": {"mu": 0.7}}}}
+    assert [m for _, m in K.problems(friction, simulator="carla")] == [
+        "knob surface=wet: a friction (mu 0.7), which CARLA's weather does not change "
+        "(wetness is visual); declare it physics: none to run it as a look only"]
+    # the run refuses with the same words
+    with pytest.raises(K.KnobError) as e:
+        K.plan(friction, {"surface": "wet"}, "carla")
+    assert str(e.value) == K.problems(friction, simulator="carla")[0][1]
+
+
+def test_issue_154_testbench_check_refuses_an_isaac_weather_knob():
+    from scensim import world
+    tb = {"simulator": "isaac",
+          "world": {"knobs": {"illumination": {
+              "values": {"day": {"weather": {"sun_altitude_angle": 60}}}, "default": "day"}}}}
+    assert world.problems(tb, "isaac") == [
+        ("world.knobs.illumination.values.day",
+         "knob illumination=day: weather parameters, but Isaac has no weather service (a "
+         "scenario's EnvironmentAction sets its sky, fog and rain); declare this value without "
+         "weather for Isaac")]
+    tb["simulator"] = "carla"
+    assert world.problems(tb, "carla") == []
+
+
 def test_a_knob_or_value_the_world_lacks_is_refused():
     with pytest.raises(K.KnobError, match="declares no such knob"):
         K.plan(WORLD, {"fog": "thick"}, "carla")

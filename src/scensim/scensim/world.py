@@ -147,7 +147,7 @@ def problems(settings: dict, simulator: str, project: Path = None) -> list:
             out += weather_problems(v)
         elif k == "knobs":
             from scensim import knobs as knobsmod   # noqa: PLC0415
-            out += knobsmod.problems(v, "world.knobs")
+            out += knobsmod.problems(v, "world.knobs", simulator or None)
         elif k == "anchors":
             out += anchor_problems(v)
         elif k == "pilot_maps":

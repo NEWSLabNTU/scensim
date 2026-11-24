@@ -1,6 +1,6 @@
 # 154: testbench check passes a knob value its simulator refuses at run time
 
-**Status:** open (243; numbered by 133). **Severity:** low: no wrong result; a project that
+**Status:** fixed 2026-11-25 (243; numbered by 133). **Severity:** low: no wrong result; a project that
 `testbench check` passes cannot run a scenario that binds the knob. Each such run is an error
 run (`knob_refused`), found only after its stack has started, and on Isaac a stack preloads for
 about 7 minutes.
@@ -40,3 +40,18 @@ at run time. `problems`, given the testbench's simulator, reports it for every d
 so `testbench check` refuses the value by name and points to the knob, the value and the
 simulator. A value with no simulator to hold it to (a declaration read without one) is checked
 for its shape only, as today.
+
+Shown after the fix: `knobs.simulator_problem(knob, value, mapping, simulator)` is the rule;
+`plan` raises its message, and `problems(world_knobs, where, simulator)` reports it at
+`world.knobs.<knob>.values.<value>` (`world.problems` passes the testbench's simulator). The
+two `world.problems` lines above are now:
+
+```
+world.problems isaac:  [('world.knobs.illumination.values.day', 'knob illumination=day: weather parameters, but Isaac has no weather service ...')]
+world.problems carla:  [('world.knobs.surface.values.wet', "knob surface=wet: a friction (mu 0.7), which CARLA's weather does not change ...")]
+```
+
+`test_knobs.py`'s two `test_issue_154_*` tests failed before the fix and pass after it: the
+check's words are the run's, and a declaration read without a simulator is checked for its
+shape only. The one committed testbench that declares knobs, k9_cs3 (CARLA, a weather value),
+still passes.

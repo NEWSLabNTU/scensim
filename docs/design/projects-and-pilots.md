@@ -307,6 +307,10 @@ error run, excluded from rates:
   surface map or a friction is refused, unless it is declared `physics: none`, and then the
   record says the friction was not applied.
 
+`testbench check` holds every declared value to the testbench's simulator by the same rule, so
+a value its runs would refuse is refused before any run, naming the knob and the value
+(issue 154).
+
 ```yaml
 world:
   knobs:

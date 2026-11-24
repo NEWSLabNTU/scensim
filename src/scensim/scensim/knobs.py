@@ -264,8 +264,9 @@ def environment_weather(scenario: Path) -> list:
     return found
 
 
-def problems(world_knobs: dict, where="world.knobs") -> list:
-    """The testbench's knob declarations, checked: (where, message) pairs."""
+def problems(world_knobs: dict, where="world.knobs", simulator: str = None) -> list:
+    """The testbench's knob declarations, checked: (where, message) pairs. With the testbench's
+    `simulator`, each value is also held to what that simulator's run applies (issue 154)."""
     out = []
     if world_knobs is None:
         return out
@@ -292,6 +293,10 @@ def problems(world_knobs: dict, where="world.knobs") -> list:
                 out.append((f"{w}.values.{v}.weather", "is {parameter: number}"))
             if m.get("physics") not in (None, "none"):
                 out.append((f"{w}.values.{v}.physics", "is `none` (visual only) or absent"))
+                continue
+            why = simulator_problem(k, v, m, simulator) if simulator else None
+            if why:
+                out.append((f"{w}.values.{v}", why))
         if d.get("default") is not None and str(d["default"]) not in map(str, d["values"]):
             out.append((f"{w}.default", f"{d['default']!r} is not one of its values"))
     return out
@@ -319,6 +324,25 @@ def _profile_problems(d, w):
     return out
 
 
+def simulator_problem(knob, value, m: dict, simulator: str):
+    """Why `simulator` cannot apply knob `knob`'s value `value` (its mapping `m`), or None: the
+    one rule `plan` refuses a run by and `problems` refuses a testbench by (issue 154)."""
+    m = m or {}
+    if simulator == "carla":
+        if m.get("surface_map"):
+            return (f"knob {knob}={value}: a surface map, which CARLA cannot apply per run; "
+                    "declare a visual-only value (physics: none) for CARLA")
+        if m.get("mu") is not None and m.get("physics") != "none":
+            return (f"knob {knob}={value}: a friction (mu {m['mu']}), which CARLA's weather does "
+                    "not change (wetness is visual); declare it physics: none to run it as a "
+                    "look only")
+    if simulator == "isaac" and m.get("weather"):
+        return (f"knob {knob}={value}: weather parameters, but Isaac has no weather service (a "
+                "scenario's EnvironmentAction sets its sky, fog and rain); declare this value "
+                "without weather for Isaac")
+    return None
+
+
 def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) -> dict:
     """What to send for a run's knob values: {weather: {param: value}, surface_maps: {knob:
     name}, notes: {knob: text}}. KnobError names a knob the world lacks, a value it does not
@@ -340,18 +364,9 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
                             f"({', '.join(values)})")
         m = values[value] or {}
         visual = m.get("physics") == "none"
-        if simulator == "carla":
-            if m.get("surface_map"):
-                raise KnobError(f"knob {knob}={value}: a surface map, which CARLA cannot apply "
-                                "per run; declare a visual-only value (physics: none) for CARLA")
-            if m.get("mu") is not None and not visual:
-                raise KnobError(f"knob {knob}={value}: a friction (mu {m['mu']}), which CARLA's "
-                                "weather does not change (wetness is visual); declare it "
-                                "physics: none to run it as a look only")
-        if simulator == "isaac" and m.get("weather"):
-            raise KnobError(f"knob {knob}={value}: weather parameters, but Isaac has no weather "
-                            "service (a scenario's EnvironmentAction sets its sky, fog and rain); "
-                            "declare this value without weather for Isaac")
+        why = simulator_problem(knob, value, m, simulator)
+        if why:
+            raise KnobError(why)
         if visual and m.get("mu") is None:
             notes[knob] = "visual only: the friction was not applied"
         weather.update({p: float(x) for p, x in (m.get("weather") or {}).items()})
