@@ -30,7 +30,7 @@ population row (16.919, 3.538, 1.183, 0.553, 2.147); the PDF shows that populati
 paper's 10 car and 10 truck followers, so for a car the car-only pooled row is the one taken.
 Fitted on highD (German motorways, drone video, 60 recordings, 25 Hz downsampled to 5 Hz,
 sections of 420 m): car-following of 50 s or more, 20 leader-follower pairs drawn, 10 with a
-car following. A small sample; its truck row is a second set if a scenario needs one. **s0, T,
+car following: **10 car followers, a small sample**; its truck row is a second set if a scenario needs one. **s0, T,
 a and b are motorway-fitted**; v0 comes from the lane's speed limit, not the set (section 3; the
 paper itself calls v0 hard to identify from car-following), so a Town lane keeps its own speed,
 but its following behaviour is a German motorway driver's.
@@ -46,8 +46,9 @@ but its following behaviour is a German motorway driver's.
 - Its step is + - * /, one sqrt and an integer power (delta = 4, computed as two squares), with
   no draws: one code over `sim_vehicle_ecu.xp`. numpy and torch on the CPU, in float64, with
   the same order of operations and `(v / v0)^4` written as two squarings (not a power), agree bit
-  for bit, as the walker's do; torch on a GPU may fuse operations (FMA), so there it is checked
-  within a stated tolerance, not bit for bit.
+  for bit, as the walker's do. On a GPU, sim_vehicle_ecu.xp runs one operation per CUDA kernel
+  with nothing fused, so torch there is **expected bit for bit, not yet run on a GPU**: the test
+  compares bytes and runs only where a GPU is present.
 - Its action is longitudinal, so it maps onto K12's channel as it is (section 2).
 
 **What it leaves out**, said in the record and in section 4 of the description:
@@ -114,8 +115,8 @@ bound), `stopped`, `lane_end`. No randomness: the seed is unused, said in the re
 - **The model alone:** steady following at v keeps IDM's equilibrium gap,
   `(s0 + v T) / sqrt(1 - (v / v0)^4)`; from rest on a free road it approaches v0 without
   overshoot; behind a standing car it stops at s0; numpy and torch bit for bit over the
-  walker's test's grid of slots and steps on the CPU in float64; torch on a GPU within a
-  tolerance stated before the check.
+  walker's test's grid of slots and steps on the CPU in float64; on a GPU expected bit for bit,
+  not yet run there.
 - **On seats (CARLA 0.9.16):** a lockstep run with lag 1 at every frame, the vehicle within its
   lane (lateral offset from the centreline, p95 and max, reported against a bound fixed before
   the run).

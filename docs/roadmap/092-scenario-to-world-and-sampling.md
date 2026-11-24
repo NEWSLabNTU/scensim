@@ -1537,7 +1537,8 @@ walker. (iv) Seats against the batch on one scenario. (v) The platoon scenario a
 **Exit.** Each check states its bound before its run:
 1. (i) The model alone: the equilibrium gap within 1e-9 relative, free-road approach to v0
    with no overshoot, the stop behind a standing car, numpy and torch on the CPU in float64
-   with 0 differing arrays, torch on a GPU within a tolerance stated before the check.
+   with 0 differing arrays; torch on a GPU expected bit for bit (sim_vehicle_ecu.xp fuses
+   nothing), not yet run on a GPU.
 2. (ii) On CARLA 0.9.16, lockstep: lag 1 at every frame, no gate miss; the vehicle's lateral
    offset from the lane's centreline, p95 and max, under a bound set from (i)'s chord error.
 3. (iv) Seats against the batch on the same record: events at the same frames, the follower's
@@ -1561,5 +1562,13 @@ benign; the first search wants a faster lane anchor.
 3. The first search's lane: an existing map with a lanelet export and a lane of 50 km/h or more
    (Town04 or Town05 first), a K9 anchor added there; Town01's limit is not raised; no new map
    without asking.
-Also: bit for bit only on the CPU in float64 (GPU within a tolerance); the cap breaks IDM's
-freedom from collisions, so `capped` events are counted; s0, T, a and b are motorway-fitted.
+Also: bit for bit claimed on the CPU in float64, and only expected on a GPU until run there;
+the cap breaks IDM's freedom from collisions, so `capped` events are counted; s0, T, a and b
+are motorway-fitted, from 10 car followers.
+
+**The map (2026-11-25).** Base Town05's own lanelet export has lanes at 50 km/h or more: its
+tags give 88.5 km/h (387 road lanelets), 104.6 (40, the ring), 56.3 (11), and lanelet2 takes
+50 for the 145 untagged ones. Straight chains at 88.5 km/h run 350 to 372 m (for one, lanelets
+105401, 78805, 117337, 219, ...). So base Town05, not the 110 km/h ring variant (133). Its
+`map_export` and a K9 anchor are made locally; publishing them as a new dataset revision is an
+outward publish and waits for the user's approval through 133.
