@@ -261,6 +261,11 @@ met twice: **PhysX fixes a collider's filtering when it takes the collider in, a
 membership written afterwards is ignored.** A collider's membership must be in the stage before the
 first physics step that sees the collider.
 
+A third measure of the rule came with the fix's orders (C, below; 133 asked that it stand here):
+**a membership naming a path that does not exist yet is not applied when the prim arrives.**
+Writing a group's includes ahead of the prims does not help. The membership has to be written
+after the prim exists and before the step that takes it in.
+
 History matters here. Issue 123 first made the pool's membership one edit at the road's load, which
 logged 769 "only in one collision group" warnings. It then moved that edit a frame later, "as a
 live rock does", which ended the warnings. That later edit is what leaves every pool prim
