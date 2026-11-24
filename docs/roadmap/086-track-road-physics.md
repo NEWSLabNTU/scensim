@@ -2243,8 +2243,9 @@ server from that tree on port 5594, conformance with Town01's map (`isaac-ex/c7a
   other writer is a static knob's older `weather:` form (CARLA only), set before SSv2 starts: a
   knob value whose `weather:` names `wetness` or `precipitation_deposits` in a scenario with a
   RoadCondition anywhere is refused, in check and run, as two writers, by name (a `knobs.py` rule,
-  243's, K9e; without a RoadCondition the knob's look stands, as before). Where it lands is 133's
-  call.
+  243's, K9e; without a RoadCondition the knob's look stands, as before). It is in K9e's branch
+  (243, `knobs.wet_look_problem`, the run and the testbench check, one test with the dry case),
+  landing after C7.
 
 **The hosts.** CARLA on 118 (its own CARLA on port 2010; issue 005 is Isaac's SimReady render on
 118's driver, not CARLA's, so 118 runs C7's CARLA side, P0 included). The Isaac reference is
