@@ -91,6 +91,7 @@
        map_path. Empty turns acb's signal publisher off. -->
   <arg name="traffic_light_map_path" default="$(var map_path)/carla/traffic_lights.yaml" />
   <arg name="control_trace_path" default="" />
+  <arg name="apply_trace_path" default="" />
   <!-- The pedal maps of the physics the car runs: the blueprint's with carla_physics none
        (acb_bridge's config/blueprint/), the spec car's otherwise, as acb_launch chooses. -->
   <arg name="vehicle_maps_dir" default="$(eval &quot;'$(find-pkg-share acb_bridge)/config/blueprint/$(var vehicle_model)' if '$(var carla_physics)' == 'none' else '$(find-pkg-share $(var vehicle_model)_description)/config'&quot;)" />
@@ -139,6 +140,7 @@
     <arg name="ground_truth_range_m" value="$(var ground_truth_range_m)" />
     <arg name="traffic_light_map_path" value="$(var traffic_light_map_path)" />
     <arg name="control_trace_path" value="$(var control_trace_path)" />
+    <arg name="apply_trace_path" value="$(var apply_trace_path)" />
     <arg name="accel_map_path" value="$(var accel_map_path)" />
     <arg name="brake_map_path" value="$(var brake_map_path)" />
     <!-- Given a spec's physics, the CARLA world server applies it at the spawn and acb reads

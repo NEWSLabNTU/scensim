@@ -63,6 +63,7 @@
   <arg name="steer_time_constant_s" default="0.0"/>
   <arg name="ground_truth_range_m" default="100.0"/>
   <arg name="control_trace_path" default=""/>
+  <arg name="apply_trace_path" default="" description="acb_bridge's apply trace (scensim issue 135); empty disables it"/>
   <arg name="allow_manual" default="false"/>
   <arg name="honor_emergency_cmd" default="false"/>
   <arg name="control_cmd_timeout_s" default="1.0"/>
@@ -88,6 +89,7 @@
     <arg name="traffic_light_state_path" value="$(var traffic_light_state_path)"/>
     <arg name="map_origin_path" value="$(var map_origin_path)"/>
     <arg name="control_trace_path" value="$(var control_trace_path)"/>
+    <arg name="apply_trace_path" value="$(var apply_trace_path)"/>
     <arg name="accel_map_path" value="$(var accel_map_path)"/>
     <arg name="brake_map_path" value="$(var brake_map_path)"/>
     <arg name="allow_manual" value="$(var allow_manual)"/>
