@@ -1,6 +1,7 @@
 # 152: rocks touch the base road in the live world on the rough rocks map, after issue 145's fix
 
-**Status:** open; the doc and its prediction, before any probe or fix. **Severity:** medium:
+**Status:** open. Part 1 (siw e0559e5): the detail tiles are out of `roadBase`; the contacts
+with the world's road where the detail is flush with the base are still open. **Severity:** medium:
 issue 123's self-check fires, so some rocks rest on or fall to the world's own road and terrain
 instead of the true surface; off the carriageway, so 086 C6d's judged numbers are not moved.
 **Found:** 2026-11-24, scensim 118, 086 C6d's runs (filed by 133). Follows issues 145 and 136.
@@ -239,7 +240,7 @@ Probe v2 on the fix (2fcbdd1), the same package and drive. The run passed haruna
   as before. r195, r2 and r404 came this time. The warnings: 770.
 
 **118's prediction: held**, except the contacts: 13 against about 10, within the runs' spread so
-far (10 to 13). **133's prediction (a second group): not found.** In USD there is no second group
+far (10 to 13). **133's hypothesis (a second group): failed.** In USD there is no second group
 for PhysX to pick, and the table says the pair is filtered, yet PhysX reports the pair's contacts.
 
 What the runs leave. In this world, a pool rock in `rocks` that rests where the base is within
