@@ -204,11 +204,14 @@ The tick call (return minus start), in us:
 | 2 | 82 | 794 | 1306 | 1632 | 1843 | 1843 |
 | 3 | 680 | 553 | 1234 | 1766 | 2973 | 6609 |
 
-Run 2 is not a result about controls. Autoware's `pose_instability_detector` aborted ("cannot
-store a negative time point in rclcpp::Time", docs/issues/027) and the run ended as an error
-after 82 frames, before the ego sent anything (81 `no_send`). This worktree had no Autoware overlay
-built, so the stack ran the stock detector without 027's fix. It has nothing to do with this
-step's change.
+**Run 2 is void.** This worktree had no Autoware overlay built, so all three runs ran stock
+Autoware, without the overlay's fixes. In run 2 the stock `pose_instability_detector` aborted
+("cannot store a negative time point in rclcpp::Time", docs/issues/027, the fix the overlay
+carries), and the run ended as an error after 82 frames, before the ego sent anything (81
+`no_send`). Runs 1 and 3 also ran stock, but did not meet any of the overlay's bugs: the
+overlay's packages are the blind spot module, this detector and NDT's step bound, and none of them
+touches when acb's controls leave or when CARLA ticks. The runner
+(`/var/tmp/aeon/i135/run3g.sh`) now refuses to start without the overlay.
 
 Against the prediction:
 
@@ -223,5 +226,8 @@ Against the prediction:
   run and 1.24 ms in runs 1 and 3; p95 was 2.81 ms then and 1.81 and 2.36 ms now.
 
 Step 2's stretch was a single event: eleven frames, which ended when acb's follower skipped a
-frame. Three runs did not reproduce it. The instruments are now in place, so the next stretch,
-in any traced run, will be judged where it happens.
+frame. Two valid runs did not reproduce it. The issue stays open: its main question, whether a
+control that misses its tick left late or after the tick began, is untested. The instruments are
+now in place (the world server's tick stamps, acb's boot id, `apply_alignment.py`'s timed
+labels), so the next stretch, in any run with `gap_trace` and `apply_trace_path` on, will be
+judged where it happens.
