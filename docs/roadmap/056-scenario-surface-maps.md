@@ -106,15 +106,15 @@ What a scenario cannot do:
   soil scenarios (`scenarios/surfaces/*.xosc`) name their maps in their Init, and the run
   scripts stop copying.
 - [x] **4. Docs.** design/off-road-surfaces.md's road-condition section; the user guide.
-- [ ] **5. Runs.** On Isaac with Autoware, one world server, no restart between them: the
+- [x] **5. Runs.** (2026-11-25, 086 C4's acceptance: Town01's set by 241 on 2026-11-20, items 1 and 2 on Haruna by 118; the label class beside a road a car leaves not run) On Isaac with Autoware, one world server, no restart between them: the
   Town01 soil scenarios one after another (053 step 5's set), each naming its map; and one
   scenario setting `swb.default.Terrain` beside a road it leaves.
 
 ## Acceptance
 
-- [ ] A scenario names its surface map and gets it; one that names a missing map, or names
+- [x] A scenario names its surface map and gets it; one that names a missing map, or names
   it after the car has driven on soil, is refused with the reason; the next scenario on the
   same world server gets its own.
-- [ ] `swb.default.<Label>` sets a ground label's class for one scenario (a soil class as its
+- [x] `swb.default.<Label>` sets a ground label's class for one scenario (a soil class as its
   friction only); an unknown label or class is refused.
-- [ ] The Town01 soil scenarios pass one after another on one world server, no file copied.
+- [x] The Town01 soil scenarios pass one after another on one world server, no file copied.

@@ -8,7 +8,7 @@ approved by 133 the same day with its three decisions. C1 done 2026-11-20 (scens
 87e0ea1, pins f00f02a2). C2 done 2026-11-20 (scensim_world_protocol 2519aca, scensim_isaac_world
 51a95b4, pins 7aad5216). C3 done 2026-11-20 (scensim_isaac_world 98a5d8c, pins 4c67e51d); the
 courses' dataset revision prepared, not published. C4 landed 2026-11-20 (scensim_isaac_world
-6177ced, scensim 82787b91); its Town01 suite waits for 139. C5 started 2026-11-23 in four
+6177ced, scensim 82787b91), done 2026-11-25 (056's acceptance: Town01 by 241, items 1 and 2 on Haruna). C5 started 2026-11-23 in four
 steps ("C5's steps" below); C5a done (scensim_isaac_world ea35f35), C5b done
 (scensim_isaac_world b5de87b, its fixture course and checks), C5c done (scensim_isaac_world
 7eb96cc, the lip fixtures and the strips as zones), C5d done with one failed check
@@ -145,7 +145,7 @@ Each step on current scensim main; the exit check is what lets the next step sta
 | **C1. The road record and its reader** (done 2026-11-20) | `road_detail.yaml` schema 1; a pure reader and checker in `scensim_isaac_world` (`road_record`, every problem named, `road_detail check <map>`); constant sections and per-station `.npz` both become stations | 1 week (took 1 day) | every converted example builds the same detail tiles, byte for byte (tile hashes before and after); `test_road_detail`, `test_road_layer` pass; a malformed record lists every problem |
 | **C2. The class table moves to the protocol package** (done 2026-11-20) | `surface_classes.yaml` into `scensim_world_protocol`'s share; both world servers find it there; the road record's surface names checked against it | 3 days (took half a day) | Isaac: the Town01 soil, mud and snow scenarios pass as on 053 step 5; an unknown class in a section or zone is refused at load |
 | **C3. The course builder writes the record** (069 E0, swb half; done 2026-11-20) | `road_detail.yaml` + `<corridor>.npz` from the builder: bank 0, today's section, `kappa_v` from z, the hazard classifier from today's rail rule; `props.py` places rails from `barrier_offset` | 1 week | Haruna and Tsukuba rebuilt: the same rails at the same positions, the world USD unchanged except the new files, `haruna_down` still passes; the course's dataset revision prepared, published only on the user's go |
-| **C4. Named surface maps** (056; landed 2026-11-20, Town01 runs pending) | as 056's steps 1-5 | 1-1.5 weeks | 056's acceptance: Town01's soil scenarios one after another on one world server, no file copied |
+| **C4. Named surface maps** (056; landed 2026-11-20; done 2026-11-25, acceptance below) | as 056's steps 1-5 | 1-1.5 weeks | 056's acceptance: Town01's soil scenarios one after another on one world server, no file copied |
 | **C5. Isaac's geometry from the record** (066 R8) | the ribbon tilted by bank and crown; `road_detail` per station; the lip; the shoulder and run-off strips as surface zones; Autoware's point cloud and lanelet heights regenerated from the same meshes, divided when large | 1.5-2 weeks | Isaac's road height and cross slope within 5 mm and 0.1 deg of the record at every station; lip re-entry fixtures (5, 10, 15 cm at 90, 45, 30 deg); aib's slope matrix unchanged; `haruna_down` passes on a course with a nonzero crown |
 | **C6. The rest of 066** | R1's checks, R4 rocks finished, R6 wheel hop, R7 sensors and Autoware, all reading the road record | 5-7 weeks, in 066's order | 066's acceptance; aib's slope matrix and 055's manoeuvre suite unchanged on smooth road |
 | **C7. CARLA as a second target for the surface record** | the CARLA world server reads `surfaces.yaml`'s zones as friction trigger boxes (class `mu` x `wet`) and takes `swb.zone.<id>.*`; on 0.9.16 first, then on CARLA 1.0 once 083 step 5 maps the spec to Chaos; label defaults stay asphalt (CARLA's towns have no ground labels per wheel) | 1 week (0.9.16), 3-5 days more (1.0) | a wet zone and a split-mu zone change the CARLA ego's stopping distance and yaw the same way as on Isaac, within 25 % of Isaac's for the same class, on both CARLA versions; the T3 suites unchanged without zones |
@@ -320,6 +320,21 @@ scensim_isaac_world 6177ced (pins cebb5557), scensim 82787b91; 056's steps 1-4.
   instead of at a place, and the run ends at 60 s. Its prediction is unchanged. The Autoware
   overlay is built (`scensim autoware overlay`), and scenarios 1 and 3 run again, 1 then 3, on
   one world server. Prediction for 3 unchanged: it passes.
+- **The second runs (2026-11-25, 02:08 to 02:17; Autoware's overlay built, its log names no stock
+  fallback; GPU0 shared, nothing timed).** One world server, 1 then 3.
+  1. `c4_named_then_late`: `haruna_sand` loaded at the Init. At 30 s, the late condition was
+     refused: "scensim.surface_map: haruna_verge: a wheel has driven on soil since map haruna_sand;
+     a surface m[ap is named before ...]", and the run ended in error with it. **Held.** (The car
+     crawled on the sand again: issue 157.)
+  2. `c4_next_gets_its_own`: `haruna_verge` loaded with `scensim.default.SideWalk=gravel` after
+     the refused run, and the run passed, 408.5 s (haruna_down's 381 s and the slower start).
+     **Held.** `pose_instability_detector` did not die.
+- **C4 is done.** 056's acceptance: item 1 held (a map named and got; a missing one and one named
+  after the car drove on soil refused with the reason; the next scenario got its own), item 2
+  held (a label's class applied; an unknown label and an unknown class refused), item 3 by 241's
+  run on Town01. Not tested anywhere: 056 step 5's "one scenario setting a label class beside a
+  road it leaves" (no scenario leaves the road). Found on the way: issue 157. Record: NAS
+  "2026-11-25 086 C4 acceptance on Haruna (118)".
 
 ### C5's steps (approved by 133, 2026-11-23)
 
