@@ -334,3 +334,28 @@ other cars' poses, and logs the tiles not ready.
 - **118's prediction:** the tests pass. In the Isaac proof (C6b's fixtures through the 142
   probe) every in-path rock within 32 m of a case start is loaded and its prim made before the
   first step after the placing, and no tile is made on the caller's thread.
+
+### Step (v) in siw (2026-11-24)
+
+siw `issue-142` 8547b30: `RoadLayer.ready_around`, `SurfaceLayer.placed` (the vehicles' poses
+kept by path), called at the world server's ego spawn and teleport and at fixture_drive's case
+start. Its tests pass, and the siw suite (471 tests). **118's prediction for the tests: held.**
+
+## The Isaac proof (before the runs)
+
+C6b's fixtures on fixture_c6b (raycast) through `probe142b.py`, which adds to the 142 probe
+every rock prim made (a loose rock's own, or a tile's merged mesh for its fixed rocks) and every
+placing, on siw 8547b30, GPU0 quiet: the default cases (11.1 m/s, the boulder at 2.78), then
+embedded_15, loose_15 and loose_8 at 13.89 m/s (50 km/h) and at 16.67 m/s (60 km/h, the course
+limit). A rock's prim lead is its s less the car's when its prim was made; the prim's creation
+latency is the time from its data load to its prim.
+
+- **118's prediction:**
+  - while driving, every in-path rock's prim exists at least (its creation latency x v) + 10 m
+    ahead at all three speeds (133's first bar), and at least 35 m ahead at 11.1 and 13.89 m/s
+    (the no-regression bar);
+  - at each case start, every in-path rock within 32 m of the placed car has its prim before the
+    first frame after the placing, and no tile is reported not ready;
+  - no tile is made on the caller's thread;
+  - the default cases' verdicts are those of issue 140's run (embedded_15, loose_15 and loose_8
+    fail in raycast, boulder_35 passes), 0 base contacts.
