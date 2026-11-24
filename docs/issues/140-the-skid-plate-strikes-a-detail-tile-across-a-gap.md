@@ -94,3 +94,19 @@ the record and the probe first). Options for whoever takes it: author a small co
 the detail tiles and the plate (a few cm: the gap at which a contact may form), or keep steep
 tile faces out of the chassis's filter, each with its own probe that the plate still meets a
 real ridge or rock.
+
+## The fix's first measurement (before the run)
+
+133 chose an authored contact offset (restOffset 0) on the tiles and the plate, small, since
+any reach at least the step's 8.6 cm along the face would keep the 994 contact. The chassis has
+no CCD authored (PhysX's default: off), so its far contacts come from the offsets alone. The
+plate is aib's prim; the tiles are siw's. Before touching aib, one run with only the tiles
+authored (`rock_layer.TILE_CONTACT_OFFSET` 0.02 m, PhysX's customary 2 cm at metre scale), the
+plate unchanged, the same probe as before plus the authored offsets of the base road and the
+terrain (their 1.8 m and 7.4 m reaches).
+
+- **118's prediction:** the plate's default reach is small (PhysX's auto offset follows a shape's
+  size, and the 0.33 m came from the 16 m tile), so with the tiles at 0.02 m no plate-tile point
+  is made beyond 0.06 m, the 994 impulse is gone, and the car keeps its speed through step 994
+  (no 1.4 m/s step). The base road and terrain carry authored offsets from the world's USD, or
+  large auto ones; either way they do not touch the plate's motion here (no impulse, as before).
