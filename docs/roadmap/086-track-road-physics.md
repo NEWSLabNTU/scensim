@@ -2023,7 +2023,7 @@ K9f-a's (below).
   happens on leaving, whether `physics_control` reads it) is not documented well enough to
   build on; P0 measures it first.
 
-**The protocol: 092 K9f-a's, as written there** (243, 28574f29 on 092-k9e): `CAPABILITY_ROAD_ZONES
+**The protocol: 092 K9f-a's, as written there** (243, 28574f29 on 092-k9e; *amended 2026-11-25, aca14a95: a separate `ROAD_CONDITION_APPLIED = 14` gates the reply, see C7 on 0.9.16 below*): `CAPABILITY_ROAD_ZONES
 = 13` (needs `ROAD_CONDITION`), `ZoneApplied {surface_class, wetness, optional water_depth,
 mu}`, `RoadConditionReply {friction_scale_factor, wetness, map<string, ZoneApplied> zones}` in
 `Reply`'s oneof at 12, no `PROTOCOL_VERSION` bump. Whichever of K9f-a and C7 lands first adds it
@@ -2195,9 +2195,11 @@ net of R0's (the coast's own loss over the same ticks, 0.030 m/s):
   asphalt factor, and `wetness` the level whose look (`WET_LOOK`: the weather's `wetness` and
   `precipitation_deposits`) `world.get_weather()` shows. With no ego, from any vehicle the
   condition was applied to; with none, the request's values, said so in the log. This closes
-  095's "unverified" for CARLA's world-wide condition. The capability that gates the reply is
-  243's to settle in 092 (K9f-a's text gates it on `ROAD_ZONES`; 118 proposed a separate
-  `ROAD_CONDITION_APPLIED`, ROAD_ZONES then needing it); C7 follows what 092 says.
+  095's "unverified" for CARLA's world-wide condition. The CARLA server declares
+  `CAPABILITY_ROAD_CONDITION_APPLIED = 14` and not `ROAD_ZONES` (13): 092 K9f-a's protocol as
+  amended 2026-11-25 (243, aca14a95 on 092-k9e, with 133's endorsement: the reply gated on 14,
+  its zones on 13, which needs 14; the messages and `Reply` slot 12 unchanged; no version bump).
+  Whichever of K9f-a and C7 lands first adds the proto text verbatim.
 - **A refusal that names the limit.** A `scensim.zone.` property refused with: "CARLA 0.9.16
   cannot apply surface zones: its friction trigger acts on every car of a blueprint and a
   per-wheel physics apply steps the car 0.14 to 0.15 m/s (scensim roadmap 086 C7's P0 and P0b);
