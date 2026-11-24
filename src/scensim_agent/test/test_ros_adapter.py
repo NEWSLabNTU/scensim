@@ -1,14 +1,12 @@
 """ros_adapter against a small test autopilot node: YAML only, and a subclass changing one
 step. Runs in its own ROS domain on localhost so it never meets a live stack."""
 
-import os
-
-os.environ["ROS_DOMAIN_ID"] = "77"
-os.environ["ROS_LOCALHOST_ONLY"] = "1"
 # Under Cyclone, ROS_LOCALHOST_ONLY brings its own interface setting, and a CYCLONEDDS_URI that
 # names one too (Autoware's, which its setup exports) makes every node fail: "rmw_create_node:
-# failed to create domain".
-os.environ.pop("CYCLONEDDS_URI", None)
+# failed to create domain". _dds_domain removes it.
+import _dds_domain
+
+_dds_domain.take()   # a domain of this run's own, on localhost (issue 155)
 
 import threading  # noqa: E402
 

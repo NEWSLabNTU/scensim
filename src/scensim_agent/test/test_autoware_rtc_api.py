@@ -3,11 +3,9 @@ tier4_ad_api_adaptor (Autoware 1.5.0: /api/external/*/rtc_*), the planning modul
 rtc_interface (Autoware 2.1.0 has no adaptor), or neither. Fake Autoware nodes in a domain of
 their own, on localhost."""
 
-import os
+import _dds_domain
 
-os.environ["ROS_DOMAIN_ID"] = "78"
-os.environ["ROS_LOCALHOST_ONLY"] = "1"
-os.environ.pop("CYCLONEDDS_URI", None)   # see test_ros_adapter.py
+_dds_domain.take()   # a domain of this run's own, on localhost (issue 155)
 
 import threading  # noqa: E402
 import time  # noqa: E402

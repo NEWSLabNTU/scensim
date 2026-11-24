@@ -11,6 +11,8 @@ import time
 
 import pytest
 
+import _dds_domain   # a domain of this run's own, on localhost (issue 155)
+
 
 def ceiling(base=120.0):
     """How long to wait for a child to get ready: at least `base` s, longer on a loaded host
@@ -34,7 +36,7 @@ def _free_port():
 
 @pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
 def test_the_agent_ends_cleanly_on_a_stop_signal(tmp_path, sig):
-    env = dict(os.environ, ROS_DOMAIN_ID="57", ROS_LOG_DIR=str(tmp_path))
+    env = dict(os.environ, ROS_DOMAIN_ID=str(_dds_domain.take()), ROS_LOG_DIR=str(tmp_path))
     log = tmp_path / "agent.log"
     with open(log, "w") as out:
         p = subprocess.Popen([sys.executable, "-m", "scensim_agent.adapters.vehicle_agent",
@@ -93,7 +95,7 @@ def test_a_run_that_raises_still_closes_in_order(tmp_path):
             "    raise RuntimeError('relay protocol error')\n"
             "v.run_relay = boom\n"
             "v.main()\n")
-    env = dict(os.environ, ROS_DOMAIN_ID="57", ROS_LOG_DIR=str(tmp_path))
+    env = dict(os.environ, ROS_DOMAIN_ID=str(_dds_domain.take()), ROS_LOG_DIR=str(tmp_path))
     p = subprocess.run([sys.executable, "-c", code, "--ros-args", "-p",
                         f"relay:=tcp://127.0.0.1:{_free_port()}"], env=env,
                        capture_output=True, text=True, timeout=ceiling())

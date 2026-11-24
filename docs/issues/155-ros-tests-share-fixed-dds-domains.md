@@ -1,6 +1,6 @@
 # 155: the ROS tests share fixed DDS domains, so two runs on one host see each other
 
-**Status:** open (241; filed by 133). **Severity:** low: tests only. Two runs of the
+**Status:** fixed 2026-11-25 (241; filed by 133). **Severity:** low: tests only. Two runs of the
 `scensim_agent` tests on one host at the same time (two gates, a gate and a side run, two
 sessions) each receive the other's messages, and three tests fail in both runs. A gate then
 fails on code it does not run.
@@ -53,23 +53,64 @@ Other tests that start ROS processes choose their domain differently:
 SIGINT launch, which in a gate is 0. These check a launch's exit, not messages, so cross-talk
 does not fail them, but they share the domain with whatever else is on it.
 
-## Fix (planned)
+## Fix
 
-A run takes a domain no other run on the host holds, and holds it until it exits:
+Each test process holds a domain no other test run on the host holds, until it exits.
+`_dds_domain.take()` (in `src/scensim_agent/test/` and, identical, `src/scensim_launch/test/`)
+takes the first free domain in **60 to 99** by an exclusive `flock` on
+`/tmp/scensim-test-domains/<domain>.lock`, kept open for the life of the process (the kernel
+releases it however the process ends), and sets `ROS_DOMAIN_ID` to it with
+`ROS_LOCALHOST_ONLY=1`. A second run, from any worktree, session or user, takes the next one.
+When all 40 are held it fails by name (`no free test domain in 60-99`) and never falls back to a
+fixed domain.
 
-- A small helper, `test_domain()`, takes the first free domain in a reserved range at or below
-  57 (the Cyclone localhost profile's limit, CLAUDE.md) by an exclusive `flock` on
-  `/tmp/scensim-test-domains/<domain>.lock`, kept open for the life of the process, and sets
-  `ROS_DOMAIN_ID` to it and `ROS_LOCALHOST_ONLY=1`. A second run, from any worktree or session,
-  takes the next one. The kernel releases the lock when the process ends, however it ends.
-- The three in-process files call it at import, in place of their fixed number. The vehicle
-  agent test and the parity launches pass the same domain to their subprocesses.
-- A test, naming this issue, runs two processes that each take a domain at once and checks the
-  two differ.
+- `test_simple_pilot_ros.py`, `test_ros_adapter.py` and `test_autoware_rtc_api.py` call it at
+  import, in place of 77 and 78.
+- `test_vehicle_agent_stop.py` passes the domain to its vehicle agent, in place of 57.
+- `src/scensim_launch/test/test_launchers_parity.py` passes it to its launches, in place of
+  `40 + pid % 15` (which drew from the seats' domains, see below) and of the caller's domain
+  (0 in a gate) for its SIGINT launch.
+- `test_dds_domain.py`, naming this issue: two processes at once hold different domains in the
+  range; the domain is set on localhost with the Cyclone profile removed; an RMW off the RTPS
+  port mapping is refused; with every domain held, it fails by name and sets no domain; the two
+  copies of the file are identical.
 
-To be shown: the pair run above passing in both runs.
+### Why 60 to 99, above CLAUDE.md's 57
 
-A domain taken this way can still be one a live stack on the host uses (seats take their domains
-from the host's settings, anywhere in 0 to 57). The range should be one this host's seats do not
-use; the default seat settings and the ego and scenario domains (1, 9) will be checked before the
-range is chosen.
+CLAUDE.md keeps `ROS_DOMAIN_ID` at 57 or below because the Cyclone localhost profile
+(`cyclonedds-localhost.xml`) sets `DomainGain` 1000, which takes higher domains' ports past
+65535. These tests never run under that profile: `take()` removes `CYCLONEDDS_URI`, and refuses
+any RMW but Fast DDS and Cyclone (unset, `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`), which
+without a profile both use the RTPS port mapping: port base 7400, domain gain 250, participant
+gain 2, offsets 0 and 1 (multicast), 10 and 11 (unicast). Domain d's ports are
+
+```
+7400 + 250 d       discovery multicast       7401 + 250 d       user multicast
+7410 + 250 d + 2 p discovery unicast         7411 + 250 d + 2 p user unicast
+```
+
+for participant p of the host in that domain. At d = 60 they start at 22400; at d = 99 they
+are 32150 and 32151, and 32160 + 2 p and 32161 + 2 p, below Linux's ephemeral range (32768 to
+60999 on 241), so no outgoing connection's port can take one, for p up to 303. Popping the URI
+was chosen over refusing to run under it: Autoware's setup exports a `CYCLONEDDS_URI`, so
+refusing would fail every test run from a shell that sourced Autoware.
+
+The range also stays off the seats: the default seats (`config.py`: domains base 1, stride 8,
+count 7) take domains 1 to 56, nearly every domain at or below 57. A test there could publish
+`/control/command/control_cmd` into a live pilot's domain on the host, which
+`test_simple_pilot_ros.py` does. The old 77 and 78 were above every seat for that reason;
+`40 + pid % 15` was not.
+
+## Shown fixed (241, 2026-11-25)
+
+The same runs on the fix (its sources ahead of main's install; logs in
+`~/nas/autoveh/logs/155-dds-domains/`):
+
+| Run | Result |
+|---|---|
+| `test_dds_domain.py` | 5 passed |
+| the two files alone | 9 passed, 7.8 s |
+| the two files, two runs at once, three times | 9 passed in each of the six runs |
+| the whole `scensim_agent` and relay group, two runs at once | 281 passed in each |
+| `test_launchers_parity.py` (with play_launch on `PATH`) | 3 passed |
+

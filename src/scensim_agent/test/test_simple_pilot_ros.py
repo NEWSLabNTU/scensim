@@ -3,11 +3,9 @@ publishes Autoware's control, gear, indicator and hazard commands at its rate. W
 /clock), its own ROS domain on localhost so it never meets a live stack; skipped without
 Autoware's message packages."""
 
-import os
+import _dds_domain
 
-os.environ["ROS_DOMAIN_ID"] = "77"
-os.environ["ROS_LOCALHOST_ONLY"] = "1"
-os.environ.pop("CYCLONEDDS_URI", None)  # as test_ros_adapter.py: Cyclone and localhost-only
+_dds_domain.take()   # a domain of this run's own, on localhost (issue 155)
 
 import threading  # noqa: E402
 import time  # noqa: E402

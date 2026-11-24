@@ -10,6 +10,8 @@ import time
 
 import pytest
 
+import _dds_domain   # a domain of this run's own, on localhost (issue 155)
+
 
 def ceiling(base=120.0):
     """How long to wait for a child to get ready: at least `base` s, longer on a loaded host
@@ -49,7 +51,7 @@ def test_an_empty_string_parameter_starts_its_node(tmp_path, launcher):
     cmd = (["ros2", "launch", str(f)] if launcher == "ros2" else
            ["play_launch", "launch", "--disable-web-ui", "--log-dir", str(log_dir), str(f)])
     env = dict(os.environ, ROS_LOG_DIR=str(log_dir), ROS_LOCALHOST_ONLY="1",
-               ROS_DOMAIN_ID=str(40 + os.getpid() % 15))
+               ROS_DOMAIN_ID=str(_dds_domain.take()))
     out = tmp_path / "console.log"
     with open(out, "w") as fh:
         p = subprocess.Popen(cmd, env=env, stdout=fh, stderr=subprocess.STDOUT,
@@ -136,8 +138,9 @@ def test_a_nested_ros2_launch_stops_on_the_groups_sigint_when_it_was_ignored(tmp
     stack_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "launch",
                             "stack.launch.py")
     outer.write_text(OUTER.format(stack=os.path.abspath(stack_py), inner=str(inner),
-                                  domain=40 + os.getpid() % 15, log_dir=str(tmp_path / "in")))
-    env = dict(os.environ, ROS_LOG_DIR=str(tmp_path / "out"), ROS_LOCALHOST_ONLY="1")
+                                  domain=_dds_domain.take(), log_dir=str(tmp_path / "in")))
+    env = dict(os.environ, ROS_LOG_DIR=str(tmp_path / "out"), ROS_LOCALHOST_ONLY="1",
+               ROS_DOMAIN_ID=str(_dds_domain.take()))
     with open(tmp_path / "console.log", "w") as fh:
         p = subprocess.Popen(["ros2", "launch", str(outer)], env=env, stdout=fh,
                              stderr=subprocess.STDOUT, start_new_session=True,
