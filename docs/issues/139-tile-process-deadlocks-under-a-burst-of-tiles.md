@@ -53,3 +53,15 @@ timeout.
 - **118's prediction:** on siw 4df3198 both hang, and the test fails at its timeouts. With the
   fix both bursts return within 1 s, every future completes (a result or "dropped"), the newest
   64 keys are answered with results, and `Detail.pending` is empty when they are done.
+
+### The test's result (2026-11-24)
+
+- **On siw 4df3198:** both bursts hung, and both tests failed at their 20 s timeouts ("the burst
+  hung"). The test that a key asked twice shares its future also failed: the second
+  submission made a second future.
+- **With the fix (siw issue-139 e9d690a):** the four tests (the two bursts, the shared key, a
+  submission after shutdown failing at once) passed in 1.3 s, three runs out of three. The
+  newest 64 keys were answered with results, the dropped ones failed "dropped: stale", and
+  `Detail.pending` was empty. The whole siw suite passed (454 tests, with ROS for the launch
+  tests).
+- **118's prediction: held.**
