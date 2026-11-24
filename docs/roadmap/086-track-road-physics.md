@@ -1390,77 +1390,6 @@ unchanged. The runner now accepts a provenance whose commit has the landed main'
   to catch another user's job. Counted against our own last run as first written, they put 10
   minutes between every pair of runs, about 4 hours for the budget instead of about 1.5.
 
-#### C6d's spec: sensors and Autoware on the rough record road (written 2026-11-24, before any run; approved to write by 133)
-
-C6d is 066 R7 on the record road: Autoware's Model 3 on C5d's rebuilt Haruna made rough, with
-rocks against without. C6b's budget runs were the smooth-road version of this pairing: pose
-error p95 0.1229 to 0.1231 m with rocks against 0.1237 to 0.1263 without, NVTL p05 3.12
-everywhere.
-
-- **The maps.** Two more copies of C5d's Haruna, each with a map-dir `road_detail.yaml` on the
-  record (`stations: course/section.npz`, `section_in_base: true`). *rough_rocks* and
-  *rough_none* differ only by `rocks`. The road's detail, each figure's source:
-
-  | feature | value | source |
-  |---|---|---|
-  | roughness | ISO 8608 class C (Gd(n0) 256e-6 m^3 at n0 0.1 cycles/m), waviness 2 below 2 cycles/m and 1.5 above | ISO 8608's class C; 066 R3's test corridor's class; the break and its waviness are R3's (Zuraulis et al. for the break, 1.5 above it assumed by R3) |
-  | ruts | 3 cm deep, 0.30 m wide, at +-0.80 m, a 2 cm centre windrow | R3's defaults, as on its test corridor (no external source in R3) |
-  | potholes | 2 per 100 m, 3 times as many in a sag, 1.5 to 8 cm deep, 0.3 to 1 m across | R3's defaults; the sizes are USACE TM 5-626's (R3) |
-  | washboard | one 100 m zone, 20 mm peak to peak, 0.7 m pitch, skew 0.3 | R3's test corridor (a 100 m zone, 620-720 m of 2 km) and R0's fixture (20 mm, 0.7 m); TRH 20's rule (the pitch in cm near the modal speed in km/h) would give about 0.45 m at haruna_down's 45-50 km/h, and R3's figure is kept for comparability |
-  | the washboard's place | u 700 to 800 m | **my choice**: mid-course, where haruna_down drives at its cruising speed, away from the start and the end |
-  | water bars | none | **my choice**: R7 names washboard, ruts and rocks; a water bar across the carriageway is an obstacle class of its own, left out to keep the pair about the rough surface |
-  | rocks (*rough_rocks* only) | carriageway 0, shoulder 1 %, runoff 1 %, ditch 3 % | C6b's cover (R4's assumed cover) |
-
-  Each map is checked offline (`road_detail check`; the record's tiles made, issue 128's
-  guard) and live with `fixture_cost --follow --guard-ms 10000` (one car, the first frames
-  under 10 s, no rock on the base) before any Autoware run.
-- **The sensors, checked before the runs (133: if either is off, report and wait).** Motion BVH
-  on in the world server's render settings for these runs, and the lidar's mount following the
-  chassis (its pose from the body each frame, so the body's pitch and roll on washboard reach
-  the scan). If either is off or missing, the runs wait for 133. `scan_ground_filter` is
-  confirmed in the profile's perception pipeline.
-- **The runs.** haruna_down, three a side, interleaved *rough_rocks*, *rough_none*, one
-  testbench workspace per side (C6d's rule, against the overlay trap), both over the same
-  build of scensim main, under the quiet rule as amended (ours gone, no foreign process on GPU0
-  for 10 min before, any foreign process during a run voids it), the 15 s GPU log, the runner's
-  process and provenance checks.
-- **Judged (the approved rule):** the rocks fail if their mean pose error p95 rises by 0.05 m
-  or more over *rough_none*'s, or if any run fails its scenario or NVTL p05 2.5.
-- **Reported beside it, not judged:**
-  - the absolute pose error and NVTL per run;
-  - false stops per km: an episode of the ego's speed under 1 m/s for over 2 s between its
-    start and its arrival, from `/vehicle/status/velocity_status` (haruna_down has no planned
-    stop), over the distance driven;
-  - rock and pothole detection range: for each rock or pothole the ego passes within 2 m of,
-    the largest distance at which a perception object (`/perception/object_recognition/objects`)
-    lies within 1 m of it. If the profile publishes no object there, it is reported as not
-    measurable, not as 0;
-  - NDT's iterations (`/localization/pose_estimator/iteration_num`), p50 and p95;
-  - the world server's tick p50 and p95 (the budget's rule is not applied).
-- **Observation, not judged (133):** *rough_none* against the C6b budget's smooth *none* (pose
-  error p95, NVTL p05, NDT iterations, tick): the roughness's effect on localization. They are
-  different sessions, so this is not a pair.
-- **The sensor check's result (2026-11-24, read-only).** Motion BVH is **off**: Kit enables it
-  only through `SimulationApp`'s `enable_motion_bvh`, which the world server does not set (nor
-  aib, nor the host's `ISAAC_KIT_ARGS`); the deprecated `isaacsim.sensors.rtx` extension the
-  world server loads lists it only in its tests' arguments. The lidar follows the chassis:
-  `aib.isaac.sensors.Lidar.before_substep` puts it each substep at the body's full pose (pitch and
-  roll included) with the mount, and de-skews each point along that track. `scan_ground_filter`
-  is on (`ScanGroundFilterComponent` in the pointcloud container).
-- **Limitation, stated before the predictions (133).** C6d runs without motion BVH. The lidar's
-  following of the body, with its de-skew, covers the ego's own pitch and roll on the rough
-  road, which is what C6d measures; motion BVH matters for other objects moving within a scan.
-  Enabling it is issue 138 (a record: a world-server option or `ISAAC_KIT_ARGS`, its render cost
-  measured first).
-- **The maps' guard checks (2026-11-24).** Both pass `road_detail check`. The live guard: *rough_none*
-  passes (first frames' largest 5.0 s, no rock on the base); *rough_rocks* failed, 12 rocks on
-  the base road (issue 136) and a first frame of 10.4 s with a docs gate loading the CPU (to be
-  measured again on a quiet host before it is called a failure). On both maps the fixture car
-  stopped near s 265 m and rolled back (issue 137). C6d's runs wait until 136 and 137 are
-  understood.
-- **Predictions** are written here before the runs.
-
-
 #### C6b's budget on Haruna: results (2026-11-24, 118)
 
 scensim main ddf1c32e (siw 31593ab: issues 128, 132 and 134 in), workspace `gate-c5c` as gated
@@ -1556,6 +1485,76 @@ drawn), the tyre contact on the rocks (+0.7 ms) and PhysX (+0.3 ms). The contact
 each run's own p95 (349 a run) are where *none* has its rare large PhysX steps (their mean 29 ms)
 and *rocks* does not. No cause with a cheap fix was found, so no issue is opened, and the budget
 is not rerun. NAS "2026-11-24 086 C6b Haruna budget (118)", `diagnostic/`.
+
+#### C6d's spec: sensors and Autoware on the rough record road (written 2026-11-24, before any run; approved to write by 133)
+
+C6d is 066 R7 on the record road: Autoware's Model 3 on C5d's rebuilt Haruna made rough, with
+rocks against without. C6b's budget runs were the smooth-road version of this pairing: pose
+error p95 0.1229 to 0.1231 m with rocks against 0.1237 to 0.1263 without, NVTL p05 3.12
+everywhere.
+
+- **The maps.** Two more copies of C5d's Haruna, each with a map-dir `road_detail.yaml` on the
+  record (`stations: course/section.npz`, `section_in_base: true`). *rough_rocks* and
+  *rough_none* differ only by `rocks`. The road's detail, each figure's source:
+
+  | feature | value | source |
+  |---|---|---|
+  | roughness | ISO 8608 class C (Gd(n0) 256e-6 m^3 at n0 0.1 cycles/m), waviness 2 below 2 cycles/m and 1.5 above | ISO 8608's class C; 066 R3's test corridor's class; the break and its waviness are R3's (Zuraulis et al. for the break, 1.5 above it assumed by R3) |
+  | ruts | 3 cm deep, 0.30 m wide, at +-0.80 m, a 2 cm centre windrow | R3's defaults, as on its test corridor (no external source in R3) |
+  | potholes | 2 per 100 m, 3 times as many in a sag, 1.5 to 8 cm deep, 0.3 to 1 m across | R3's defaults; the sizes are USACE TM 5-626's (R3) |
+  | washboard | one 100 m zone, 20 mm peak to peak, 0.7 m pitch, skew 0.3 | R3's test corridor (a 100 m zone, 620-720 m of 2 km) and R0's fixture (20 mm, 0.7 m); TRH 20's rule (the pitch in cm near the modal speed in km/h) would give about 0.45 m at haruna_down's 45-50 km/h, and R3's figure is kept for comparability |
+  | the washboard's place | u 700 to 800 m | **my choice**: mid-course, where haruna_down drives at its cruising speed, away from the start and the end |
+  | water bars | none | **my choice**: R7 names washboard, ruts and rocks; a water bar across the carriageway is an obstacle class of its own, left out to keep the pair about the rough surface |
+  | rocks (*rough_rocks* only) | carriageway 0, shoulder 1 %, runoff 1 %, ditch 3 % | C6b's cover (R4's assumed cover) |
+
+  Each map is checked offline (`road_detail check`; the record's tiles made, issue 128's
+  guard) and live with `fixture_cost --follow --guard-ms 10000` (one car, the first frames
+  under 10 s, no rock on the base) before any Autoware run.
+- **The sensors, checked before the runs (133: if either is off, report and wait).** Motion BVH
+  on in the world server's render settings for these runs, and the lidar's mount following the
+  chassis (its pose from the body each frame, so the body's pitch and roll on washboard reach
+  the scan). If either is off or missing, the runs wait for 133. `scan_ground_filter` is
+  confirmed in the profile's perception pipeline.
+- **The runs.** haruna_down, three a side, interleaved *rough_rocks*, *rough_none*, one
+  testbench workspace per side (C6d's rule, against the overlay trap), both over the same
+  build of scensim main, under the quiet rule as amended (ours gone, no foreign process on GPU0
+  for 10 min before, any foreign process during a run voids it), the 15 s GPU log, the runner's
+  process and provenance checks.
+- **Judged (the approved rule):** the rocks fail if their mean pose error p95 rises by 0.05 m
+  or more over *rough_none*'s, or if any run fails its scenario or NVTL p05 2.5.
+- **Reported beside it, not judged:**
+  - the absolute pose error and NVTL per run;
+  - false stops per km: an episode of the ego's speed under 1 m/s for over 2 s between its
+    start and its arrival, from `/vehicle/status/velocity_status` (haruna_down has no planned
+    stop), over the distance driven;
+  - rock and pothole detection range: for each rock or pothole the ego passes within 2 m of,
+    the largest distance at which a perception object (`/perception/object_recognition/objects`)
+    lies within 1 m of it. If the profile publishes no object there, it is reported as not
+    measurable, not as 0;
+  - NDT's iterations (`/localization/pose_estimator/iteration_num`), p50 and p95;
+  - the world server's tick p50 and p95 (the budget's rule is not applied).
+- **Observation, not judged (133):** *rough_none* against the C6b budget's smooth *none* (pose
+  error p95, NVTL p05, NDT iterations, tick): the roughness's effect on localization. They are
+  different sessions, so this is not a pair.
+- **The sensor check's result (2026-11-24, read-only).** Motion BVH is **off**: Kit enables it
+  only through `SimulationApp`'s `enable_motion_bvh`, which the world server does not set (nor
+  aib, nor the host's `ISAAC_KIT_ARGS`); the deprecated `isaacsim.sensors.rtx` extension the
+  world server loads lists it only in its tests' arguments. The lidar follows the chassis:
+  `aib.isaac.sensors.Lidar.before_substep` puts it each substep at the body's full pose (pitch and
+  roll included) with the mount, and de-skews each point along that track. `scan_ground_filter`
+  is on (`ScanGroundFilterComponent` in the pointcloud container).
+- **Limitation, stated before the predictions (133).** C6d runs without motion BVH. The lidar's
+  following of the body, with its de-skew, covers the ego's own pitch and roll on the rough
+  road, which is what C6d measures; motion BVH matters for other objects moving within a scan.
+  Enabling it is issue 138 (a record: a world-server option or `ISAAC_KIT_ARGS`, its render cost
+  measured first).
+- **The maps' guard checks (2026-11-24).** Both pass `road_detail check`. The live guard: *rough_none*
+  passes (first frames' largest 5.0 s, no rock on the base); *rough_rocks* failed, 12 rocks on
+  the base road (issue 136) and a first frame of 10.4 s with a docs gate loading the CPU (to be
+  measured again on a quiet host before it is called a failure). On both maps the fixture car
+  stopped near s 265 m and rolled back (issue 137). C6d's runs wait until 136 and 137 are
+  understood.
+- **Predictions** are written here before the runs.
 
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
