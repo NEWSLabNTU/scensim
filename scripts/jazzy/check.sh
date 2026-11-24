@@ -33,7 +33,11 @@ git -C "$WT" submodule update -q --init --recursive
 docker build -q -t "$IMAGE" --build-arg UID="$(id -u)" --build-arg GID="$(id -g)" \
     "$ROOT/scripts/jazzy" >/dev/null
 echo "jazzy-check: $head in $IMAGE (setup, build, test)"
-docker run --rm --cpus "${JAZZY_CHECK_CPUS:-8}" --memory "${JAZZY_CHECK_MEMORY:-24g}" \
+# --init: an init that reaps orphans as PID 1, as on a host. Without it bash execs the last
+# command, so `just` is PID 1 and never reaps; an orphaned stack stays a zombie, which still
+# counts as a member of its process group, and t3's stop waits out every grace (test_t3's four
+# stop tests timed out, 2026-11-24).
+docker run --rm --init --cpus "${JAZZY_CHECK_CPUS:-8}" --memory "${JAZZY_CHECK_MEMORY:-24g}" \
     --memory-swap "${JAZZY_CHECK_MEMORY:-24g}" \
     -v scensim-jazzy-home:/home/dev -v "$WT:$WT" -v "$GIT_COMMON:$GIT_COMMON" -w "$WT" \
     "$IMAGE" bash -c '
