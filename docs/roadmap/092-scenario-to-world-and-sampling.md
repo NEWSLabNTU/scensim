@@ -406,7 +406,11 @@ predicted before the run: the same result as attempt 3: Autoware's route 28257, 
 240 s limit; no contact; `anchors.barrier_lane` 6583 with attempt 3's `anchor_source`; `maps`
 with Town01's lanelet2 digest a85836f5. The read-back is the same quantity, now through
 `ENVIRONMENT_APPLIED`: `knobs.ok` true, `illumination.sun_elevation` read back 60 on every
-frame after its send. Times (entry into 6583, the stop) are recorded, not judged.
+frame after its send, within the stated tolerance of 0.007 deg (1e-3 plus 1e-4 of 60; the CARLA
+world server reads the angle back as CARLA's float `sun_altitude_angle`, so a rounding below
+that passes and a coarser one, a whole degree say, fails and is reported). Times (entry into
+6583, the stop) are recorded, not judged. My own CARLA 0.9.16 on RPC 2100 (Epic, Town01, no town
+change), the stack from this branch's own install, stopped cleanly afterwards.
 
 **Step 2b, the runs on Isaac.** Isaac Sim 6.2 from NVMe; run when the card has room for Isaac
 and Autoware with 4 GB left for the others' jobs, no CARLA of mine up, one heavy job on the
@@ -415,7 +419,7 @@ Predicted, before any run:
 - no SSv2 error;
 - `result.json` `anchors.barrier_lane` 6583 with the same `anchor_source` as CARLA's (file
   digest, dataset and commit); `knobs.ok` true, with `illumination.sun_elevation` read back 60
-  from Isaac's `ENVIRONMENT_APPLIED` on every frame after its send; `maps` with the two lanelet2
+  from Isaac's `ENVIRONMENT_APPLIED` on every frame after its send, within 0.007 deg; `maps` with the two lanelet2
   digests as on CARLA (Town01 a85836f5..., the variant a2daf41c...);
 - the barriers' truth positions within 0.05 m in x and y of CARLA's (305.64; -128.21,
   -129.51, -130.81), compared in the map frame (SSv2's, right-handed): CARLA's numbers are
