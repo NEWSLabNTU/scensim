@@ -1042,3 +1042,8 @@ it while the run lasts), under `nice -n 10`, with `search_run.py --margin-k 1.0`
 14:02): seed 3 88.9 s, seed 4 90.9 s, seed 5 91.0 s, the host's load 66 to 74 on 24 CPUs;
 checked again an hour later against P4's 20 % rule.
 
+The hour's check (15:04, the three searches running: K11c in its fresh stage after g19, K11d
+at g11, K11e at g3): seed 3 88.3 s, seed 4 91.5 s, seed 5 89.7 s, against 88.9, 90.9 and
+91.0 s before; the largest change is seed 4's +0.7 %, well inside the 20 % rule. The host's
+load was 81 to 93.
+
