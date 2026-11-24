@@ -1555,6 +1555,35 @@ everywhere.
   stopped near s 265 m and rolled back (issue 137). C6d's runs wait until 136 and 137 are
   understood.
 - **Predictions** are written here before the runs.
+- **Unblocked (2026-11-24).** Issue 137 (the fixture car rolling back near s 265 m) is fixed (siw
+  4df3198), and issues 145 and 136 (the rocks on the base) are fixed (siw 1535c3b). On the fix,
+  *rough_rocks*' guard run passes: 0 rocks on the base, first frames' largest 182 ms, the car past
+  s 280 m (issue 145's record). Issue 144 (the tiles' frame-end wait, siw ac008bd) is on main too.
+  The runs use scensim main 35127469.
+- **The runs as built (before any run).** Two testbench packages, `isaac_c6d_haruna_rough_rocks`
+  and `isaac_c6d_haruna_rough_none`, each in its own testbench workspace
+  (`/var/tmp/aeon/tb-c6d-rocks`, `tb-c6d-none`, built over `gate-c5c`'s install at 35127469).
+  They are C6b's packages with the rough maps and two more recorded topics,
+  `/localization/pose_estimator/iteration_num` and `/perception/object_recognition/objects`. The
+  pose_error judge's bound is raised to 1.0 m, report only: C6d judges the rocks against
+  *rough_none*, not an absolute bound. The NVTL judge keeps its p05 2.5, the rule's. Runner: C6b's
+  `run_one.sh` with the per-side workspace, its provenance and process checks, and the quiet rule.
+  Interleaved rough_rocks, rough_none, three each.
+- **118's predictions (before any run).**
+  - Every run passes haruna_down, NVTL p05 at least 2.5 (about 3.0, a little under smooth's 3.12).
+  - *rough_none*'s mean pose error p95 is 0.13 to 0.20 m, at or above C6b's smooth *none*
+    (0.124 to 0.126): the body's pitch and roll on washboard and potholes reach the scan
+    (the lidar follows the body and de-skews).
+  - **The judged rule: the rocks pass.** *rough_rocks*' mean p95 within 0.03 m of
+    *rough_none*'s, not 0.05 or more above it. The cover is off the carriageway, and rock prims
+    exist only within 32 m of the car (issue 143).
+  - False stops: 0 a km on both (haruna_down has no planned stop; no rock is on the carriageway).
+  - Detection range: mostly not measurable. The shoulder's rocks are mostly under 15 cm, and a
+    pothole is below the road, so the profile's clustering is expected to publish no object for
+    most. Where it publishes one, the range is under 32 m (issue 143's reach).
+  - NDT iterations: p50 the same on both maps within 1 iteration, p95 within 2.
+  - World server tick: p50 about 50 to 55 ms on both; p95 up to about 4 ms higher on
+    *rough_rocks* (C6b's rocks +3.5 ms on smooth), not judged.
 
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
