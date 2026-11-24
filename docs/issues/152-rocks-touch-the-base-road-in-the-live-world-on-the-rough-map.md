@@ -1,7 +1,8 @@
 # 152: rocks touch the base road in the live world on the rough rocks map, after issue 145's fix
 
-**Status:** open. Part 1 (siw e0559e5): the detail tiles are out of `roadBase`; the contacts
-with the world's road where the detail is flush with the base are still open. **Severity:** medium:
+**Status:** fixed by parts 1 and 2, once landed. Part 1 (siw e0559e5) takes the detail tiles out
+of `roadBase`. Part 2 (46c09ec) preloads the world with its ground paths, so the world's ground
+is in `roadBase` when PhysX takes it in. **Severity:** medium:
 issue 123's self-check fires, so some rocks rest on or fall to the world's own road and terrain
 instead of the true surface; off the carriageway, so 086 C6d's judged numbers are not moved.
 **Found:** 2026-11-24, scensim 118, 086 C6d's runs (filed by 133). Follows issues 145 and 136.
@@ -347,3 +348,18 @@ made again at a removed one's path taken for one in two groups. They are not the
     WARN, because the bridge's ground paths are the world file's, so the preloaded world is
     kept. The scenario's load still logs about 770 warnings: the pool's reused paths, issue
     034's class, recorded here and not fixed.
+
+### Part 2's live proof (2026-11-24, 22:05 to 22:13)
+
+siw 46c09ec (parts 1 and 2, no probe) in the gate checkout for the run, restored after; the same
+package and drive; GPU0 shared with another session's encode job (nothing timed). The preload
+named the world file's ground paths, and the scenario's load kept the preloaded world.
+
+- The run passed haruna_down.
+- Issue 123's base contacts: **0** (10 to 13 in each run before part 2).
+- Issue 152's WARN (a world loaded again for other ground paths): 0.
+- The "only in one collision group" warnings: 770 in the run's log, the pool's reused paths
+  (issue 034's class), as predicted.
+
+**118's prediction: held.** Status: fixed by parts 1 and 2 (siw 46c09ec, with e0559e5), once
+landed. The pool-path warnings stay recorded here as issue 034's class, not fixed.
