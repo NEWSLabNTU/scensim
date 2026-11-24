@@ -454,7 +454,8 @@ Rules:
 - **Knobs carry physical values** (μ, visibility), so the sampler can apply constraints (CS2).
 - *Built, K9e (roadmap 092):* **a value's form says where it runs.** `environment:` sets the
   scenario environment by its fields (`sun_elevation`, `sun_azimuth`, `fog_visual_range`,
-  `precipitation_intensity`; `cloud_cover_oktas` on CARLA only), which every world server
+  `precipitation_intensity`; `cloud_cover_oktas` on CARLA only; angles in radians, as
+  OpenSCENARIO's, each field held to its range), which every world server
   applies and reads back (`ENVIRONMENT_APPLIED`): it is the portable form, for a knob a CARLA
   town and an Isaac stage of one place both declare. `weather:` sets the CARLA world server's
   weather parameters through its weather service, which Isaac lacks: use it for what has no

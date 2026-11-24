@@ -36,7 +36,8 @@ set_weather) and/or a named surface map (Isaac: the scenario's RoadCondition
 `scensim.surface_map`, linked by the project's ground). Every run sends the testbench's
 weather baseline merged with its knobs' parameters, so no run inherits another's weather.
 
-A value may instead set the scenario environment by field, `environment: {sun_elevation: 60}`
+A value may instead set the scenario environment by field, `environment: {sun_elevation: 1.0472}`
+(radians, as OpenSCENARIO's angles; each field's range is FIELD_RANGES)
 (092 K9e; the fields a profile sets): the portable form, which both world servers apply and
 read back. The run sends it as a profile held constant from time 0 (`<knob>.<field>`), judged on
 every frame's read-back after the send. One value sets a quantity in one form (SAME_QUANTITY).
@@ -46,6 +47,7 @@ On Isaac there is no weather service: a value with weather parameters is refused
 names a surface map or a friction (`mu`) is refused there by name, unless it says
 `physics: none`, and then the record says the friction was not applied.
 """
+import math
 from pathlib import Path
 
 KINDS = ("weather", "environment", "surface_map", "mu", "physics")
@@ -74,6 +76,27 @@ SAME_QUANTITY = {"sun_elevation": ("sun_altitude_angle",), "sun_azimuth": ("sun_
                  "fog_visual_range": ("fog_density", "fog_distance"),
                  "precipitation_intensity": ("precipitation",),
                  "cloud_cover_oktas": ("cloudiness",)}
+# each environment field's unit and range (092 K9e): a value, or a profile knob's range, outside
+# it is refused, naming the unit (an angle also its value read as degrees, in radians)
+FIELD_RANGES = {
+    "sun_elevation": (lambda v: -math.pi / 2 <= v <= math.pi / 2, "[-1.5708, 1.5708] rad", True),
+    "sun_azimuth": (lambda v: 0.0 <= v < 2 * math.pi, "[0, 6.2832) rad", True),
+    "fog_visual_range": (lambda v: v > 0.0, "above 0 m", False),
+    "precipitation_intensity": (lambda v: v >= 0.0, "0 or more mm/h", False),
+    "cloud_cover_oktas": (lambda v: 0.0 <= v <= 8.0, "[0, 8] oktas", False),
+}
+
+
+def field_range_problem(field: str, v: float):
+    """Why `v` is no value of environment field `field`, or None."""
+    rule = FIELD_RANGES.get(field)
+    if rule is None or rule[0](float(v)):
+        return None
+    ok, text, angle = rule
+    conv = f" ({float(v):g} deg is {math.radians(float(v)):.4f} rad)" if angle else ""
+    return f"{float(v):g} is outside {field}'s range {text}{conv}"
+
+
 PROFILE_KEYS = ("profile", "sets", "range", "default", "step", "min_interval")
 # s of scenario time between two sends of a profile, unless declared: a SetEnvironment costs
 # the frame it is sent in (CARLA, Town01 with 20 NPCs, 2026-11-22: frame p95 4-7 ms without a
@@ -396,8 +419,12 @@ def _profile_problems(d, w):
     num = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool)  # noqa: E731
     if not (isinstance(r, list) and len(r) == 2 and all(num(x) for x in r) and r[0] < r[1]):
         out.append((f"{w}.range", "[low, high], two numbers, low below high"))
-    elif d.get("default") is not None and not (num(d["default"]) and r[0] <= d["default"] <= r[1]):
-        out.append((f"{w}.default", f"a number in its range [{r[0]}, {r[1]}]"))
+    else:
+        if d.get("default") is not None and not (num(d["default"]) and r[0] <= d["default"] <= r[1]):
+            out.append((f"{w}.default", f"a number in its range [{r[0]}, {r[1]}]"))
+        if d.get("sets") in PROFILE_FIELDS:   # the range within the field's own (092 K9e)
+            out += [(f"{w}.range", why) for x in r
+                    for why in [field_range_problem(d["sets"], x)] if why]
     if d.get("step") is not None and not (num(d["step"]) and d["step"] > 0):
         out.append((f"{w}.step", "a positive number (default: 1 % of the range)"))
     if d.get("min_interval") is not None and not (num(d["min_interval"])
@@ -452,8 +479,11 @@ def environment_problems(env, where) -> list:
     if not isinstance(env, dict) or not all(
             isinstance(x, (int, float)) and not isinstance(x, bool) for x in env.values()):
         return [(where, "is {field: number}")]
-    return [(f"{where}.{f}", f"{f} is not one of {', '.join(PROFILE_FIELDS)}")
-            for f in env if f not in PROFILE_FIELDS]
+    out = [(f"{where}.{f}", f"{f} is not one of {', '.join(PROFILE_FIELDS)}")
+           for f in env if f not in PROFILE_FIELDS]
+    out += [(f"{where}.{f}", why) for f, v in env.items()
+            for why in [field_range_problem(f, v)] if why]
+    return out
 
 
 def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) -> dict:
@@ -481,6 +511,10 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
         if why:
             raise KnobError(why)
         if m.get("environment"):
+            for f, x in m["environment"].items():
+                off = field_range_problem(f, x)
+                if off:
+                    raise KnobError(f"knob {knob}={value}: environment.{f}: {off}")
             environment[knob] = {f: float(x) for f, x in m["environment"].items()}
         if visual and m.get("mu") is None:
             notes[knob] = "visual only: the friction was not applied"

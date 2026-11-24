@@ -311,7 +311,8 @@ error run, excluded from rates:
 a value its runs would refuse is refused before any run, naming the knob and the value
 (issue 154).
 
-A value may instead set the scenario environment, `environment: {sun_elevation: 60}` (the fields
+A value may instead set the scenario environment, `environment: {sun_elevation: 1.0472}` (60 deg:
+OpenSCENARIO's angles, and so these fields, are radians; the fields
 a knob profile sets: `sun_elevation`, `sun_azimuth`, `fog_visual_range`,
 `precipitation_intensity`, and `cloud_cover_oktas` on CARLA only). Both world servers apply and
 read it back, so it is the form for a knob that one scenario uses on CARLA and Isaac alike
@@ -320,7 +321,10 @@ use when). The run sends it as a profile held at the value from time 0 and judge
 read-back after the send, from the gap trace (`logging.gap_trace` must stay on): `result.json`
 `knobs.<knob>.applied.<field>`, and its `profiles` entry `<knob>.<field>`. A value that sets one
 quantity in both forms, or a field that the scenario's EnvironmentAction or a profile knob also
-sets, is refused by name.
+sets, is refused by name. So is a value outside its field's range (`sun_elevation` [-pi/2,
+pi/2] rad, `sun_azimuth` [0, 2 pi) rad, `fog_visual_range` above 0 m, `precipitation_intensity`
+0 or more mm/h, `cloud_cover_oktas` [0, 8]), naming the unit: 60 for `sun_elevation` is refused
+as "60 deg is 1.0472 rad". A profile knob's `range` is held to the same.
 
 ```yaml
 world:

@@ -394,7 +394,8 @@ writers and refused, as for a profile. `result.json` judges each field: every fr
 read-back after its send within the field's tolerance (half an okta; otherwise 1e-3 plus 1e-4
 of the value), and none missing; a field off makes the run a `knob_profile` error run.
 scenario-description.md section 3 says which form to use when. k9_cs3 and k9_cs3_isaac both
-declare `illumination: {values: {day: {environment: {sun_elevation: 60}}}, default: day}`.
+declare `illumination: {values: {day: {environment: {sun_elevation: 60}}}, default: day}` (as
+first written: 60 meant degrees in a radians field, found in step 2b; pi/3 since, below).
 
 Step 1's checks, before the runs: `testbench check` passes both projects; a unit test checks
 that the same CS3 spec gets the same bound values on both simulators (barrier_lane 6583, light

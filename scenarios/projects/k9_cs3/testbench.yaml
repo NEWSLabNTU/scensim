@@ -10,8 +10,9 @@ maps: [Town01]
 world:
   knobs:
     # day only: the binding is under test, not the light (issue 131). environment: is the
-    # portable form, which CARLA and Isaac both apply and read back (092 K9e)
-    illumination: {values: {day: {environment: {sun_elevation: 60}}}, default: day}
+    # portable form, which CARLA and Isaac both apply and read back (092 K9e); angles in
+    # radians: pi/3, 60 deg
+    illumination: {values: {day: {environment: {sun_elevation: 1.0471975511965976}}}, default: day}
   pilot_maps:
     Town01: {current: Town01, works: Town01_west_street_closed}
 pilots:
