@@ -143,8 +143,8 @@ def _const(p):
 
 def initial(model, names):
     """{name: theta} for the searched variables, from the base: a normal or log-normal keeps its
-    kind and range, a uniform becomes a normal within its range, a categorical keeps its
-    values. Anything else is refused by name."""
+    kind and range, a uniform stays uniform in g0 and becomes a normal within its range from g1
+    (refit), a categorical keeps its values. Anything else is refused by name."""
     by = {e.names: e for e in model.entries}
     theta = {}
     for n in names:
@@ -171,7 +171,10 @@ def initial(model, names):
             if lo is None or hi is None:
                 raise SearchError(f"{n}: its uniform reads other values; K11 searches only "
                                   f"constant parameters")
-            theta[n] = {"kind": "normal", "mean": (lo + hi) / 2,
+            # g0 keeps the uniform, the base itself (092 K11e; K11d's centred normal put less
+            # mass where failures live); refit turns it into a normal within its range from g1,
+            # starting from the uniform's own mean and sd
+            theta[n] = {"kind": "uniform", "mean": (lo + hi) / 2,
                         "sd": (hi - lo) / math.sqrt(12.0), "range": [lo, hi]}
         elif isinstance(d, Categorical):
             if len(d.values) * FLOOR >= 1:
@@ -210,7 +213,8 @@ def refit(theta, theta0, values, weights):
         sd = max(ALPHA * sd + (1 - ALPHA) * th["sd"], SD_FLOOR * theta0[n]["sd"])
         if th["kind"] == "lognormal" and m <= 0:
             raise SearchError(f"{n}: the refitted log-normal's mean is {m}, not > 0")
-        out[n] = dict(th, mean=m, sd=sd)
+        kind = "normal" if th["kind"] == "uniform" else th["kind"]
+        out[n] = dict(th, kind=kind, mean=m, sd=sd)
     return out
 
 
@@ -219,6 +223,9 @@ def proposal_doc(sid, t, base_rel, theta):
     for n, th in theta.items():
         if th["kind"] == "categorical":
             variables.append({"name": n, "categorical": dict(zip(th["values"], th["p"]))})
+        elif th["kind"] == "uniform":
+            lo, hi = th["range"]
+            variables.append({"name": n, "uniform": {"low": lo, "high": hi}})
         else:
             v = {"name": n, th["kind"]: {"mean": th["mean"], "sd": th["sd"]}}
             if th["range"] is not None:
@@ -338,7 +345,8 @@ def init(spec_path, out):
 
 
 def read_outcomes(path, records):
-    """{record id: (score or None, error)} for every record, from a JSONL of {record, outcome}."""
+    """{record id: (score or None, error, outcome)} for every record, from a JSONL of
+    {record, outcome}."""
     ids = {r["id"] for r in records}
     got = {}
     for i, line in enumerate(Path(path).read_text().splitlines()):
@@ -355,7 +363,7 @@ def read_outcomes(path, records):
         if sc is not None and (isinstance(sc, bool) or not isinstance(sc, (int, float))
                                or not math.isfinite(sc)):
             raise SearchError(f"{path}: line {i + 1}: score is a number, not {sc!r}")
-        got[rid] = (None if o.get("error") else sc, bool(o.get("error")))
+        got[rid] = (None if o.get("error") else sc, bool(o.get("error")), o)
     missing = ids - set(got)
     if missing:
         raise SearchError(f"{path}: {len(missing)} of {len(ids)} records have no outcome "
@@ -387,13 +395,18 @@ def _scored(out, gen, outcomes_path, spec, state):
     got = read_outcomes(outcomes_path, recs)
     th = spec["threshold"]
     base_model = _joint(_sampler(spec)).model
-    rows, errors = [], 0
+    rows, errors, avoided = [], 0, set()
     for r in recs:
-        sc, err = got[r["id"]]
+        sc, err, o = got[r["id"]]
         if sc is None:
             errors += 1
             continue
         rows.append((r, float(sc)))
+        # 092 K11e: a walker that went (decision margin < 0) and was avoided (gap > 0): the
+        # near-failures a sloped score's elite should climb through
+        m, g = o.get("decision_margin"), o.get("closest_gap")
+        if m is not None and g is not None and m < 0 and g > th:
+            avoided.add(r["id"])
         if sc <= th:
             vals = dict(r["values"], **(r.get("latent") or {}))
             state["failures"].append({"record": r["id"], "generation": gen["generation"],
@@ -406,7 +419,9 @@ def _scored(out, gen, outcomes_path, spec, state):
     est = plain_estimate([r["log_weight"] for r, _ in rows], gen["normaliser"],
                          [s <= th for _, s in rows], rel)
     gen.update(outcomes=os.path.relpath(Path(outcomes_path).resolve(), out.resolve()),
-               errors=errors, estimate=est, max_weight=est["max_weight"])
+               errors=errors, estimate=est, max_weight=est["max_weight"],
+               went_avoided=len(avoided))
+    gen["_avoided"] = sorted(avoided)
     return rows
 
 
@@ -423,6 +438,7 @@ def next_step(out, outcomes_path):
         raise SearchError(f"{out}: generation {gen['generation']} has its outcomes already")
     rows = _scored(out, gen, outcomes_path, spec, state)
     if state["phase"] == "fresh":
+        gen.pop("_avoided", None)
         state["estimate"] = gen["estimate"]
         ce = [g for g in state["generations"] if g["stage"] == "cross_entropy"]
         # the generations' own estimate, each generation's plain estimate averaged: biased by
@@ -446,7 +462,9 @@ def next_step(out, outcomes_path):
     w = np.exp(lw - lw.max())
     values = [dict(r["values"], **(r.get("latent") or {})) for r, _ in elite]
     theta = refit(state["theta"], state["theta0"], values, w)
-    gen.update(level=gamma, elite=len(elite))
+    av = set(gen.pop("_avoided", []))
+    gen.update(level=gamma, elite=len(elite),
+               elite_went_avoided=sum(1 for r, _ in elite if r["id"] in av))
     state["theta"] = theta
     _write_proposal(out, t + 1, spec, state, theta)
     if reached or t + 1 >= MAX_GENERATIONS:
@@ -467,7 +485,8 @@ def report(out):
             "stop": state["stop"], "parameters": state["parameters"],
             "z_base": state["z_base"],
             "generations": [{k: g.get(k) for k in ("generation", "stage", "level", "elite",
-                                                   "errors", "normaliser", "max_weight")}
+                                                   "errors", "normaliser", "max_weight",
+                                                   "went_avoided", "elite_went_avoided")}
                             | {"failures": (g.get("estimate") or {}).get("failures"),
                                "estimate": (g.get("estimate") or {}).get("p")}
                             for g in state["generations"]],
@@ -482,7 +501,9 @@ def print_report(rep, file):
     for g in rep["generations"]:
         p(f"  g{g['generation']} {g['stage']}: level {g['level']}, elite {g['elite']}, "
           f"failures {g['failures']}, errors {g['errors']}, normaliser {g['normaliser']:.4g}, "
-          f"largest weight {g['max_weight']}", file=file)
+          f"largest weight {g['max_weight']}"
+          + (f", went and avoided {g['went_avoided']} (elite {g['elite_went_avoided']})"
+             if g.get("went_avoided") is not None else ""), file=file)
     e = rep["estimate"]
     if e:
         p(f"  rate {e['p']:.4g} (se {e['se']:.3g}; {e['interval_method']} "

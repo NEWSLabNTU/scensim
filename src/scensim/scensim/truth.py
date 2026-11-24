@@ -291,11 +291,13 @@ def _closest(args) -> int:
     return 1 if failed else 0
 
 
-def slot_outcomes(batch_dir, threshold=0.0) -> list:
+def slot_outcomes(batch_dir, threshold=0.0, margin_k=None) -> list:
     """092 K11b: the outcome of each batch slot's episode, as the search reads them, from the
     batch's truth export (scensim_batch.truth: `<dir>/slot_<k>_ep<e>/{truth.jsonl, sample.json,
     outcome.json}`). The score is closest() on the slot's truth, the same box-to-box gap the
-    seats judge measures; a run fails when it is at most `threshold`. `[{record, outcome}]`."""
+    seats judge measures; a run fails when it is at most `threshold`. With `margin_k`, the score
+    is sloped_score's (K11e), the failure still the gap at most `threshold`.
+    `[{record, outcome}]`."""
     gt = _module("gap_trace")
     rows = []
     for d in sorted(Path(batch_dir).glob("slot_*_ep*"), key=_slot_key):
@@ -315,11 +317,50 @@ def slot_outcomes(batch_dir, threshold=0.0) -> list:
                 "error": True, "message": "no ego and other entity to measure", "run": d.name}})
             continue
         gap = float(c["gap"])
+        out = {"score": gap}
+        if margin_k is not None:
+            out = sloped_score(d, margin_k)
         rows.append({"record": rid, "outcome": {
-            "score": gap, "failed": gap <= threshold, "contact": bool(trace.contacts),
+            **out, "failed": gap <= threshold, "contact": bool(trace.contacts),
             "error": False, "closest": {"entity": c["entity"], "frame": c["frame"],
                                         "sim_time": c["sim_time"]}, "run": d.name}})
     return rows
+
+
+def sloped_score(slot_dir, k=1.0, draw="accept_u"):
+    """092 K11e's score of one batch slot, from its saved files alone: the closest gap (the
+    slot's truth.jsonl, closest()), and the walker's decision margin m = logit(u) - U, u the
+    record's `draw` value (sample.json) and U the decision's (decision.json, the model's own
+    record). score = gap where gap <= 0 (contact: a failure), else gap + k * max(m, 0): a
+    walker that waited is ranked by how near it came to going, one that went (m < 0) by its
+    gap. `{closest_gap, decision_margin, score}`; the margin None where the walker never
+    decided (the score is then the gap)."""
+    gt = _module("gap_trace")
+    d = Path(slot_dir)
+    c = closest([gt.load_trace(d / "truth.jsonl", require_end=True)])
+    if c is None:
+        raise ValueError(f"{d}: no ego and other entity to measure")
+    gap = float(c["gap"])
+    rec = json.loads((d / "sample.json").read_text())
+    dec = json.loads((d / "decision.json").read_text())
+    m = None
+    if dec.get("decision") is not None:
+        from scensim.behaviour.walker import GapAcceptanceWalker as W
+        u = (rec.get("values") or {}).get(draw)
+        if u is not None:
+            threshold = W.draw(0, float(u))
+        else:   # no draw searched: the walker's own, from the record's pilot seed
+            seed = ((rec.get("seeds") or {}).get("pilots") or {}).get(dec.get("entity"))
+            if seed is None:
+                raise ValueError(f"{d}: the record has neither {draw!r} nor a pilot seed for "
+                                 f"{dec.get('entity')!r}")
+            threshold = W.draw(int(seed))
+        if abs(threshold - float(dec["threshold_logit"])) > 1e-9:
+            raise ValueError(f"{d}: the record's {draw} gives the threshold {threshold}, the "
+                             f"model used {dec['threshold_logit']}")
+        m = threshold - float(dec["decision"]["u"])
+    score = gap if gap <= 0 or m is None else gap + k * max(m, 0.0)
+    return {"closest_gap": gap, "decision_margin": m, "score": score}
 
 
 def _slot_key(d):

@@ -26,7 +26,8 @@ import time
 from pathlib import Path
 
 
-def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker"):
+def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker",
+        margin_k=None):
     from sim_vehicle_ecu import batch as ecu_batch
     from scensim import truth as T
     from scensim_batch import core
@@ -57,12 +58,22 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
             break
     out = Path(out)
     truth.write(out / "truth")
-    rows = T.slot_outcomes(out / "truth")
+    # each slot's walker decision, the model's own record (092 K11e): what the sloped score
+    # reads beside the truth and the record, so it is recomputable from the saved files
+    recs = r.models.records().get(walker)
+    if recs is not None:
+        for k_slot, mrec in enumerate(recs):
+            (out / "truth" / f"slot_{k_slot}_ep0" / "decision.json").write_text(json.dumps(
+                {"entity": walker, "threshold_logit": mrec["threshold_logit"],
+                 "decision": mrec["decision"]}, sort_keys=True) + "\n")
+    rows = T.slot_outcomes(out / "truth", margin_k=margin_k)
     (out / "outcomes.jsonl").write_text("".join(json.dumps(x, sort_keys=True) + "\n"
                                                 for x in rows))
     ends = r.outcome()
     summary = {"slots": c.n, "steps": k, "step_time": step_time,
                "ego": "point mass (scensim_batch.pointmass), aeb_ttc", "runner": "interim",
+               "score": ("closest gap" if margin_k is None else
+                         f"sloped: closest gap + {margin_k} m per logit of decision margin"),
                "outcomes": {o: ends.count(o) for o in sorted(set(ends))},
                "failed": sum(1 for x in rows if x["outcome"].get("failed")),
                "errors": sum(1 for x in rows if x["outcome"].get("error")),
@@ -80,6 +91,9 @@ def main(argv=None):
     ap.add_argument("--steps", type=int, default=400, help="each slot's cap (default 400)")
     ap.add_argument("--step-time", type=float, default=0.05)
     ap.add_argument("--walker", default="walker", help="the entity aeb_ttc brakes for")
+    ap.add_argument("--margin-k", type=float, default=None,
+                    help="092 K11e: score sloped on the waiting branch, k m per logit of the "
+                         "walker's decision margin (default: the closest gap alone)")
     a = ap.parse_args(argv)
     from scensim_batch.world_lanelet import LaneletWorld
     out = Path(a.out)
@@ -88,7 +102,8 @@ def main(argv=None):
     out.mkdir(parents=True, exist_ok=True)
     recs = [json.loads(x) for x in Path(a.records).read_text().splitlines() if x.strip()]
     world = LaneletWorld.load(a.world)
-    print(json.dumps(run(recs, a.scenario, world, out, a.steps, a.step_time, a.walker)))
+    print(json.dumps(run(recs, a.scenario, world, out, a.steps, a.step_time, a.walker,
+                         a.margin_k)))
     return 0
 
 

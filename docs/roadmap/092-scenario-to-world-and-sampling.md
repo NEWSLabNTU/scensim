@@ -999,6 +999,20 @@ unit outweigh the plateau's whole spread (0.2 m). The runner writes the margin i
 (the batch walker's `record()`: `threshold_logit` and the decision's `u`) and both parts of the
 score in each outcome (`closest_gap`, `decision_margin`), so the score is recomputable.
 
+**The score is a function of the saved files alone (133).** `search_run.py --margin-k`
+writes, beside each slot's truth and record, `decision.json` (the walker model's own record of
+its decision: `threshold_logit` and the decision's U). `scensim.truth.sloped_score(slot)`
+recomputes the score from those files: the gap from the truth, the threshold from the record
+(logit of `accept_u`, else of the record's pilot seed's draw), checked against the model's, and
+U from the decision. A test recomputes every score of a run from its saved directory and
+compares (`test_pointmass.py`).
+
+**Went and avoided (133).** A walker that went (m < 0) but that `aeb_ttc` stopped in time
+(gap > 0) scores its own gap, with no margin term: below every waiting walker. Those draws are
+the near-failures the elite should climb through, and they are expected in the elite from g1
+on. The search counts them per generation, and those in its elite (`went_avoided`,
+`elite_went_avoided` in its state and report).
+
 **2. g0 at the base for a uniform variable.** K11a turns a uniform into a centred truncated
 normal from g0, which put less mass where failures live (K11d's observation). From K11e a
 uniform variable stays uniform in g0, so g0 draws every variable from its base (weights all 1),
