@@ -217,7 +217,9 @@ jobs:
           rosdep install --from-paths $SIM_SUBMODULES $VEHICLE_PACKAGES \
             src/scenario_world_bridge src/scenario_agent_relay \
             src/scensim src/scensim_launch src/scensim_interfaces src/scensim_examples src/scensim_agent \
-            src/czp /tmp/vendor --ignore-src -y -q   # every key resolves (082 step 4): no -r, no skips
+            src/czp src/scensim_sampler /tmp/vendor --ignore-src -y -q   # every key resolves (082 step 4): no -r, no skips
+          # scripts/check_release_rosdep.py (just test) checks these paths hold every workspace
+          # package they depend on (issue 146)
       - name: Build and stage
         run: |
           start=$(date +%s)
