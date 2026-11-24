@@ -103,3 +103,12 @@ C6b's fixtures, raycast, fixture_c6b, GPU0 quiet through all three runs:
   as the car neared them. Whether any rock near the car's path was missing when a wheel reached
   it is not shown by these counts.
 - **118's prediction: held** (no drops; 134's; 4df3198 and 87591b4 at 66).
+
+## Follow-up: the worker's shutdown writes a traceback (2026-11-24, from issue 145)
+
+Every one of issue 145's drives (six on 637b454, 87591b4 and 56b8e39) ends with the tile
+worker's `BrokenPipeError` in `pickle.dump`, in `road_detail._worker`. The app has closed the
+worker's stdout by then, and the worker was still writing a tile's result. It comes after the
+drive's summary line, so no measure or verdict depends on it. But a clean shutdown should write
+nothing: the worker should end quietly on a closed pipe (its stdin's end is already its signal
+to stop). The fix is not yet built.
