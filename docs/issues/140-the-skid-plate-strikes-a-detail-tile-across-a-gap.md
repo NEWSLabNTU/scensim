@@ -110,3 +110,20 @@ terrain (their 1.8 m and 7.4 m reaches).
   is made beyond 0.06 m, the 994 impulse is gone, and the car keeps its speed through step 994
   (no 1.4 m/s step). The base road and terrain carry authored offsets from the world's USD, or
   large auto ones; either way they do not touch the plate's motion here (no impulse, as before).
+
+### The first measurement's result (2026-11-24)
+
+*rough_none*, siw `issue-140` 5cf3834 (tiles at 0.02 m, restOffset 0; the plate as before), GPU0
+quiet, to the run's end (rc 0).
+
+- **The strike is gone.** No contact point between the plate and any tile in t 16.45 to
+  16.70 s, no impulse on the chassis, and the car held 10.13 to 10.17 m/s through step 994 with
+  no roll (before: 1.4 m/s lost and 0.7 s on one wheel). The plate's least vertical gap to the
+  tile in the window was 8.96 cm.
+- **The plate's own reach.** With no plate-tile point made at gaps down to 8.96 cm, the plate's
+  default contact offset plus the tile's 2 cm is under about 9 cm: the plate's own is under
+  about 7 cm. Its value is not read; authoring it is what pins it.
+- **The base road and the terrain** carry no PhysxCollisionAPI either; their default reach to
+  the chassis was up to 0.43 m (road) and 7.3 m (terrain), with no impulse, as before.
+- **118's prediction: held** (no plate-tile point beyond 0.06 m: none was made at all; the 994
+  impulse and the 1.4 m/s step gone).
