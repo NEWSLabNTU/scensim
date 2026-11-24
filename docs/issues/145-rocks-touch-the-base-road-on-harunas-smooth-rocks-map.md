@@ -60,3 +60,34 @@ result after the app has closed its pipe at exit. It comes after the drive's sum
 part of the count.
 
 The run record: `/mnt/renegade/aeon/isaac-ex/c6b-140/run145.sh`, `b145_*.log`, `b145_*.jsonl`.
+
+## The diagnosis (before the runs)
+
+133's step, with the same drive on siw main 77075e3: one run at 10 m/s and one at 13.9 m/s,
+both paced to real time, in a scratch probe (`probe145.py` over probe142c). For every rock woken:
+its lowest point against the base and the detail tile under it, from PhysX scene queries straight
+down. For every base contact: the same at its pose then; the contact points and separations from
+that step's report; the frames since it woke; the USD state of the filter (the prim in `rocks`'
+includes or still pending, `rocks` filtering `roadBase`, the base among `roadBase`'s members); and
+where it lies (its tile and the distance to the tile's edge, and its corridor's v against the
+carriageway's half width and the shoulder). On a smooth record there are no potholes, so a seam
+means a tile edge.
+
+A rock in `rocks` and a base in `roadBase` cannot touch while the filter holds, whatever the
+geometry. So the geometry says where they touch; whether they may touch at all is the filter's.
+
+- **118's prediction.** The USD state is right at every contact: the prim in `rocks`, nothing
+  pending, `rocks` filtering `roadBase`, the base a member. Of two readings:
+  - (a) PhysX does not apply the filter to any of these rocks, so the geometry decides: every
+    woken rock whose lowest point comes within the pair's contact reach of the base reports;
+    the rest lie further above it;
+  - (b) PhysX does not apply the filter to particular prims only: woken rocks lie as close to the
+    base as the nine do and do not report;
+  118 expects (a). The nine lie where the base comes up to or above the detail surface: off the
+  carriageway (|v| beyond the half width), where the world's terrain meets the detail's shoulder
+  or ditch, not at a tile edge. Their lowest point is at most a few cm above the base, and the
+  contact separations are 0 or small, not deep.
+- **Speed.** At 13.9 m/s more rocks wake (the activation window grows with speed, and a faster
+  car knocks more), and the hits are the 10 m/s run's nine plus others of the same kind. A
+  rock reports at most once per wake (the check stops at its first hit), so the count grows with
+  the wakes, not with repeat touches.
