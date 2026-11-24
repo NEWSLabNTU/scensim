@@ -291,6 +291,8 @@ Each step is pushed after review, with its tests.
    `PIP_BREAK_SYSTEM_PACKAGES=1 PIP_IGNORE_INSTALLED=1` for pip and rosdep's pip keys
    (PEP 668), the release package `scensim-ros-jazzy`. The simulation side only: Autoware
    1.5.0 is Humble only, and the front end refuses the vehicle side on Jazzy by name.
+   What remains of Jazzy (the tests, the developer path, a live world server) is carried by
+   092 K6 (243, from 2026-11-24).
 8. **Exit runs.**
 
 ## Exit criteria
