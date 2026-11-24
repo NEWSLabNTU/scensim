@@ -548,3 +548,175 @@ def test_a_ramp_the_world_trails_by_much_warns_naming_the_interval_that_fits():
     assert K.lag_notes(world, {"visibility": lane}) == []
     n = K.lag_notes(world, {"visibility": lane}, {"route_n": 10.0})
     assert len(n) == 1 and "at 10 m/s" in n[0] and "0 -> 100 m" in n[0]
+
+
+# --- the portable environment form (092 K9e) ------------------------------------------------
+
+ENV_WORLD = {"illumination": {"values": {"day": {"environment": {"sun_elevation": 60}},
+                                         "dusk": {"environment": {"sun_elevation": 5,
+                                                                  "sun_azimuth": 1.2}}},
+                              "default": "day"}}
+LIT = SCEN.replace('<Property name="scensim.knob.surface" value="param:road"/>', "")
+
+
+def _lit(tmp_path, extra=""):
+    p = tmp_path / "lit.xosc"
+    p.write_text(LIT.replace("<Storyboard/>", extra or "<Storyboard/>"))
+    return p
+
+
+def test_k9e_an_environment_value_is_declared_by_field_and_runs_on_both_targets():
+    assert K.problems(ENV_WORLD) == []
+    assert K.problems(ENV_WORLD, simulator="carla") == []
+    assert K.problems(ENV_WORLD, simulator="isaac") == []
+    bad = {"a": {"values": {"x": {"environment": {"sun_height": 1}}}},
+           "b": {"values": {"x": {"environment": {"sun_elevation": "high"}}}},
+           "c": {"values": {"x": {"environment": [60]}}}}
+    text = " ".join(m for _, m in K.problems(bad))
+    assert "sun_height is not one of fog_visual_range" in text
+    assert "is {field: number}" in text
+    # Isaac has no cloud state to read back, as for a profile
+    oktas = {"sky": {"values": {"grey": {"environment": {"cloud_cover_oktas": 6}}}}}
+    assert K.problems(oktas, simulator="carla") == []
+    (w, m), = K.problems(oktas, simulator="isaac")
+    assert w == "world.knobs.sky.values.grey" and "cloud_cover_oktas" in m and "carla" in m
+
+
+def test_k9e_one_quantity_in_one_form_per_value():
+    both = {"illumination": {"values": {"day": {"environment": {"sun_elevation": 60},
+                                                "weather": {"sun_altitude_angle": 60}}}}}
+    (w, m), = K.problems(both)
+    assert w == "world.knobs.illumination.values.day"
+    assert m == ("knob illumination=day: environment.sun_elevation and "
+                 "weather.sun_altitude_angle set the same quantity: one value sets it in one "
+                 "form (environment: on every target, weather: CARLA only)")
+    with pytest.raises(K.KnobError, match="set the same quantity"):
+        K.plan(both, {"illumination": "day"}, "carla")
+    # different quantities in the two forms are fine on CARLA
+    mixed = {"i": {"values": {"d": {"environment": {"sun_elevation": 60},
+                                    "weather": {"street_lights": 100}}}}}
+    assert K.problems(mixed, simulator="carla") == []
+    fog = {"f": {"values": {"v": {"environment": {"fog_visual_range": 200},
+                                  "weather": {"fog_density": 40}}}}}
+    assert "weather.fog_density" in K.problems(fog)[0][1]
+
+
+def test_k9e_an_environment_value_is_a_constant_profile_through_the_bridge(tmp_path):
+    for sim in ("carla", "isaac"):
+        b = ProfileBridge()
+        blk, why = run.apply_knobs({"simulator": sim}, _Spec(_lit(tmp_path), {"light": "dusk"}),
+                                   {"world": {"knobs": ENV_WORLD}}, call=b)
+        assert not why and blk["ok"], (sim, why)
+        assert b.sent == []                      # nothing through set_weather
+        got = sorted((p["knob"], p["field"], p["coordinate"], p["points"]) for p in b.profiles[-1])
+        assert got == [("illumination.sun_azimuth", "sun_azimuth", "time", [[0.0, 1.2]]),
+                       ("illumination.sun_elevation", "sun_elevation", "time", [[0.0, 5.0]])]
+        assert all(p.get("static") for p in blk["_profile_plan"])
+        assert blk["knobs"]["illumination"]["value"] == "dusk"
+
+
+def test_k9e_a_constant_profile_is_judged_on_every_frame_after_its_send():
+    class L:
+        def __init__(self, f, a, s):
+            self.knob, self.frame, self.commanded, self.applied, self.sent = (
+                "illumination.sun_elevation", f, 60.0, a, s)
+    plan = [{"knob": "illumination.sun_elevation", "field": "sun_elevation", "step": 1e-3,
+             "min_interval": 1.0, "coordinate": "time", "points": [[0.0, 60.0]],
+             "static": True}]
+    good = [L(1, 45.0, True), L(2, 60.0, False), L(3, 60.0004, False)]
+    s = K.profile_summary(ENV_WORLD, plan, good)["illumination.sun_elevation"]
+    assert s["ok"] and s["static"] and s["sent"] == 1 and s["read_back"] == 60.0004
+    assert s["tolerance"] == pytest.approx(1e-3 + 1e-4 * 60)
+    off = good + [L(4, 59.0, False)]
+    s = K.profile_summary(ENV_WORLD, plan, off)["illumination.sun_elevation"]
+    assert not s["ok"] and s["off_frames"] == [4]
+    # never read back after its send, or no frame at all
+    assert not K.profile_summary(ENV_WORLD, plan, [L(1, 45.0, True), L(2, None, False)])[
+        "illumination.sun_elevation"]["ok"]
+    assert not K.profile_summary(ENV_WORLD, plan, [L(1, 45.0, True)])[
+        "illumination.sun_elevation"]["ok"]
+
+
+def test_k9e_two_writers_of_one_field_are_refused(tmp_path):
+    sun = ("<Storyboard><Init><Actions><GlobalAction><EnvironmentAction><Environment name='e'>"
+           "<Weather><Sun azimuth='0' elevation='1' intensity='1'/></Weather></Environment>"
+           "</EnvironmentAction></GlobalAction></Actions></Init></Storyboard>")
+    blk, why = run.apply_knobs({"simulator": "isaac"}, _Spec(_lit(tmp_path, sun)),
+                               {"world": {"knobs": ENV_WORLD}}, call=ProfileBridge())
+    assert "EnvironmentAction sets Sun too" in why and not blk["ok"]
+    # a profile knob on the same field
+    world = dict(ENV_WORLD, sunrise={"profile": True, "sets": "sun_elevation", "range": [-10, 90]})
+    p = _lit(tmp_path)
+    p.write_text(p.read_text().replace(
+        "</Properties>", '<Property name="scensim.knob.sunrise" value="time: 0 0; 20 30"/>'
+                         "</Properties>"))
+    blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(p), {"world": {"knobs": world}},
+                               call=ProfileBridge())
+    assert "sun_elevation" in why and "two writers" in why
+
+
+def test_k9e_a_fields_read_back_lands_in_its_knobs_entry_and_needs_the_gap_trace(tmp_path):
+    block = {"ok": True, "knobs": {"illumination": {"value": "day", "applied": {}, "ok": True}}}
+    summary = {"illumination.sun_elevation": {"static": True, "sets": "sun_elevation",
+                                              "read_back": 60.0, "ok": True},
+               "visibility": {"sets": "fog_visual_range", "ok": True}}
+    K.merge_static(block, summary)
+    assert block["knobs"]["illumination"] == {"value": "day", "applied": {"sun_elevation": 60.0},
+                                              "ok": True}
+    summary["illumination.sun_elevation"].update(read_back=59.0, ok=False)
+    K.merge_static(block, summary)
+    assert block["knobs"]["illumination"]["ok"] is False
+    blk, why = run.apply_knobs({"simulator": "isaac"}, _Spec(_lit(tmp_path)),
+                               {"world": {"knobs": ENV_WORLD}, "logging": {"gap_trace": False}},
+                               call=ProfileBridge())
+    assert "environment: values are read back from the gap trace" in why
+
+
+REPO = Path(__file__).resolve().parents[3]
+CS3 = REPO / "scenarios" / "projects"
+
+
+@pytest.mark.skipif(not (CS3 / "k9_cs3_isaac" / "testbench.yaml").is_file(),
+                    reason="the repository's scenarios/projects is not beside this package")
+def test_k9e_cs3_binds_the_same_on_carla_and_isaac(tmp_path):
+    """092 K9e step 1: k9_cs3 and k9_cs3_isaac, the same scenario byte for byte, give the same
+    spec the same bound values (barrier_lane, light, the pilot's map) and the same knob plan
+    (one constant profile, illumination.sun_elevation at 60) on both simulators. The map is a
+    stand-in with west_street resolved as Town01's (lanelet 6583, 224.22 m)."""
+    import shutil
+    from scensim_sampler import anchors as A
+    scen = (CS3 / "k9_cs3" / "scenarios" / "cs3_stale_map.xosc").read_bytes()
+    assert scen == (CS3 / "k9_cs3_isaac" / "scenarios" / "cs3_stale_map.xosc").read_bytes()
+    got = {}
+    for name in ("k9_cs3", "k9_cs3_isaac"):
+        d = tmp_path / name
+        (d / "scenarios").mkdir(parents=True)
+        shutil.copy(CS3 / name / "testbench.yaml", d / "testbench.yaml")
+        sc = d / "scenarios" / "cs3_stale_map.xosc"
+        sc.write_bytes(scen)
+        md = d / "assets" / "maps" / "Town01"
+        md.mkdir(parents=True)
+        (md / "lanelet2_map.osm").write_text("<osm town01/>")
+        lane = {"kind": "lane", "lanelets": [{"id": 6583, "from_s": 0.0, "to_s": 224.22}],
+                "length": 224.22, "speed_limit": 11.17, "start_x": 325.64, "start_y": -129.52,
+                "end_x": 101.42, "end_y": -129.41, "heading_s": [0.0, 224.22],
+                "heading": [3.1412, 3.1412], "heading_max_error": 0.0}
+        (md / A.RESOLVED).write_text(json.dumps(
+            {"format": A.FORMAT, "version": A.VERSION, "map": "Town01",
+             "map_sha256": A.map_digest(md), "anchors": {"west_street": lane}}))
+        settings = yaml.safe_load((d / "testbench.yaml").read_text())
+        specs, _ = run.expand(sc, d, params={"pm": ["current", "works"]})
+        out = []
+        for s in specs:
+            b = ProfileBridge()
+            blk, why = run.apply_knobs({"simulator": settings["simulator"]}, s, settings, call=b)
+            assert not why and blk["ok"], (name, why)
+            out.append((s.parameters["pm"], s.parameters["barrier_lane"],
+                        {k: v["value"] for k, v in s.anchors.items()},
+                        [(p["knob"], p["field"], p["points"]) for p in b.profiles[-1]], b.sent))
+        got[settings["simulator"]] = out
+    assert got["carla"] == got["isaac"]
+    assert got["isaac"] == [
+        (pm, "6583", {"barrier_lane": "6583"},
+         [("illumination.sun_elevation", "sun_elevation", [[0.0, 60.0]])], [])
+        for pm in ("current", "works")]

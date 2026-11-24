@@ -311,6 +311,17 @@ error run, excluded from rates:
 a value its runs would refuse is refused before any run, naming the knob and the value
 (issue 154).
 
+A value may instead set the scenario environment, `environment: {sun_elevation: 60}` (the fields
+a knob profile sets: `sun_elevation`, `sun_azimuth`, `fog_visual_range`,
+`precipitation_intensity`, and `cloud_cover_oktas` on CARLA only). Both world servers apply and
+read it back, so it is the form for a knob that one scenario uses on CARLA and Isaac alike
+(roadmap 092 K9e); `weather:` stays CARLA's (scenario-description.md section 3 says which to
+use when). The run sends it as a profile held at the value from time 0 and judges every frame's
+read-back after the send, from the gap trace (`logging.gap_trace` must stay on): `result.json`
+`knobs.<knob>.applied.<field>`, and its `profiles` entry `<knob>.<field>`. A value that sets one
+quantity in both forms, or a field that the scenario's EnvironmentAction or a profile knob also
+sets, is refused by name.
+
 ```yaml
 world:
   knobs:

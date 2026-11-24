@@ -36,6 +36,11 @@ set_weather) and/or a named surface map (Isaac: the scenario's RoadCondition
 `scensim.surface_map`, linked by the project's ground). Every run sends the testbench's
 weather baseline merged with its knobs' parameters, so no run inherits another's weather.
 
+A value may instead set the scenario environment by field, `environment: {sun_elevation: 60}`
+(092 K9e; the fields a profile sets): the portable form, which both world servers apply and
+read back. The run sends it as a profile held constant from time 0 (`<knob>.<field>`), judged on
+every frame's read-back after the send. One value sets a quantity in one form (SAME_QUANTITY).
+
 On Isaac there is no weather service: a value with weather parameters is refused there by name
 (its scenario's EnvironmentAction sets the sky). On CARLA a surface map cannot be applied, and weather (wetness) is visual only: a value that
 names a surface map or a friction (`mu`) is refused there by name, unless it says
@@ -43,7 +48,7 @@ names a surface map or a friction (`mu`) is refused there by name, unless it say
 """
 from pathlib import Path
 
-KINDS = ("weather", "surface_map", "mu", "physics")
+KINDS = ("weather", "environment", "surface_map", "mu", "physics")
 TOLERANCE = 1e-3   # a read-back may round (the world server stores floats)
 
 
@@ -63,6 +68,12 @@ PROFILE_FIELDS = {
 PROFILE_ELEMENTS = {"fog_visual_range": ("Fog",), "sun_elevation": ("Sun", "TimeOfDay"),
                     "sun_azimuth": ("Sun", "TimeOfDay"), "precipitation_intensity":
                     ("Precipitation",), "cloud_cover_oktas": ("Weather",)}
+# a static value's `environment:` field (092 K9e) and the CARLA weather parameters that are the
+# same quantity: one value sets a quantity in one form
+SAME_QUANTITY = {"sun_elevation": ("sun_altitude_angle",), "sun_azimuth": ("sun_azimuth_angle",),
+                 "fog_visual_range": ("fog_density", "fog_distance"),
+                 "precipitation_intensity": ("precipitation",),
+                 "cloud_cover_oktas": ("cloudiness",)}
 PROFILE_KEYS = ("profile", "sets", "range", "default", "step", "min_interval")
 # s of scenario time between two sends of a profile, unless declared: a SetEnvironment costs
 # the frame it is sent in (CARLA, Town01 with 20 NPCs, 2026-11-22: frame p95 4-7 ms without a
@@ -186,6 +197,66 @@ def profile_plan(world_knobs: dict, profiles: dict, simulator: str, anchors=None
     return out
 
 
+def static_tolerance(field: str, value: float) -> float:
+    """How far a constant's read-back may be from its value: half an okta, else float."""
+    return 0.5 if field == "cloud_cover_oktas" else 1e-3 + 1e-4 * abs(value)
+
+
+def static_profiles(environment: dict, environment_elements=(), profiles=None) -> list:
+    """The bridge's profiles for a run's static `environment:` values (092 K9e;
+    `environment`: plan's {knob: {field: value}}): one held constant from time 0 per field,
+    named `<knob>.<field>`, so it is sent and read back as a profile is. KnobError names a
+    field the scenario's EnvironmentAction or a profile knob (`profiles`, profile_plan's list)
+    also sets: two writers."""
+    out = []
+    taken = {p["field"]: p["knob"] for p in (profiles or [])}
+    for knob, fields in (environment or {}).items():
+        for f, v in fields.items():
+            both = [e for e in PROFILE_ELEMENTS[f] if e in environment_elements]
+            if both:
+                raise KnobError(f"knob {knob}: environment.{f}, and the scenario's "
+                                f"EnvironmentAction sets {', '.join(both)} too: two writers, "
+                                "drop one")
+            if f in taken:
+                raise KnobError(f"knob {knob}: environment.{f}, and profile knob {taken[f]} "
+                                f"sets {f} too: two writers, drop one")
+            taken[f] = f"{knob}.{f}"
+            out.append({"knob": f"{knob}.{f}", "field": f, "step": 1e-3,
+                        "min_interval": PROFILE_MIN_INTERVAL, "coordinate": "time",
+                        "points": [[0.0, float(v)]], "static": True})
+    return out
+
+
+def _static_summary(p: dict, lines: list) -> dict:
+    """A constant's summary: every frame's read-back after its first send within the field's
+    tolerance, none missing, at least one."""
+    value = p["points"][0][1]
+    tol = static_tolerance(p["field"], value)
+    sends = [k for k in lines if k.sent]
+    after = lines[lines.index(sends[0]) + 1:] if sends else []
+    unread = sum(1 for k in after if k.applied is None)
+    off = [k.frame for k in after if k.applied is not None and abs(k.applied - value) > tol]
+    dev = max((abs(k.applied - value) for k in after if k.applied is not None), default=None)
+    read = [k.applied for k in after if k.applied is not None]
+    return {"sets": p["field"], "static": True, "value": value, "frames": len(lines),
+            "sent": len(sends), "judged": len(after), "unread": unread, "off_frames": off[:20],
+            "max_deviation": dev, "tolerance": tol,
+            "first_read_back": (sends[0].applied if sends else None),
+            "read_back": (read[-1] if read else None),
+            "ok": bool(after) and not unread and not off}
+
+
+def merge_static(block: dict, summary: dict) -> dict:
+    """result.json's `knobs` with each static `environment:` field's read-back (profile_summary's
+    `<knob>.<field>` entries) in its knob's `applied`, the knob not ok when a field is off."""
+    for name, e in summary.items():
+        entry = (block.get("knobs") or {}).get(name.split(".", 1)[0])
+        if e.get("static") and entry is not None:
+            entry.setdefault("applied", {})[e["sets"]] = e["read_back"]
+            entry["ok"] = entry.get("ok", True) and e["ok"]
+    return block
+
+
 def profile_summary(world_knobs: dict, plan: list, knob_lines: list) -> dict:
     """result.json knobs' `profiles`, from the gap trace's knob lines: per knob its field,
     coordinate, breakpoints, step and min_interval, frames, sends, the range commanded, and how
@@ -199,6 +270,9 @@ def profile_summary(world_knobs: dict, plan: list, knob_lines: list) -> dict:
         knob = p["knob"]
         decl = (world_knobs or {}).get(knob) or {}
         lines = [k for k in knob_lines if k.knob == knob]
+        if p.get("static"):
+            out[knob] = _static_summary(p, lines)
+            continue
         sends = [k for k in lines if k.sent]
         tol = profile_tolerance(decl) if decl.get("range") else TOLERANCE
         unread, lagged, off, dev = 0, 0, [], None
@@ -291,6 +365,15 @@ def problems(world_knobs: dict, where="world.knobs", simulator: str = None) -> l
             if wp is not None and (not isinstance(wp, dict) or not all(
                     isinstance(x, (int, float)) and not isinstance(x, bool) for x in wp.values())):
                 out.append((f"{w}.values.{v}.weather", "is {parameter: number}"))
+            if m.get("environment") is not None:
+                env = environment_problems(m["environment"], f"{w}.values.{v}.environment")
+                if env:
+                    out += env
+                    continue
+            same = form_problem(k, v, m)
+            if same:
+                out.append((f"{w}.values.{v}", same))
+                continue
             if m.get("physics") not in (None, "none"):
                 out.append((f"{w}.values.{v}.physics", "is `none` (visual only) or absent"))
                 continue
@@ -340,7 +423,37 @@ def simulator_problem(knob, value, m: dict, simulator: str):
         return (f"knob {knob}={value}: weather parameters, but Isaac has no weather service (a "
                 "scenario's EnvironmentAction sets its sky, fog and rain); declare this value "
                 "without weather for Isaac")
+    env = m.get("environment") if isinstance(m.get("environment"), dict) else {}
+    for f in env:
+        if f in PROFILE_FIELDS and simulator not in PROFILE_FIELDS[f]:
+            return (f"knob {knob}={value}: environment.{f}, which the {simulator} world server "
+                    f"cannot apply and read back ({', '.join(PROFILE_FIELDS[f])} only)")
     return None
+
+
+def form_problem(knob, value, m: dict):
+    """Why value `value` of knob `knob` sets one quantity in both forms (`environment:` and
+    `weather:`), or None (092 K9e)."""
+    env = (m or {}).get("environment")
+    weather = (m or {}).get("weather")
+    if not isinstance(env, dict) or not isinstance(weather, dict):
+        return None
+    for f in env:
+        for p in SAME_QUANTITY.get(f, ()):
+            if p in weather:
+                return (f"knob {knob}={value}: environment.{f} and weather.{p} set the same "
+                        "quantity: one value sets it in one form (environment: on every target, "
+                        "weather: CARLA only)")
+    return None
+
+
+def environment_problems(env, where) -> list:
+    """A static value's `environment:`, checked: {field: number}, a field a profile sets."""
+    if not isinstance(env, dict) or not all(
+            isinstance(x, (int, float)) and not isinstance(x, bool) for x in env.values()):
+        return [(where, "is {field: number}")]
+    return [(f"{where}.{f}", f"{f} is not one of {', '.join(PROFILE_FIELDS)}")
+            for f in env if f not in PROFILE_FIELDS]
 
 
 def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) -> dict:
@@ -348,7 +461,7 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
     name}, notes: {knob: text}}. KnobError names a knob the world lacks, a value it does not
     declare, or one this simulator cannot honour."""
     weather = dict(baseline or {})
-    maps, notes = {}, {}
+    maps, notes, environment = {}, {}, {}
     for knob, value in knobs.items():
         decl = (world_knobs or {}).get(knob)
         if decl is None:
@@ -364,15 +477,18 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
                             f"({', '.join(values)})")
         m = values[value] or {}
         visual = m.get("physics") == "none"
-        why = simulator_problem(knob, value, m, simulator)
+        why = form_problem(knob, value, m) or simulator_problem(knob, value, m, simulator)
         if why:
             raise KnobError(why)
+        if m.get("environment"):
+            environment[knob] = {f: float(x) for f, x in m["environment"].items()}
         if visual and m.get("mu") is None:
             notes[knob] = "visual only: the friction was not applied"
         weather.update({p: float(x) for p, x in (m.get("weather") or {}).items()})
         if m.get("surface_map"):
             maps[knob] = str(m["surface_map"])
-    return {"weather": weather, "surface_maps": maps, "notes": notes}
+    return {"weather": weather, "surface_maps": maps, "notes": notes,
+            "environment": environment}
 
 
 def compare(knobs: dict, world_knobs: dict, sent: dict, read: dict, maps_read=None) -> dict:

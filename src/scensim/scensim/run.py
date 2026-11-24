@@ -1263,12 +1263,20 @@ def apply_profiles(rec, spec, psettings, project=None, call=_ros_call):
     a testbench that declares a profile knob sends its profiles to the bridge, an empty list
     when it binds none, so no run inherits another's; nothing for a testbench without any."""
     world = psettings.get("world") or {}
-    declared = [k for k, d in (world.get("knobs") or {}).items() if knobsmod.is_profile_knob(d)]
+    wknobs = world.get("knobs") or {}
+    declared = [k for k, d in wknobs.items() if knobsmod.is_profile_knob(d)
+                or any(isinstance(m, dict) and m.get("environment")
+                       for m in ((d or {}).get("values") or {}).values())]
     try:
         bound = knobsmod.bound_profiles(spec.scenario, spec.parameters)
+        # 092 K9e: a static value's environment: goes as a profile held constant
+        fixed = {k: v for k, v in knobsmod.bound(spec.scenario, spec.parameters).items()
+                 if not knobsmod.is_profile_knob(wknobs.get(k) or {})}
+        env = (knobsmod.plan(wknobs, fixed, rec.get("simulator") or "")["environment"]
+               if fixed else {})
     except (knobsmod.KnobError, ValueError) as e:
         return None, f"knobs: {e}"
-    if not declared and not bound:
+    if not declared and not bound and not env:
         return None, ""
     if bound and getattr(spec, "distribution", False):
         return None, ("knobs: the scenario binds a knob profile, which SSv2's own distribution "
@@ -1276,12 +1284,17 @@ def apply_profiles(rec, spec, psettings, project=None, call=_ros_call):
     if bound and not (psettings.get("logging") or {}).get("gap_trace", True):
         return None, ("knobs: a knob profile's applied values are read from the gap trace, "
                       "which logging.gap_trace: false turns off")
+    if env and not (psettings.get("logging") or {}).get("gap_trace", True):
+        return None, ("knobs: a knob's environment: values are read back from the gap trace, "
+                      "which logging.gap_trace: false turns off")
     try:
         anchors = (anchorsmod.for_map(project, scenario_map(Path(spec.scenario)))
                    if project is not None and any(c != "time" for c, _l, _p in bound.values())
                    else {})
+        elements = knobsmod.environment_weather(spec.scenario)
         plan = knobsmod.profile_plan(world.get("knobs"), bound, rec.get("simulator") or "",
-                                     anchors, knobsmod.environment_weather(spec.scenario))
+                                     anchors, elements)
+        plan += knobsmod.static_profiles(env, elements, plan)
     except (knobsmod.KnobError, ValueError) as e:
         return None, f"knobs: {e}"
     out, err = call(rec, _profiles_argv(plan))
@@ -1740,6 +1753,7 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
         summary = knobsmod.profile_summary((psettings.get("world") or {}).get("knobs"),
                                            profile_plan, lines)
         knob_block["profiles"] = summary
+        knobsmod.merge_static(knob_block, summary)   # 092 K9e: environment: per field
         bad = [k for k, e in summary.items() if not e["ok"]]
         if bad and ssv2 is not None:
             knob_block["ok"] = False

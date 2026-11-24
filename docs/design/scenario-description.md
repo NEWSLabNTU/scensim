@@ -452,6 +452,17 @@ Rules:
   the applied value back, and `result.json` records it under `knobs`. A run whose applied
   value differs from its record's is an error run, excluded from rates.
 - **Knobs carry physical values** (μ, visibility), so the sampler can apply constraints (CS2).
+- *Built, K9e (roadmap 092):* **a value's form says where it runs.** `environment:` sets the
+  scenario environment by its fields (`sun_elevation`, `sun_azimuth`, `fog_visual_range`,
+  `precipitation_intensity`; `cloud_cover_oktas` on CARLA only), which every world server
+  applies and reads back (`ENVIRONMENT_APPLIED`): it is the portable form, for a knob a CARLA
+  town and an Isaac stage of one place both declare. `weather:` sets the CARLA world server's
+  weather parameters through its weather service, which Isaac lacks: use it for what has no
+  environment field (`street_lights`, `wetness` as a look, `fog_falloff`), on CARLA only.
+  `surface_map:` and `mu` are a surface's (Isaac; on CARLA only as `physics: none`). One value
+  sets a quantity in one form: `environment.sun_elevation` with `weather.sun_altitude_angle`
+  is refused by name, and so are the other pairs. An `environment:` value is sent once, as a
+  profile held at its value from time 0, and judged on every frame's read-back after the send.
 - **A knob with `profile: true`** accepts a value along time or route position (CS5).
 - *Built, K9 (roadmap 092):* knob profiles. A profile knob declares a range and the one
   environment field it sets; a scenario binds it to breakpoints along `time` or a resolved lane
