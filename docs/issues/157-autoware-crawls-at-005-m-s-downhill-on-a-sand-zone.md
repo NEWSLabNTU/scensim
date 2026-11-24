@@ -1,6 +1,6 @@
 # 157: Autoware's Model 3 crawls at 0.05 m/s downhill on a sand zone on Haruna
 
-**Status:** open; a record (the data below), no probe and no fix yet. **Severity:** to judge: a sand
+**Status:** open: the probe found the sand's resistance, not the brakes (below); a modelling question for 054's sand class. **Severity:** to judge: a sand
 model that holds a car still downhill would be a physics bug; the record cannot yet tell that
 from the controller's braking. **Found:** 2026-11-25, scensim 118, 086 C4's acceptance runs
 (numbered by 133).
@@ -85,3 +85,39 @@ alone resists about three times what the slope pulls.
     question for 054's sand class, not a bug in the code. And why the controller asks for
     deceleration below its plan's speed is Autoware's slope compensation: on a downhill it
     expects gravity to supply the acceleration, so it commands less.
+
+### The probe's result (2026-11-25, 02:40 to 02:50; one run each)
+
+GPU0 (shared by agreement, nothing timed); siw 7b13f5f in the gate checkout for the runs,
+restored to 7813843 after. Each run passed its scenario (it ends at 90 s). Every 6th physics step
+logged, about 960 records an arm. After the first 10 s:
+
+| arm | speed, m/s | brake torque, sum of wheels | drive torque, sum | ECU brake pressure | ABS, TC factors | soil resistance / load | soil load, N | soil thrust, N |
+|---|---|---|---|---|---|---|---|---|
+| free | 0.0515 to 0.0557 | 0 | 2.0 | (no ECU) | (no ECU) | 0.214 to 0.215 | 17087 | 4612 |
+| brake | 0.0515 to 0.0557 | 0 | 2.0 | 0 | 1, 1 | 0.214 to 0.215 | 17087 | 4612 |
+| replay | 0.0512 to 0.0560 | 0 | 2.0 | 0 | 1, 1 | 0.214 to 0.215 | 17082 | 4611 |
+
+(The 2.0 N m of drive is aib's sticky-tire release, 1.0 N m on each driven wheel. Pitch 3.2 to 3.5
+degrees nose down. Each arm went 4.66 m in the 80 s.) In the replay arm, the original run's
+start held the car with the ECU's brake for its first frames (1455 N m in all at 0.08 s, while
+the command was still zero), and then released it.
+
+- free: the car does not roll freely; it creeps at 0.05 to 0.056 m/s with no torque on it.
+  **Held.**
+- brake: the same creep, the ECU's brake pressure 0, ABS and TC inactive. **Held.**
+- replay: as the original run, about 0.055 m/s; the ECU does not brake for Autoware's -0.03 to
+  -0.07 m/s^2 (pressure 0, motor torque 0). **Held.**
+- So the cause is the sand: its closed form resists 0.214 of the load, about 3.6 times the 0.059
+  the grade pulls. The ECU and the brakes are not part of it, and Autoware's small negative
+  command changed nothing. Two questions are left for 054's sand class, not judged here:
+  - whether 0.21 of the load is right for a car's tyre on this class (it holds a car on a 3.5
+    degree slope; loose dry sand can);
+  - why the car creeps at a steady 0.055 m/s rather than standing still, when the resistance is
+    above the pull. A speed at which forces balance points at the closed form's low-speed
+    handling, not at static friction.
+- The controller's deceleration below its plan's speed was not probed here; it had no effect on
+  the car.
+
+Record: NAS "2026-11-25 issue 157 sand probe (118)". Status: a modelling question for 054's sand
+class (the resistance's size and its low-speed creep), not an ECU or brake fault.
