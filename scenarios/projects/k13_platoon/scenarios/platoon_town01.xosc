@@ -91,6 +91,16 @@
           </Condition></ConditionGroup></StartTrigger>
         </Event></Maneuver>
       </ManeuverGroup>
+      <ManeuverGroup name="end" maximumExecutionCount="1">
+        <Actors selectTriggeringEntities="false"/>
+        <!-- SSv2 ends a run on a custom command, not on the storyboard's stop trigger alone -->
+        <Maneuver name="end"><Event name="end_of_run" priority="parallel">
+          <Action name="done"><UserDefinedAction><CustomCommandAction type="exitSuccess"/></UserDefinedAction></Action>
+          <StartTrigger><ConditionGroup><Condition name="t_end" delay="0" conditionEdge="none">
+            <ByValueCondition><SimulationTimeCondition value="25" rule="greaterThan"/></ByValueCondition>
+          </Condition></ConditionGroup></StartTrigger>
+        </Event></Maneuver>
+      </ManeuverGroup>
       <StartTrigger><ConditionGroup><Condition name="t0" delay="0" conditionEdge="none">
         <ByValueCondition><SimulationTimeCondition value="0" rule="greaterThan"/></ByValueCondition>
       </Condition></ConditionGroup></StartTrigger>

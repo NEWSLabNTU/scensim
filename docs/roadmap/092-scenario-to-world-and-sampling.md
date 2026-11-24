@@ -1625,3 +1625,20 @@ and its events `follow` then `stopped`, in that order, in every run.
 and check. The ego is not judged: carla_basic's following of the model car is reported, as any
 contact it makes, but it is not the subject.
 
+**Changed after attempt 4's failure (2026-11-25), before attempt 6.** Attempts 1 to 3 never ran
+a frame (the unfetched map assets, issue 159; a crash in the run-side attachment check on a
+catalog entity's unknown kind; `-$decel`, which OpenSCENARIO 1.3 refuses). Attempt 4 ran all
+three runs at lag 1 with no gate miss, but failed on substance, and two things changed for the
+next attempt; the rule, the predictions and the checks above did not:
+1. *The run ends on `exitSuccess` at 25 s.* SSv2 ends a run on a custom command, not on the
+   storyboard's stop trigger, so attempt 4's runs ran to SSv2's time-out. The scenario's `end`
+   event sends `exitSuccess` at simulation time 25 s.
+2. *The world reports a commanded body's velocity (issue 160).* The CARLA world server's step
+   states carried CARLA's measured 0 m/s for the follower, posed with physics off, so the model
+   read its own speed as 0 and the follower crawled at 0.075 m/s. The states now carry the
+   integrator's velocity (`scensim_carla_world` 078c1a1, on its branch
+   `issue-160-commanded-velocity`, which replaces 9af488a in this check). The model reads the
+   world's velocity, as designed. Attempt 5 ran a model that took its own last command as its
+   speed instead; that fix was withdrawn (open loop, it hid the world's defect), so attempt 5
+   does not count.
+
