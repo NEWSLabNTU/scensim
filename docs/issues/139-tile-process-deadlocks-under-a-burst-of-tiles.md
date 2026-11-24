@@ -1,6 +1,7 @@
 # 139: the road's tile process deadlocks under a burst of tile requests
 
-**Status:** open; fix planned after issue 137's probe (133). **Severity:** high: a hung world
+**Status:** fixed, landed as siw 87591b4 in siw main 56b8e39 (scensim main 75626c3b); the
+worker's traceback at shutdown is a follow-up, below. **Severity:** high: a hung world
 server, with no error and no exit, is the worst kind of failure. **Found:** 2026-11-24, scensim
 118, issue 137's probe on 086 C6d's *rough_none* map.
 

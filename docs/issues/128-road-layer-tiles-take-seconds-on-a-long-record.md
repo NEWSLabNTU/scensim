@@ -114,3 +114,22 @@ pursuit's look-ahead) from the course's end. The guard now fails when the cars n
 naming where they stopped. `cost.json` reports `course_m` and `course_end`. On Haruna at 10 m/s
 that is about 3060 frames, 153 s of drive, against 26 s before. The cost measures without
 `--guard-ms` are unchanged.
+
+## Bit for bit, and under which numpy (2026-11-24, from issue 145)
+
+The exactness tests ran only under the system numpy (1.21.5), the gate's. The world server runs
+Isaac 6.2's Python, with numpy 2.3.1, which sums in another order. Measured there against the full
+loop, on the tests' tiles:
+
+- 128's tiles: u within 2.3e-13 m, v and near identical.
+- 142's winding tiles: u within 2.0e-8 m, near identical, v identical except at one point of
+  71538. That point is equally near two segments that meet at a vertex, and numpy 2.3 takes the
+  other one; its v differs by 0.42 mm (the point is 18 m off the centreline).
+- 142's hairpin: u within 2.8e-14 m, v and near identical. 128's own tie test (the hairpin's
+  equidistant points) still takes the first leg.
+
+So "bit for bit, ties included" holds under numpy 1.x. Under numpy 2.x it holds up to rounding in
+u and up to the choice at an exact tie. 118 first reported "within 2e-15 m" from the first array a
+failing test printed; that figure was wrong (corrected here, after the measurement above). The tests
+(siw branch `exact-numpy2`) compare exactly under numpy 1.x, and under 2.x take near as equal and
+u and v within 1e-6 and 1e-3 m: bounds set after this measurement.
