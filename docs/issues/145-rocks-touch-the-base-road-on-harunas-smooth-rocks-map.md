@@ -150,3 +150,33 @@ one mechanism, seen where the base and the tile part.
 The next test, not yet run: wake a rock in a small stage where the base sits 5 cm above the tile
 under it. With the filter in effect the rock falls through to the tile; without it, it rests on
 the base. Run it on a pool prim, on a prim made live, and on one made dynamic from the start.
+
+## The stage test (approved by 133; before the run)
+
+A small stage, no road layer: a detail tile (a flat mesh at z 0) and the base (a flat mesh at
+z 0.05, in `roadBase`, its members set before play as issue 123 requires), with
+`rock_layer.define_groups`' groups. Each rock is one of C6b's prototypes, about 13 cm across,
+made as `RockStream._new_prim` makes one, resting on the tile with its lowest point 1 mm above it
+(so 4 cm under the base's surface), 1 m from the next. Every rock is woken at the same frame
+(its body enabled), then 3 s of physics. Measured: each rock's lowest point at the end, and its
+contacts with the base from the contact report.
+
+| rock | made | joins `rocks` | asleep, then woken |
+|---|---|---|---|
+| D | before play | before play | no: a body from the start |
+| D2 | before play | before play | yes |
+| P | after play, parked, then reused (the pool's way) | the frame it is made, collision on | yes |
+| L | after play, at rest (a prim made live) | the frame it is made, collision on | yes |
+| L2 | after play, collision off | the frame it is made; collision on a frame later | yes |
+| N | before play | never (the control) | no |
+
+With the filter in effect a rock stays on the tile, its lowest point near 0. Without it, it meets
+the base and is pushed up onto it, its lowest point near 0.05 m.
+
+- **118's prediction.** N rests on the base, about 0.05 m: the test can see a missing filter.
+  D and D2 stay on the tile with no base contact. P and L touch the base at once when woken and
+  end on it. L2 stays on the tile. The cause is then the order: a rock's collider reaches PhysX
+  before its membership of `rocks`, and a membership added to a collider PhysX already holds is
+  not applied (issue 123's rule for a group, here for a member). Waking alone is not the cause
+  (D2). The fix would be L2's order: a new rock's collision on only after its membership is in.
+- If D2 also fails, waking is the cause (its body enabled drops the filter), and L2 fails too.
