@@ -211,3 +211,44 @@ the base and is pushed up onto it, its lowest point near 0.05 m.
     tiles' static rock meshes (`/World/RoadRocks/s_*`) are in `rockTiles`, not `rocks`. So 118
     does not expect a second group there either. Run 2 tests the stage only. If it shows a rock
     in a second group, the drive's groups get the same listing next.
+
+### The stage test's result (2026-11-24, run 2)
+
+siw main 77075e3, aib 4e8d684, GPU0 under the quiet rule; record `stage145.py`, `run145s.sh`,
+`s145.jsonl`, `s145.log` (run 1's as `s145_void1.*`). The control works: N, in no group, was pushed
+up onto the base.
+
+| rock | lowest point at the end | base contacts | verdict |
+|---|---|---|---|
+| D (made before play, a body from the start) | -2.4 mm | 0 | on the tile |
+| D2 (made before play, asleep, woken) | -2.4 mm | 0 | on the tile |
+| P (the pool's way: made after play, joins `rocks` a step later) | 47.6 mm | 24, from the wake frame (30) | on the base |
+| L (made live, joins before any step) | -2.4 mm | 0 | on the tile |
+| L2 (made with collision off, on a frame after joining) | -2.4 mm | 0 | on the tile |
+| N (the control, no group) | 47.6 mm | 22, from frame 0 | on the base |
+
+**118's prediction (as amended before the run): held, every case.** Only P, the pool's prim,
+meets the base. It does so the frame it wakes, and it ends on the base, as the drive's 46 did.
+
+**133's second-group question: no second group in USD.** At both listings, before play and at
+the wake frame, every rock is in `rocks` only. No other group lists a rock or an ancestor of one;
+`roadBase` lists the base alone. omni.physx's warning came again, once ("Collisions are supported
+currently only in one collision group", after omni.fabric's "attribute
+collection:colliders:includes not found for path .../rocks"). Its place among the frames cannot
+be read from this log: Kit's lines and the script's are separate streams, and the whole run of
+210 steps took under a second. It is not explained and stays open.
+
+**The cause.** A rock's collider that PhysX takes in before the rock is in `rocks` keeps no
+filter against `roadBase`, even after the membership is added. That holds while the collider is
+disabled too (P was parked with collision off in the frame it was made). Waking is not the cause:
+D2 and L wake and keep their filter. In the world server and the drives, `RockStream.reserve`
+makes the pool's prims at the road's load and at each ego's spawn, and their membership is
+written at the next `update`'s `_flush_groups`, after at least one physics step. So every pool
+prim is unfiltered, and the pool is where nearly every woken rock comes from. Issue 123's rule
+for groups ("made while the simulation runs, not applied to colliders PhysX already holds")
+holds for a member too.
+
+**The fix to propose (not built):** `reserve` writes its prims' membership of `rocks` before it
+returns, before the next physics step, as a live prim's is (L's order). Its proof: the stage
+test's P made that way stays on the tile, and the Haruna drive at 10 and 13.9 m/s gives 0 base
+contacts over the course. On the rough map (issue 136) the same should end its 12.
