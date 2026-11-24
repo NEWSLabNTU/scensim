@@ -2,7 +2,8 @@
 
 **Severity**: low. Every collider is in one group and the filtering works, as in 032; the
 warning floods the log (452 lines over the second and third of three 800 m drives) and hides the others. **Status**:
-fixed in swb_isaac_world eedae29. **Found**: 2026-11-03 on newslab-server-241, the 066 R4 budget rerun
+fixed in swb_isaac_world eedae29 within a stream; across loads (issue 152's record), a fix
+built and not yet run (below). **Found**: 2026-11-03 on newslab-server-241, the 066 R4 budget rerun
 (`spikes/rock_world.py`, three speeds in one process), Isaac Sim 6.1 (omni.physx 110.3.2).
 
 ## What happens
@@ -48,3 +49,27 @@ and out) took about 100 ms of the next step: 46 frames over 50 ms in 800 m at 80
 tile's static rocks now have a group of their own (`rockTiles`, with the rocks' filters),
 which the window edits; the rocks group changes only when a prim is made beyond the pool. No
 frame over 50 ms since.
+
+## Again, across loads (2026-11-25, from issue 152's record)
+
+Issue 152's live runs logged "Collisions are supported currently only in one collision group" 770
+times a run: 768 at the step after the scenario's load made its rock pool, and 2 later (a run
+without rocks logs 2). The world server's preload (issue 152) loads the map once and makes a rock
+stream with its 768-prim pool. The scenario's `LoadWorld` keeps the world and loads the road again,
+which removes that stream's prims and makes a new stream. Each stream, and each `DetailColliders`,
+counted its path serial from 1 (`self.serial = 0` in its constructor), so the new pool's prims
+took the removed pool's paths, `/World/RoadRocks/r1` to `r768`. That is this issue's case: a
+collider made at a path an earlier one had, which omni.physx takes for one in two groups. The
+fix above made each path new within a stream, not within the session. Issue 152's probe found
+every rock in `rocks` alone by USD and its stage tests no warning, which fits the first finding
+here, that the filtering works. The warnings are the log's flood, not the contacts' cause.
+
+- **The fix (built offline, not run; siw local branch pool-paths 7813843 on main 26a3573):** one
+  serial for the session (`rock_layer.next_serial`, a module counter), taken by the three path
+  sites: the collision tiles `t_<i>_<j>_<n>`, a tile's static rocks `s_<i>_<j>_<n>` and the
+  rocks `r<n>`. Reusing the pool across loads would also do it, but the pool belongs to a stream
+  that the load replaces. Tests without Isaac (`test_session_paths.py`): the serial never repeats,
+  two loads make the same tile at two paths, and every path site takes the session serial.
+- **118's prediction (before any run):** the live haruna_down drive on *rough_rocks* (issue 152's
+  run) logs about 2 of the warnings instead of 770, its base contacts stay 0, and it passes. The
+  run waits for a GPU window from the other session that holds GPU0, and for 133's word.
