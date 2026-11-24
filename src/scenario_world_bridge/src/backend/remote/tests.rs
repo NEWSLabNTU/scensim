@@ -1570,6 +1570,40 @@ fn a_server_without_commands_never_receives_commanded() {
     assert!(seen.lock().unwrap().is_empty());
 }
 
+/// Roadmap 092 K13: a `model` vehicle is commanded as a `model` pedestrian is: refused by a
+/// server without `COMMANDS` before any Spawn goes out, and otherwise the simulator's (read
+/// back, never posed), spawned COMMANDED as a vehicle.
+#[test]
+fn a_model_vehicle_is_commanded_and_refused_without_commands() {
+    let (behaviour, seen) = spawn_motions(honest_with(ISAAC_LIKE, "one"));
+    let mut b = backend(&server(behaviour));
+    b.initialize(&episode()).unwrap();
+    let e = b
+        .spawn(&vehicle("follower", Driver::Model, 0.0))
+        .unwrap_err();
+    assert!(e.to_string().contains("does not offer COMMANDS"), "{e}");
+    assert!(e.to_string().contains("controller model"), "{e}");
+    assert!(seen.lock().unwrap().is_empty());
+
+    let (behaviour, seen) = spawn_motions(honest_with(COMMANDING, "one"));
+    let mut b = backend(&server(behaviour));
+    b.initialize(&episode()).unwrap();
+    b.spawn(&vehicle("follower", Driver::Model, 0.0)).unwrap();
+    b.spawn(&vehicle("npc", Driver::Scenario, -10.0)).unwrap();
+    let f = &b.entities["follower"];
+    assert_eq!(f.mover, Mover::Simulator);
+    assert!(f.commanded && !f.agent && !f.autopilot);
+    assert_eq!(f.entity_type, EntityType::Vehicle);
+    assert!(!b.entities["npc"].commanded);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            wire::Motion::Commanded as i32,
+            wire::Motion::Kinematic as i32
+        ]
+    );
+}
+
 /// Roadmap 092 K12: a `model` pedestrian is the simulator's (read back, never posed), spawned
 /// COMMANDED, and the truth file (schema 3) gives it the frame of the command that moved it;
 /// no other entity has `cmd_frame`.

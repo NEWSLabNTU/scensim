@@ -126,6 +126,34 @@ def resample(lane: dict, ds: float = DS, extend: float = EXTEND):
     return xs, ys
 
 
+def lane_anchors(params: list, resolved: dict) -> list:
+    """Per slot, the model's anchors: its `lane` from the map's resolved anchors (K9's
+    anchors.resolved.json), refused by name when absent or not a lane."""
+    out = []
+    for p in params:
+        name = p.get("lane")
+        a = (resolved or {}).get(name)
+        if a is None:
+            raise ValueError(f"idm_follower: lane {name!r}: no such anchor on the map "
+                             f"(known: {', '.join(sorted(resolved or {})) or 'none'})")
+        if a.get("kind") != "lane":
+            raise ValueError(f"idm_follower: lane {name!r} is a {a.get('kind')} anchor, not a lane")
+        out.append({"lane": a})
+    return out
+
+
+def seats_obs(me, entities: dict, leader, np):
+    """One slot's observation on seats: `me` and the leader's truth (x, y, yaw, vx, vy) from the
+    frame's `entities` (the leader absent, or none: `leader_valid` False)."""
+    a = lambda v: np.array([float(v)])   # noqa: E731
+    lead = entities.get(leader) if leader else None
+    ok = lead is not None
+    lead = lead if ok else me
+    return {"x": a(me[0]), "y": a(me[1]), "vx": a(me[3]), "vy": a(me[4]),
+            "leader_x": a(lead[0]), "leader_y": a(lead[1]), "leader_vx": a(lead[3]),
+            "leader_vy": a(lead[4]), "leader_valid": np.array([ok]), "valid": np.array([True])}
+
+
 class IdmFollower:
     array_api = ("numpy", "torch")
     name = "idm_follower"

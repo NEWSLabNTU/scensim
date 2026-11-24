@@ -163,10 +163,12 @@ def test_command_problems_name_each_refusal():
                                 scene + [ent("npc", "", "vehicle")])
     assert any("'npc', whose controller is 'the default', not 'model'" in m for m in plain)
     assert any("'ghost', which the scenario does not have" in m for m in plain)
-    # a commanded vehicle
-    car = at.command_problems([{**walkers, "commands": ["car"]}],
-                              [ent("car", "model", "vehicle")])
-    assert any("'car' is a vehicle with controller 'model'" in m for m in car)
+    # a commanded vehicle is allowed (092 K13); a commanded misc object is not
+    assert at.command_problems([{**walkers, "commands": ["car"]}],
+                               [ent("car", "model", "vehicle")]) == []
+    cone = at.command_problems([{**walkers, "commands": ["cone"]}],
+                               [ent("cone", "model", "misc_object")])
+    assert any("'cone' is a misc object with controller 'model'" in m for m in cone)
     # the datagram's bounds: 10 entities, 64-byte names
     many = [ent(f"w{i}", "model") for i in range(11)]
     over = at.command_problems([{**walkers, "commands": [e.name for e in many]}], many)

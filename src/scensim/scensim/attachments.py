@@ -28,13 +28,13 @@ group. It runs in the project directory with the scenario domain's ROS environme
   the parameter values it was given; ``SCENSIM_MAP_DIR``: the map directory it runs on.
 
 ``commands: [<entity>, ...]`` (roadmap 092 K12): the attachment moves those entities. Each is a
-pedestrian whose controller is ``model`` (its role is ``model`` in ``SCENSIM_ROLES``); the
+pedestrian (K12) or a vehicle (K13) whose controller is ``model`` (its role is ``model`` in ``SCENSIM_ROLES``); the
 world server integrates the commands the attachment sends with the gate's datagrams, ``DONE
 <frame> [<entity> <speed> <heading> <accel_limit>]...`` in lockstep, ``CMD <frame> ...``
 otherwise (``scensim.attachments.CommandGate``; it gets ``SCENSIM_TICK_GATE`` and
 ``SCENSIM_COMMANDS``, its entities as JSON, either way). A run refuses, before SSv2 starts, a
 commanded entity no attachment claims, one claimed twice, a claim on an entity whose controller
-is not ``model``, a commanded vehicle or misc object, more than ``MAX_COMMANDED`` commanded
+is not ``model``, a commanded misc object or ego, more than ``MAX_COMMANDED`` commanded
 entities, and a name longer than ``MAX_NAME`` bytes: a frame's commands fit one datagram.
 
 What became of each is recorded in ``result.json`` under ``attachments``: when it started and
@@ -154,9 +154,9 @@ def command_problems(attachments, entities) -> list:
                        f"{e.controller or 'the default'!r}, not {MODEL_CONTROLLER!r}")
     for name in wanted:
         kind = by_name[name].kind
-        if kind in ("vehicle", "misc_object"):
+        if kind not in ("pedestrian", "vehicle"):
             out.append(f"entity {name!r} is a {kind.replace('_', ' ')} with controller "
-                       f"{MODEL_CONTROLLER!r}: only pedestrians are commanded for now")
+                       f"{MODEL_CONTROLLER!r}: only pedestrians and vehicles are commanded")
         if len(name.encode()) > MAX_NAME:
             out.append(f"entity {name!r} has a name of {len(name.encode())} bytes: a commanded "
                        f"entity's is at most {MAX_NAME} (one datagram per frame)")

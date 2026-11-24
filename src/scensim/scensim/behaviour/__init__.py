@@ -31,9 +31,7 @@ SETS = Path(__file__).resolve().parent / "sets"
 gap_acceptance_walker = GapAcceptanceWalker
 idm_follower = IdmFollower
 
-# the models a scenario may name; idm_follower joins when its seats and batch sides exist (K13
-# steps ii and iii), so neither target takes it before then
-MODELS = {"gap_acceptance_walker": GapAcceptanceWalker}
+MODELS = {"gap_acceptance_walker": GapAcceptanceWalker, "idm_follower": IdmFollower}
 
 
 def parameter_set(name: str) -> dict:

@@ -64,22 +64,31 @@ class Runner:
         commands = {}
         for name, m in self.models.items():
             me = frame["entities"].get(name)
-            if me is None or ego is None:
+            if me is None:
                 continue
-            a = lambda v: np.array([float(v)])   # noqa: E731
-            obs = {"x": a(me[0]), "y": a(me[1]), "ego_x": a(ego[0]), "ego_y": a(ego[1]),
-                   "ego_vx": a(ego[3]), "ego_vy": a(ego[4]), "ego_ax": a(ax), "ego_ay": a(ay),
-                   "valid": np.array([True])}
+            if getattr(m, "name", "") == "idm_follower":
+                # the car-follower reads its leader, not the ego (092 K13)
+                from scensim.behaviour.follower import seats_obs
+                obs = seats_obs(me, frame["entities"], m.params[0]["leader"], np)
+            else:
+                if ego is None:
+                    continue
+                a = lambda v: np.array([float(v)])   # noqa: E731
+                obs = {"x": a(me[0]), "y": a(me[1]), "ego_x": a(ego[0]), "ego_y": a(ego[1]),
+                       "ego_vx": a(ego[3]), "ego_vy": a(ego[4]), "ego_ax": a(ax),
+                       "ego_ay": a(ay), "valid": np.array([True])}
             act, ev = m.step(obs, dt)
             commands[name] = (float(act["speed"][0]), float(act["heading"][0]),
                               float(act["accel_limit"][0]))
             e = int(np.asarray(ev)[0])
             if e and self.decisions is not None:
-                from scensim.behaviour.walker import EVENTS
+                events = getattr(m, "events", None)
+                if events is None:
+                    from scensim.behaviour.walker import EVENTS as events
                 self.decisions.write(json.dumps({"frame": frame["frame"],
                                                  "sim_frame": frame["sim_frame"],
                                                  "entity": name,
-                                                 "event": EVENTS.get(e, str(e))}) + "\n")
+                                                 "event": events.get(e, str(e))}) + "\n")
                 self.decisions.flush()
         self.gate.send(int(frame["sim_frame"]), commands)
         return commands
@@ -129,8 +138,16 @@ def build(env) -> tuple:
             raise SystemExit(f"{scenario}: {name!r} names no behaviour model "
                              "(<Property name=\"model\" value=\"scensim.behaviour:...\"/>)")
         cls = behaviour.MODELS[spec["model"]]
-        models[name] = cls(spec["params"], spec["seeds"],
-                           model_anchors(c, world, i, egos[0]), xp)
+        if spec["model"] == "idm_follower":
+            # its lane from the map's resolved anchors (092 K13)
+            from scensim.behaviour.follower import lane_anchors
+            from scensim_sampler import anchors as A
+            f = Path(map_dir) / A.RESOLVED
+            resolved = A.load_resolved(f, map_dir=map_dir) if f.is_file() else {}
+            anchors = lane_anchors(spec["params"], resolved)
+        else:
+            anchors = model_anchors(c, world, i, egos[0])
+        models[name] = cls(spec["params"], spec["seeds"], anchors, xp)
     return models, names[egos[0]]
 
 

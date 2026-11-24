@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 092 K13's platoon: a scripted lead brakes; the car between it and the ego follows it as scensim.behaviour:idm_follower (the
+     Intelligent Driver Model, parameter set zhang2024_highd_car), holding the lane anchor `straight`; the ego follows that car.
+     The model alone moves the follower: no storyboard action names it. Values invented; an example, not a tuned scenario. -->
+<OpenSCENARIO>
+  <FileHeader revMajor="1" revMinor="3" date="2026-11-25T00:00:00" author="scensim"
+              description="a lead brakes; the car between it and the ego follows it under IDM"/>
+  <ParameterDeclarations>
+    <ParameterDeclaration name="ego_speed" parameterType="double" value="12"/>
+    <ParameterDeclaration name="lead_speed" parameterType="double" value="12"/>
+    <ParameterDeclaration name="decel" parameterType="double" value="4"/>
+    <ParameterDeclaration name="onset_t" parameterType="double" value="8"/>
+    <ParameterDeclaration name="time_gap" parameterType="double" value="1.133"/>
+    <ParameterDeclaration name="accel" parameterType="double" value="1.5"/>
+  </ParameterDeclarations>
+  <CatalogLocations/>
+  <RoadNetwork><LogicFile filepath="maps/town_street"/></RoadNetwork>
+  <Entities>
+    <ScenarioObject name="ego">
+      <Vehicle name="car" vehicleCategory="car"><BoundingBox><Center x="1.4" y="0" z="0.8"/><Dimensions length="4.7" width="1.9" height="1.5"/></BoundingBox><Properties/></Vehicle>
+      <ObjectController><Controller name="ego"><Properties>
+        <Property name="isEgo" value="true"/></Properties></Controller></ObjectController>
+    </ScenarioObject>
+    <ScenarioObject name="follower">
+      <Vehicle name="car" vehicleCategory="car"><BoundingBox><Center x="1.4" y="0" z="0.8"/><Dimensions length="4.7" width="1.9" height="1.5"/></BoundingBox><Properties/></Vehicle>
+      <ObjectController><Controller name="model"><Properties>
+        <Property name="model" value="scensim.behaviour:idm_follower"/>
+        <Property name="lane" value="straight"/>
+        <Property name="leader" value="lead"/>
+        <Property name="T" value="$time_gap"/>
+        <Property name="a" value="$accel"/>
+        <Property name="length" value="4.7"/>
+        <Property name="leader_length" value="4.7"/>
+      </Properties></Controller></ObjectController>
+    </ScenarioObject>
+    <ScenarioObject name="lead">
+      <Vehicle name="car" vehicleCategory="car"><BoundingBox><Center x="1.4" y="0" z="0.8"/><Dimensions length="4.7" width="1.9" height="1.5"/></BoundingBox><Properties/></Vehicle>
+    </ScenarioObject>
+  </Entities>
+  <Storyboard>
+    <Init><Actions>
+      <Private entityRef="ego"><PrivateAction><TeleportAction><Position>
+        <LanePosition roadId="" laneId="34513" s="5" offset="0"/></Position></TeleportAction></PrivateAction>
+        <PrivateAction><LongitudinalAction><SpeedAction>
+          <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
+          <SpeedActionTarget><AbsoluteTargetSpeed value="$ego_speed"/></SpeedActionTarget>
+        </SpeedAction></LongitudinalAction></PrivateAction></Private>
+      <Private entityRef="follower"><PrivateAction><TeleportAction><Position>
+        <LanePosition roadId="" laneId="34513" s="40" offset="0"/></Position></TeleportAction></PrivateAction></Private>
+      <Private entityRef="lead"><PrivateAction><TeleportAction><Position>
+        <LanePosition roadId="" laneId="34513" s="70" offset="0"/></Position></TeleportAction></PrivateAction>
+        <PrivateAction><LongitudinalAction><SpeedAction>
+          <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
+          <SpeedActionTarget><AbsoluteTargetSpeed value="$lead_speed"/></SpeedActionTarget>
+        </SpeedAction></LongitudinalAction></PrivateAction></Private>
+    </Actions></Init>
+    <Story name="main"><Act name="act">
+      <ManeuverGroup name="brake" maximumExecutionCount="1">
+        <Actors selectTriggeringEntities="false"><EntityRef entityRef="lead"/></Actors>
+        <Maneuver name="brake"><Event name="brake" priority="override" maximumExecutionCount="1">
+          <Action name="brake"><PrivateAction><LongitudinalAction><SpeedAction>
+            <SpeedActionDynamics dynamicsShape="linear" value="-$decel" dynamicsDimension="rate"/>
+            <SpeedActionTarget><AbsoluteTargetSpeed value="0"/></SpeedActionTarget>
+          </SpeedAction></LongitudinalAction></PrivateAction></Action>
+          <StartTrigger><ConditionGroup><Condition name="brake" delay="0" conditionEdge="none">
+            <ByValueCondition><SimulationTimeCondition value="$onset_t" rule="greaterThan"/></ByValueCondition>
+          </Condition></ConditionGroup></StartTrigger>
+        </Event></Maneuver>
+      </ManeuverGroup>
+      <StartTrigger><ConditionGroup><Condition name="t0" delay="0" conditionEdge="none">
+        <ByValueCondition><SimulationTimeCondition value="0" rule="greaterThan"/></ByValueCondition>
+      </Condition></ConditionGroup></StartTrigger>
+    </Act></Story>
+    <StopTrigger><ConditionGroup><Condition name="end" delay="0" conditionEdge="none">
+      <ByValueCondition><SimulationTimeCondition value="25" rule="greaterThan"/></ByValueCondition>
+    </Condition></ConditionGroup></StopTrigger>
+  </Storyboard>
+</OpenSCENARIO>

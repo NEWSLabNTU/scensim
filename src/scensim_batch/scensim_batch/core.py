@@ -93,10 +93,12 @@ def request_motion(kind, commands):
 class BatchRun:
     def __init__(self, compiled, world, backend, component, route_length=300.0,
                  points=121, speed_limit=None, allow_loop=False, start_frames=0,
-                 step_time=None, device=None, sync_every=None):
+                 step_time=None, device=None, sync_every=None, anchors=None):
         """`allow_loop`: accept a LoopBatch component (one Python step per slot), for checking
         a component before it has a batched form; never for a throughput number, and the run
-        says so (`self.looped`)."""
+        says so (`self.looped`). `anchors`: the map's resolved anchors ({name: anchor}, K9's
+        anchors.resolved.json), which a car-follower's lane is taken from (092 K13)."""
+        self.anchors_resolved = dict(anchors or {})
         from sim_vehicle_ecu import batch as ecu_batch
         # `device` (092 K2.2c): the run's tensors live there (the compiled scenario must be
         # compiled there too), and a component on array_api "torch" gets its commands and
@@ -399,6 +401,8 @@ class BatchRun:
         st = self.backend.state()
         self.models.step(st, dt)     # behaviour models, on this step's ego (092 K10)
         self.obs = self._observe(st, dt, npc_ego=before)
+        # car-followers read their leaders where this step left every entity (092 K13)
+        self.models.step_followers(self.obs, dt)
         self.seen = self._ego_view(self.obs)
         view = self._as_ssv2_sees(self.obs, before)
         self._post_update()
@@ -550,11 +554,16 @@ class Models:
         self.x, self.y, self.yaw, self.v = z.clone(), z.clone(), z.clone(), z.clone()
         self._prev_v = None
         self.pending = [None] * len(self.idx)   # each model's command, applied the next step
+        # a car-follower (092 K13) steps on every entity's pose after the step, not the ego's
+        self.follower = [c.entities[i].model["model"] == "idm_follower" for i in self.idx]
         self.anchors = [self._anchors(j, i) for j, i in enumerate(self.idx)]
 
     def _anchors(self, j, i):
-        """Per slot, entity i's crossing in the map frame."""
+        """Per slot, entity i's crossing in the map frame; a car-follower's lane."""
         run = self.run
+        if self.follower[j]:
+            from scensim.behaviour.follower import lane_anchors
+            return lane_anchors(run.c.entities[i].model["params"], run.anchors_resolved)
         return model_anchors(run.c, run.world, i, run.ego, run.route_length, run.points)
 
     def reset(self, mask):
@@ -599,19 +608,54 @@ class Models:
         self._prev_v = (vx, vy)
         valid = torch.ones(n, dtype=torch.bool, device=vx.device)
         for j, m in enumerate(self.models):
-            # the previous step's command moves the entity first: the lockstep channel's lag 1
-            # (092 K12), so a model on seats and in the batch reacts a frame after it decides
-            p = self.pending[j]
-            if p is not None:
-                self.x[:, j], self.y[:, j], self.v[:, j] = model_law(
-                    self.x[:, j], self.y[:, j], self.v[:, j],
-                    p["speed"], p["heading"], p["accel_limit"], dt)
-                self.yaw[:, j] = p["heading"]
+            self._move(j, dt)
+            if self.follower[j]:
+                continue
             obs = {"x": self.x[:, j], "y": self.y[:, j], "ego_x": st["x"], "ego_y": st["y"],
                    "ego_vx": vx, "ego_vy": vy, "ego_ax": ax, "ego_ay": ay, "valid": valid}
             act, ev = m.step(obs, dt)
             self.pending[j] = {k: act[k] for k in ("speed", "heading", "accel_limit")}
             self.events[self.run.c.entities[self.idx[j]].name] = ev
+
+    def _move(self, j, dt):
+        """The previous step's command moves model j's entity first: the lockstep channel's lag
+        1 (092 K12), so a model on seats and in the batch reacts a frame after it decides."""
+        p = self.pending[j]
+        if p is not None:
+            self.x[:, j], self.y[:, j], self.v[:, j] = model_law(
+                self.x[:, j], self.y[:, j], self.v[:, j],
+                p["speed"], p["heading"], p["accel_limit"], dt)
+            self.yaw[:, j] = p["heading"]
+
+    def step_followers(self, obs, dt):
+        """The car-followers (092 K13), each on its own pose and its leader's in `obs` (every
+        entity where this step left it, the models placed), as on seats a follower reads one
+        truth frame; their poses and events placed back into `obs`."""
+        if not any(self.follower):
+            return
+        n = self.run.c.n
+        names = [e.name for e in self.run.c.entities]
+        valid = torch.ones(n, dtype=torch.bool, device=obs["x"].device)
+        for j, m in enumerate(self.models):
+            if not self.follower[j]:
+                continue
+            leader = m.params[0]["leader"]
+            li = names.index(leader) if leader in names else None
+            vx, vy = self.v[:, j] * torch.cos(self.yaw[:, j]), self.v[:, j] * torch.sin(self.yaw[:, j])
+            if li is None:
+                lx, ly, lvx, lvy = self.x[:, j], self.y[:, j], vx, vy
+                lvalid = torch.zeros(n, dtype=torch.bool, device=valid.device)
+            else:
+                lv, lyaw = obs["v"][:, li], obs["yaw"][:, li]
+                lx, ly = obs["x"][:, li], obs["y"][:, li]
+                lvx, lvy = lv * torch.cos(lyaw), lv * torch.sin(lyaw)
+                lvalid = valid
+            act, ev = m.step({"x": self.x[:, j], "y": self.y[:, j], "vx": vx, "vy": vy,
+                              "leader_x": lx, "leader_y": ly, "leader_vx": lvx,
+                              "leader_vy": lvy, "leader_valid": lvalid, "valid": valid}, dt)
+            self.pending[j] = {k: act[k] for k in ("speed", "heading", "accel_limit")}
+            self.events[self.run.c.entities[self.idx[j]].name] = ev
+        obs["model_events"] = dict(self.events)
 
     def place(self, obs):
         """The model entities' poses into an observation's [N, E] columns, and their events."""

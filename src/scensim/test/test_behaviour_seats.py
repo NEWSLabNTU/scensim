@@ -135,3 +135,26 @@ def test_a_turning_bodys_velocity_becomes_the_entity_origins():
     assert abs(x - (10.0 - 1.387)) < 1e-12 and abs(y) < 1e-12
     assert abs(vx - 8.0) < 1e-12 and abs(vy) < 1e-12
 
+
+
+def test_a_car_follower_reads_its_leader_not_the_ego():
+    """092 K13: an idm_follower's observation is its own truth and its leader's; a frame
+    without the leader is free road, and one without the ego still answers the follower."""
+    from sim_vehicle_ecu.xp import namespace
+
+    from scensim.behaviour.follower import IdmFollower
+    lane = {"kind": "lane", "length": 400.0, "speed_limit": 15.0,
+            "x": [float(x) for x in range(0, 401, 5)], "y": [0.0] * 81}
+    m = IdmFollower([{"lane": "straight", "leader": "lead"}], [0], [{"lane": lane}],
+                    namespace("numpy"))
+    gate, out = Gate(), io.StringIO()
+    r = seats.Runner({"car": m}, "ego", gate, out, step_time=0.05)
+    r.on_frame(frame(1, {"ego": None, "car": (10.0, 0.0, 0.0, 10.0, 0.0),
+                         "lead": (30.0, 0.0, 0.0, 5.0, 0.0)}))
+    r.on_frame(frame(2, {"ego": None, "car": (10.5, 0.0, 0.0, 10.0, 0.0), "lead": None}))
+    (f1, c1), (f2, c2) = gate.sent
+    assert (f1, f2) == (5001, 5002)
+    # closing at 5 m/s on 15.5 m: it brakes; with the lead gone, free road below v0
+    assert c1["car"][0] < 10.0 and c2["car"][0] > 10.0
+    events = [json.loads(x)["event"] for x in out.getvalue().splitlines()]
+    assert events == ["follow", "free"]

@@ -536,8 +536,8 @@ struct Entity {
     agent: bool,
     /// Controller `simulator_autopilot`: the simulator's traffic drives it.
     autopilot: bool,
-    /// Controller `model` (a pedestrian): the world server moves it by a behaviour model's
-    /// commands (Motion COMMANDED, roadmap 092 K12).
+    /// Controller `model` (a pedestrian, K12, or a vehicle, K13): the world server moves it by
+    /// a behaviour model's commands (Motion COMMANDED, roadmap 092).
     commanded: bool,
     /// The server's last pose of it, map frame, and its motion.
     pose: Pose,
@@ -1974,7 +1974,14 @@ impl SimBackend for RemoteBackend {
         let sim = self.sim().to_string();
         let tracked_npcs = self.config.npc_motion == NpcMotion::Tracked;
         let server_tracks = self.offers(C::TracksTargets);
-        let commanded = matches!(req.kind, EntityKind::Pedestrian { model: true });
+        let commanded = matches!(
+            req.kind,
+            EntityKind::Pedestrian { model: true }
+                | EntityKind::Vehicle {
+                    driver: Driver::Model,
+                    ..
+                }
+        );
         if commanded {
             // The world server integrates the model's commands, which reach it with its tick
             // gate's acknowledgements, and reads the body back (roadmap 092 K12, D3).
@@ -2037,6 +2044,17 @@ impl SimBackend for RemoteBackend {
                             true,
                         )
                     }
+                    // Controller `model` (092 K13): the world server integrates its model's
+                    // commands, checked above, and the body is read back.
+                    Driver::Model => (
+                        wire::Kind::Vehicle,
+                        EntityType::Vehicle,
+                        subtype,
+                        Mover::Simulator,
+                        String::new(),
+                        false,
+                        false,
+                    ),
                     Driver::Agent => {
                         if !self.offers(C::AgentVehicles) {
                             return Err(unsupported(
