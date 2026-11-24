@@ -99,3 +99,18 @@ fixtures. Their timing lines may be inflated: C6a's R1 cost line, C6a2's cost li
 119/120 cost table (p50 and p95, with and without colliders). All of them were reported, not
 judged, and no verdict depends on them. Physics results are unaffected unless a tile was
 missing when a wheel reached it; the recheck above tests that. No rerun is planned.
+
+## A gap in the guard (2026-11-24, found in issue 145)
+
+The live guard did not cover the course. `fixture_cost --guard-ms` drove its default 400 timed
+frames after a 6 s warm-up, which ended at s 280.3 m of Haruna's 1527 m course. Issue 145's
+drives on the same map find nine rocks on the base road, on 637b454 too, and the first two at
+about 282 m: the guard stopped about 2 m short of them. Its "base contacts 0" above is therefore
+true of the first 280 m only, not of the map.
+
+The fix (siw branch `issue-128-course`): with `--guard-ms`, `fixture_cost` drives the whole
+course. It runs at least the 400 timed frames and goes on until the lead car is 16 m (twice the
+pursuit's look-ahead) from the course's end. The guard now fails when the cars never get there,
+naming where they stopped. `cost.json` reports `course_m` and `course_end`. On Haruna at 10 m/s
+that is about 3060 frames, 153 s of drive, against 26 s before. The cost measures without
+`--guard-ms` are unchanged.
