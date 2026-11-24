@@ -156,7 +156,8 @@ PhysX's own tyre forces at low speed.
   `ego.state.velocity[0]` (`world.py`, the substep loop): the body's base_link speed along its
   x axis from PhysX's tensor view, the same speed the probe logged (0.052 to 0.055 m/s). So
   `resistance_scale` gave 0.52 to 0.56, and its input explains nothing.
-- **The force is the road layer's, and it is the grade counted twice.** Haruna has a road
+- **The force is the road layer's, and it is the grade counted twice** (now issue 158, its own
+  record and reach list; 157 keeps the sand creep, 158 its cause). Haruna has a road
   detail, so the probe's car ran on R5's contact (the run's log: "road detail ...
   road_detail.yaml: 1 corridor(s)"). Its `dfx`, "the effective plane's push back along the
   wheel's heading", is minus the tire's load times the cams' slope (`road_contact.step`). The
