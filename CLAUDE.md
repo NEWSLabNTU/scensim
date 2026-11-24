@@ -165,7 +165,8 @@ the simulation side, +5 the Isaac world server), displays
 AV; the Isaac ego's `isaac_vehicle` node follows
 `EGO_ROS_DOMAIN_ID` too, over aib's `ego.yaml`) and the ego's RMW (`EGO_RMW_IMPLEMENTATION`),
 the log root and archive (`SCENSIM_LOG_ROOT`, `SCENSIM_LOG_ARCHIVE`), and the bring-up waits
-(`CARLA_READY_TIMEOUT`, `ISAAC_READY_TIMEOUT`, `EGO_READY_TIMEOUT`). The variables that used to carry project
+(`CARLA_READY_TIMEOUT`, `ISAAC_READY_TIMEOUT`, `EGO_READY_TIMEOUT`), and the build's job count
+(`SCENSIM_BUILD_JOBS`). The variables that used to carry project
 settings (`MAP_NAME`, `LAUNCH_RVIZ`, `EGO_LAUNCH_ARGS`, `OUTPUT_DIR`, `KEEP_STACKS`, ...;
 the list is `SCENSIM_RETIRED_ENV` in `scripts/just_lib.bash`) make a recipe refuse to start,
 naming the argument to pass instead. Do not add new ones.
@@ -181,6 +182,11 @@ checkout it comes from.
 
 ### Use just build
 Always use `just build` instead of `colcon build` directly (ensures `--symlink-install`).
+
+`just build` (here and in acb) picks its compile jobs from free memory: half of `MemAvailable`
+at 2.5 GB a job, at most the CPU count, colcon 2 packages at a time, and prints what it chose.
+SSv2's C++ takes about 2 GB per compiler. Set the total with `SCENSIM_BUILD_JOBS` (a host
+setting, in `.env`); a `MAKEFLAGS` or `CARGO_BUILD_JOBS` already set is kept (issue 121).
 
 **And rebuild both workspaces after an acb change, in this order: acb's, then this one.**
 `just ego-av` sources three overlays -- Autoware, `src/autoware_carla_bridge/install/`, then
