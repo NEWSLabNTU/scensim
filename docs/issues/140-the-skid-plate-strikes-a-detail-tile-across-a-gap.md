@@ -170,3 +170,34 @@ Follow-ups (133), not part of this fix:
   boulder_35 passes in both: the car high-centres on it, stopping within 0.5 s of the plate
   reaching it), the placement as before, and 0 base contacts in both. The measures within 5 % of
   128's recheck (siw has moved since: issues 137 and 139), boulder_35's stop included.
+
+### The fixtures' result (2026-11-24)
+
+siw `issue-140` 56b8e39, aib 4e8d684, fixture_c6b, GPU0 quiet. (The *rough_none* run did not
+start: its runner's variable was overwritten by Isaac's environment script, a known trap; it is
+run again.)
+
+| case | raycast (128's recheck) | sweep (128's recheck) |
+|---|---|---|
+| embedded_15 | J 303.1, fails (303.1, fails) | J 305.0, fails (305.0, fails) |
+| loose_15 | moved 2.3 cm, **fails** (1.674 m, passes) | moved 0.288 m, **passes** (2.5 cm, fails) |
+| loose_8 | 1.1 cm, fails (1.1 cm, fails) | 1.2 cm, fails (5.0 cm, fails) |
+| boulder_35 | stops 0.35 s after the plate reaches it, passes (the same) | the same, passes (the same) |
+| placement | as before | as before |
+
+Base contacts: 0 in both. embedded_15's measures and boulder_35's stop equal 128's to the digit
+printed (boulder's front axle at the stop within 2 cm).
+
+- **118's prediction: failed for loose_15** (its verdict flipped in both queries) and for
+  loose_8's sweep measure (1.2 cm against 5.0 cm, outside 5 %); held for the rest (boulder_35
+  high-centres as before, 0 base contacts, embedded_15 to the digit). The rocks loaded and made
+  also differ (embedded_15: at most 66 loaded and 44 prims, 80 and 48 in 128's).
+
+loose_15 was already known to turn on its start (issue 122), and siw has moved since 128's
+recheck (issues 137 and 139). Which change moved it is not yet known.
+
+- **118's prediction for the attribution run** (the same fixtures on siw main 87591b4: issues
+  137 and 139, without 140's offset): loose_15 and loose_8 as in 128's recheck (raycast passes
+  at 1.674 m, sweep fails), so the flip is the tile offset's: a loose rock rests on the tiles,
+  and its contacts with them changed. The rocks loaded as in this run (66 and 44 at
+  embedded_15), since 139's queue changes when tiles arrive, not the offset.
