@@ -23,7 +23,7 @@ step, separations 0.08 to 0.47 m, every point with no impulse except one. At ste
 plate's point on the tile at (81.60, 345.30, -108.996):
 
 - the normal (-0.021, -0.479, 0.877): a face 29 deg from level facing the car (it drives +y),
-  the pothole's far wall in the tile's 5 cm mesh;
+  the pothole's far wall in the tile's 10 cm mesh;
 - the separation **+0.083 m** (a gap, not a penetration);
 - the impulse (-133, -3011, 5513) N s, 6.28 kN s along the normal. Its part along the road,
   3.0 kN s, is the 1.4 m/s the car lost.
@@ -88,7 +88,7 @@ step 994, the skid plate on tile `t_5_21_26` at (81.60, 345.30, -108.996), norma
   9.75 cm), the strike again at step 994, no authored offsets, and a reach past the 8.3 cm gap.
 
 So the strike is PhysX acting on a tile face's plane across a real gap, not geometry: the tile's
-5 cm mesh turns a pothole's 3 cm wall into faces as steep as 29 deg, and the default contact
+10 cm mesh turns a pothole's 3 cm wall into faces as steep as 29 deg, and the default contact
 reach lets the plate's approach to the plane of one count as a collision. Not changed yet (133:
 the record and the probe first). Options for whoever takes it: author a small contact offset on
 the detail tiles and the plate (a few cm: the gap at which a contact may form), or keep steep
@@ -127,3 +127,46 @@ quiet, to the run's end (rc 0).
   the chassis was up to 0.43 m (road) and 7.3 m (terrain), with no impulse, as before.
 - **118's prediction: held** (no plate-tile point beyond 0.06 m: none was made at all; the 994
   impulse and the 1.4 m/s step gone).
+
+(Corrected after the results: the collision tiles' mesh is 10 cm, every second sample of the
+5 cm detail, `rock_layer.COLLISION_STEP` 2; this record and issue 137's first said 5 cm.)
+
+## The fix (before the proof runs)
+
+siw `issue-140` 56b8e39 on siw main 87591b4 (issue 139's fix): the detail collision tiles carry
+PhysxCollisionAPI contactOffset `TILE_CONTACT_OFFSET` = 0.02 m and restOffset 0; nothing else
+changes. 133: the tile offset alone is the fix, in siw; aib's prims are not edited from siw.
+`test/test_issue_140.py` (a stand-in for pxr): a tile gets both offsets, None leaves PhysX's.
+
+Why 2 cm and not the step's travel: any reach at least the step's motion along a face's normal
+(8.6 cm at step 994) keeps the ghost contact; 2 cm is PhysX's customary offset at metre scale,
+and with the plate's own (under 7 cm) the reach stays under the 8.96 cm the plate passed at.
+
+What keeps a thin feature from being skipped with a small reach: the plate is 2.265 m long
+(wheelbase 3.005 m less two 0.37 m radii), 1.33 m wide and 4 cm thick, its bottom 13.8 cm over
+the ground. At the fixtures' top speed, 20 m/s, it moves 33 cm in a 1/60 s step; at C6b's
+11.1 m/s, 18.5 cm. Anything that enters under its front edge in a step is inside the plate's
+footprint the next (33 cm of 226.5 cm), so it is found as an overlap and pushed out, never
+passed through. Nothing here is thinner than a step along the travel and taller than the plate's
+bottom: a rock is its own body (speculative CCD on, `rock_layer.SPECULATIVE_CCD`, untouched by
+this fix), and a tile's face is part of a closed surface under the plate, not a blade.
+
+Follow-ups (133), not part of this fix:
+
+- the plate's own contact offset is unread, under 7 cm; authoring it in aib (where the plate is
+  made) would pin it;
+- the base road and the terrain carry no authored offsets either: their default reach to the
+  chassis was up to 0.43 m and 7.3 m, with no impulse. Harmless now, but contact generation paid
+  for every step.
+
+### The proof runs' predictions
+
+- ***rough_none*, to the end** (one car, the probe of the first measurement): no plate contact
+  with a tile at t 16.45 to 16.70 s, no chassis impulse, no 1.4 m/s step, no throw; the car at
+  s 278 m or more at the run's end.
+- **C6b's fixtures** (`fixture_drive --fixtures c6b` on fixture_c6b, raycast and sweep, judged by
+  `rock_check` with the placement): every verdict as in issue 128's recheck (embedded_15 fails J
+  in both queries, loose_15 passes in raycast and fails in sweep, loose_8 fails in both,
+  boulder_35 passes in both: the car high-centres on it, stopping within 0.5 s of the plate
+  reaching it), the placement as before, and 0 base contacts in both. The measures within 5 % of
+  128's recheck (siw has moved since: issues 137 and 139), boulder_35's stop included.

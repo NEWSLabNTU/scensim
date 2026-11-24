@@ -132,7 +132,7 @@ throw at step 1040, the rear-left wheel's `w` -108.3154 m, our load 1.604 MN. It
   the base road, the terrain and tile `t_5_21_26` at every step, all with no impulse except one
   point at step 994: the skid plate on the tile at (81.60, 345.30, -108.996), its normal (-0.021,
   -0.479, 0.877) (a face 29 deg from level, facing the car: the pothole's far wall in the tile's
-  5 cm mesh), separation +0.083 m, impulse (-133, -3011, 5513) N s, 6.28 kN s along the normal.
+  10 cm mesh), separation +0.083 m, impulse (-133, -3011, 5513) N s, 6.28 kN s along the normal.
   Its component along the road, 3.0 kN s, is the 1.4 m/s the car lost in that step. The gap was
   open (+8.3 cm); the car's 10 m/s along that face's normal closes about 4.8 m/s, 8 cm in one
   1/60 s step, so the solver acted on the contact as one the step would close.
