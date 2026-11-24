@@ -5,6 +5,7 @@ import io
 import json
 import sys
 import textwrap
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -230,6 +231,9 @@ FAKE_WORKER = textwrap.dedent('''\
             emit(event="retired", why=why)
             break
     print(f"seat {seat} worker stops its stack", file=sys.stderr, flush=True)
+    for i in range(plan.get("last_lines", 0)):
+        print(f"seat {seat} last line {i} " + "x" * 180, file=sys.stderr)
+    sys.stderr.flush()
 ''')
 
 
@@ -283,6 +287,26 @@ def test_every_run_once_on_whichever_seat_is_free_into_one_report(tmp_path, fake
     assert "[seat 0] seat 0 worker up" in text and "summary: " in text
     assert "seat 1 worker stops its stack" in text   # every worker was told to stop
     assert all(w.proc.poll() is not None for w in d.workers)
+
+
+def test_every_workers_last_lines_come_before_the_summary(tmp_path, fake):
+    # issue 148: a worker's process ending does not mean its stderr has been relayed. Each
+    # worker prints 400 lines of 200 bytes as it exits and the output takes 3 ms a relayed
+    # line, so a pipe's worth (64 KiB, ~320 lines, ~1 s) is still unread when it has gone
+    class Slow(io.StringIO):
+        def write(self, text):
+            if " last line " in text:
+                time.sleep(0.003)
+            return super().write(text)
+    last = {"last_lines": 400}
+    d, suite, out = dispatcher(tmp_path, fake, n=2, plan={"0": last, "1": last})
+    d.out = out = Slow()
+    assert d.run() == 0
+    text = out.getvalue()
+    summary = text.index("summary: ")
+    for seat in ("0", "1"):
+        assert text.count(f"[seat {seat}] seat {seat} last line ") == 400
+        assert text.rindex(f"[seat {seat}] seat {seat} last line 399") < summary
 
 
 def test_a_failed_run_sets_the_exit_and_an_error_is_retried(tmp_path, fake):

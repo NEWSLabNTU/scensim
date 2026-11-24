@@ -340,6 +340,7 @@ class Worker:
     psi0: int = None           # /proc/pressure/cpu full total at the run's start (us)
     t0: float = None           # the run's start (the dispatcher's clock)
     seats0: int = None         # seats taking work at the run's start
+    relays: list = dataclasses.field(default_factory=list)  # its stderr relay threads
 
 
 class Dispatcher:
@@ -388,7 +389,9 @@ class Dispatcher:
         w.state = "starting"
         self.last_start = self.clock()
         self.sel.register(w.proc.stdout, selectors.EVENT_READ, w)
-        threading.Thread(target=self._relay, args=(w,), daemon=True).start()
+        t = threading.Thread(target=self._relay, args=(w,), daemon=True)
+        t.start()
+        w.relays.append(t)
         self.say(f"dispatch seat {w.seat.index}: starting its stack (CARLA {w.seat.carla_port})")
 
     def _send(self, w: Worker, **order):
@@ -658,6 +661,15 @@ class Dispatcher:
                         os.killpg(p.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
+        # every worker's stderr relayed to its end (issue 148): the process ending does not
+        # mean its last lines have been read; bounded only for a child left holding the pipe
+        deadline = time.monotonic() + grace
+        for w in self.workers:
+            for t in w.relays:
+                t.join(timeout=max(0.1, deadline - time.monotonic()))
+                if t.is_alive():
+                    self.say(f"dispatch seat {w.seat.index}: its output still open after "
+                             f"{grace:.0f} s; not waiting for the rest")
 
 
 def worker_argv_for(project: Path, logs, ready_timeout: float, stack_timeout, keep: bool,
