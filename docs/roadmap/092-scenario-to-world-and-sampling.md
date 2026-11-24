@@ -1241,3 +1241,14 @@ the fresh stage's 225 failing record ids (`fresh_failures.txt`), with `SHA256SUM
 The truth exports, with each slot's `decision.json` from which the sloped score is recomputed,
 stay on 241 in `/var/tmp/aeon/k11e-run/runs/*/truth/`. The run executed 7be7775b (main 90f598eb).
 
+**A check after the results (133): do a few heavy samples carry p?** If a few failures at or near
+the weight bound carried most of the estimate, the proposal would under-cover a failure region
+and the SE would be optimistic; 133's rule, set before the check: over 30 % of p from failures
+weighing more than 5 means one replicate fresh stage (N 1000, a new seed, from g8's proposal),
+both estimates reported and their disagreement taken as the SE. Measured from the fresh stage's
+records and outcomes: **no failure weighs more than 5** (none over 1; the largest 0.527, 3.6 % of
+p; the five largest together 10.5 %; the median 0.057), and the failures' own n_eff is 143.8 of
+225. The 82 draws over 5, 71 of them at the bound, are all non-failures: draws in the base's bulk
+(the walker waits) that the proposal reaches rarely. They lower the whole sample's n_eff to 115
+but add nothing to p. So no replicate was run; the SE of 0.0011 stands as the estimate's.
+
