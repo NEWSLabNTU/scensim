@@ -28,3 +28,28 @@ No pipe write while holding the lock (a writer thread fed by a queue), and a bou
 outstanding submissions, with back-pressure or stale keys dropped. The test: a fake worker
 whose results exceed the pipe buffer, under a burst of 3000 keys; it hangs on today's code
 (guarded by a timeout) and passes after the fix. Its own siw commit and its own landing.
+
+## The fix as built (before the test is run on it)
+
+- `TileProcess.submit` writes nothing: it records the job and queues the key, under the lock,
+  and returns. A writer thread takes keys from the queue and writes them to the worker outside
+  the lock. The reader thread still takes the lock only to pop a finished job.
+- The bound: at most MAX_IN_FLIGHT (2) keys written and not yet answered, so the worker always
+  has its next key and the pipes never hold a backlog, and at most MAX_QUEUED (64) keys waiting.
+  A submission past that drops the oldest waiting key, whose future fails ("dropped: stale",
+  set by the writer thread, never inside `submit`), and `Detail` then makes that tile itself if
+  it is still wanted (`tile_of`'s existing path for a failed job). A car's newest requests are
+  the ones near it, so the oldest are the stale ones.
+- A second submission of a key already waiting or in flight returns that key's future (before,
+  it replaced the first in `jobs`, and the first never completed).
+- `Detail.prefetch` calls `submit` under its own lock, and the done-callback `_made`, run on the
+  reader thread, takes that lock: with a `submit` that never blocks, that wait is bounded too.
+
+The test (`test/test_issue_139.py`): the worker replaced by a fake that answers each key with
+1.5 MB, 5 ms apart; a burst of 3000 keys of about 30 bytes each (90 KB, past the 64 KB pipe),
+through `TileProcess.submit` and through `Detail.prefetch`, each in a thread joined with a 20 s
+timeout.
+
+- **118's prediction:** on siw 4df3198 both hang, and the test fails at its timeouts. With the
+  fix both bursts return within 1 s, every future completes (a result or "dropped"), the newest
+  64 keys are answered with results, and `Detail.pending` is empty when they are done.
