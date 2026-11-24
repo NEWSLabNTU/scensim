@@ -768,6 +768,9 @@ into its section before its runs, and its rule set before them:
   testbench workspace per side. The rocks fail if their mean pose error p95 rises by 0.05 m or
   more, or if any run fails its scenario or NVTL p05 2.5. The absolute values are reported
   beside it, with false stops per km and the rock and pothole detection range.
+  **Result (2026-11-24): the rocks pass** (+0.0003 m), on a test with little leverage: the
+  rough road without rocks equals the smooth one, so the roughness never reached localization
+  (C6d's result, below; issue 152 beside it).
 
 C6's exit is 066's acceptance as these four steps hold it, plus aib's slope matrix and
 haruna_down unchanged on smooth road, paired as C5's were. C6a's own spec (the fixture course's
@@ -1608,6 +1611,77 @@ everywhere.
   `wait_ms` in memory only), so they are not recorded in these runs (133: they belong to issue 147's
   own measure, and its branch carries the WARN that logs them). The tick p95 stays reported, not judged. Issue 147 (the look-ahead's prefetch) is not
   in these runs, so their ticks include its waits.
+
+#### C6d's result (2026-11-24, 118, GPU0)
+
+Six runs, interleaved r1, n1, r2, n2, r3, n3 from 19:52 to 20:38, after GPU0 had been held by
+another user's jobs from 17:21 to about 19:42 (the quiet rule waited; nothing foreign was on
+GPU0 during the six, by the GPU log every 15 s). Every run exited 0 and passed the runner's
+provenance and process checks: the bridge from `gate-c5c`'s install, provenance
+`41da7f84...+dirty`. 41da7f84's tree is main 35127469's (no diff), and the "dirty" is
+two `Cargo.lock` files the colcon build extends with `[[patch.unused]]` entries
+(`scensim_carla_world`, `scensim_world_protocol`), no code; C6b's runs carry the same.
+Each run drove 1.47 km of haruna_down.
+
+| run | map | verdict | pose error p95, m | NVTL p05 | wait_missed | false stops a km | NDT iterations p50 / p95 | tick p50 / p95, ms |
+|---|---|---|---|---|---|---|---|---|
+| r1 | rough_rocks | passed | 0.1245 | 3.119 | 0 | 0 | 3 / 4 | 50.56 / 243.43 |
+| n1 | rough_none | passed | 0.1240 | 3.118 | 0 | 0 | 3 / 4 | 49.27 / 112.53 |
+| r2 | rough_rocks | passed | 0.1229 | 3.119 | 0 | 0 | 3 / 4 | 50.06 / 91.44 |
+| n2 | rough_none | passed | 0.1241 | 3.119 | 0 | 0 | 3 / 4 | 49.04 / 80.96 |
+| r3 | rough_rocks | passed | 0.1240 | 3.117 | 0 | 0 | 3 / 4 | 50.26 / 90.77 |
+| n3 | rough_none | passed | 0.1224 | 3.119 | 0 | 0 | 2 / 4 | 49.78 / 131.69 |
+
+All six count: `wait_missed` (issue 144's "not ready" WARN lines in the world server's log,
+`logs/simulator/console.log`) is 0 in each.
+
+**The judged rule: the rocks pass.** *rough_rocks*' mean pose error p95 is 0.1238 m against
+*rough_none*'s 0.1235 m, a rise of 0.0003 m against the bar of 0.05 m. No run failed its scenario
+or NVTL p05 2.5. *rough_none*'s three p95s have an sd of 0.0009 m, far under 0.030 m, so the
+pairing is judged, not inconclusive.
+
+**What the pass is worth (133).** *rough_none* equals the smooth road: its pose error p95
+(0.1235 m mean) is C6b's smooth low mode (0.1229 to 0.1263 m), and its NVTL p05 (3.12) is
+smooth's. The roughness as built does not reach localization at all, so C6d shows that the rocks
+do no harm on a road whose roughness does nothing either. The rule passed on a test with little
+leverage. A rougher map, or one with rocks in the car's path, is what would test it; that is a
+proposal for later, not a run now.
+
+**118's predictions against the result:**
+
+- Every run passes haruna_down, NVTL p05 at least 2.5: **held**. "About 3.0, a little under
+  smooth's 3.12": **failed**; it is 3.117 to 3.119, smooth's.
+- *rough_none*'s mean pose error p95 0.13 to 0.20 m: **failed**; 0.1235 m, smooth's low mode.
+  The body's pitch and roll on the washboard and potholes did not reach the scan's pose.
+- The rocks within 0.03 m of *rough_none*: **held** (+0.0003 m).
+- False stops 0 a km on both: **held** (0 in all six).
+- Detection range mostly not measurable: **held**, and not measurable in all six. The runs
+  passed within 2 m of 118 or 119 rocks (*rough_rocks*) and 17 potholes (both); about 19,000
+  objects were published a run, none within 1 m of any of them.
+- NDT iterations, p50 the same within 1, p95 within 2: **held** (p50 3, 3, 3 against 3, 3, 2;
+  p95 4 in all).
+- World server tick p50 about 50 to 55 ms on both: **held** for *rough_rocks* (50.1 to 50.6),
+  just under on *rough_none* (49.0 to 49.8).
+- Tick p95 up to about 4 ms higher on *rough_rocks*: **failed**, or not readable. *rough_rocks*
+  243.4, 91.4, 90.8 (r1, the series' first run, carries the 243); *rough_none* 112.5, 81.0,
+  131.7. The tick is reported, not judged. n3 (20:31 to 20:38) overlapped another session's
+  training job on GPU1 that began at 20:31 with CPU data loaders (about 35 GiB of RAM and several
+  cores). The quiet rule covers GPU0, so n3 counts, but its tick ran beside that load.
+
+**A finding beside the verdict: issue 152.** In each *rough_rocks* run the world server logged
+10 or 11 of issue 123's self-check errors, a rock touching the base road within its first second
+awake, and 0 of issue 145's intake WARNs. They are the same pool rocks at the same places in
+each run (s about 409, 621 to 625, 1179 to 1227 and 1333 to 1336 m along the drive), meeting
+`/World/env/Road`, `/World/env/Terrain` or a detail collision tile under `/World/RoadCollision`.
+*rough_none* has none. The world server also logged omni.physx's "Collisions are supported
+currently only in one collision group" 770 times in each *rough_rocks* run, at the step after the
+768-prim rock pool is made, against 2 in every *rough_none* run and in each of C6b's eleven live Haruna runs. The rocks
+are off the carriageway and the pose error is unchanged, so the contacts cannot have moved the
+judged numbers; the cause is issue 152's.
+
+Record: NAS "2026-11-24 086 C6d Haruna rough (118)": the six run directories, the runner
+(`run_one.sh`, `run_all.sh`, `times.txt`), the GPU log over the runs, `c6d_extras.py` and its
+output (`extras.jsonl`), and issue 152's `where.py`.
 
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
