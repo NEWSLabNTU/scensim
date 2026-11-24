@@ -1925,7 +1925,8 @@ def keep(stack_dir, poll=5.0, once=False, pilot_command=None,
     and stopped at the end.
 
     ``once``: return right after the stack is ready (tests), or 3 when it is not ready within
-    ``once_timeout`` s. ``pilot_command``:
+    ``once_timeout`` s, or as soon as a pilot is left not ready, its load restarts spent (issue
+    150: the event a test waits for, not the clock). ``pilot_command``:
     ``(rec, pilot, entry, log_dir) -> argv`` in place of ``pilot_argv`` (tests).
     ``weather_call``: ``(rec) -> (ok, message)`` in place of ``set_weather`` (tests).
     ``world_probe``: ``(rec) -> bool`` in place of ``bridge_serving`` (tests): the stack is
@@ -2076,6 +2077,7 @@ def keep(stack_dir, poll=5.0, once=False, pilot_command=None,
                 break
             waiting = _waiting(rec)
             if waiting and pilots_on and time.time() >= next_check:
+                left = ""
                 for p in waiting:
                     if stop["now"] or external_refused():
                         break
@@ -2102,6 +2104,8 @@ def keep(stack_dir, poll=5.0, once=False, pilot_command=None,
                                   composables=missing)
                             print(f"scensim stack: pilot {p['entity']} is not ready: its "
                                   f"launch did not load {missing}", file=sys.stderr, flush=True)
+                        if once and int(p.get("load_restarts") or 0) >= LOAD_RESTARTS:
+                            left = p["entity"]
                         continue
                     if check_ready(p.get("ready"), ros_env(rec, p["domain"])):
                         p["ready_at"] = iso_now()
@@ -2113,6 +2117,12 @@ def keep(stack_dir, poll=5.0, once=False, pilot_command=None,
                 write_json(path, rec)
                 if ext["refused"]:
                     code = 2
+                    break
+                if left:
+                    rec["error"] = (f"pilot {left} left not ready: its launch did not load its "
+                                    f"composables after {LOAD_RESTARTS} restarts")
+                    print(f"scensim stack: {rec['error']}", file=sys.stderr, flush=True)
+                    code = 3
                     break
                 next_check = time.time() + poll
                 waiting = _waiting(rec)

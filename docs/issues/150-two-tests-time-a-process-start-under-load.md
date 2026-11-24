@@ -1,6 +1,6 @@
 # 150: two tests time a process start, and lose under load
 
-**Status:** open (241; filed by 133, 2026-11-24). **Severity:** low: tests only; each fails
+**Status:** fixed 2026-11-24 (241; filed by 133). **Severity:** low: tests only; each fails
 intermittently on a loaded host, and a gate then fails on code it does not run.
 **Found:** 2026-11-24, scensim 241, in the gate of issue 148's landing (main 35127469, host load
 about 90): both failed, outside 148's diff, and were waived by 133 (148's landing, fb7e6c5b).
@@ -50,5 +50,13 @@ Each test waits for the event, not a clock.
 - `test_stack`: `keep(once=True)` (used by tests only, `ONCE_TIMEOUT`) ends with code 3 as soon as a
   pilot is left not ready with its load restarts spent, which is the event the test waits for;
   `once_timeout` stays as a backstop and the test raises it from 8 s to 60 s.
+  The long-running `keep()` path (the CLI's, which never passes `once`) is unchanged: there a
+  pilot left not ready still stays up, not ready, as before.
 
-Each is shown with the slowed pilot start: failing before the fix, passing after.
+The fake pilot in `test_run` now writes its argv to a temporary file and renames it, so the
+scenario never reads a half-written file once it sees the name.
+
+Shown with the slowed pilot start (not committed), each test failing before the fix and passing
+after: `test_run` with a 6 s sleep passes in 8.2 s (2.4 s unslowed); `test_stack` with a 3 s sleep
+before each start passes in 10.0 s, past the old 8 s budget. `test_stack.py` and `test_run.py`
+whole: 146 passed.

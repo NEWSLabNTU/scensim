@@ -1295,8 +1295,9 @@ def test_a_start_that_never_loads_is_restarted_twice_then_left_not_ready(where, 
             f"[c-1] [WARN] [{{T}}] [{bp}.rclcpp]: failed to send response to "
             "/planning/behavior_planning_container/_container/load_node (timeout)"]
     cmd, starts = _composables_pilot(marker, lost)
+    # issue 150: keep(once) ends when the third start is left not ready; 60 s is a backstop only
     assert stack.keep(p.stack_dir, poll=0.05, once=True, pilot_command=cmd, respawn_delay=0.1,
-                      once_timeout=8) == 3
+                      once_timeout=60) == 3
     events = [json.loads(x) for x in (p.stack_dir / "events.jsonl").read_text().splitlines()]
     assert [e["restart"] for e in events if e["event"] == "pilot.stalled"] == [1, 2]
     assert len(starts) == 3

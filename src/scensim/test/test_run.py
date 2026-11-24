@@ -712,13 +712,23 @@ def test_run_pilot_started_and_stopped(where, maps_hub):
     def pilot_cmd(rec, pilot, entry, log_dir):
         argv = run.pilot_argv(rec, pilot, entry, log_dir)
         return [sys.executable, "-c",
-                f"import json, sys, time; json.dump(sys.argv[1:], open({str(seen)!r}, 'w'));"
-                " time.sleep(60)", *argv]
+                f"import json, os, sys, time; t = {str(seen)!r} + '.part';"
+                " f = open(t, 'w'); json.dump(sys.argv[1:], f); f.close();"
+                f" os.replace(t, {str(seen)!r}); time.sleep(60)", *argv]
+    scenario = fake(where)
+
+    def after_pilot(rec, spec, run_dir, xosc):
+        # issue 150: the scenario starts once the pilot has written its argv, not before; a
+        # loaded host otherwise stops the pilot before its interpreter is up (60 s: a bound only)
+        wait = ("import os, sys, time\nend = time.time() + 60\n"
+                "while not os.path.exists(sys.argv[1]) and time.time() < end:\n"
+                "    time.sleep(0.05)\nos.execv(sys.executable, [sys.executable] + sys.argv[2:])")
+        return [sys.executable, "-c", wait, str(seen), *scenario(rec, spec, run_dir, xosc)[1:]]
     try:
         t = time.time()
         r = api.run_one(d, "scenarios/three_pilots.xosc",
                         {"parameters": {"policy": "push"}, "seed": 11, "logging": {"keep": {}},
-                         "scenario_command": fake(where), "pilot_command": pilot_cmd})
+                         "scenario_command": after_pilot, "pilot_command": pilot_cmd})
         assert time.time() - t < 40  # the pilot was stopped, not waited for
     finally:
         proc.send_signal(signal.SIGTERM)
