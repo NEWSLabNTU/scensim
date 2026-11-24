@@ -39,7 +39,7 @@ judged or reported against a fixed bar or a reference.
 | result | road detail, grade | what can move |
 |---|---|---|
 | 086 C4's Haruna runs (056 acceptance items 1 and 2, testbench `isaac_c4_haruna`) | C6b's Haruna record course, its descent | the judged items (the named map set at Init, a refusal reaching SSv2) do not depend on the car's speed; scenario 1's crawl on sand, and its trigger changed from 20 m to 30 s of sim time, came from 157, whose speed this halves (the ramp alone still creeps) |
-| 086 C5b, C5d, C5d2 (fixture courses `fixture_c5`, `fixture_c5d2`) | -3 % along the whole course | C5b's checks are geometric (rays against the record): unaffected. C5d2's Autoware drive judged pose error and NVTL against fixed bars: absolutes, single build, can move |
+| 086 C5b, C5d, C5d2 (fixture courses `fixture_c5`, `fixture_c5d2`) | -3 % along the whole course, but no road layer in the world server: the course's road detail is in `course/`, not the map directory | unaffected. *Corrected after the C5d2 rerun (below): written first as "can move"; the world server never loaded a road detail on these maps, so their Autoware runs never had the force* |
 | 086 C5's exit pairing (haruna_down, published Haruna) | none (no `road_detail.yaml`) | unaffected; issue 116's closure stands |
 | 086 C5c (`fixture_c5c`), C6a, C6b's fixtures, C6c | level | unaffected |
 | 086 C6b's budget on Haruna (rocks against none) | Haruna record course | judged deltas (frame p50 and p95, rocks against none, both with the road layer) stand; the driving under them (speeds, braking) does not |
@@ -144,3 +144,31 @@ Record: NAS "2026-11-25 issue 158 F1 and 157 P2 (118)".
   unless the run falls in Haruna's high mode (about 0.18 m, C5's exit pairing), which is then
   named as that mode, not a shift; NVTL p05 within 0.02 of 3.12; false stops 0; NDT iterations
   3 / 4. The rocks' delta is not judged again from one run a side.
+
+## The reruns' results (2026-11-25, 05:13 to 05:31, 118, GPU0)
+
+Scensim main a41f92c7 (gate-c5c's install; every run's live bridge under it, `result.json`
+naming 4998daa1+dirty, the gate commit whose tree is a41f92c7's, the dirt `Cargo.lock` files
+only, as C6d's runner accepts); GPU0 with nothing else on it; codec told. NAS "2026-11-25 issue
+158 reruns (118)".
+
+- **C5d2** (2026-11-25T05-29-03): passed, 127.436 s (127.4 before), NVTL p05 3.079 (3.08),
+  pose error p95 0.106 m (0.103), median 0.054, max 0.121. **Every prediction held.** But the
+  reason is not the one written: the run's log has no road detail line, and `fixture_c5d2` has
+  no `road_detail.yaml` in its map directory (the course builder writes it to `course/`), so the
+  force never reached C5d2's Autoware runs. The reach table is corrected (labelled). A first
+  attempt at 05:13 was refused by scensim's check before it drove (the map not fetched into the
+  testbench's package); fetched and rebuilt, it ran at 05:29.
+- **C6d one a side** (the runner's quiet rule passed at the start of each):
+
+  | run | pose error p95, m | NVTL p05 | false stops a km | NDT iterations p50 / p95 | simulated, s |
+  |---|---|---|---|---|---|
+  | r4 rough_rocks (2026-11-25T05-13-55) | 0.1243 (before: 0.1238 mean of three) | 3.118 (3.118) | 0 (0) | 3 / 4 (3 / 4) | 424.5 (413.5 to 457.7) |
+  | n4 rough_none (2026-11-25T05-21-37) | 0.1230 (0.1235) | 3.118 (3.119) | 0 (0) | 3 / 4 (2-3 / 4) | 408.5 (397.5 to 427.8) |
+
+  The road layer ran in both (the log's road detail line). **Every prediction held**: both
+  passed, each pose error p95 within 0.0005 m of its side's earlier mean (low mode), NVTL p05
+  within 0.001 of 3.12, no false stops, NDT 3 / 4, durations inside the earlier runs' spread.
+  So on Haruna the second force moved none of C6d's absolutes measurably: Autoware's speed
+  control took it out (it braked against it), and the trajectory and the scans did not change.
+  C6d's absolutes stand as recorded, now with this note.

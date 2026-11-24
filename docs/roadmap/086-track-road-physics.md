@@ -1897,6 +1897,11 @@ everywhere.
 
 #### C6d's result (2026-11-24, 118, GPU0)
 
+*Annotated 2026-11-25 (issue 158): these runs had the road layer's second grade force. One rerun
+a side on the fix (a41f92c7) moved none of the absolutes below measurably (pose error p95 within
+0.0005 m, NVTL p05 within 0.001, no false stops, NDT 3 / 4); they stand. Issue 158's doc has the
+runs.*
+
 Six runs, interleaved r1, n1, r2, n2, r3, n3 from 19:52 to 20:38, after GPU0 had been held by
 another user's jobs from 17:21 to about 19:42 (the quiet rule waited; nothing foreign was on
 GPU0 during the six, by the GPU log every 15 s). Every run exited 0 and passed the runner's
