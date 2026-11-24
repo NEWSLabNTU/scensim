@@ -80,3 +80,26 @@ car go missing. Between 637b454 and 87591b4 lie issues 132 and 134 (31593ab), 13
   waiting). The change is issue 134's (31593ab already loads 66): 134 changed what comes back
   with a tile and when a tile with no road is taken as empty, which is where the rock layer looks
   for its rocks. 4df3198 and 87591b4 load 66 as well.
+
+### The bisection's result (2026-11-24)
+
+C6b's fixtures, raycast, fixture_c6b, GPU0 quiet through all three runs:
+
+| siw | embedded_15: loaded, prims at most | the cases' measures |
+|---|---|---|
+| 637b454 (128's recheck) | 80, 48 | as recorded in issue 128 |
+| 31593ab (132, the step split, 134) | 66, 44 | 128's to the digit |
+| 4df3198 (+ 137) | 66, 39 | 128's to the digit |
+| 87591b4 (+ 139), drops logged | 66, 39 | 128's to the digit |
+
+- **No tile was dropped** in the 87591b4 run (0 drops logged). 139 is not the cause.
+- **The change is issue 134's** (3a4fcd7): it is already in 31593ab, and the other two commits in
+  637b454..31593ab cannot move it (0beb150 changes a test, 6c6a044 the world server's step
+  logging, which `fixture_drive` does not use). By elimination; 3a4fcd7 was not run alone.
+- **The same rocks load, later.** The rocks loaded is a running count; both codes reach 253 by
+  the boulder. Along the course the new code lags: 80 rocks at s 112.9 m before, at about
+  s 143 m now; at loose_15's middle 130 against 100. With rocks loaded within ROCK_REACH (32 m)
+  of a car on ready tiles only, a lag of about 30 m of travel says some tiles became ready only
+  as the car neared them. Whether any rock near the car's path was missing when a wheel reached
+  it is not shown by these counts.
+- **118's prediction: held** (no drops; 134's; 4df3198 and 87591b4 at 66).
