@@ -31,3 +31,32 @@ The drive: `fixture_cost --follow`, one car, 10 m/s, 1900 frames, paced to real 
   87591b4 (139, the last before 140): 0 and 0. 56b8e39 (140): about 9 each, at least 5. So 140's
   offset brings them. If 87591b4 counts as many as 56b8e39, 140 is cleared and the next step is
   3a4fcd7 (134) against 6c6a044.
+
+### The bisection's result (2026-11-24)
+
+The prediction fails. Each of the six runs counts 9, on every commit, and they are the same nine
+rocks (r136, r154, r160, r188, r192, r196, r422, r561, r623); only which base prim each touches,
+the road or the terrain, varies between runs. Every run drove 1020 m and exited 0. Nothing between
+637b454 and 56b8e39 brings them, 140's offset included.
+
+| siw | run 1 | run 2 |
+|---|---|---|
+| 637b454 (128's guard) | 9 | 9 |
+| 87591b4 (139, before 140) | 9 | 9 |
+| 56b8e39 (140) | 9 | 9 |
+
+Issue 128's 0 was a shorter drive, not another result: its guard ran fixture_cost's default 400
+frames, which ended at 280.3 m along the course. Here the first two contacts (r136, r188) come at
+about 282 m in all three commits, and the rest at about 365 to 390, 490 to 500, 600 to 615 and
+865 to 875 m. (The along-course place is the car's at the log line's second, so it is good to
+about 10 m.) The self-check at 637b454 counts these 9 too, so the contacts are at least as old as
+128's guard, and the guard never drove far enough to see them.
+
+What this leaves open: the contacts' cause on this map, and their growth with speed (9 at 10 m/s,
+36 at 13.9 m/s paced, issue 142's like-for-like). Each 1 s window has the base reach a rock that
+the detail tiles should hold, so the next step is what is under those nine rocks when they wake.
+Every log also ends on the tile worker's `BrokenPipeError` in `pickle.dump`: the worker writes a
+result after the app has closed its pipe at exit. It comes after the drive's summary and is not
+part of the count.
+
+The run record: `/mnt/renegade/aeon/isaac-ex/c6b-140/run145.sh`, `b145_*.log`, `b145_*.jsonl`.
