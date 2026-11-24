@@ -744,3 +744,45 @@ def test_k9e_an_environment_field_out_of_its_range_is_refused_naming_unit_and_co
     assert any("sun_elevation's range [-1.5708, 1.5708] rad" in m for _, m in K.problems(prof))
     # in range: accepted on both targets
     assert K.problems(ENV_WORLD, simulator="isaac") == []
+
+
+ROAD = ("<Storyboard><Init><Actions><GlobalAction><EnvironmentAction><Environment name='e'>"
+        "<RoadCondition frictionScaleFactor='1.0' wetness='dry'/></Environment>"
+        "</EnvironmentAction></GlobalAction></Actions></Init></Storyboard>")
+
+
+def test_k9e_a_weather_knob_writing_the_wet_look_and_a_road_condition_are_two_writers(tmp_path):
+    """086 C7 (4aeceff): on CARLA a scenario's road condition owns the road's wet look (weather
+    wetness and precipitation_deposits) until Initialize, a dry one too. A weather: knob naming
+    either, in a scenario with any RoadCondition, is refused in the run and the check; without
+    one, the knob's look stands. A profile cannot write them (not an environment field)."""
+    from scensim import project
+    world = {"surface": {"values": {"dry": {"weather": {"wetness": 0}, "physics": "none"},
+                                    "wet_look": {"weather": {"wetness": 80,
+                                                             "precipitation_deposits": 40},
+                                                 "physics": "none"}}}}
+    scen = SCEN.replace('<Property name="scensim.knob.illumination" value="param:light"/>', "")
+    plain = tmp_path / "plain.xosc"
+    plain.write_text(scen)
+    blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(plain, {"road": "wet_look"}),
+                               {"world": {"knobs": world}}, call=Bridge())
+    assert not why and blk["ok"]
+    road = tmp_path / "road.xosc"
+    road.write_text(scen.replace("<Storyboard/>", ROAD))
+    for value in ("wet_look", "dry"):
+        blk, why = run.apply_knobs({"simulator": "carla"}, _Spec(road, {"road": value}),
+                                   {"world": {"knobs": world}}, call=Bridge())
+        assert not blk["ok"] and "RoadCondition" in why and "wetness" in why, (value, why)
+        assert "the road condition owns the wet look (086 C7)" in why
+    assert "wetness" not in K.PROFILE_FIELDS and "precipitation_deposits" not in K.PROFILE_FIELDS
+    # the check, by scenario
+    d = tmp_path / "proj"
+    (d / "scenarios").mkdir(parents=True)
+    (d / "testbench.yaml").write_text(yaml.safe_dump({"simulator": "carla",
+                                                      "world": {"knobs": world}}))
+    (d / "scenarios" / "road.xosc").write_text(road.read_text())
+    (d / "scenarios" / "plain.xosc").write_text(scen)
+    found = project.wet_look_problems(d, yaml.safe_load((d / "testbench.yaml").read_text()))
+    assert [f.file for f in found] == ["scenarios/road.xosc"]
+    assert "knob surface" in found[0].what and "two writers" in found[0].what
+    assert found[0].refused

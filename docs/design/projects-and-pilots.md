@@ -294,7 +294,12 @@ Once `world.knobs` is declared, every run sends and checks the baseline, bound k
 the world server keeps its weather across runs and world loads, so a run without knobs would
 otherwise run in the last knobbed run's. A scenario that binds a weather knob and also sets
 weather in an EnvironmentAction (Weather, TimeOfDay, Sun, Fog, ...; the bridge forwards them
-to the world during the run, after the read-back) is refused by name. The coverage report
+to the world during the run, after the read-back) is refused by name. So is one that binds a
+knob whose `weather:` names the road's wet look (`wetness`, `precipitation_deposits`) and sets a
+RoadCondition anywhere, a dry one too: on CARLA the road condition owns that look during a
+scenario (roadmap 086 C7), so the knob would be a second writer whose read-back passed before
+the condition replaced it. `testbench check` refuses it per scenario, and the run by the same
+rule. The coverage report
 groups runs by the knob values applied; a surface map not read back (issue 095) is its own
 cell, `<value> (unverified)`. A knob the world lacks, a value it does not
 declare, a read-back that differs, or a value this simulator cannot honour makes the run an

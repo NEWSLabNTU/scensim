@@ -599,6 +599,38 @@ def unmanaged_scenarios(project: Path, settings: dict) -> set:
     return out
 
 
+def wet_look_problems(project: Path, settings: dict) -> list:
+    """Each scenario that binds a knob whose weather: names the road's wet look (wetness,
+    precipitation_deposits) and sets a RoadCondition: two writers, refused (086 C7 owns the
+    look; knobs.wet_look_problem, which the run refuses by too)."""
+    from scensim import knobs as knobsmod   # noqa: PLC0415
+    world = settings.get("world") if isinstance(settings.get("world"), dict) else {}
+    wknobs = world.get("knobs") if isinstance(world.get("knobs"), dict) else {}
+    if not wknobs:
+        return []
+    files, _ = collect_scenarios(project)
+    out = []
+    for f in files:
+        if "scensim.knob." not in _text(Path(f)) or "RoadCondition" not in _text(Path(f)):
+            continue
+        try:
+            bound = knobsmod.bound(Path(f), {})
+            road = knobsmod.has_road_condition(Path(f))
+        except Exception:   # noqa: BLE001 -- check_scenario reports an unreadable scenario
+            continue
+        if not road:
+            continue
+        for k in bound:
+            d = wknobs.get(k)
+            why = knobsmod.wet_look_problem(k, (d or {}).get("values") if isinstance(d, dict)
+                                            else None)
+            if why:
+                out.append(Finding(_rel(project, f), why, "drop the knob's wetness and "
+                                   "precipitation_deposits, or the scenario's RoadCondition",
+                                   refused=True))
+    return out
+
+
 def profile_problems(project: Path, settings: dict) -> list:
     """The Autoware profile's refusals (check_launch_args) of each ``autoware`` pilot's
     ``args``, and of a suite's ``pilot_args`` over them (scensim.profile)."""
@@ -1115,6 +1147,7 @@ def check_project(path, scenarios: bool = True) -> list:
             out.append(Finding(config.PROJECT_FILE, f"{where}: {msg}",
                                refused="not fetched" in msg, host="not fetched" in msg))
     out += profile_problems(project, settings)
+    out += wet_look_problems(project, settings)
     try:
         host = config.host_settings(project)
     except config.ConfigError:

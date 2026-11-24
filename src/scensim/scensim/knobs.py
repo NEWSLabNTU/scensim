@@ -346,6 +346,30 @@ def bound(scenario: Path, parameters: dict) -> dict:
 
 
 WEATHER_ELEMENTS = ("Weather", "TimeOfDay", "Sun", "Fog", "Precipitation", "Wind")
+# CARLA's weather parameters that are the road's wet look: a scenario's road condition owns them
+# during a scenario, a dry one too (086 C7, scensim_carla_world 4aeceff)
+WET_LOOK = ("wetness", "precipitation_deposits")
+
+
+def has_road_condition(scenario: Path) -> bool:
+    """Whether the scenario sets a RoadCondition anywhere (Init or Story)."""
+    from scensim_sampler.subset import read
+    root, _ = read(scenario)
+    return any(True for _ in root.iter("RoadCondition"))
+
+
+def wet_look_problem(knob, values: dict):
+    """Why knob `knob`, whose values (or one value) are `values` ({value: mapping}), cannot run
+    in a scenario with a RoadCondition, or None: a weather: naming the wet look is a second
+    writer of what the road condition owns."""
+    named = sorted({p for m in (values or {}).values() if isinstance(m, dict)
+                    for p in ((m.get("weather") or {}) if isinstance(m.get("weather"), dict)
+                              else {}) if p in WET_LOOK})
+    if not named:
+        return None
+    return (f"knob {knob} sets weather.{', weather.'.join(named)}, and the scenario has a "
+            "RoadCondition: the road condition owns the wet look (086 C7) during a scenario, a "
+            "dry one too; two writers, drop one")
 
 
 def environment_weather(scenario: Path) -> list:

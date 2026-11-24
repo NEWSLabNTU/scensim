@@ -1334,6 +1334,12 @@ def apply_knobs(rec, spec, psettings, call=_ros_call, project=None):
         knobbed = [k for k in bound if ((world.get("knobs") or {}).get(k) or {}).get(
             "values", {}).get(bound[k], {}) and (world["knobs"][k]["values"][bound[k]] or {}).get(
             "weather")]
+        if bound and knobsmod.has_road_condition(spec.scenario):
+            for k, v in bound.items():
+                vals = ((world.get("knobs") or {}).get(k) or {}).get("values") or {}
+                why = knobsmod.wet_look_problem(k, {v: {str(a): b for a, b in vals.items()}.get(v)})
+                if why:
+                    raise knobsmod.KnobError(why)
         if env and knobbed:
             raise knobsmod.KnobError(
                 f"knob {', '.join(knobbed)} sets weather, and the scenario's EnvironmentAction "
