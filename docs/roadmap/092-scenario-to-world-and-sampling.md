@@ -49,6 +49,7 @@ From the design's section 10.
 | K10 | 093 D3's behaviour models (scenario-description.md section 4): the model interface (a parameter schema, `reset`, `step`, one array API code for numpy on seats and `step_batch` in torch; truth in, a kinematic command out, decisions into the truth), the starter model (a gap-acceptance walker for CS1, from a published model named before any coefficient), batched in scensim_batch, on seats as a K4 attachment that commands its entity through K12; the agreement check in K2.4's style (the same records on both forms: decisions and their frames, the walker's trajectory error, trigger times, verdict); the latency from a truth frame to the command taking effect measured free-running and in lockstep (093's open question 1) | component | K2, K4, K12 | swb 241 | done 2026-11-24; its open recheck (issue 130) closed the same day, the decisions at the same frames on new seats runs ("K10's open recheck" below) (the close-out below: the engines' map-frame velocity, D3's section 4 out of draft; not covered: a vehicle model, parked with the user, and an agreement with an engine in the loop, until both targets share an ego). Before: planned 2026-11-22 (133 approved), the section 4 draft corrected (SSv2 takes a world-owned pose for any entity; pilots do not see truth, attachments do); (i)-(ii) landed ce760b69: `scensim.behaviour`, the walker on numpy and torch bit for bit (0 of 2800 arrays differ on an RTX 5090), its coefficients the cited set `khaki2021_restricted` (Khaki and Mohammadnazar 2021, CC0; the gap's 2.021 against the 2021 meta-analysis's pooled 1.98); (iii) in the batch: a model entity (role `model`) compiled from its ObjectController (its properties per slot, `anchor.*` for the crossing, its seed from `seeds.pilots.<entity>`), stepped after the ego's physics on its truth and moved kinematically within its acceleration limit; CS1's start trigger is the model's `start_gap` (`$ttc_entry`), as the subset keeps ActivateControllerAction seats-only; the walker decides where it can still stop at the kerb; `cs1_walker_gap_acceptance.xosc` the batch example (the description's CS1 stays refused: a storyboard SpeedAction on a model entity); (iv) the agreement with seats passed 2026-11-24 on K12's exit set 3 ("K10's agreement" below: the seats ego played back, no engine; the batch now takes a model entity as world-owned with the channel's lag 1), (v) the latency is K12's (set 3: lag 1 in lockstep and free-running); not covered: an engine in the loop, the engines' map-frame velocity |
 | K12 | Truth-fed pilots: a command channel from a K4 attachment to the world server (`entity_command`: an entity's kinematic command, carried with the tick gate's acknowledgement, integrated and applied by the world, read back to SSv2, whose fork adopts it for a simulator-driven pedestrian), under lockstep held to one frame; for K10's behaviour models and learned background agents | component | K4 | swb 243 | landed 2026-11-23 (scensim 0cc054d8; the SSv2 fork's model pedestrian, COMMANDED on the world protocol, the CARLA world server's integrator, the bridge, truth schema 3, attachments' `commands:`, `scensim.behaviour.seats`); pedestrians first, CARLA only; exit passed 2026-11-23 on set 3, by the rule fixed before the runs ("K12's exit runs" below) |
 | K11 | 093 D4's search (purpose B): an adaptive search over cells that writes the record's reserved `search` | component | K1, K7 | swb 241 | in progress: K11a done 2026-11-24 (`scensim-sample search`; "K11a's result" below, check 1's fourth part failed, its cause named); K11b, K11c open |
+| K13 | A vehicle behaviour model ([vehicle-behaviour-model.md](../design/vehicle-behaviour-model.md)): the Intelligent Driver Model as a car-follower on a lane anchor, its coefficients a cited set (`zhang2024_highd_car`), commanded through K12's channel as it is (speed, heading, acceleration limit); K12's vehicle side in the fork and `scensim run`; numpy and torch bit for bit; seats against the batch; a first K11 search on a platoon | component | K10, K12, K11 | swb 241 | planned 2026-11-25 (user approved the model through 133); plan below, approved by 133 the same day |
 | E1 | Examples | examples | the above | | open |
 
 ## K6: Jazzy for the whole set (plan, 2026-11-24, 243; approved by 133, before any build)
@@ -1518,3 +1519,47 @@ conditional on its proposal covering every failure region.
 ids) and `SHA256SUMS` (89 files). The truth exports stay on 241 in
 `/var/tmp/aeon/k11d-run/runs/*/truth/`. The run executed a0d6c257 (main 190a172b).
 
+## K13's plan: the vehicle behaviour model (2026-11-25, 241; approved by 133 the same day, before any code)
+
+The design is [vehicle-behaviour-model.md](../design/vehicle-behaviour-model.md): the
+Intelligent Driver Model (Treiber, Hennecke and Helbing 2000) as a car-follower holding a lane
+anchor, its coefficients Zhang and Sun's (2024) pooled MA-IDM for cars on highD
+(CC BY 4.0), its action K12's `speed heading accel_limit` with no field added, the deceleration
+capped at the catalog's `maxDeceleration`. It leaves out lane changes (MOBIL), human error and
+aggression beyond its parameters (the Human Driver Model), and a published driver spread.
+
+**Steps.** (i) The model and its set, numpy and torch, bit for bit (no stack). (ii) K12's
+vehicle side: the fork's `SimulatorDrivenVehicleEntity::drives()` takes `model`, `scensim run`
+stops refusing a commanded vehicle, the CARLA world server moves a commanded vehicle as it moves
+the walker; Isaac stays refused by name. (iii) The batch places a model vehicle as it places the
+walker. (iv) Seats against the batch on one scenario. (v) The platoon scenario and a K11 search.
+
+**Exit.** Each check states its bound before its run:
+1. (i) The model alone: the equilibrium gap within 1e-9 relative, free-road approach to v0
+   with no overshoot, the stop behind a standing car, numpy and torch on the CPU in float64
+   with 0 differing arrays, torch on a GPU within a tolerance stated before the check.
+2. (ii) On CARLA 0.9.16, lockstep: lag 1 at every frame, no gate miss; the vehicle's lateral
+   offset from the lane's centreline, p95 and max, under a bound set from (i)'s chord error.
+3. (iv) Seats against the batch on the same record: events at the same frames, the follower's
+   position within a bound fixed before the run, K10's way.
+4. (v) The search runs end to end in the batch and reports its estimate and interval; its
+   prediction is written before the run, from a numpy dry run of the platoon.
+
+**First numbers, for the prediction's shape** (a hand calculation in Python with the set's
+values, not the model's code; redone with `zhang2024_highd_car` once the PDF was checked): on
+Town01's 30 km/h (v0 8.33 m/s), a follower at its equilibrium gap behind a lead at 7 m/s
+(15.2 m) that then brakes to rest at 2, 4, 6 or 8 m/s^2 peaks at about 2.2 m/s^2 of braking in
+every case, never reaches a cap, and stops about 1.7 m behind it, inside s0 (2.8 m), even
+at 2 m/s^2. A platoon at Town01's speeds is therefore
+benign; the first search wants a faster lane anchor.
+
+**Answered (133, 2026-11-25).**
+1. The driver spread: invented bases, labelled so as K11c's, bracketing the set's means; a
+   published spread is future work.
+2. The Isaac agreement is after K13 (K12 D3's follow-up, its own item); K13's agreement is
+   CARLA's seats against the batch.
+3. The first search's lane: an existing map with a lanelet export and a lane of 50 km/h or more
+   (Town04 or Town05 first), a K9 anchor added there; Town01's limit is not raised; no new map
+   without asking.
+Also: bit for bit only on the CPU in float64 (GPU within a tolerance); the cap breaks IDM's
+freedom from collisions, so `capped` events are counted; s0, T, a and b are motorway-fitted.
