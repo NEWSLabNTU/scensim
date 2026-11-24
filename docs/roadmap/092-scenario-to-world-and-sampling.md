@@ -163,7 +163,7 @@ Against the predictions:
   runs it only when torch imports and says so;
 - `just setup` and PEP 668: met;
 - the relay's messages: not met. acb_bridge needed `third_party/sim_vendor` (above);
-- the conformance check (item 3): not run yet. It is the one GPU step, asked of 133 first.
+- the conformance check (item 3): met (below).
 
 **Two failed runs, and a wrong first reading.** jazzy-check's runs 1 and 2 (0222418e) failed
 the same way: four of `scripts/test_t3.py`'s stop tests timed out at their 30 s wait, and the
@@ -190,6 +190,24 @@ capabilities declared, since the world protocol carries no ROS types and both bu
 carla-sys use libclang 14. What could break is the one ROS-facing part, the node's parameters
 (rclrs on Jazzy), which no test reads; if it does, the server starts on the config file's
 values instead of the arguments, so the config given names port 2100 too.
+
+**Item 3's result (2026-11-25): as predicted.** 133 relaxed the start rule before the run: the
+check is functional, not a timing measure, so other compute does not void it; it needs 6 GB of
+VRAM free (CARLA's 2 GB and 4 GB for the others' jobs), one heavy job on the host at a time, and
+the others' jobs recorded. It started at 00:41, after another project's CI gate on the host
+ended, with 8.9 GB free; on the card were a ddcm python (4.7 GB) and teacup1117's unidrivevla
+python (9.5 GB) and CARLA 0.9.15 (on RPC 41000, 9.0 GB), and my CARLA took 2.0 GB.
+
+| server | hello | conformance | capabilities |
+|---|---|---|---|
+| Jazzy (f8e65c58, in `scensim-jazzy-check`) | up, CARLA 0.9.16, protocol 4, ready | 28 passed, 0 failed, autopilot skipped (needs a road) | SIGNALS, AUTOPILOT, AGENT_VEHICLES, TRACKS_TARGETS, READS_BACK, WEATHER, CONTACTS, ROAD_CONDITION, ENVIRONMENT, ENVIRONMENT_APPLIED |
+| Humble control (59439b38) | the same | the same 28 and the same skip | the same |
+
+The node's parameters work on Jazzy: the server listened on 5691, which only the ROS parameter
+`port` names (the config file has no world port, and the default is 5591), and connected to
+CARLA on 2100. Afterwards my CARLA was stopped by its process group: no member of either group
+left, and ports 2100 to 2102, 8100, 5691 and 5655 to 5657 free. The Humble launch respawned its
+world server once under the stop's SIGINT, and the SIGTERM after it ended both.
 
 **A host hazard found on the way.** On this Humble host a pip numpy 2.2.6 in `~/.local`
 shadows apt's numpy 1.21, and apt's torch then fails at import (`_ARRAY_API not found`); a
