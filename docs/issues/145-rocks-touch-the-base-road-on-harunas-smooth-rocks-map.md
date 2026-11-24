@@ -318,3 +318,21 @@ Each run also logged omni.fabric's "includes not found for path .../rocks" once.
 **The fix takes B's order**, as built: `reserve` writes the pool's membership before it returns
 (siw branch `issue-145`). Issue 123's 769 warnings for that order did not come in the stage. Whether
 they come in a drive is read in the proof runs below.
+
+## The fix's proof (siw issue-145 1535c3b; before the runs)
+
+The stage's B is P made the fix's way: 0 of 64 met the base. Then, on 1535c3b, under the quiet
+rule:
+
+1. The Haruna drive as the diagnosis (probe145, one car, 1900 frames, paced to real time), at
+   10 and 13.9 m/s.
+2. Issue 136's own run on *rough_rocks*: `fixture_cost --follow --cars 1 --guard-ms 10000`, as
+   136 found its 12 (400 timed frames, to about 280 m), like for like.
+
+- **118's prediction.**
+  - (1): 0 base contacts at both speeds, where 77075e3 had 9 and 37. The rocks woken are about as
+    before (9 and 37 first wakes), since waking does not change. Issue 145's intake WARN: 0. The
+    "only in one collision group" warning: at most 1, as before. Issue 123's 769 do not come
+    back, as in the stage's B.
+  - (2): 0 rocks on the base, where 136 had 12. The guard passes, unless a first frame takes
+    over 10 s (136 measured 10.4 s on a loaded host; this host is quiet before each start).
