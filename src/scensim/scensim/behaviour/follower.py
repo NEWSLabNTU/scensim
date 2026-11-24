@@ -22,7 +22,9 @@ by -e / `LOOKAHEAD` (e the signed lateral offset, clamped to +-`MAX_CORRECTION` 
 moves the vehicle along it, so it keeps to the lane.
 
 **The leader** is another entity's truth (`leader_*` in `obs`), placed on the same lane: it
-leads when it is ahead and within `half_width` m of the centreline. The lane's end is a standing
+leads when it is ahead and within `half_width` m of the centreline. Positions are entity
+origins (a vehicle's rear axle, for SSv2); the gap runs from this vehicle's box front
+(`center_x + length / 2` ahead of its origin) to the leader's box rear. The lane's end is a standing
 obstacle: with no leader, or a farther one, the follower stops `s0` before it.
 
 **The command** is K12's: `speed = max(0, v + a_cmd dt)` and `accel_limit = max(|a_cmd|,
@@ -64,7 +66,9 @@ PARAMS = {
     "max_accel":     (float, 4.0, (0.1, 20.0), "the catalog's maxAcceleration, m/s^2"),
     "max_decel":     (float, 8.0, (0.5, 20.0), "the catalog's maxDeceleration, m/s^2"),
     "length":        (float, 4.5, (1.0, 25.0), "the catalog's bounding box length, m"),
+    "center_x":      (float, 0.0, (-10.0, 10.0), "the box centre ahead of the entity origin, m"),
     "leader_length": (float, 4.5, (0.5, 25.0), "the leader's bounding box length, m"),
+    "leader_center_x": (float, 0.0, (-10.0, 10.0), "the leader's box centre ahead of its origin"),
     "half_width":    (float, 1.75, (0.5, 5.0), "ours: m from the centreline a leader counts"),
 }
 
@@ -95,9 +99,26 @@ def resolve(params: dict) -> dict:
     return out
 
 
+def centreline_of(lane: dict) -> dict:
+    """{x, y}: a lane anchor's centreline from its start and its heading profile."""
+    ss, hs = [float(v) for v in lane["heading_s"]], [float(v) for v in lane["heading"]]
+    x, y = [float(lane["start_x"])], [float(lane["start_y"])]
+    for i in range(1, len(ss)):
+        d = ss[i] - ss[i - 1]
+        a, b = hs[i - 1], hs[i]
+        h = a + math.remainder(b - a, 2.0 * math.pi) / 2.0
+        x.append(x[-1] + d * math.cos(h))
+        y.append(y[-1] + d * math.sin(h))
+    return {"x": x, "y": y}
+
+
 def resample(lane: dict, ds: float = DS, extend: float = EXTEND):
     """The lane's centreline every `ds` m of arc length, extended straight `extend` m past its
-    end: (xs, ys), on the host."""
+    end: (xs, ys), on the host. A lane anchor resolved before its centreline was recorded (K9
+    before cd65e4ce: `heading_s`, `heading`, `start_x`, `start_y` only) has it rebuilt from
+    its headings, each interval along the mean of its two."""
+    if "x" not in lane and "heading_s" in lane:
+        lane = dict(lane, **centreline_of(lane))
     x, y = [float(v) for v in lane["x"]], [float(v) for v in lane["y"]]
     if len(x) < 2 or len(x) != len(y):
         raise ValueError("idm_follower: the lane anchor has no centreline (x, y)")
@@ -176,7 +197,7 @@ class IdmFollower:
         self.v0, self.s0, self.T, self.a = col("v0"), col("s0"), col("T"), col("a")
         self.two_sqrt_ab = col("two_sqrt_ab")
         self.max_accel, self.max_decel = col("max_accel"), col("max_decel")
-        self.half_len, self.half_lead = col("half_len"), col("half_lead")
+        self.front, self.lead_rear = col("front"), col("lead_rear")
         self.end_s, self.half_width = col("end_s"), col("half_width")
         # the lanes, every slot's resampled to one length (K points, K - 1 segments)
         k = max(len(h["xs"]) for h in self._host)
@@ -220,7 +241,8 @@ class IdmFollower:
         xs, ys = resample(lane)
         return dict(v0=v0, s0=s0, T=T, a=aa, b=bb, two_sqrt_ab=2.0 * math.sqrt(aa * bb),
                     max_accel=p["max_accel"], max_decel=p["max_decel"],
-                    half_len=0.5 * p["length"], half_lead=0.5 * p["leader_length"],
+                    front=p["center_x"] + 0.5 * p["length"],
+                    lead_rear=p["leader_center_x"] - 0.5 * p["leader_length"],
                     end_s=float(lane["length"]), half_width=p["half_width"], xs=xs, ys=ys)
 
     def reset(self, mask=None, seeds=None):
@@ -309,8 +331,9 @@ class IdmFollower:
         leads = lvalid & (sl > s) & (xp.abs(el) <= self.half_width)
 
         # the gap: to the leader's rear, or to the lane's end (a standing obstacle)
-        gap_lead = sl - s - self.half_len - self.half_lead
-        gap_end = self.end_s - s - self.half_len
+        # positions are entity origins (SSv2's: a vehicle's rear axle); the gap is box to box
+        gap_lead = (sl + self.lead_rear) - (s + self.front)
+        gap_end = self.end_s - (s + self.front)
         use_lead = leads & (gap_lead < gap_end)
         gap = xp.where(use_lead, gap_lead, gap_end)
         dv = xp.where(use_lead, v - vl, v)

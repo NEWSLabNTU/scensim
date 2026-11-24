@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- K13's exit check 2 (docs/roadmap/092, "K13's exit check 2"): 092's platoon (scensim_sampler's
+     examples/cases/k13_platoon_idm.xosc) on Town01's anchor west_street (lanelet 6583, 224 m, 40 km/h; maps dataset
+     v2026.11e). A scripted lead at 8 m/s brakes to rest at `decel` from 8 s; the car between it and the ego is
+     scensim.behaviour:idm_follower, holding the lane anchor west_street; the ego, carla_basic, follows it. Its set is
+     "zhang2024_highd_car with a = 1.5, ours": the paper's a (0.362 m/s^2) would never catch the lead within the street. The model alone
+     moves the follower: no storyboard action names it. Values invented; an exit run, not a tuned scenario. -->
+<OpenSCENARIO>
+  <FileHeader revMajor="1" revMinor="3" date="2026-11-25T00:00:00" author="scensim"
+              description="a lead brakes; the model car between it and the ego follows it, on Town01">
+    <Properties>
+      <Property name="scensim.anchor.street" value="west_street.lanelet_at(0)"/>
+    </Properties>
+  </FileHeader>
+  <ParameterDeclarations>
+    <ParameterDeclaration name="ego_speed" parameterType="double" value="8.0"/>
+    <ParameterDeclaration name="lead_speed" parameterType="double" value="8.0"/>
+    <ParameterDeclaration name="decel" parameterType="double" value="4.0"/>
+    <ParameterDeclaration name="street" parameterType="string" value=""/>
+  </ParameterDeclarations>
+  <CatalogLocations><VehicleCatalog><Directory path="$(env SCENSIM_VEHICLES)"/></VehicleCatalog></CatalogLocations>
+  <RoadNetwork><LogicFile filepath="$(env SCENSIM_MAPS)/Town01"/></RoadNetwork>
+  <Entities>
+    <ScenarioObject name="ego">
+      <CatalogReference catalogName="vehicles" entryName="tesla_model3"><ParameterAssignments>
+        <ParameterAssignment parameterRef="maxSpeed" value="50"/>
+        <ParameterAssignment parameterRef="maxAcceleration" value="15.0"/>
+        <ParameterAssignment parameterRef="maxDeceleration" value="15.0"/>
+        <ParameterAssignment parameterRef="maxSteering" value="0.5"/>
+      </ParameterAssignments></CatalogReference>
+      <ObjectController><Controller name="ego"><Properties>
+        <Property name="isEgo" value="true"/></Properties></Controller></ObjectController>
+    </ScenarioObject>
+    <ScenarioObject name="follower">
+      <CatalogReference catalogName="vehicles" entryName="tesla_model3"><ParameterAssignments>
+        <ParameterAssignment parameterRef="maxSpeed" value="50"/>
+        <ParameterAssignment parameterRef="maxAcceleration" value="15.0"/>
+        <ParameterAssignment parameterRef="maxDeceleration" value="15.0"/>
+        <ParameterAssignment parameterRef="maxSteering" value="0.5"/>
+      </ParameterAssignments></CatalogReference>
+      <ObjectController><Controller name="model"><Properties>
+        <Property name="model" value="scensim.behaviour:idm_follower"/>
+        <Property name="lane" value="west_street"/>
+        <Property name="leader" value="lead"/>
+        <Property name="a" value="1.5"/>
+        <Property name="max_decel" value="8.0"/>
+        <Property name="length" value="4.792"/>
+        <Property name="center_x" value="1.416"/>
+        <Property name="leader_length" value="4.792"/>
+        <Property name="leader_center_x" value="1.416"/>
+      </Properties></Controller></ObjectController>
+    </ScenarioObject>
+    <ScenarioObject name="lead">
+      <CatalogReference catalogName="vehicles" entryName="tesla_model3"><ParameterAssignments>
+        <ParameterAssignment parameterRef="maxSpeed" value="50"/>
+        <ParameterAssignment parameterRef="maxAcceleration" value="15.0"/>
+        <ParameterAssignment parameterRef="maxDeceleration" value="15.0"/>
+        <ParameterAssignment parameterRef="maxSteering" value="0.5"/>
+      </ParameterAssignments></CatalogReference>
+    </ScenarioObject>
+  </Entities>
+  <Storyboard>
+    <Init><Actions>
+      <Private entityRef="ego"><PrivateAction><TeleportAction><Position>
+        <LanePosition roadId="" laneId="$street" s="5" offset="0"/></Position></TeleportAction></PrivateAction>
+        <PrivateAction><LongitudinalAction><SpeedAction>
+          <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
+          <SpeedActionTarget><AbsoluteTargetSpeed value="$ego_speed"/></SpeedActionTarget>
+        </SpeedAction></LongitudinalAction></PrivateAction>
+        <PrivateAction><RoutingAction><AcquirePositionAction><Position>
+          <LanePosition roadId="" laneId="$street" s="210" offset="0"/></Position></AcquirePositionAction></RoutingAction></PrivateAction></Private>
+      <Private entityRef="follower"><PrivateAction><TeleportAction><Position>
+        <LanePosition roadId="" laneId="$street" s="30" offset="0"/></Position></TeleportAction></PrivateAction></Private>
+      <Private entityRef="lead"><PrivateAction><TeleportAction><Position>
+        <LanePosition roadId="" laneId="$street" s="60" offset="0"/></Position></TeleportAction></PrivateAction>
+        <PrivateAction><LongitudinalAction><SpeedAction>
+          <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
+          <SpeedActionTarget><AbsoluteTargetSpeed value="$lead_speed"/></SpeedActionTarget>
+        </SpeedAction></LongitudinalAction></PrivateAction></Private>
+    </Actions></Init>
+    <Story name="main"><Act name="act">
+      <ManeuverGroup name="brake" maximumExecutionCount="1">
+        <Actors selectTriggeringEntities="false"><EntityRef entityRef="lead"/></Actors>
+        <Maneuver name="brake"><Event name="brake" priority="override" maximumExecutionCount="1">
+          <Action name="brake"><PrivateAction><LongitudinalAction><SpeedAction>
+            <SpeedActionDynamics dynamicsShape="linear" value="-$decel" dynamicsDimension="rate"/>
+            <SpeedActionTarget><AbsoluteTargetSpeed value="0"/></SpeedActionTarget>
+          </SpeedAction></LongitudinalAction></PrivateAction></Action>
+          <StartTrigger><ConditionGroup><Condition name="brake" delay="0" conditionEdge="none">
+            <ByValueCondition><SimulationTimeCondition value="8" rule="greaterThan"/></ByValueCondition>
+          </Condition></ConditionGroup></StartTrigger>
+        </Event></Maneuver>
+      </ManeuverGroup>
+      <StartTrigger><ConditionGroup><Condition name="t0" delay="0" conditionEdge="none">
+        <ByValueCondition><SimulationTimeCondition value="0" rule="greaterThan"/></ByValueCondition>
+      </Condition></ConditionGroup></StartTrigger>
+    </Act></Story>
+    <StopTrigger><ConditionGroup><Condition name="end" delay="0" conditionEdge="none">
+      <ByValueCondition><SimulationTimeCondition value="25" rule="greaterThan"/></ByValueCondition>
+    </Condition></ConditionGroup></StopTrigger>
+  </Storyboard>
+</OpenSCENARIO>

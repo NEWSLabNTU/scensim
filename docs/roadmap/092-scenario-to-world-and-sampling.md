@@ -1572,3 +1572,56 @@ tags give 88.5 km/h (387 road lanelets), 104.6 (40, the ring), 56.3 (11), and la
 105401, 78805, 117337, 219, ...). So base Town05, not the 110 km/h ring variant (133). Its
 `map_export` and a K9 anchor are made locally; publishing them as a new dataset revision is an
 outward publish and waits for the user's approval through 133.
+
+## K13's exit check 2: a model car on CARLA (rule fixed 2026-11-25, before any run)
+
+Run before the landing (133): the components' commits are on their remotes' branch
+`k13-model-vehicle` (the SSv2 fork 31b12c5fc, scensim_world_protocol ecb56e8,
+scensim_carla_world 9af488a, scensim_isaac_world eb3d8e9), and the runs use a local build of
+scensim's K13 branch that pins them.
+
+**The scenario.** `scenarios/projects/k13_platoon/scenarios/platoon_town01.xosc`: 092's platoon
+on Town01's lane anchor `west_street` (lanelet 6583, 224 m, 40 km/h; maps dataset v2026.11e).
+The lead, a scripted default vehicle at 8 m/s from s 60, brakes to rest at `decel` from 8 s;
+the follower, `idm_follower` at rest at s 30, follows it; the
+ego, `carla_basic` at 8 m/s from s 5, follows the follower. Both cars are the catalog's
+tesla_model3 (box 4.792 m, its centre 1.416 m ahead of the rear axle). The seats runner is a
+lockstep attachment commanding `follower`. CARLA 0.9.16 at Low (one town), this host's seat,
+on GPU 1. Suite `lockstep`: `decel` 2, 4 and 6 m/s^2, one run each (the model draws nothing).
+
+**The follower's set is not the cited one: "zhang2024_highd_car with a = 1.5, ours".** The
+paper's a is 0.362 m/s^2. At that rate a car from rest is at 2.9 m/s after 8 s, 11.6 m on,
+while the lead is 64 m on: it would never catch up within the street's 224 m, and nothing of
+the follow-and-stop this check exists for would happen. So a is raised to 1.5 m/s^2 (ours),
+the rest is the set's (s0 2.833 m, T 1.133 s, b 2.140 m/s^2) and v0 is the lane's 11.17 m/s.
+This check is of the command channel and the world's motion of a model vehicle; it says
+nothing of the cited model's driving, and its numbers are not to be read as that model's.
+
+**The predictions**, from the model and K12 D5's integrator on the same lane in numpy, the
+lead's profile as the storyboard gives it, lag 1 (not the stack):
+
+| decel | follower stops at s | its final gap, box to box | its peak braking | capped frames |
+|---|---|---|---|---|
+| 2 m/s^2 | 132.8 m | 2.65 m | 1.77 m/s^2 | 0 |
+| 4 m/s^2 | 124.8 m | 2.65 m | 1.74 m/s^2 | 0 |
+| 6 m/s^2 | 122.1 m | 2.65 m | 1.73 m/s^2 | 0 |
+
+and its events `follow` then `stopped`, in that order, in every run.
+
+**The checks**, each run:
+1. Lag 1 at every frame after the follower's first command (`result.json` `commands`: lag p50,
+   p95 and max 1), no gate miss, no command for an unknown entity.
+2. The follower in its lane: its truth's lateral offset from west_street's centreline at most
+   0.10 m at every frame (the commanded heading corrects toward the centreline; the street is
+   straight).
+3. The model's own outcome: no contact between the follower and the lead (the gap from the
+   follower's truth positive at every frame), the follower at rest by the run's end, its final
+   gap within 0.3 m of 2.65 m, no `capped` frame, the events `follow` and `stopped` in
+   `decisions.jsonl`.
+4. SSv2 adopts the world's pose: the follower's pose in SSv2's own log trails the world's by the
+   two frames every world-owned entity does, as K12 stated for the walker.
+
+**The verdict.** Exit check 2 holds when all three runs pass 1 to 4. A failure is named by run
+and check. The ego is not judged: carla_basic's following of the model car is reported, as any
+contact it makes, but it is not the subject.
+

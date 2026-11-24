@@ -1,0 +1,25 @@
+# k13_platoon (roadmap 092 K13, exit check 2): a platoon on Town01's west_street. A scripted lead
+# brakes to rest; the car behind it is scensim.behaviour:idm_follower, moved by the CARLA world
+# server on the model's commands, which the seats runner sends on the tick gate; the ego, CARLA's
+# BasicAgent, follows that car. The runs measure the command channel and the follower's lane
+# keeping, not an autopilot.
+simulator: carla
+assets:
+  - dataset: carla-town-autoware-maps
+    take: [Town01]
+# Low: one town only (Town01, never a load_world), on GPU 1, which another user's jobs share
+carla: {quality: low}
+pilots:
+  ego: {kind: carla_basic, vehicle: tesla_model3}
+attachments:
+  - name: follower
+    # the runner builds its model with scensim_batch (torch): this host's numpy 2 in ~/.local
+    # breaks the system torch, as in `just test`'s batch lane
+    run: [env, PYTHONNOUSERSITE=1, python3, -m, scensim.behaviour.seats]
+    lockstep: true
+    commands: [follower]
+    required: true
+judges:
+  - {name: context_log, run: ["true"], needs: [context]}
+logging: {capture: standard, gap_trace: true, keep: {passed: full, failed: full, error: full}}
+default: lockstep

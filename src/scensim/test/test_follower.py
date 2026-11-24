@@ -232,3 +232,19 @@ def test_torch_on_a_gpu_agrees_with_numpy():
     if not torch.cuda.is_available():
         pytest.skip("no CUDA device")
     compare(closed_loop("numpy"), closed_loop("torch", "cuda"))
+
+
+def test_a_lane_resolved_without_its_centreline_has_it_rebuilt_from_its_headings():
+    """K9's anchors resolved before the centreline was recorded carry only the headings: the
+    lane is rebuilt from them (on the half circle of 199 steps, within 2 mm of the arc at its
+    end: each step a chord of the arc)."""
+    lane = arc_lane()
+    n = len(lane["x"])
+    ss = [lane["length"] * i / (n - 1) for i in range(n)]
+    old = {"kind": "lane", "length": lane["length"], "speed_limit": lane["speed_limit"],
+           "start_x": 0.0, "start_y": 0.0, "heading_s": ss,
+           "heading": [math.pi * i / (n - 1) for i in range(n)]}
+    c = f.centreline_of(old)
+    assert math.hypot(c["x"][-1] - lane["x"][-1], c["y"][-1] - lane["y"][-1]) < 2e-3
+    m = f.IdmFollower([{"lane": "l"}], [0], [{"lane": old}], xpmod.namespace("numpy"))
+    assert m.K > 0

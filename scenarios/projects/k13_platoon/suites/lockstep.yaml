@@ -1,0 +1,5 @@
+# K13's exit check 2: lockstep, the lead braking at 2, 4 and 6 m/s^2
+scenarios: [scenarios/platoon_town01.xosc]
+parameters: {decel: [2.0, 4.0, 6.0]}
+seed: 1
+repetitions: 1
