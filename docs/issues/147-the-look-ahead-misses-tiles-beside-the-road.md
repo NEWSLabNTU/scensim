@@ -53,3 +53,13 @@ waits are timings), each held to the wall clock and unpaced.
     32 m of the car (issue 144's wait guarantees it on both), read as the same (frame, tile)
     lists of rocks loaded and collision tiles made, which depend only on that set.
   - A run counts only with `wait_missed` 0, on all four.
+- **Amended before the runs (133, labelled): the load, and how the runs are judged.** Another
+  session's training job on GPU1 started at 22:43, about 2 h, with CPU data loaders (25 to 35
+  GiB of RAM, several cores), so its CPU load overlaps all four runs. The quiet rule covers GPU0,
+  so the runs count. Each run's load average is recorded at its start.
+  - (1) The filed absolute predictions stand as filed: under 5 waits over 50 ms, under 2 s in
+    all, over 33.7 frames a second unpaced. The load makes the waits a stricter test. If only
+    the rate fails, the result says whether the same-day baseline's unpaced rate also fell
+    below 33.7.
+  - (2) A relative line: the fix's waits over 50 ms at real time are at most a tenth of the
+    same-day baseline's, and the fix's unpaced rate is at least the baseline's.
