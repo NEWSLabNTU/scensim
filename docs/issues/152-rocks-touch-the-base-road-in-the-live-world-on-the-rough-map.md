@@ -134,3 +134,40 @@ height above the base there.
 
 Record: `/mnt/renegade/aeon/isaac-ex/c6d/i152` (`run152.sh`, `times.txt`), the run's directory
 `isaac_c6d_haruna_rough_rocks/runs/2026-11-24T21-15-12_haruna_down_r0`.
+
+## The fix test (before the run)
+
+The fix (siw issue-152 e0559e5, local): `rock_layer.base_ground` gives the rock stream the
+world's ground without `/World/RoadCollision` (road_detail.yaml's `ground` first, as before),
+and `RockStream` refuses a ground that holds the tiles' root. A test without Isaac
+(`test_issue_152.py`). The run: the probe's run again, with the probe commit on the fix
+(3e4b1ff, local), the same package, GPU0 as agreed with the other session.
+
+Two hypotheses from 133, checked against the probe's record before the run:
+
+1. *The 770 warnings are the tiles, in two groups through the root include.* Not supported.
+   The probe's membership query expands the includes: it found each tile in `roadBase` through
+   the root. But 768 of the 770 warnings come at the pool's step, all within 13 ms, when no
+   tile exists (`roadDetail` is empty there and the first 14 tiles come 4 s later). The other 2
+   come after the first tiles, and *rough_none*'s runs, whose tiles are in one group (no rock
+   stream, so `roadBase` is empty), log 2 as well. So 768 is the pool, one a rock, although
+   USD puts each pool rock in `rocks` alone; the tiles in two groups logged no warning.
+2. *The env contacts are the checker, not physics.* Not so. Issue 123's check
+   (`RockStream.check_base`) reads PhysX's contact report headers, for the rocks that carry a
+   contact report (threshold 0), skips `CONTACT_LOST`, and matches the other collider's path
+   against the base's paths. It is not a geometric query. A pair PhysX filters makes no contact
+   report, so each env contact is a pair PhysX did not filter.
+
+- **118's prediction for the fix test.**
+  - The run passes haruna_down.
+  - Every tile made is in `roadDetail` alone (no probe line of tiles in two groups).
+  - Contacts with a detail tile: 0. That is by construction: the check no longer counts the
+    tiles as base.
+  - Contacts with `/World/env/Road` or `/World/env/Terrain`: about 8 (5 to 11), the same rocks
+    as the probe's run. Nothing in the fix touches the pool rocks' filtering.
+  - The "only in one collision group" warnings: 770 as before, 768 at the pool's step and 2
+    later.
+  - If the env contacts stay, the next step is a stage test of the filter itself: a pool rock
+    taken in with `rocks` before its first step, resting on a tile flush with a `roadBase` mesh,
+    with and without the pool's 768. The pool's warnings come with issue 145's fix, so the
+    stage test asks whether a rock that PhysX warns for keeps `rocks`' filter.
