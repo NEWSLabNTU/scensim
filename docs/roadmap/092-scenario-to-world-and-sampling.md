@@ -1103,6 +1103,22 @@ script, with `SHA256SUMS` (88 files). The truth exports (4.8 GB) stay on 241 in
 `/var/tmp/aeon/k11c-run/runs/*/truth/`. The fresh stage's 14 distinct failures go to the seats
 replay (K3, 243), reported with no bar.
 
+### K11c, K11d and K11e: the hashes the runs executed, and their main equivalents (2026-11-24, 241)
+
+The searches ran from pinned trees on the branch `k11c-notes`, which landed on main by rebase,
+so the hashes cited above for what ran are not on main. The branch is kept on origin as an
+archive, `k11c-notes` at a56aef83, unchanged, so every cited hash stays reachable; K11d's and
+K11e's results will cite the same trees. The runs executed the old commit; the trees match in
+the touched files (every file the branch changed up to that commit is byte-identical in its main
+equivalent, except this document, which differs only by main's own sections).
+
+| Ran (k11c-notes) | Main equivalent | What |
+|---|---|---|
+| 2c7a6df9 | 2c0c79c3 | the walker's draw as a parameter; K11c's and K11d's pinned tree |
+| 7be7775b | 90f598eb | the sloped score; K11e's pinned tree |
+| 7f436b99 | ff87aaf4 | the truth export's overlap once per row (K11c's N^2) |
+| a0d6c257 | 190a172b | the scenario named as the spec writes it |
+
 ### K11e's spec: a score sloped on the waiting branch, and g0 at the base (2026-11-24, 241; for 133's review, before any code or run)
 
 K11e addresses both causes named for K11c's and K11d's flat levels, and changes nothing else
