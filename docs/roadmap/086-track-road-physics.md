@@ -254,6 +254,44 @@ scensim_isaac_world 6177ced (pins cebb5557), scensim 82787b91; 056's steps 1-4.
   world server, on 139 (asked of 133); and 056's "one scenario setting a label class beside a
   road it leaves" has no Town01 scenario yet.
 
+#### C4's acceptance (found late and finished 2026-11-25, 118)
+
+- **Item 3, found late (2026-11-25).** 241 ran it on 2026-11-20, assigned by 133: `isaac_soil`'s
+  suite `soil` on Isaac Town01 at scensim cc7bf09, one world server, town01_soil, town01_mud,
+  town01_snow and town01_zones one after another, each naming its own map from the testbench
+  state, nothing copied: all four passed (6 min 19 s, no node exits before the stop). Record:
+  NAS "2026-11-20 086 C4 isaac_soil on Isaac Town01 (241)"; its lock finding is issue 076. This
+  roadmap still said the runs were pending; credit to 241.
+- **Items 1 and 2, live on Haruna (Town01 does not render on 118, issue 005).** A local
+  testbench `isaac_c4_haruna` (`/var/tmp/aeon/tb-c4`) on C6b's smooth Haruna map (`none`), with
+  two named maps in its state: `haruna_sand` (Haruna's labels and a sand zone over the start,
+  `soil: closed_form`, so no ground of its own on the sloped road) and `haruna_verge` (gravel
+  verges). Its suite `c4`, five scenarios one after another on one world server, each a copy of
+  haruna_down with its Init's road condition:
+  1. `c4_named_then_late`: names `haruna_sand`; 20 m along, inside the sand, a road condition
+     names `haruna_verge`; ends at 45 m.
+  2. `c4_missing_map`: names `no_such_map`.
+  3. `c4_next_gets_its_own`: names `haruna_verge`, with `scensim.default.SideWalk=gravel`; the
+     whole drive.
+  4. `c4_unknown_label`: `scensim.default.Kerb=gravel`.
+  5. `c4_unknown_class`: `scensim.default.Terrain=moon_dust`.
+- **118's predictions (before the runs).**
+  - One world server serves all five (one pid).
+  - 1: the world server loads `haruna_sand` (its zone `start_sand`) at the Init. The late
+    condition is refused, with "scensim.surface_map: haruna_verge: a wheel has driven on soil
+    since map haruna_sand". The refusal fails the bridge's environment update, so the scenario
+    ends in error with that reason, before 45 m. (Should it go on and pass at 45 m instead, the
+    refusal is still the item; the verdict says what a refusal does to a run.)
+  - 2: refused at the Init, the scenario in error, the reason naming `no_such_map` and the maps
+    there.
+  - 3: the world server loads `haruna_verge` (the next scenario gets its own after the two
+    refusals) and applies SideWalk's gravel; the run passes, about 381 s as haruna_down.
+  - 4 and 5: refused at the Init, in error, the reasons "no ground label 'Kerb'" and "unknown class
+    'moon_dust'".
+  - Not tested here: 056 step 5's "one scenario setting a label class beside a road it leaves".
+    haruna_down never leaves the road, so a label class beside it changes nothing the drive
+    meets.
+
 ### C5's steps (approved by 133, 2026-11-23)
 
 - **C5a, the road layer per station.** `road_detail.StationSection` interpolates a record's
