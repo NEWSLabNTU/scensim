@@ -289,3 +289,15 @@ same bit for bit.
 - **118's prediction:** bit for bit on the 23 road tiles and on every rock's placement of 16
   Haruna tiles; the rocks' placement of a Haruna tile from 212 ms to under 60 ms, the whole tile
   under 250 ms (first make, the roughness fields included).
+
+### Step (iv) timed (2026-11-24)
+
+siw `issue-142` a547571: on 16 Haruna tiles the tiles, looks and every rock
+placed are bit for bit those of the cull over every segment; a tile's first make 251 to 196 ms,
+the rocks' placement 123 to 59 ms (the 212 ms of the split above was a first call in a fresh
+process). **118's prediction: held** (placement under 60 ms, by 1; the tile under 250 ms). The
+siw suite passes (468 tests).
+
+- **118's prediction for the throughput with all four steps** (the same driver, real `_ahead`,
+  Haruna, host idle): the worker's median under 200 ms; the least road-tile lead at least 40 m at
+  13.9 m/s, at least 30 m at 16.7 m/s, and at least 15 m at 20 m/s.
