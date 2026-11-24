@@ -1718,6 +1718,42 @@ as its own spec.
 **Smooth-road A/B**: C6c1 changes no physics (a log column, a course, cases), so 055's suite
 and aib's slope matrix are not rerun for it; C6c2 (a) reruns both, paired as in C5.
 
+#### C6c1's result: passed (2026-11-25, 118)
+
+siw `086-c6c` (8429497) in gate-c5c's workspace (built and tested by the full gate, rc 0), aib
+4e8d684 (its pin); GPU0 with nothing else on it at the start (non-timing; codec told), 04:11 to
+04:13; every start within the check; logs on the NAS, "2026-11-25 086 C6c1 wheel hop (118)".
+The front-left wheel's load at our contact's 480 Hz inner steps, raycast / sweep, against the
+reference (cams, R2's damper):
+
+| case | Hz | reference | raycast | sweep |
+|---|---|---|---|---|
+| washboard, 5 m/s, amplitude (kN) | 7.1 | 1.50 | 1.41 (-6 %) | 1.45 (-3 %) |
+| washboard, 7 m/s | 10.0 | 2.52 | 2.26 (-10.4 %) | 2.27 (-9.9 %) |
+| washboard, 8 m/s | 11.4 | 3.31 | 2.98 (-10.1 %) | 2.99 (-9.8 %) |
+| washboard, 9 m/s | 12.9 | 3.88 | 3.53 (-9.0 %) | 3.54 (-8.8 %) |
+| washboard, 10 m/s | 14.3 | 3.92 | 3.72 (-5 %) | 3.75 (-4 %) |
+| washboard, 12 m/s | 17.1 | 3.38 | 3.44 (+2 %) | 3.44 (+2 %) |
+| washboard, 14 m/s | 20.0 | 3.05 | 3.09 (+2 %) | 3.09 (+1 %) |
+| washboard, 20 m/s | 28.6 | 2.57 | 2.67 (+4 %) | 2.69 (+4 %) |
+| class C, 10 m/s: peak Hz / height over 4-6 Hz | | 9.77 / 1.66 | 9.77 / 1.42 | 9.77 / 1.41 |
+| class C, 20 m/s | | 12.7 / 2.24 | 13.67 / 1.93 | 13.67 / 1.93 |
+
+- **The check passes** under both queries: every amplitude within 30 % of the reference's,
+  the largest at 14.3 Hz as the reference's, then falling (to 0.72 of it at 28.6 Hz); class C's
+  peaks within 2 Hz and their heights within 30 % (14-15 % under).
+- **118's predictions**: the amplitudes within 10 % **failed under raycast** at two speeds
+  (7 and 8 m/s, -10.4 and -10.1 %) and held under sweep (worst -9.9 %); the class C peak within
+  1 Hz held (0 and 0.97 Hz); both queries alike held (within 3 % of each other everywhere).
+- Read plainly: below the hop our wheel's load swings about 10 % less than the reference's,
+  above it a few percent more. The 60 Hz body (its force held over each step) is the one
+  difference from the reference; that it causes this is untested. The hop is there, at the reference's frequency, in the wheel's load.
+- Reported, not judged: the body's vertical acceleration (60 Hz steps) on class C peaks at the
+  body's 1.46 Hz under both queries and speeds; in 4-30 Hz its largest bin is the band's edge
+  (4.39 Hz, 1.1-1.2 times its 4-6 Hz level): no hop peak in the chassis, as the reference showed
+  under R2's damper (Open: the damper).
+- The runs took 75 s each (11 886 PhysX steps a query).
+
 #### C6d's spec: sensors and Autoware on the rough record road (written 2026-11-24, before any run; approved to write by 133)
 
 C6d is 066 R7 on the record road: Autoware's Model 3 on C5d's rebuilt Haruna made rough, with
