@@ -1605,8 +1605,8 @@ everywhere.
   tile still not ready after a frame's 2 s wait leaves that frame pace-dependent. The landed code
   logs each such tile as a WARN ("issue 144: ... not ready"), so each run's count is read from the
   world server's log. The frame waits over 50 ms are not logged by the landed code (it keeps
-  `wait_ms` in memory only), so they are not recorded unless a logging change lands first (asked
-  of 133). The tick p95 stays reported, not judged. Issue 147 (the look-ahead's prefetch) is not
+  `wait_ms` in memory only), so they are not recorded in these runs (133: they belong to issue 147's
+  own measure, and its branch carries the WARN that logs them). The tick p95 stays reported, not judged. Issue 147 (the look-ahead's prefetch) is not
   in these runs, so their ticks include its waits.
 
 
