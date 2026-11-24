@@ -99,3 +99,19 @@ The bar (133, written before the runs; the first one mixed physics with percepti
   least pre-134's, 35 m or more;
 - **at a case start** (a car placed), every in-path rock within reach exists before the first
   physics step.
+
+## The fix, step 1: the skip again (before its test runs)
+
+`Detail._uvs` projects a corridor on a tile only when the corridor can reach it (`_reaches`: the
+centre test `_make` used before 134). It is exact: a sample's distance to the centreline differs
+from the centre's by at most its own distance from the centre, under half a 16 m tile's
+diagonal (11.3 m), and the test skips only a centre farther than the reach plus 16 m, so no
+skipped sample lies within reach (`near` is all false, and with it the base, the zones and the
+rocks). `test/test_issue_142.py`: tiles on and up to two tiles off a winding road with rocks and
+potholes, and a second corridor, against the full projection, bit for bit (heights, base, zones,
+the rocks placed); a tile off the road at under a quarter of the CPU time of one on it; the skip
+is the centre test and agrees with `Detail.touches` on every tile.
+
+- **118's prediction:** with the skip, all three pass; on siw 56b8e39 (no skip) the identity
+  passes (the same code path) and the time test fails (the off-road tile costs about what an
+  on-road one does).
