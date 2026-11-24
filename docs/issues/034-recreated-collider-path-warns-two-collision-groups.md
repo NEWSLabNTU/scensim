@@ -2,8 +2,8 @@
 
 **Severity**: low. Every collider is in one group and the filtering works, as in 032; the
 warning floods the log (452 lines over the second and third of three 800 m drives) and hides the others. **Status**:
-fixed in swb_isaac_world eedae29 within a stream; across loads (issue 152's record), a fix
-built and not yet run (below). **Found**: 2026-11-03 on newslab-server-241, the 066 R4 budget rerun
+fixed in swb_isaac_world eedae29 within a stream, and across loads (issue 152's record) by
+scensim_isaac_world 7813843, once landed (below). **Found**: 2026-11-03 on newslab-server-241, the 066 R4 budget rerun
 (`spikes/rock_world.py`, three speeds in one process), Isaac Sim 6.1 (omni.physx 110.3.2).
 
 ## What happens
@@ -90,3 +90,15 @@ here, that the filtering works. The warnings are the log's flood, not the contac
     run counts the prims under `/World/RoadRocks` and `/World/RoadCollision` after the
     scenario's load (a probe line, not landed). **Predicted:** 768 under `/World/RoadRocks`, the
     new pool alone, not 1536.
+- **The live proof (2026-11-25, 01:19 to 01:28; one run).** siw pool-paths 7813843 with the
+  prim-count probe (df51c93, local, not landed) in the gate checkout for the run, restored to
+  main 26a3573 after; issue 152's package and drive on *rough_rocks*; GPU0 free (another
+  session's job had ended), nothing timed. The run passed haruna_down.
+  - The warnings: **2** in the run's log (770 before), 3 in the stack's (the preload's 1 and
+    those 2). **Held.**
+  - Base contacts: 0. **Held.**
+  - After each road load (the preload's and the scenario's), `/World/RoadRocks` held 769 prims
+    and `/World/RoadCollision` none. The 769 are the new pool's 768 and the stream's material
+    scope (`/World/RoadRocks/material`), which the prediction did not count. There were not
+    1537, so the old stream's prims are gone. **Held**, as amended here after the run: 768
+    prims and the material scope.
