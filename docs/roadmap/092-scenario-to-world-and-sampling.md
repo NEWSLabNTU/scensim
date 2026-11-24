@@ -1067,6 +1067,42 @@ the uniform exactly (beta(1, 1)).
 generations: g0 to g5 0.431, 0.429, 0.423, 0.423, 0.425, 0.423 (failures 8, 10, 9, and 9 to 13
 after). The run goes on to its cap; predictions 2 to 4 are judged on its fresh stage.
 
+### K11c's result (2026-11-24, 241; the run ended 15:18)
+
+**Stop: the generation cap (20).** The level never reached 0: it stayed between 0.416 and 0.430
+m from g0 to g19 (the plateau of "an observation during the run": the walker waits at the
+kerb), so the cross-entropy found no way down. Each generation's level and failures (elite 100
+throughout):
+
+| g | level (m) | failures | g | level (m) | failures |
+|---|---|---|---|---|---|
+| 0 | 0.4301 | 17 | 10 | 0.4222 | 15 |
+| 1 | 0.4272 | 15 | 11 | 0.4178 | 13 |
+| 2 | 0.4213 | 25 | 12 | 0.4160 | 25 |
+| 3 | 0.4232 | 22 | 13 | 0.4216 | 15 |
+| 4 | 0.4248 | 11 | 14 | 0.4199 | 14 |
+| 5 | 0.4203 | 27 | 15 | 0.4191 | 23 |
+| 6 | 0.4263 | 11 | 16 | 0.4188 | 21 |
+| 7 | 0.4190 | 10 | 17 | 0.4187 | 22 |
+| 8 | 0.4190 | 17 | 18 | 0.4200 | 17 |
+| 9 | 0.4239 | 14 | 19 | 0.4216 | 23 |
+
+**The fresh stage (g20, N 1000, from g19's proposal).** 14 failures, 14 distinct records,
+no errors. The estimate under the invented base: **p = 0.0179**, SE 0.0054, normal 95 %
+interval **[0.0074, 0.0285]**, relative SE 0.30; n_eff 473.8; the largest weight 9.78, inside
+its bound of 10 Z_q / Z_b (the normaliser 1: no constraint rejects a draw). The adaptive
+generations' own estimate, 0.0172, is a diagnostic only. The interval holds g0's plain rate
+(17 in 1000, Wilson [0.0106, 0.0271]): twenty generations of search bought no precision over
+plain sampling, which is what the plateau predicts. 371 failures were found over the whole
+run; every one is a contact, and none is reached by moving the searched variables, since the
+walker's gap-acceptance draw decides (K11d and K11e are the answers to that).
+
+**Data.** `~/nas/autoveh/logs/092-k11c/`: the search's records and proposals (`search/`),
+each generation's `outcomes.jsonl` and `run.json` (`runs/`), `report.json`, the run's log and
+script, with `SHA256SUMS` (88 files). The truth exports (4.8 GB) stay on 241 in
+`/var/tmp/aeon/k11c-run/runs/*/truth/`. The fresh stage's 14 distinct failures go to the seats
+replay (K3, 243), reported with no bar.
+
 ### K11e's spec: a score sloped on the waiting branch, and g0 at the base (2026-11-24, 241; for 133's review, before any code or run)
 
 K11e addresses both causes named for K11c's and K11d's flat levels, and changes nothing else
