@@ -1,6 +1,6 @@
 # 163: seats steps a behaviour model before SSv2 starts its NPCs
 
-**Status:** open (241; numbered by 133, 2026-11-25). **Severity:** medium: a model entity on
+**Status:** fixed 2026-11-25 (241; numbered by 133). **Severity:** medium: a model entity on
 seats moves during the frames SSv2 holds its own NPCs still, so seats and the batch disagree
 on every model without a start condition of its own.
 **Found:** 2026-11-25, scensim 241, in 092 K13's exit check 3, run 1 (seats against the batch on

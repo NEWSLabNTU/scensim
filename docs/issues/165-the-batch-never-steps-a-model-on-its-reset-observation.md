@@ -1,6 +1,6 @@
 # 165: the batch never steps a model on its reset observation
 
-**Status:** open (241; numbered by 133, 2026-11-25). **Severity:** medium: every batch model
+**Status:** fixed 2026-11-25 (241; numbered by 133). **Severity:** medium: every batch model
 entity moved one step later than on seats, once issue 163 aligned seats with SSv2's NPC logic.
 **Found:** 2026-11-25, scensim 241, in 092 K13's exit check 3, run 2 (seats with issue 163's fix
 against the batch with issue 164's): the IDM follower's decisions came one step later in the

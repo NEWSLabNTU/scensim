@@ -1,6 +1,6 @@
 # 164: the agreement names every model's events from the walker's table
 
-**Status:** open (241; numbered by 133, 2026-11-25). **Severity:** low: a tool's labels, but they
+**Status:** fixed 2026-11-25 (241; numbered by 133). **Severity:** low: a tool's labels, but they
 fail the agreement's decision check for any model other than the walker.
 **Found:** 2026-11-25, scensim 241, in 092 K13's exit check 3, run 1: the batch side of the IDM
 follower's decisions read `go` and `hesitate` where the seats side read `follow` and `stopped`.
