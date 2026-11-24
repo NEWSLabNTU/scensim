@@ -154,7 +154,9 @@ def command_problems(attachments, entities) -> list:
                        f"{e.controller or 'the default'!r}, not {MODEL_CONTROLLER!r}")
     for name in wanted:
         kind = by_name[name].kind
-        if kind not in ("pedestrian", "vehicle"):
+        # a CatalogReference's kind is the catalog's (None here): the world server refuses
+        # what it cannot command, by name, at the spawn
+        if kind is not None and kind not in ("pedestrian", "vehicle"):
             out.append(f"entity {name!r} is a {kind.replace('_', ' ')} with controller "
                        f"{MODEL_CONTROLLER!r}: only pedestrians and vehicles are commanded")
         if len(name.encode()) > MAX_NAME:

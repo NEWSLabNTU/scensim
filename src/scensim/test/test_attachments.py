@@ -169,6 +169,9 @@ def test_command_problems_name_each_refusal():
     cone = at.command_problems([{**walkers, "commands": ["cone"]}],
                                [ent("cone", "model", "misc_object")])
     assert any("'cone' is a misc object with controller 'model'" in m for m in cone)
+    # a catalog reference's kind is not known here: the world server judges it at the spawn
+    assert at.command_problems([{**walkers, "commands": ["cat"]}],
+                               [ent("cat", "model", None)]) == []
     # the datagram's bounds: 10 entities, 64-byte names
     many = [ent(f"w{i}", "model") for i in range(11)]
     over = at.command_problems([{**walkers, "commands": [e.name for e in many]}], many)
