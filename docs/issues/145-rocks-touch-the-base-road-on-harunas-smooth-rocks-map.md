@@ -188,3 +188,10 @@ the base and is pushed up onto it, its lowest point near 0.05 m.
   same reasoning L, whose membership is in before PhysX's first step with it, stays on the tile
   like L2. P still fails. All 46 hits of the diagnosis were pool prims: r2 to r623, within the
   pool's r1 to r768 (`rocks` held 768 members at the first hit).
+- **Run 1 void (2026-11-24 13:17, recorded before run 2).** All six rocks, the control N included,
+  ended on the tile (lowest point -2.4 mm) with no base contact. The base was a flat one-sided
+  mesh, and a rock that starts under its surface is never pushed up through it. So the test could
+  not see a missing filter, and run 1 says nothing about D to L2. For run 2 the base is a solid
+  box whose top is at 0.05 m. The cases and the prediction are unchanged. Run 1's log also has
+  omni.physx's warning "Collisions are supported currently only in one collision group", and
+  run 2 lists every group's members to find which collider it means.
