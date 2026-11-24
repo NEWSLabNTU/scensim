@@ -1642,3 +1642,37 @@ next attempt; the rule, the predictions and the checks above did not:
    speed instead; that fix was withdrawn (open loop, it hid the world's defect), so attempt 5
    does not count.
 
+**Amended after attempt 5 (2026-11-25, 133), before attempt 6's results were read.**
+1. *The stop positions are FAILED predictions, not judged.* Attempt 5 stopped the follower at s
+   135.8, 130.2 and 129.5 m against the predicted 132.8, 124.8 and 122.1. The cause is the
+   lead, not the model: SSv2's lead holds 8 m/s until about 9.05 s (s 126.0), not 8 s, and
+   brakes more softly at first (at decel 6 it stops at s 136.9 against 129.3). That is SSv2's
+   storyboard timing, which K2.4 also measures. The follower's stop relative to the lead (the
+   final gap) held, and that is what the model is responsible for. The predictions are not
+   recomputed for attempt 6.
+2. *Check 4 is judged against the ego.* As written ("trails the world's by the two frames every
+   world-owned entity does") it FAILED on its wording: in attempt 5's gap traces the follower's
+   SSv2 pose (with the 1.387 m origin offset) equals the world's one frame earlier, exactly, and
+   the ego's does too. K12's two frames came from another record. The intent was "like any
+   world-owned entity", so check 4 now reads: the follower trails the world by the same number
+   of frames as the ego in the same gap trace.
+
+**Attempt 6's result (2026-11-25): exit check 2 holds.** k13dev f68d275c, scensim_carla_world
+078c1a1; all three runs passed SSv2 (`exitSuccess` at 25 s). Evaluated by
+`k13_check2_eval.py`; runs, logs and the script in `~/nas/autoveh/logs/k13-check2/` (attempt 5
+beside them, for the record).
+
+| decel | check 1: lag p50/p95/max, misses, unknown | check 2: lateral max | check 3: final gap, min gap, events, capped, contacts | check 4: trail, follower and ego | stop s (FAILED prediction) |
+|---|---|---|---|---|---|
+| 2 m/s^2 | 1/1/1, 0, 0 | 0.0001 m | 2.652 m, 2.652 m, follow then stopped, 0, none | 1 frame, 1 frame | 135.8 m (132.8) |
+| 4 m/s^2 | 1/1/1, 0, 0 | 0.0001 m | 2.652 m, 2.652 m, follow then stopped, 0, none | 1 frame, 1 frame | 130.2 m (124.8) |
+| 6 m/s^2 | 1/1/1, 0, 0 | 0.0001 m | 2.652 m, 2.652 m, follow then stopped, 0, none | 1 frame, 1 frame | 129.5 m (122.1) |
+
+The follower at rest at each run's end (0 m/s from its positions over the last frame). The peak
+braking from positions was 1.85, 1.79 and 1.77 m/s^2 (predicted 1.77, 1.74 and 1.73); its
+reported speed now equals the speed from its positions (peak 9.94, 9.91 and 9.93 m/s), where
+attempt 4 reported 0. Lateral offset is measured from the line through the follower's and the
+lead's spawn points, both on west_street's centreline (the street is straight). Check 4's error
+at the matched trail is 0.0 m for both bodies, with the 1.387 m origin offset applied. The
+contact monitor recorded no contact in any run, the ego's included.
+
