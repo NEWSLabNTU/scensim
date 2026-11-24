@@ -412,13 +412,41 @@ that passes and a coarser one, a whole degree say, fails and is reported). Times
 6583, the stop) are recorded, not judged. My own CARLA 0.9.16 on RPC 2100 (Epic, Town01, no town
 change), the stack from this branch's own install, stopped cleanly afterwards.
 
+**Step 2a's result (2026-11-25): as predicted, but for one word of the prediction.** k9_cs3
+pm=current from f429787b's own install (wt-k9e, acb then swb from a clean environment), my
+CARLA 0.9.16 on RPC 2100 (Epic, booted on Town01, no town change), seat 0, started at 01:38
+with 10.3 GB of VRAM free; on the card were teacup1117's unidrivevla python (9.5 GB) and CARLA
+0.9.15 (on RPC 41000, 7.4 GB) and a ddcm python (4.7 GB).
+
+| | attempt 3 (weather form) | step 2a (environment form) |
+|---|---|---|
+| Autoware's route | 28257, 41654, 6583, 42451, 32189 | the same |
+| ego in 6583 | from sim 29.5 s | from sim 30.2 s |
+| stopped for good | sim 34.8 s, centre x 313.86 | sim 35.2 s, centre x 313.91 (y -129.49) |
+| outcome | exitFailure at 240 s | exitFailure at 240 s |
+| contacts | none | none (`contacts`, `npc_contacts` empty) |
+| barriers (truth, map frame) | x 305.64; y -128.21, -129.51, -130.81 | the same |
+| knob read-back | `sun_altitude_angle` 60.0 (get_weather) | `sun_elevation` 60.000001 on 5019 of 5019 frames after its send (frame 1), max deviation 9.7e-7 against 0.007; `knobs.ok` true |
+| `maps` lanelet2 digest | a85836f5... | the same |
+| `anchors.barrier_lane` | 6583 | 6583 |
+
+The one miss is the prediction's wording "attempt 3's `anchor_source`": the map's and the
+file's digests are attempt 3's (ee291b6e..., 428462cc...), but `commit` is now 732fd615 (the
+maps dataset's v2026.11f) where attempt 3's was 19d52699 (v2026.11e), because k9_cs3's lock
+moved to v2026.11f after attempt 3 (ca3c8b1d), with the anchors file unchanged byte for byte.
+The record is right; the prediction should have said the lock's commit. For step 2b the
+comparison is with this run's (732fd615), which k9_cs3_isaac's lock holds too. Times were
+recorded, not judged. Afterwards `--stop-stack` stopped the stack, my CARLA was stopped by its
+process group (nothing of the group left, ports 2100 to 2102 and 8100 free), and no stack
+process was left with parent 1.
+
 **Step 2b, the runs on Isaac.** Isaac Sim 6.2 from NVMe; run when the card has room for Isaac
 and Autoware with 4 GB left for the others' jobs, no CARLA of mine up, one heavy job on the
 host; the others' jobs recorded; timing not judged. pm=current, then pm=works, on one stack.
 Predicted, before any run:
 - no SSv2 error;
-- `result.json` `anchors.barrier_lane` 6583 with the same `anchor_source` as CARLA's (file
-  digest, dataset and commit); `knobs.ok` true, with `illumination.sun_elevation` read back 60
+- `result.json` `anchors.barrier_lane` 6583 with the same `anchor_source` as step 2a's (map and
+  file digests, dataset, commit 732fd615); `knobs.ok` true, with `illumination.sun_elevation` read back 60
   from Isaac's `ENVIRONMENT_APPLIED` on every frame after its send, within 0.007 deg; `maps` with the two lanelet2
   digests as on CARLA (Town01 a85836f5..., the variant a2daf41c...);
 - the barriers' truth positions within 0.05 m in x and y of CARLA's (305.64; -128.21,
