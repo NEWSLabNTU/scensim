@@ -227,6 +227,53 @@ ground-truth lane departure stays the measure; perception still uses the lidar.
   km/h. Scored with `ladder_score.py` against `/ground_truth/odom`, lateral limit 1.75 m,
   per stretch.
 
+### Step 4 rerun: the five rungs on main (plan, 2026-11-24, 243; approved by 133 before any run)
+
+Only rung 10 had run (241's runs A and B on 133, 2026-11-19/20: A2, aib b05142f's Periodic fix,
+camera 28.1 Hz, real-time factor 0.219 under others' load). Since then aib main has Isaac Sim
+6.2 (095 M3), the spec's tyre friction over PhysX's load-filter gain (issue 108: grip in the
+bends), ground truth's pose-derived rate without its half-step lag (104), the ECU's torque
+release, regen and ABS (100 to 106) and a profiled lidar at its scan rate (099). So all five
+rungs run again, rung 10 included: scensim's `speed_ladder` project (its suite: rung 10, 15,
+20, 25, 30; a retry on `error`), on scensim main and aib main as pinned at the run (both
+recorded per run), autoware-drift main (its commits past b9165dd are race_planner only, which
+the ladder does not run). The camera-own-rate branch (aib 3a3b423) is dropped. The map is the
+dataset's `town05_ring_110kmh` at the project's lock (carla-town-autoware-maps 19d52699:
+`lanelet2_map.osm` sha256 936f9496..., `isaac/world.yaml` 8813b147...), not rebuilt.
+
+Run only behind the quiet-host gate (063's: 5 min quiet, then a gate per run), never beside
+CARLA, one heavy job at a time on the host, under a memory guard that stops the run cleanly.
+
+**Predictions, written before any run:**
+
+| rung (m/s) | lap | top speed on the straights | bends | camera |
+|---|---|---|---|---|
+| 10 | full | 9.5 to 10.5 | at the rung | about 28 Hz |
+| 15 | full | 14.5 to 15.5 | at the rung | about 28 Hz |
+| 20 | full | 19.5 to 20.5 | at the rung | about 28 Hz |
+| 25 | full | 24.5 to 25.5 | at the rung (the planner's limit, ~0.79 g on ~100 m, is ~28 m/s) | about 28 Hz |
+| 30 | full | 29 to 30 | cut by the planner to about 28 | about 28 Hz |
+
+Real-time factor 0.16 to 0.35, lower while the card is shared; rung 10's lap is about 187 s
+simulated. After issue 108 the grip is the spec's: a bend departure at 25 or 30 m/s is possible;
+it would show as sideslip in the ground truth and count as grip, not localization (the decision
+below).
+
+**"Localization holds"**, at every rung (the car drives on the ground truth, so this says the
+pose Autoware drives on stays the ground truth's and the recording serves step 5):
+
+- `/localization/kinematic_state` against `/ground_truth/odom`, over the lap: lateral and
+  along-track error p99 at most 0.2 m, heading p99 at most 1 deg;
+- no localization MRM; autonomous mode held for the lap (`/api/operation_mode/state`);
+- the recording whole: ground truth at the frame rate (100 Hz, simulated time), at least 27
+  images per simulated second, the IMU and velocity status with no gap over 50 ms;
+- the project's judge `rung_check` passes (its own bars: ground truth at >= 90 Hz, >= 25 images
+  per simulated second, top speed within 10 % of the rung, the lap finished), the scenario
+  passes, and no lane departure in the ground truth.
+
+A rung failing any of these runs once more; a second failure is that rung's result, with its
+cause.
+
 ## Decisions taken here (not the user's)
 
 - The Autoware project is `autoware-drift` (057's laps: its planning holds 25-30 m/s), with
