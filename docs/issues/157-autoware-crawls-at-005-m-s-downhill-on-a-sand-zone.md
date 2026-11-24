@@ -121,3 +121,28 @@ the command was still zero), and then released it.
 
 Record: NAS "2026-11-25 issue 157 sand probe (118)". Status: a modelling question for 054's sand
 class (the resistance's size and its low-speed creep), not an ECU or brake fault.
+
+### Hypotheses for the open questions (133; not results)
+
+1. **The size, 0.21 of the load.** Secondary engineering tables put the rolling resistance of a tyre
+   on loose sand at 0.15 to 0.30 (Engineers Edge, "Rolling resistance force", its table 1) and a car
+   tyre on loose sand at 0.2 to 0.4 (Engineering ToolBox, "Rolling resistance"). Neither cites a
+   primary test. 0.21 sits inside both ranges. Wong's *Theory of Ground Vehicles* was not checked
+   here, and its figures are not quoted.
+2. **The creep. Checked against the code, offline.** The closed form's resistance is applied
+   through `surface_layer.resistance_scale`, a linear ramp, `speed / RESIST_V0` with RESIST_V0 =
+   0.1 m/s (issue 004's fix: a standing car is not pushed), not a tanh. A ramp gives an
+   equilibrium speed where the scaled resistance equals the grade's pull: v = RESIST_V0 x pull /
+   resistance. From the free arm's own numbers (every wheel's share 1, its resistance and load,
+   the pitch), that speed is 0.026 to 0.028 m/s. The car went 0.052 to 0.055 m/s, about twice
+   that, and at that speed the ramp's resistance is 1.96 times the grade's pull throughout. So the
+   ramp explains why the car creeps rather than standing. It does not explain the speed: some
+   other force of about the grade's pull (about 1000 N) acts forward too. A next look would be the
+   speed `resistance_scale` is given (the contact's, not the body's?) and the tyre's own forces in
+   PhysX.
+3. **Autoware's negative command.** Its longitudinal controller compensates the slope by
+   subtracting g sin(grade) on a downhill: it expects gravity to supply the acceleration and
+   knows nothing of the sand. That is the likely reason for its -0.03 to -0.10 m/s^2 below the
+   plan's speed, and it changed nothing here (the ECU did not brake for it).
+
+157 stays open as a modelling question; a plan for it comes after C6c's.
