@@ -427,3 +427,22 @@ times real time (the pace); 142 at real time is not yet measured.
 - **118's prediction for it** (the same drive, siw 8547b30, `fixture_cost`'s frames paced to
   the wall clock, 20 a second): the least in-path lead at least 35 m, no local makes, base
   contacts as on main (a few).
+
+### The paced run (2026-11-24)
+
+siw 8547b30, the Haruna drive at 10 m/s with every frame held to the wall clock (20.0 frames a
+second): 35 in-path rocks, the least lead 16.2 m, 3 under 35 m (16.2, 31.3, 34.0), none passed
+before it existed, no local makes, 9 base contacts (as on main).
+
+- The 16.2 m rock loaded 1.7 s into the drive, the car at its start: `fixture_cost` creates its
+  car without `placed` (the world server now calls it at a spawn).
+- The 31.3 and 34.0 m rocks' tiles were made 20 and 25 m of travel before the rocks loaded: those
+  rocks loaded when their tiles came within ROCK_REACH (32 m) of the car, the worker not the
+  limit. A rock near its tile's near edge loads about 32 m ahead; pre-134's least of 35.7 m on
+  the fixtures was where its rocks happened to lie, not a property of the code.
+- **118's prediction:** at least 35 m **failed** (16.2 at the start; 31.3 and 34.0 by the reach);
+  no local makes **held**; base contacts as on main **held** (9 and 9).
+
+So at real time, with steps (i) to (v), the worker is no longer what decides when a rock loads on
+Haruna: every in-path rock but the one at the drive's start loaded when its tile came within the
+32 m reach. The 35 m bar asks for more than the reach can give for every rock.
