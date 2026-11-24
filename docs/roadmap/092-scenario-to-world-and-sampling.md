@@ -956,3 +956,44 @@ written before its run: a score with a slope on the waiting branch (the time mar
 leaves, say, or the gap acceptance's own margin, U against its threshold), or the decision's
 noise as a searched variable.
 
+### K11d's spec: the walker's decision draw as a searched variable (2026-11-24, 241; for 133's review, before any code or run)
+
+K11c's observation: the failure lives in the walker model's own gap-acceptance draw (its
+uniform u, from the record's pilot seed: it accepts when U > logit(u)), which the search
+cannot move. K11d makes that draw a declared, searched variable, and changes nothing else, so
+any difference from K11c is that variable's.
+
+**The variable.** `accept_u`, the walker's uniform draw for the episode, declared in the base
+as `uniform: {low: 0, high: 1}`: the same law as the seed's `random.Random(seed).random()`, so
+the base, and the rate it defines, are K11c's. It must reach the model, so it is a scenario
+parameter bound to a new optional walker property `draw` (u in (0, 1); without it the walker
+draws from its seed as now), not a K8 `latent` (a latent never reaches the scenario). It is
+recorded, weighted and replayed like the other four: a seats replay of a record (K3) then makes
+the same decision, where today it depends on the pilot seed reaching the runner.
+
+**What changes.**
+
+- `gap_acceptance_walker` gains the optional `draw` (ours, params_schema marks it). Test: with
+  `draw` the threshold is logit(draw) on seats and in the batch alike; without it, as today.
+- A sibling `cs1_town01_k11d.xosc`: K11c's with `accept_u` declared and bound (`draw =
+  $accept_u`).
+- A base `cs1_gap_acceptance_k11d.yaml`: K11c's four variables and `accept_u`, independent,
+  invented as K11c's is.
+- The spec `searches/k11d.yaml`: five variables searched (`accept_u` as a normal within
+  [0, 1], as K11a refits a uniform); the score still the closest gap, threshold 0; N 1000; the
+  seed 11; the plan's parameters. A sloped score (U against its threshold) is not used: it would
+  change two things at once. It is the next lever if K11d's elite still stalls.
+
+**Predictions, fixed before the run.**
+
+1. The level reaches 0 (the stop rule, not the cap) within 6 generations.
+2. The elite's mean `accept_u` falls from g0 to the generation that stops (reported per
+   generation).
+3. The fresh stage's 95 % interval overlaps K11c's g0 Monte Carlo interval (g0 draws from the
+   base itself: 17 failures in 1000, Wilson 95 % [0.011, 0.027]) and K11c's fresh-stage
+   interval: all three estimate the one rate, under the one base.
+4. Its relative standard error is below K11c's fresh stage's.
+
+If 1 fails, the elite is still filled by the plateau (the sloped score is then the next spec);
+if 3 fails, the weights or the variable's law are wrong, and K11d's rate is not used.
+
