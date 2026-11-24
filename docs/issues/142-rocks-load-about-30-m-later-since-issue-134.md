@@ -168,3 +168,46 @@ Host idle (load 0.4 and 1.1 at the starts). Leads in m; tiles a second made by t
   `_ahead` replaced by points along the centreline from the car's u to u + max(48 m, 4 s v)):
   the least road-tile lead is at least 0 at 8.3 and 11.1 m/s and the 5th percentile at least
   20 m at 13.9 m/s; above that the worker's pace limits it (negative leads at 16.7 and 20 m/s).
+
+### The prefetch along the centreline (2026-11-24)
+
+The same driver on c6ec980, Haruna, the prefetch's points along the centreline by u instead of
+the heading's line (host idle):
+
+| speed | worker median, tiles/s | least lead (p05), m |
+|---|---|---|
+| 8.3 m/s | 395 ms, 1.16 | 36.5 (49.6) |
+| 11.1 m/s | 377 ms, 1.55 | 24.3 (42.9) |
+| 13.9 m/s | 364 ms, 1.96 | 13.4 (28.5) |
+| 16.7 m/s | 363 ms, 2.37 | 5.6 (15.0) |
+| 20 m/s | 360 ms, 2.54 | -48.1 (-43.3) |
+
+The worker makes 140 tiles over the 1000 m instead of 207 to 227: the line no longer asks for
+the hillside's. **118's prediction:** least lead at least 0 at 8.3 and 11.1 m/s **held** (36.5,
+24.3); p05 at least 20 m at 13.9 m/s **held** (28.5); negative at 16.7 m/s **failed** (5.6 m,
+positive); negative at 20 m/s **held**.
+
+Against 142's bar this is not enough: at haruna_down's 50 km/h (13.9 m/s) the least tile lead,
+13.4 m, is under the 35 m of pre-134 (a rock loads only after its tile), and at 60 km/h 5.6 m
+leaves no room for the prims' creation and the 10 m. Step (iii), a cheaper projection, is due.
+
+### The off-road tiles in the Isaac probe (133's question, a lead, not yet shown)
+
+Of the off-road tiles the worker made in the Isaac probe on 6c6a044, 64 of 86 were made with the
+car under 0.5 m/s (on main 27 of 78, the rest finishing late, after the car moved on). `_ahead`
+aims its 48 m line along the car's velocity, `(vx, vy) / speed`: at rest that is the direction
+of a near-zero velocity's noise, so a standing car asks for tiles 48 m off in changing
+directions (case starts, and the 50 s at the boulder). To be shown by logging `_ahead`'s keys
+with the car at rest; the corridor prefetch of step (ii) replaces this line where a corridor is
+within reach.
+
+## Step (iii), a cheaper projection (before the prototype is timed)
+
+`Corridor.uv` culls the segments per call (issue 128): a whole tile keeps every segment that can
+be nearest to any of its 103 041 samples (106 of 3054 on Haruna's record), and each kept segment
+is a pass over all the samples. Culled per block of the tile (8 x 8 blocks of about 40 x 40
+samples), each block keeps only the segments that can be nearest to its own samples, by the same
+exact rule, and visits them in order.
+
+- **118's prediction:** bit for bit the same u, v and near as today's on every tile of both
+  records (fixture_c6b and Haruna); `_uvs` on a Haruna road tile at least 3 times faster.
