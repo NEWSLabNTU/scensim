@@ -2185,6 +2185,32 @@ net of R0's (the coast's own loss over the same ticks, 0.030 m/s):
   call; 118's proposal: not declared on 0.9.16, so K9f-a's checks see a server without zones and
   skip, as they do now.
 
+**C7 on 0.9.16, as decided (133, 2026-11-25, option (2)), before any code.** No zones and no
+`ROAD_ZONES` on CARLA 0.9.16. What C7 builds there:
+
+- **The world-wide reply.** The CARLA server answers `SetRoadCondition` with a
+  `RoadConditionReply` for the world-wide part, read back from CARLA, `zones` empty:
+  `friction_scale_factor` from the ego's tyre friction over its own (`own_friction`, wheel 0 and
+  every wheel the same, else refused as an error the bridge reports) divided by the wetness's
+  asphalt factor, and `wetness` the level whose look (`WET_LOOK`: the weather's `wetness` and
+  `precipitation_deposits`) `world.get_weather()` shows. With no ego, from any vehicle the
+  condition was applied to; with none, the request's values, said so in the log. This closes
+  095's "unverified" for CARLA's world-wide condition. The capability that gates the reply is
+  243's to settle in 092 (K9f-a's text gates it on `ROAD_ZONES`; 118 proposed a separate
+  `ROAD_CONDITION_APPLIED`, ROAD_ZONES then needing it); C7 follows what 092 says.
+- **A refusal that names the limit.** A `scensim.zone.` property refused with: "CARLA 0.9.16
+  cannot apply surface zones: its friction trigger acts on every car of a blueprint and a
+  per-wheel physics apply steps the car 0.14 to 0.15 m/s (scensim roadmap 086 C7's P0 and P0b);
+  zones are the Isaac world server's", replacing "has no surface map".
+- **Tests without CARLA:** the read-back's arithmetic (factor and look to scale and wetness, every
+  level, a mismatch between wheels refused), the refusal's text.
+- **Acceptance, on 118's CARLA (port 2010), before any run:** for each wetness level at scale 1,
+  and scale 0.8 at `wetWithPuddles`, `SetRoadCondition` then its reply: the reply's scale within
+  1e-5 of the request's and its wetness the request's, both read back (a test that breaks the
+  read-back, the ego's friction set by hand to another factor, gives a reply that differs).
+  `scensim_world_check conformance` passes. 118's prediction: all equal (tyre friction is
+  float32: 3.5 x 0.6 reads back to within 1e-6 of 2.1, so 1e-5 holds).
+
 **The hosts.** CARLA on 118 (its own CARLA on port 2010; issue 005 is Isaac's SimReady render on
 118's driver, not CARLA's, so 118 runs C7's CARLA side, P0 included). The Isaac reference is
 K9f-a's own Isaac Town01 run on 243's host for the same zone and class; if K9f-a's run cannot
