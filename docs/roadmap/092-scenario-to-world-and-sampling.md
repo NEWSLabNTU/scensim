@@ -1681,3 +1681,36 @@ contact monitor recorded no contact in any run, the ego's included.
 the heights': it fails the same at isaac main without K13). Gate log:
 `~/nas/autoveh/logs/k13-gate/gate-53a15bf9.log`.
 
+## K13's exit check 3: seats against the batch (rule fixed 2026-11-25, before any run)
+
+K10's agreement, on the model car (step iv). `agreement_run.py --ego-from-truth` on each of
+check 2's attempt 6 runs (decel 2, 4 and 6; `~/nas/autoveh/logs/k13-check2/attempt6/`), one
+slot, read from their run directories, so no seats run is made again. The batch plays the seats
+ego's truth back (no engine, no GPU), runs the lead as SSv2's default vehicle (K2.1) from the
+storyboard, and the follower as a `model` entity compiled from its ObjectController, with K10's
+pairing: seats frame S + k is batch step k, a model's command applied a step later (lockstep's
+lag 1), model entities in SSv2's view two steps back. The map export is `scensim_batch.map_export`
+of the project's Town01 (carla-town-autoware-maps 19d52699, map_sha256 ee291b6e..., 300
+lanelets), from scensim 4893da50.
+
+**What differs from K10's walker.** The follower reads another vehicle, not the ego: on seats
+the lead's truth is CARLA's car tracking SSv2's pose (`npc_motion: tracked`), in the batch the
+lead is SSv2's pose itself. Measured on the seats side before this rule (the truth alone, no
+batch run): CARLA's lead within 0.0007 m (p50) and 0.0069 to 0.0136 m (p95) of SSv2's, at most
+0.021 m, except three frames as it jumps from rest to 8 m/s (0.042, 0.275 and 0.551 m, frames
+11 to 19). So the follower's inputs differ by that much, and its error is expected above the
+walker's 1.5e-4 m.
+
+**The rule.** Each run agrees when:
+1. the outcomes are equal (passed on both: `exitSuccess` at 25 s, which the batch's storyboard
+   takes);
+2. the follower's decisions are the same sequence at the same frames (`follow`, `stopped`;
+   seats: the attachment's `decisions.jsonl`, batch: the model's events);
+3. every storyboard element's offsets are 0 (the lead's brake event among them);
+4. the follower's max xy error is at most 0.10 m; the lead's (the batch's SSv2 vehicle against
+   SSv2's pose in the truth) at most 0.05 m (K2.4's NPCs: 2.8 cm); the ego's is checked 0.
+
+**The prediction.** All three agree: the follower's max xy error 0.005 to 0.03 m, at its start
+or its stop; the lead's under 0.03 m; `stopped` at the same frame on both sides. A disagreement
+is named by run, column and number, and its cause found before anything is rerun.
+
