@@ -2140,6 +2140,25 @@ What it means for C7:
   is the friction split itself (an apply of equal friction on all four). 118's lean: (3) then (1)
   if the step is the restore's and small, else (2).
 
+**P0b (133: option (3), before the run).** The same CARLA, car and cleanup; A coasting at 10 m/s
+(the target velocity held to tick 40, then none), one change at tick 50, ticks 0 to 120 logged.
+The step: A's mean speed over ticks 51 to 60 less its mean over 40 to 49, less R0's (the coast's
+own loss); the chatter: the yaw rate's largest |value| over ticks 51 to 120. Arms:
+
+- R0, no apply: the velocity and angular velocity set back alone (what the restore does);
+- R1, an apply that changes nothing (every wheel 3.5), velocity and angular velocity set back:
+  the rebuild alone;
+- R2, every wheel 1.0, both set back: any change, no split (133);
+- R3, the left wheels 1.0, the velocity set back, the angular velocity left alone;
+- R4, the left wheels 1.0, both set back: P0's arm again, the control.
+
+118's predictions: R0 no step (under 0.01 m/s) and no chatter (under 0.1 deg/s); R1 the step
+P0 saw (0.15 to 0.2 m/s), no chatter: the step is the rebuild's, not the restore's; R2 the same
+step, no chatter; R3 and R4 the same step and the chatter (about 1 deg/s), the split's. 133's
+rule then: a kept step of 0.05 m/s or more puts C7 on option (2); under it with no chatter on R2,
+option (1) for whole-car zones, split-mu out unless the chatter is shown to be the split's
+physics. By these predictions, option (2).
+
 **The hosts.** CARLA on 118 (its own CARLA on port 2010; issue 005 is Isaac's SimReady render on
 118's driver, not CARLA's, so 118 runs C7's CARLA side, P0 included). The Isaac reference is
 K9f-a's own Isaac Town01 run on 243's host for the same zone and class; if K9f-a's run cannot
