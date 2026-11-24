@@ -841,6 +841,9 @@ into its section before its runs, and its rule set before them:
   substep rate, between R5's effective road and the body. Check: a 10-15 Hz peak in the chassis
   and wheel-load spectra on C6a's washboard; grip loss on washboard rising with speed; 055's
   manoeuvre suite and aib's slope matrix unchanged on smooth road (paired, A/B as above).
+  *Amended 2026-11-25, before any C6c run*: the unsprung mass is in since R5, and C6a's gaps
+  are R2's damper and R5's cams against R0's simpler car (C6c's spec, below); C6c becomes
+  the check of the hop, and grip loss a model choice.
 - **C6d. Sensors and Autoware on the rough record road (R7).** Autoware on C6b's Haruna with
   rocks, its lanelets and cloud from C5d's builder (the lanelet map R4 lacked): motion BVH on,
   the lidar following the chassis, `scan_ground_filter` over the washboard and ruts. Check,
@@ -1570,6 +1573,123 @@ drawn), the tyre contact on the rocks (+0.7 ms) and PhysX (+0.3 ms). The contact
 each run's own p95 (349 a run) are where *none* has its rare large PhysX steps (their mean 29 ms)
 and *rocks* does not. No cause with a cheap fix was found, so no issue is opened, and the budget
 is not rerun. NAS "2026-11-24 086 C6b Haruna budget (118)", `diagnostic/`.
+
+#### C6c's spec: wheel hop (written 2026-11-25, before any Isaac run; for 133's review)
+
+**What already exists (found writing this spec).** R5's corner (`road_contact.Corner`,
+`TireContact`, in since 2026-10-31) carries the unsprung mass C6c was to add: 42 kg per corner
+on a 230 kN/m tire spring (150 N s/m) that lifts off, under R2's spring, digressive damper
+(rebound 3 : 1 over bump), bump and rebound stops and anti-roll bars, integrated 8 times a
+PhysX step (480 Hz). The front corner's hop is at sqrt((230 + 41.8) kN/m / 42 kg) / 2 pi =
+12.8 Hz. The body gets it as the step's mean force (`dfz`). So C6a's cause "PhysX's corner
+lacking the reference's 42 kg unsprung mass" was wrong as written: PhysX's corner lacks it,
+ours has it, and ours drives the body.
+
+**C6a's gaps, taken apart offline** (2026-11-25, no Isaac; siw 7813843's
+`spikes/fixture_course.reference`, R0's quarter car at 4 kHz, with each of R5's two
+departures from R0 switched on alone: the tandem cams' effective road, and R2's damper in
+place of the linear 3.74 kN s/m one). The wheel mass is 42 kg in every column. Peak load (kN)
+/ body rise (cm); washboard: the load's minimum (kN):
+
+| case | R0 (disc, linear damper): C6a's reference | disc, R2's damper | cams, linear damper | cams, R2's damper | ours offline | C6a, Isaac 60 Hz, raycast; sweep |
+|---|---|---|---|---|---|---|
+| cleat_05, 10 m/s | 13.3 / 2.6 | 12.9 / 1.3 | 12.7 / 2.5 | 12.2 / 1.2 | 12.2 / 1.1 | 11.2 / 1.2; 10.3 / 1.2 |
+| cleat_10, 10 m/s | 20.2 / 7.8 | 19.3 / 6.2 | 30.9 / 7.9 | 21.8 / 6.0 | 18.0 / 5.7 | 16.2 / 5.3; 16.9 / 4.9 |
+| cleat_10, 20 m/s | 24.0 / 5.1 | 23.5 / 4.7 | 63.3 / 8.0 | 60.5 / 7.5 | 59.2 / 6.8 | 26.3 / 5.6; 27.2 / 6.0 (480 Hz peaks 53.6; 55.0) |
+| cleat_15, 10 m/s | 26.6 / 20.2 | 25.1 / 21.0 | 67.5 / 26.2 | 61.1 / 28.6 | 59.4 / 27.6 | 32.1 / 21.6; 32.0 / 20.3 (480 Hz peaks 58.2; 58.0) |
+| washboard, 10 m/s, min | 1.16 | 0.10 | 1.36 | 0.38 | 0.50 | 1.18; 1.14 (240 Hz: 0.72; 0.69) |
+| washboard, 20 m/s, min | 1.43 | 0.47 | 1.63 | 0.70 | 0.57 | 2.64; 2.72 (240 Hz: 1.77; 1.76) |
+
+"Ours offline" is `spikes/contact_offline.py`: road_contact's corner under a stand-in for
+PhysX's body at 60 Hz, its peak the largest inner-step load (480 Hz).
+
+- **The body rise is R2's damper, not the wheel mass.** Its bump side, half the rig's c at low
+  shaft speed, halves the rise on the 5 cm cleat and takes 20 % off the 10 cm one; the cams
+  change it little. C6a2's H4 ("the body rise is the missing unsprung mass") is withdrawn.
+- **The peaks growing past the reference with rate (C6a2) are the cams.** On a box-edged cleat
+  at 20 m/s, and on the 15 cm one, the cams' quarter car peaks at 60-61 kN against the disc's
+  23.5-26.6; C6a3's 480 Hz peaks (53.6-58.2 kN) were converging to it.
+- **Washboard's harder swing (C6a3) is R2's damper again**: it takes the minimum from 1.16 to
+  0.10-0.38 kN at 10 m/s.
+- Against the quarter car with both of R5's choices (cams, R2's damper), ours offline is within
+  10 % on peak and rise, except cleat_10 at 10 m/s's peak (18.0 against 21.8 kN). Washboard's
+  minimum differs more (0.50 against 0.38 kN, 0.57 against 0.70), small loads near lift-off.
+
+So C6a measured R2's and R5's modelling choices against R0's simpler car, not PhysX's
+coupling. C6a's verdict stands as measured (its rule is not amended); this is a reading beside
+it. Two modelling questions remain, neither of them wheel hop, proposed for Open:
+
+1. **R2's damper** (assumed: Tesla publishes no curves). Its bump side is what halves the
+   small cleats' body rise. Settling it needs a measured damper curve for the car or its class,
+   or a ride measurement over a cleat.
+2. **The cams on a box-edged cleat at speed**: 60 kN on a 10 cm cleat at 20 m/s, 2.5 times the
+   rigid disc's. Settling it needs cleat test data at speed (the tandem cam's published
+   validations are small cleats at low speed). C6b's rock checks are judged by impulse, which
+   agrees with R0's within 7-20 % (C6a3), so they are not held up by it.
+
+**C6c1. Hop in the wheel load (a measurement; no model change).** Offline first, for the
+predictions (same tools; `offline/` in the record):
+
+- On C6a's 2 cm washboard (one line at v / 0.7 m), the reference's (cams, R2's damper) load
+  amplitude rises from 1.6 kN at 7.1 Hz (5 m/s) to 4.0 kN at 14.3 Hz (10 m/s) and then holds at
+  3.7-3.8 kN to 28.6 Hz (20 m/s), with no peak over the plateau: the rig's damper damps the hop
+  heavily (about 0.55 of critical at the linear rate), and near 14 Hz the load clips at 0. On a
+  1 cm washboard the shape is the same (0.99 to 1.81 kN, flat from 14 Hz).
+- On an ISO 8608 class C random profile (400 m, 14 mm rms), the reference's load spectrum
+  peaks at 9.8 Hz at 10 m/s and 10.7 Hz at 20 m/s, 1.7 and 2.2 times its level at 4-6 Hz. With
+  a linear damper there is no peak in 4-40 Hz. The body's acceleration shows no hop peak with
+  either damper.
+
+So 066's check, "a 10-15 Hz peak in the chassis and wheel-load spectra on washboard", cannot
+hold even for the reference: washboard gives one line a speed, and the chassis shows no hop
+under the rig's damping. C6c1's check, proposed in its place:
+
+- **Washboard sweep**: the front-left wheel's load amplitude ((max - min) / 2, from the 480 Hz
+  inner-step loads) on the 2 cm washboard at 5, 7, 8, 9, 10, 12, 14 and 20 m/s (7.1 to
+  28.6 Hz), each within 30 % of the reference's at that speed, and rising to its plateau at
+  13-15 Hz as the reference's does.
+- **Random road**: the wheel load's spectrum on a class C section at 10 and 20 m/s, its peak
+  in 4-40 Hz within 2 Hz of the reference's on the same profile (offline 9.8 and 10.7 Hz) and
+  its height over its 4-6 Hz level within 30 % of the reference's.
+- Reported, not judged: the body's vertical acceleration spectrum (60 Hz steps: up to 30 Hz).
+- **Needs**: `fixture_drive` logging the inner-step loads (`load_inner`), the speeds above as
+  cases, and a fixture course `fixture_c6c` with C6a's washboard and a class C section. Whether
+  road_detail's roughness (R3) writes a class C section on a fixture course is checked writing
+  the code; if not, the profile goes in as a feature, as C6a's cleats did.
+- **Runs**: `fixture_drive` on GPU0 under both wheel queries as in C6a, one build, non-timing
+  (shared GPU0 allowed; codec told the start and end). Each run names siw and aib.
+- **118's predictions**: every washboard amplitude within 10 % of the reference's (offline,
+  ours is within 8 %; the worst, 2.39 against 2.59 kN at 7 m/s); the class C peak within 1 Hz
+  of the reference's. The body's 60 Hz force hold does not show in the wheel's load, which is
+  integrated at 480 Hz. Both queries alike (the load is our contact's whichever query runs).
+
+**C6c2. Grip loss on washboard (a model choice for 133 before any spec).** Friction follows
+the load linearly today (`friction_scale`), so a swinging load grips on average as the flat
+road does, and on 2 cm washboard the load stays above 0 (offline minimum 0.08-0.57 kN at
+10-20 m/s). Grip
+loss can come only from time in the air or from friction falling with load, as a real tire's
+does. A load-sensitive friction also acts on smooth road wherever load transfers, so "055's
+suite unchanged on smooth road" cannot hold with it, as it could not with R2's bars
+(2026-11-07). Options:
+
+- (a) load sensitivity on every world as the new baseline, 055's suite and aib's slope matrix
+  rerun and the changes reported, as the bars were;
+- (b) friction stays linear, and grip loss leaves R6's check, recorded as not modelled.
+
+118 recommends (a) only with a sourced coefficient for the car's tire class (an assumed value
+once moved the dry sine with dwell across its spin threshold); without one, (b). For scale
+(an estimate, not a prediction): with friction falling by a fraction a per unit of load over
+static, the mean grip falls by a times the variance of load over static; on the 2 cm washboard
+at 10-20 m/s (amplitude about 0.85 of static) that is about 3.6 % for a = 0.1.
+
+**Not proposed: nulling PhysX's spring** (066 R6's text). R5's difference force puts the body
+within 1.3 mm of PhysX alone on flat road and its predicted PhysX load within 0.3 % of
+PhysX's, and with the references matched nothing above points at the coupling. If C6c1's
+amplitudes miss while ours offline holds, the coupling is the suspect, and nulling comes back
+as its own spec.
+
+**Smooth-road A/B**: C6c1 changes no physics (a log column, a course, cases), so 055's suite
+and aib's slope matrix are not rerun for it; C6c2 (a) reruns both, paired as in C5.
 
 #### C6d's spec: sensors and Autoware on the rough record road (written 2026-11-24, before any run; approved to write by 133)
 
