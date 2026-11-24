@@ -23,12 +23,16 @@ Coefficients are never constants in a model: a model reads a named, cited parame
 import hashlib
 from pathlib import Path
 
+from .follower import IdmFollower
 from .walker import GapAcceptanceWalker
 
 SETS = Path(__file__).resolve().parent / "sets"
 
 gap_acceptance_walker = GapAcceptanceWalker
+idm_follower = IdmFollower
 
+# the models a scenario may name; idm_follower joins when its seats and batch sides exist (K13
+# steps ii and iii), so neither target takes it before then
 MODELS = {"gap_acceptance_walker": GapAcceptanceWalker}
 
 

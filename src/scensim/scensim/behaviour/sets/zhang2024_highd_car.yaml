@@ -1,0 +1,36 @@
+# An Intelligent Driver Model parameter set for scensim.behaviour:idm_follower (roadmap 092
+# K13). Copied from the source below; change nothing here: a new source is a new set. A run's
+# record names the set and this file's sha256.
+name: zhang2024_highd_car
+form: idm                     # a = a_max (1 - (v / v0)^delta - (s_star / s)^2)
+model_source:
+  authors: [Martin Treiber, Ansgar Hennecke, Dirk Helbing]
+  title: Congested traffic states in empirical observations and microscopic simulations
+  id: doi:10.1103/PhysRevE.62.1805
+  year: 2000
+source:
+  authors: [Chengyuan Zhang, Lijun Sun]
+  title: Bayesian Calibration of the Intelligent Driver Model
+  id: arXiv:2210.03571
+  doi: 10.1109/TITS.2024.3354102
+  year: 2024
+  licence: CC-BY-4.0
+  where: >-
+    Table I, row "Pooled MA-IDM (car)": the posterior mean of theta = [v0, s0, T, alpha, beta]
+    (checked against the PDF of arXiv v2, 2026-11-25); delta fixed at 4 (section V-C); s1 = 0
+  data: >-
+    highD (German motorways, drone video, 60 recordings, 25 Hz downsampled to 5 Hz, sections of
+    420 m); car-following longer than 50 s; 20 leader-follower pairs drawn, 10 with a car
+    following (this row) and 10 with a truck; 4 s segments; an MA-IDM, the residual a Gaussian
+    process (squared-exponential kernel)
+  note: >-
+    motorway-fitted. The paper calls v0 hard to identify from car-following data (section V-C);
+    the model takes v0 from its lane's speed limit, not from here. The units are not tabled;
+    they are the model's SI units (m/s, m, s, m/s^2, m/s^2).
+coefficients:
+  v0: 12.244      # m/s, desired speed (not used: the lane's limit)
+  s0: 2.833       # m, jam spacing
+  T: 1.133        # s, safe time headway
+  a: 0.362        # m/s^2, maximum acceleration (alpha)
+  b: 2.140        # m/s^2, comfortable deceleration (beta)
+  delta: 4        # the acceleration exponent, fixed by the paper
