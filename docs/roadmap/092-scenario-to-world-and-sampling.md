@@ -924,6 +924,13 @@ nothing random about the walker stays unsearched. The binding `draw = $accept_u`
 walker's controller properties, an entity property, not the FileHeader, so issue 131's rule
 (on FileHeader bindings) does not apply.
 
+**Host-independent paths (133, from K11c's proof).** K11c's records (`scenario.path`) and its
+runs' `outcome.json` (`scenario`) carry the checkout's absolute path; the path is not part of a
+record's identity, so K11c's ids are unaffected, but the files name the host. From K11d on, a
+search writes `scenario.path` as the spec writes it, and `search_run.py` names that in
+`outcome.json` (tests in `test_search.py` and `test_pointmass.py`). K11c's files keep the
+absolute form.
+
 **Predictions, fixed before the run.**
 
 1. The level reaches 0 (the stop rule, not the cap) within 6 generations.

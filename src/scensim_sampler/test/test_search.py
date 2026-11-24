@@ -174,6 +174,13 @@ class Files(unittest.TestCase):
         self.assertEqual(cell["interval_method"], "plain likelihood ratio, normal 95 %")
         self.assertAlmostEqual(cell["rate"], st["estimate"]["p"], places=15)
 
+    def test_records_name_the_scenario_as_the_spec_writes_it(self):
+        self.d.write("spec.yaml", spec(3, n=20))
+        st = S.init(self.d.path / "spec.yaml", self.d.path / "r")
+        for r in records(self.d.path / "r" / st["generations"][0]["records"]):
+            self.assertEqual(r["scenario"]["path"], "s.xosc")       # not this host's path
+            self.assertEqual(R.check(r), [])
+
     def test_an_outcome_missing_is_refused(self):
         self.d.write("spec.yaml", spec(3, n=50))
         out = self.d.path / "r"
