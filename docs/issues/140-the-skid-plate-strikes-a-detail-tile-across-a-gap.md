@@ -201,3 +201,23 @@ recheck (issues 137 and 139). Which change moved it is not yet known.
   at 1.674 m, sweep fails), so the flip is the tile offset's: a loose rock rests on the tiles,
   and its contacts with them changed. The rocks loaded as in this run (66 and 44 at
   embedded_15), since 139's queue changes when tiles arrive, not the offset.
+
+### The attribution run's and *rough_none*'s results (2026-11-24)
+
+- **The attribution run** (siw main 87591b4, no tile offset; both queries): loose_15 moved
+  1.674 m in raycast (passes) and 2.5 cm in sweep (fails), loose_8 1.1 cm and 5.0 cm, every
+  measure 128's recheck to the digit printed; embedded_15 and boulder_35 as before; 0 base
+  contacts. The rocks loaded at embedded_15 were 66, as with the offset. **118's prediction:
+  held.** The loose rocks' flip is the tile offset's: a loose rock rests on the tiles, and its
+  contacts with them now form within the rock's own reach plus 2 cm, not the tile's 0.33 m. The
+  loading change (80 to 66) came with issues 137 and 139.
+- ***rough_none* to the end** (siw `issue-140` 56b8e39): no contact between the plate and any
+  tile at t 16.45 to 16.70 s, no impulse on the chassis, 10.13 to 10.19 m/s and roll under
+  0.007 rad through step 994, the plate's least gap to the tile 8.96 cm; the run ended by itself
+  with the car at s 280.4 m. **118's prediction: held.**
+
+So the fix does what it is for, and moves C6b's two loose-rock verdicts in opposite directions:
+loose_15 now passes in sweep and fails in raycast, the reverse of before. That case was already
+known to turn on small changes (issue 122). Whether to keep the tiles' offset as it is, or also
+author the loose rocks' own offset so their contacts with the tiles keep a reach of their own,
+is 133's call.
