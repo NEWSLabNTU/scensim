@@ -211,3 +211,8 @@ depend on it is listed with the fix, not before.
 
 Not in this plan: the size of the sand's 0.21 (054's question, hypothesis 1 above) and
 Autoware's slope compensation (hypothesis 3).
+
+**P2's result (2026-11-25, on issue 158's F1):** the free arm creeps at 0.024 to 0.026 m/s, half
+the 0.052 to 0.055 before, and gravity, the soil and the road layer close to -85 N; the creep left
+is the ramp's alone. Details and the predictions' outcomes in issue 158's "Issue 157's P2 on F1".
+F2, the ramp, is 133's choice next.

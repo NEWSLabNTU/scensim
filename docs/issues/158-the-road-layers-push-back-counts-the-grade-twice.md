@@ -91,3 +91,34 @@ judged or reported against a fixed bar or a reference.
   - the rest of siw's suite as before F1 (the same environment's errors, none new).
 - **Next:** issue 157's P2 probe on F1 (Isaac, GPU0, non-timing), then the landing with its
   results, after 133's word.
+
+## Issue 157's P2 on F1 (2026-11-25, 04:48 to 04:51, 118)
+
+The free arm (no ECU, no torque) on `p157_sand`, siw probe158 4ca9246 (F1, 31adacc, with 157's
+probe extended to log the forces along the road; local, never landed) in gate-c5c for the run,
+restored to 30eb19a after; GPU0 empty at the start, non-timing (codec told); the scenario passed;
+962 records, 862 after the first 10 s. After the first 10 s (medians, 5th to 95th percentile):
+
+| quantity | P2 (F1) | 157's free arm (before F1) |
+|---|---|---|
+| speed, m/s | 0.0253 (0.0241 to 0.0261) | 0.0515 to 0.0557 |
+| gravity along the road, m g sin(pitch), N (m 1840 kg, pitch 3.29 deg) | 1036 (997 to 1063) | |
+| soil, as applied (-resistance x share x ramp), sum, N | -951 (-975 to -910) | |
+| road layer `dfx`, sum, N | 0.0 (every record under 0.05 a wheel) | about +1000 (158) |
+| m a - gravity - soil - dfx, N | -85 (-96 to -74) | |
+| PhysX's `WheelState.force[0]`, sum, N | -3867 (-3880 to -3837) | not logged |
+
+- **The creep halves**, from 0.052 to 0.055 m/s to 0.024 to 0.026: the ramp alone (its
+  equilibrium from one record's numbers, 0.1 x 991 / 3761 = 0.026 m/s). 158 was the other half.
+- **The forces along the road close without the tyres**: gravity, the soil and `dfx` leave
+  -85 N, 8 % of the pull, with the body's acceleration near 0.
+- **118's predictions:** `dfx` under 50 N held (0); the residual under 100 N held, taken
+  without the tyre field (-85 N); the creep at 0.026 to 0.028 m/s **failed**, just under it
+  (0.0241 to 0.0261); the tyres under 20 N **failed as measured**: aib's `WheelState.force[0]`
+  reads -930 to -1020 N a wheel, about 0.22 of each wheel's load, steady. As a force on the car
+  along the road it would decelerate it at 2.1 m/s^2 against a measured 0.00, so it is not one
+  here; what PhysX reports in that field at this speed (below its sticky-tyre threshold, 0.2
+  m/s) is not settled by this run, and nothing here uses it.
+- So 157's creep is now the ramp's alone, F2's question; 158 is fixed by F1 for the creep.
+
+Record: NAS "2026-11-25 issue 158 F1 and 157 P2 (118)".
