@@ -159,3 +159,28 @@ That is the shape of acb's view of the frames running one tick behind the server
 delay the method names as its limit), not of an asynchronous call lost in flight; this trace
 cannot tell the two apart, which needs the world server's tick-start time on the same clock
 (`CLOCK_MONOTONIC`). Outside the stretch, every judged frame held acb's control in its tick.
+
+## Step 3: the server's tick times on the same clock (2026-11-24, 133 approved)
+
+Step 2 could not tell a control that reached CARLA late from acb's view of the frames running
+behind the server's. So the CARLA world server stamps `CLOCK_MONOTONIC` just before its call to
+`world.tick()` for the step's last tick and again when it returns, and reports both in the step
+reply; the truth's frame carries them (`tick_mono_ns`, `tick_return_mono_ns`), and its episode
+the world server's boot id (`/proc/sys/kernel/random/boot_id`). acb's apply trace names its own
+boot id in its header. `CLOCK_MONOTONIC` compares only within one boot of one host, so
+`apply_alignment.py` refuses the timed comparison, by name, when the two boot ids differ or one
+is missing.
+
+With the times, a frame whose control was not held is `late` when its expected send left before
+the tick's start stamp, and `after_tick` when it left after it (acb's view was behind). The
+start stamp is taken on the client just before `tick()`; the server begins the tick a little
+later, by up to the call's send latency, so a control sent inside that window and not held would
+be labelled `after_tick` though it was late. That window is bounded and measured: the
+distribution of (return minus start) is reported beside the labels, with how many `after_tick`
+sends fall within its p95 of the start stamp.
+
+**Prediction, written before the runs** (dev_trace, `town01_ego_drive`, three runs on one fresh
+stack): every frame step 2's rule calls `late` is `after_tick` here, sent after the tick began;
+truly `late` frames are 0; if no such stretch recurs in three runs, that is said, and step 2's
+nine frames stay unjudged (their tick times were not recorded); the tick's p50 is unchanged
+within noise (one more `clock_gettime` a tick).
