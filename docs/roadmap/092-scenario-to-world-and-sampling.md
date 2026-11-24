@@ -1063,3 +1063,47 @@ fails. For a variable whose base is uniform, the next spec starts g0 at the base
 uniform kept for g0 and refitted to a truncated normal from g1, or a beta family, which holds
 the uniform exactly (beta(1, 1)).
 
+**K11d's prediction 1: failed** (2026-11-24 13:38). The level did not reach 0 within 6
+generations: g0 to g5 0.431, 0.429, 0.423, 0.423, 0.425, 0.423 (failures 8, 10, 9, and 9 to 13
+after). The run goes on to its cap; predictions 2 to 4 are judged on its fresh stage.
+
+### K11e's spec: a score sloped on the waiting branch, and g0 at the base (2026-11-24, 241; for 133's review, before any code or run)
+
+K11e addresses both causes named for K11c's and K11d's flat levels, and changes nothing else
+from K11d (the same scenario, base, five searched variables, ego, runner, N 1000, seed 11).
+
+**1. The score, sloped on the waiting branch.** At its one decision the walker goes if
+U > logit(u), the threshold. Its margin is m = logit(u) - U: negative when it went, positive when
+it waited, and the smaller m, the nearer it came to going (to the failure branch). The score:
+
+    score = gap                      if gap <= 0     (contact: a failure, unchanged)
+    score = gap + k * max(m, 0)      otherwise
+
+with the gap the closest gap, box to box (m), as before, and **k = 1 m per logit unit, invented**.
+A failure is still exactly gap <= 0: the added term is never negative and is added only when
+gap > 0. A walker that went and was avoided (m < 0, gap > 0) scores its gap; a walker that
+waited scores its plateau gap (0.40 to 0.60 m) plus its margin, so the plateau is ranked by how
+near it came to going, and every waiting walker ranks above every avoided one. k makes one logit
+unit outweigh the plateau's whole spread (0.2 m). The runner writes the margin it read
+(the batch walker's `record()`: `threshold_logit` and the decision's `u`) and both parts of the
+score in each outcome (`closest_gap`, `decision_margin`), so the score is recomputable.
+
+**2. g0 at the base for a uniform variable.** K11a turns a uniform into a centred truncated
+normal from g0, which put less mass where failures live (K11d's observation). From K11e a
+uniform variable stays uniform in g0, so g0 draws every variable from its base (weights all 1),
+and is refitted to a truncated normal within its range from g1 on, as before.
+
+**Predictions, fixed before the run.**
+
+1. g0 is the base: every g0 weight is 1, and g0's failures fall within 9 to 27 (K11c's g0 rate,
+   17 in 1000, the same base: its 95 % range for a new 1000).
+2. The level reaches 0 (the stop rule) within 10 generations.
+3. The elite's mean `accept_u` falls below 0.25 by g3 (K11d's stayed at 0.44 to 0.47).
+4. The fresh stage's 95 % interval overlaps K11c's g0 interval (Wilson [0.0106, 0.0271]) and
+   K11c's and K11d's fresh-stage intervals: one rate, one base.
+5. Its relative standard error is below K11c's and K11d's fresh stages'.
+
+If 2 fails with 3 met, the score is ranked but the cross-entropy still cannot reach the failure
+branch in 10 generations (rho or N, then). If 3 fails, the margin does not reach the elite (a
+fault to find before any reading). If 4 fails, the rate is not used.
+
