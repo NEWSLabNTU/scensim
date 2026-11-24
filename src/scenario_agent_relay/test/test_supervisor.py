@@ -2,7 +2,6 @@
 the relay routes `restart` to it when the agent cannot restart itself, and the supervisor
 replaces the whole process group, after which the agent registers again."""
 
-import os
 import sys
 import tempfile
 import threading
@@ -10,7 +9,7 @@ import time
 
 import scensim_agent
 from scensim_agent import protocol as P
-from scensim_agent.supervise import Group, Supervisor
+from scensim_agent.supervise import Group, Supervisor, group_alive
 from scenario_agent_relay.server import AgentServer
 
 
@@ -53,12 +52,8 @@ def test_restart_goes_to_the_supervisor_and_the_agent_comes_back():
             reply = c.command("ego", P.RESTART, timeout=20.0)
         assert reply["status"] == P.OK, reply
         assert group.pgid != first_pgid
-        try:
-            os.killpg(first_pgid, 0)
-            alive = True
-        except ProcessLookupError:
-            alive = False
-        assert not alive  # the old group is gone, by process group
+        # the old group is gone, by process group; a zombie in it is gone too (issue 153)
+        assert not group_alive(first_pgid)
         assert wait_until(lambda: server.session("ego") is not None
                           and server.session("ego") is not first, 20.0)
     finally:

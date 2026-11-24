@@ -63,6 +63,7 @@ from scensim import overlays as overlaysmod, vehicles as vehiclesmod, world as w
 from scensim import launcher as launchermod, timeline as timelinemod, tools as toolsmod
 from scensim import attachments as attachmentsmod, autoware as autowaremod
 from scensim import component as componentmod
+from scensim import groups as groupsmod
 from scensim import assets as assetsmod
 from scensim.config import ConfigError
 
@@ -1409,7 +1410,7 @@ def stop_processes(procs, grace=STOP_GRACE):
         if now - checked.get(p.pid, 0.0) < GROUP_POLL:
             return True
         checked[p.pid] = now
-        return _group_alive(p.pid)
+        return groupsmod.group_alive(p.pid)
 
     live = [p for p in procs if alive(p)]
     for sig, wait in ((signal.SIGINT, grace), (signal.SIGTERM, 10.0), (signal.SIGKILL, 5.0)):
@@ -1496,27 +1497,6 @@ def stop_incomplete(stack_dir: Path) -> bool:
         return False
     last = len(events) - 1 - events[::-1].index("stack.stopping")
     return "stack.stop" not in events[last + 1:]
-
-
-def _group_alive(pgid) -> bool:
-    """Any process left in group ``pgid`` (zombies excluded: init reaps them)."""
-    try:
-        os.killpg(pgid, 0)  # cheap: nothing of the group, not even a zombie
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    for d in os.listdir("/proc"):
-        if not d.isdigit():
-            continue
-        try:
-            with open(f"/proc/{d}/stat") as f:
-                fields = f.read().rsplit(")", 1)[1].split()
-        except OSError:
-            continue
-        if fields[0] != "Z" and int(fields[2]) == pgid:
-            return True
-    return False
 
 
 class Pilots:

@@ -714,13 +714,8 @@ def test_a_started_carla_dies_with_a_killed_keeper(tmp_path):
     child = int(pidfile.read_text())
     keeper.kill()
     keeper.wait()
-    deadline = time.time() + 10
-    while time.time() < deadline:
-        try:
-            os.kill(child, 0)
-        except ProcessLookupError:
-            return
-        time.sleep(0.05)
+    if gone(child, within=10):   # an orphan: a zombie counts as gone (issue 153)
+        return
     os.kill(child, 9)
     raise AssertionError("the started CARLA outlived its SIGKILLed keeper")
 
@@ -766,13 +761,8 @@ def test_a_carla_deaf_to_sigterm_is_killed_after_its_keeper(tmp_path):
         raise AssertionError("the reaper never watched the stand-in CARLA")
     keeper.kill()
     keeper.wait()
-    deadline = time.time() + 15
-    while time.time() < deadline:
-        try:
-            os.kill(child, 0)
-        except ProcessLookupError:
-            return
-        time.sleep(0.05)
+    if gone(child, within=15):   # an orphan: a zombie counts as gone (issue 153)
+        return
     os.kill(child, 9)
     raise AssertionError("a CARLA that ignores SIGTERM outlived its SIGKILLed keeper")
 

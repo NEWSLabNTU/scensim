@@ -654,3 +654,48 @@ def test_an_overloaded_parallel_run_is_named_in_the_problem(tmp_path):
     problems, _ = t3.compare_rows(t3.read_summary(ref), t3.read_summary(csv_path))
     assert problems == ["a.xosc r0: failed, the reference passed "
                         "[overloaded run: mean load 78.4 (limit 32)]"]
+
+
+def test_the_three_copies_of_group_alive_are_identical_issue_153():
+    """scripts, scensim and scensim_agent each keep a copy rather than depend on another
+    package (issue 153): the same text in all three."""
+    import inspect
+    import re
+    root = Path(__file__).resolve().parents[1]
+    def text(path):
+        s = (root / path).read_text()
+        m = re.search(r"^def group_alive\(pgid\) -> bool:\n(?:(?:    .*)?\n)+", s, re.M)
+        assert m, path
+        return m.group(0).rstrip()
+    ours = inspect.getsource(t3.group_alive).rstrip()
+    assert text("src/scensim/scensim/groups.py") == ours
+    assert text("src/scensim_agent/scensim_agent/supervise.py") == ours
+
+
+def test_a_group_whose_only_member_left_is_a_zombie_is_gone_issue_153():
+    """A zombie keeps its group, so ``killpg(pgid, 0)`` alone calls it alive; under a PID 1
+    that never reaps, an orphaned one stays for good (issue 153)."""
+    import os
+    import subprocess
+    import time
+    p = subprocess.Popen(["true"], start_new_session=True)   # its own group; not reaped yet
+    try:
+        deadline = time.time() + 30
+        while open(f"/proc/{p.pid}/stat").read().rsplit(")", 1)[1].split()[0] != "Z":
+            assert time.time() < deadline, "the child never exited"
+            time.sleep(0.05)
+        os.killpg(p.pid, 0)   # the probe this replaces: the zombie still answers
+        assert not t3.group_alive(p.pid)
+    finally:
+        p.wait()
+    assert not t3.group_alive(p.pid)
+
+
+def test_a_group_with_a_live_member_is_alive_issue_153():
+    import subprocess
+    p = subprocess.Popen(["sleep", "30"], start_new_session=True)
+    try:
+        assert t3.group_alive(p.pid)
+    finally:
+        p.kill()
+        p.wait()

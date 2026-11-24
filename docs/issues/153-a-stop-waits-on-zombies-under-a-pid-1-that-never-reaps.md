@@ -1,6 +1,6 @@
 # 153: a stop waits on zombies under a PID 1 that never reaps
 
-**Status:** open (241; filed by 133). **Severity:** medium: under a PID 1 that never reaps its
+**Status:** fixed 2026-11-25 (241; filed by 133). **Severity:** medium: under a PID 1 that never reaps its
 orphans (a container started without `--init`, docker's default), four stop paths wait out
 every grace before they return, and one reports a stack that has stopped as not stopped. A
 released testbench run in such a container would hang this way. On a host whose init reaps,
@@ -97,17 +97,49 @@ pid is not the caller's child (an orphan that went to PID 1); for its own childr
 The other `killpg` calls in `scripts/` (the coop drivers, `acceptance_bag.py`,
 `carla_bench.py`, `test_ego_used.py`) send signals and do not probe.
 
-## Fix (planned)
+## Fix
 
-One helper, "is any process of group `pgid` left, zombies excluded": `os.killpg(pgid, 0)` first
-(no such group: gone; another user's process in it: alive), then a scan of `/proc/*/stat` for a
-member of the group whose state is not `Z`. It is `stack._group_alive`'s body, which already does
-this. Each package that probes a group gets its own identical copy rather than a dependency on
-another package: `scripts/t3.py`, `scensim` (the existing one, moved where `own_world` can import
-it without a cycle), and `scensim_agent` (the relay's test takes it from `scensim_agent`, which it
-already imports). Each stop path above uses it; the two `test_simulator` probes count a zombie as
-gone, as that file's `gone` does. Each package gets a test, naming this issue, that makes a group
-whose only member left is a zombie it does not reap and checks the helper calls it gone.
+One helper, `group_alive(pgid)`: is any process of the group left, zombies excluded.
+`os.killpg(pgid, 0)` first (no such group: gone; another user's process in it: alive), then a
+scan of `/proc/*/stat` for a member of the group whose state is not `Z`. It is the body
+`stack._group_alive` already had. Each package that probes a group keeps its own identical copy
+rather than depend on another package: `scripts/t3.py`, `scensim.groups` (a new module, so that
+`own_world` can import it without a cycle through `stack`; `stack` uses it too) and
+`scensim_agent.supervise`. `scripts/test_t3.py` checks that the three texts are the same.
 
-To be shown: the tables above, under the non-reaping subreaper, with the fix: every stop path
-back to its time without the subreaper, and the seven tests passing.
+- `t3.stop_group`, `own_world._stop`, `stack_cli._gone` and `supervise.Group.alive` ask
+  `group_alive`. When the group is gone, `stop_group` and `_stop` reap their leader (a zombie
+  of their own by then) before they return, as `stack.stop_processes` does.
+- The relay's `test_supervisor` asks `scensim_agent.supervise.group_alive`, from the package it
+  already imports.
+- `test_simulator`'s two stand-in CARLA probes use the file's `gone`, which counts a zombie as
+  gone.
+- New tests, each naming this issue, in `scripts/test_t3.py`, `test_stop_group.py` (scensim)
+  and `test_supervise_group.py` (scensim_agent): a child in a group of its own that has exited
+  and is not yet reaped answers `killpg(pgid, 0)`, and `group_alive` calls the group gone; a
+  sleeping one is alive.
+
+## Shown fixed (241, 2026-11-25)
+
+The same runs, on the fix (its sources ahead of main's install), under the non-reaping
+subreaper and without it (logs in `~/nas/autoveh/logs/153-zombies/`):
+
+| Test file | Without | Under the non-reaping subreaper |
+|---|---|---|
+| `scripts/test_t3.py` (with 3 new) | 32 passed, 8 s | 32 passed, 8 s |
+| `src/scensim/test/test_simulator.py` | 47 passed | 47 passed |
+| `src/scenario_agent_relay/test/test_supervisor.py` | 4 passed | 4 passed |
+| `src/scensim/test/test_stack.py` | 68 passed | 68 passed |
+| `src/scensim/test/test_stop_group.py` (with 2 new) | 8 passed | 8 passed |
+| `src/scensim_agent/test/test_supervise_group.py` (new) | 2 passed | 2 passed |
+
+| Stop path | Without | Under the non-reaping subreaper |
+|---|---|---|
+| `t3.stop_group` | 0.0 s | 0.0 s |
+| `own_world._stop` | 0.0 s | 0.0 s |
+| `supervise.Group.stop` | 0.0 s | 0.0 s |
+| `stack_cli._gone`, every member dead | True | True |
+| `stack.stop_processes` | 0.1 s | 0.1 s |
+
+Under the subreaper the orphan's zombie is still there after each stop, as it must be: only its
+parent can remove it. The stops no longer wait for it.

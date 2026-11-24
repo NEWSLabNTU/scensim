@@ -40,6 +40,7 @@ import subprocess
 import time
 
 from scensim.findings import Finding
+from scensim.groups import group_alive
 
 KEY = "server"
 NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
@@ -141,9 +142,8 @@ def _stop(proc, grace=10.0):
         end = time.time() + grace
         while time.time() < end:
             proc.poll()
-            try:
-                os.killpg(proc.pid, 0)
-            except ProcessLookupError:
+            if not group_alive(proc.pid):   # zombies excluded (issue 153)
+                proc.poll()   # the leader, a zombie now: reaped
                 return
             time.sleep(0.2)
 

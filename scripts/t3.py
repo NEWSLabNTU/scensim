@@ -733,10 +733,34 @@ def _on_hurry(signum, frame):
     _hurry = True
 
 
+def group_alive(pgid) -> bool:
+    """Any process left in group ``pgid``, zombies excluded. A zombie keeps its group, so
+    ``os.killpg(pgid, 0)`` alone counts it, and under a PID 1 that never reaps (a container
+    without an init) an orphaned zombie stays for good (issue 153). The same function is in
+    scripts/t3.py, scensim.groups and scensim_agent.supervise: keep the three identical."""
+    try:
+        os.killpg(pgid, 0)  # cheap: nothing of the group, not even a zombie
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            with open(f"/proc/{d}/stat") as f:
+                fields = f.read().rsplit(")", 1)[1].split()
+        except OSError:
+            continue
+        if fields[0] != "Z" and int(fields[2]) == pgid:
+            return True
+    return False
+
+
 def stop_group(pid: int, grace: float = 60.0, proc=None):
     """``pid``'s process group: SIGINT, then SIGTERM, then SIGKILL, ``grace`` s apart (or at
     once after a hurrying signal, ``_on_hurry``), until it is gone. ``proc``: t3's own child
-    leading it, reaped as it goes (a zombie still counts as a member of its group)."""
+    leading it, reaped as it goes; the group is gone when only zombies are left (issue 153)."""
     global _hurry
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
         try:
@@ -750,9 +774,9 @@ def stop_group(pid: int, grace: float = 60.0, proc=None):
                 break
             if proc is not None:
                 proc.poll()
-            try:
-                os.killpg(pid, 0)
-            except ProcessLookupError:
+            if not group_alive(pid):   # zombies excluded (issue 153)
+                if proc is not None:
+                    proc.poll()   # the leader, a zombie now: reaped
                 return
             time.sleep(1)
 

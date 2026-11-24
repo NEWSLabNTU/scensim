@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from scensim import config
+from scensim import groups as groupsmod
 from scensim import run as runmod
 from scensim import stack as stackmod
 
@@ -32,13 +33,7 @@ def live_stacks(logs) -> list:
 
 
 def _gone(pgid) -> bool:
-    try:
-        os.killpg(pgid, 0)
-        return False
-    except ProcessLookupError:
-        return True
-    except PermissionError:
-        return False
+    return not groupsmod.group_alive(pgid)   # zombies excluded (issue 153)
 
 
 def stop_live(rec: dict, grace=STOP_GRACE) -> bool:
