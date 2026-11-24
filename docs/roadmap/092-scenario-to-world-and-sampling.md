@@ -610,6 +610,53 @@ refused.
   - CARLA: the same suite refused by name before C7. After C7, the same scenario and knob pass
     with the zone read back, and C7's own acceptance runs it.
 
+### The protocol change, shared with 086 C7 (fixed 2026-11-25, for 118's C7 plan)
+
+One change to `scensim_world.proto`, shared by K9f-a (Isaac's side, the bridge's read) and C7
+(CARLA's side). Whichever lands first adds it as written here; the other cites it.
+
+```proto
+// in enum Capability:
+  // `scensim.zone.<id>.<field>` properties in `SetRoadCondition` (092 K9f-a, 086 C7): the server
+  // applies each field to that zone of its map's surface record and answers every
+  // `SetRoadCondition` with a `RoadConditionReply`, read back from what it now applies. Needs
+  // `ROAD_CONDITION`. A server without it is sent no `scensim.zone.` property by a check that
+  // knows; one that is sent one anyway refuses it, as before.
+  CAPABILITY_ROAD_ZONES = 13;
+
+// A zone's state as the server applies it after a `SetRoadCondition`.
+message ZoneApplied {
+  // The class of the table the zone now has (the condition's, else the map's).
+  string surface_class = 1;
+  // Its OpenSCENARIO wetness level (dry, moist, wetWithPuddles, lowFlooded, highFlooded).
+  string wetness = 2;
+  // Its water depth, m, when it has one (a ford); unset otherwise.
+  optional double water_depth = 3;
+  // The friction coefficient its surface now gives a tyre: the class's mu times the wetness
+  // factor, times the condition's friction_scale_factor (the class table's numbers).
+  double mu = 4;
+}
+
+// A server with `ROAD_ZONES` answers `SetRoadCondition` with the road state it now applies,
+// read from its own model (Isaac: the surface layer; CARLA: its friction trigger boxes and
+// tyre friction), for the world-wide part and every zone the condition named. A zone the
+// condition did not name is as the map has it and is not listed.
+message RoadConditionReply {
+  double friction_scale_factor = 1;
+  string wetness = 2;
+  map<string, ZoneApplied> zones = 3;
+}
+
+// in message Reply's oneof reply:
+    RoadConditionReply road_condition = 12;
+```
+
+No `PROTOCOL_VERSION` bump, by the file's own rule: only a server declaring `ROAD_ZONES` sends
+the reply, the bridge reads it only from one, and a capability an older peer does not know is
+one it never declares. The bridge records the reply in the gap trace (a `road` line per
+`SetRoadCondition`), and `scensim run` judges each knob-set zone against it: `result.json`
+`knobs.<knob>.zones.<id>` with the fields sent and read back, a mismatch an error run.
+
 ### K9f-b: prop layouts as a knob
 
 - **The form.** A layout is a list of props beside the map, `<map>/layouts/<name>.yaml`. Each
