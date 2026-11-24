@@ -2049,6 +2049,18 @@ fords; a zone's water depth asked for is refused by name).
   118's predictions: (a) absolute; (b) all four, the trigger acting on the car's overlap, not
   per wheel; (c) back to the value the car had on entry; (d) yes; (e) no measurable cost at 20
   boxes; (f) a step under 0.05 m/s and 0.5 deg/s.
+  *Added by 133, 2026-11-25, before P0 ran* (CLAUDE.md's 0.9.16 notes):
+  (g) two Model 3s of one blueprint, one in a trigger box, then a per-wheel
+  `apply_physics_control` on that one: does the other's tyre friction change? 0.9.16 shares a
+  blueprint's tyre object among its cars (the last applied wins; the world server hands it to a
+  decoy). 118's prediction: both leak, the trigger's value and the apply's both reaching the
+  other car, since both write the shared tyre object. If either leaks, split-mu option (i) is
+  out.
+  (h) the apply's rebuild: the speed every tick around a mid-drive `apply_physics_control`, raw
+  and with the velocity set back after it as the world server does (`apply_kept`). 118's
+  prediction: raw, the speed falls to near 0 at the apply (the PhysX vehicle rebuilt at rest);
+  with the velocity set back, a dip of one tick and under 0.05 m/s after it, which is what (f)
+  above means.
 - **C7a, zones as boxes** (code, after P0): the server finds the map's `surfaces.yaml` as the
   Isaac server does (the map directory or the project's state, `names`), turns each zone's
   polygon into oriented boxes (a rectangle within 1 cm is one box; otherwise strips along its
