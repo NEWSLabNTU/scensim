@@ -115,3 +115,26 @@ is the centre test and agrees with `Detail.touches` on every tile.
 - **118's prediction:** with the skip, all three pass; on siw 56b8e39 (no skip) the identity
   passes (the same code path) and the time test fails (the off-road tile costs about what an
   on-road one does).
+
+### Step 1's test result (2026-11-24)
+
+siw `issue-142` c6ec980: the three tests pass (22 s). On 56b8e39's code the identity passes (the
+same projection) and the time test fails, three off-road tiles costing 1.04 s of CPU against
+0.88 s for three on it; the centre-test test fails there too (no skip). The siw suite passes
+(459 tests). **118's prediction: held.**
+
+## The worker's throughput against speed (before the run)
+
+`throughput142.py` (no Isaac, CPU only): a virtual car drives a record's centreline at a fixed
+speed in real time, asking `Detail.prefetch` every 1/60 s for `RoadLayer._ahead`'s tiles through
+the real TileProcess, built as `RoadLayer` builds it; a road tile's lead is its centre's u less
+the car's u when it became ready. Haruna's record (C6b's *rocks* map, u 100 to 1100 m) at 8.3,
+11.1, 13.9, 16.7 and 20 m/s, and fixture_c6b's at 11.1 m/s, on siw 87591b4 (main's tile code,
+no skip) and c6ec980 (the skip), the host otherwise idle.
+
+- **118's prediction:** on fixture_c6b the skip brings the worker's median back under 60 ms and
+  the least road-tile lead to 30 m or more. On Haruna, whose winding road touches most tiles
+  prefetched ahead, the skip changes little: the worker's median stays near 300 ms (the
+  projection, 213 ms of it), about 3 tiles a second, and the least road-tile lead is negative
+  from 13.9 m/s up on both codes. If so, step 2 is a cheaper projection: culling the segments
+  per block of a tile rather than per tile (exact, as issue 128's), not a second worker.
