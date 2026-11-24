@@ -301,3 +301,19 @@ siw suite passes (468 tests).
 - **118's prediction for the throughput with all four steps** (the same driver, real `_ahead`,
   Haruna, host idle): the worker's median under 200 ms; the least road-tile lead at least 40 m at
   13.9 m/s, at least 30 m at 16.7 m/s, and at least 15 m at 20 m/s.
+
+### The throughput with all four steps (2026-11-24)
+
+siw a547571, host load 1.8 at the start.
+
+| speed | worker median, tiles/s | least lead (p05), m |
+|---|---|---|
+| 8.3 m/s | 207 ms, 1.16 | 50.7 (54.0) |
+| 11.1 m/s | 199 ms, 1.55 | 48.2 (52.3) |
+| 13.9 m/s | 189 ms, 1.97 | 43.5 (57.9) |
+| 16.7 m/s | 187 ms, 2.39 | 41.7 (61.7) |
+| 20 m/s | 179 ms, 2.92 | 28.4 (61.2) |
+
+**118's prediction:** the least lead at least 40 m at 13.9, 30 m at 16.7 and 15 m at 20 m/s
+**held** (43.5, 41.7, 28.4); the worker's median under 200 ms **held** from 11.1 m/s up and
+**failed** at 8.3 m/s (207 ms).
