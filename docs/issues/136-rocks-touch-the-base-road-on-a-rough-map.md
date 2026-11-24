@@ -49,3 +49,6 @@ The fix (siw 1535c3b) writes the pool's membership before `reserve` returns, and
 self-check names any collider left out of its group. This map's run, as 136 found its 12
 (`fixture_cost --follow --cars 1 --guard-ms 10000`, to 280.4 m): **0 rocks on the base**, the
 guard passing (first frames' largest 182 ms). Record: issue 145's doc, `g136_1535c3b_rough_rocks.*`.
+
+That run reaches s 280.4 m. On the same map, 086 C6d's live runs (1.47 km) still log 10 or 11
+base contacts a drive past it: issue 152.

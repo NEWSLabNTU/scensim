@@ -362,3 +362,8 @@ worker's `BrokenPipeError` at exit (issue 139's follow-up).
 
 **Status:** fixed by the pool's order. Issue 136's 12 on the rough map are the same mechanism
 and go to 0 with it. 136's own doc records that, and C6d's runs are no longer blocked by it.
+
+**The proof's reach (2026-11-24, after 086 C6d).** The proof ran `fixture_cost`, not the live
+world server, and on the rough map only to s 280.4 m. 086 C6d's live runs on the rough map, with
+this fix, still log 10 or 11 base contacts a 1.47 km drive, the first at about 409 m. Those are
+issue 152's.
