@@ -83,7 +83,7 @@
         <Actors selectTriggeringEntities="false"><EntityRef entityRef="lead"/></Actors>
         <Maneuver name="brake"><Event name="brake" priority="override" maximumExecutionCount="1">
           <Action name="brake"><PrivateAction><LongitudinalAction><SpeedAction>
-            <SpeedActionDynamics dynamicsShape="linear" value="-$decel" dynamicsDimension="rate"/>
+            <SpeedActionDynamics dynamicsShape="linear" value="$decel" dynamicsDimension="rate"/>
             <SpeedActionTarget><AbsoluteTargetSpeed value="0"/></SpeedActionTarget>
           </SpeedAction></LongitudinalAction></PrivateAction></Action>
           <StartTrigger><ConditionGroup><Condition name="brake" delay="0" conditionEdge="none">
