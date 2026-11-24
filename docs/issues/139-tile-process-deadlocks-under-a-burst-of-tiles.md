@@ -65,3 +65,18 @@ timeout.
   `Detail.pending` was empty. The whole siw suite passed (454 tests, with ROS for the launch
   tests).
 - **118's prediction: held.**
+
+## The rocks loaded at embedded_15 (133, before the runs)
+
+C6b's fixtures load fewer rocks at embedded_15 since issue 128's recheck: at most 66 loaded and
+44 prims, against 80 and 48 (siw 637b454), the same with or without issue 140's offset. 133's
+worry: if 139's queue drops a tile that is still wanted and nothing asks again, rocks near the
+car go missing. Between 637b454 and 87591b4 lie issues 132 and 134 (31593ab), 137 (4df3198) and
+139 (87591b4). Three raycast runs of the fixtures, the same map: on 31593ab, on 4df3198, and on
+87591b4 with every drop logged (its key and time, and whether the tile was made later).
+
+- **118's prediction:** no tile is dropped in the whole run: the only caller that asks for tiles,
+  `RoadLayer.before_substep`, prefetches those ahead of the car (about ten keys a step, under 64
+  waiting). The change is issue 134's (31593ab already loads 66): 134 changed what comes back
+  with a tile and when a tile with no road is taken as empty, which is where the rock layer looks
+  for its rocks. 4df3198 and 87591b4 load 66 as well.
