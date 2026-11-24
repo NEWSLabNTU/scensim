@@ -496,7 +496,30 @@ converted the same number back, 60.000001: an echo of an impossible angle, not t
 of attempt 3. So step 2a's knob line is withdrawn (its other lines stand: the ego's perception
 is lidar's, which no light changes) and step 2b's knob line is FAILED. Nothing checked the
 unit: the unit test's `ENV_WORLD` used 60 too, as did the docs' example and both
-testbenches. The fix is proposed to 133 before any rerun.
+testbenches, and 133's own note setting the Isaac prediction said "sun_elevation 60" (133 asked
+that this be recorded too). The unit was assumed, not read; the bridge's doc comment said rad.
+
+**The fix and the reruns (133's OK, 2026-11-25, before any code or rerun).**
+1. One rule in `knobs`, for the check and the run: each environment field's unit and range,
+   `sun_elevation` [-pi/2, pi/2] rad, `sun_azimuth` [0, 2 pi) rad, `fog_visual_range` above 0 m,
+   `precipitation_intensity` 0 or more mm/h, `cloud_cover_oktas` [0, 8]. A static value, or a
+   profile knob's declared range, outside it is refused by name, naming the unit and, for an
+   angle, the conversion ("60 deg is 1.0472 rad"). The bridge's JSON is unchanged.
+2. Both testbenches declare illumination day as `environment: {sun_elevation: 1.0471975511965976}`
+   (pi/3, 60 deg); the docs' examples say rad and use pi/3; the tests use radians, and one shows
+   60 refused.
+3. The reruns, predicted here before them. Step 2a again (CARLA, pm=current), as predicted
+   above but for the knob: `illumination.sun_elevation` read back 1.0472 rad on every frame
+   after its send, within 1e-3 plus 1e-4 of the value, 0.0011 rad (0.06 deg); CARLA's
+   `sun_altitude_angle` shows 60.0 deg, attempt 3's sun (read from the world server's log or
+   get_weather, recorded). Step 2b again (Isaac, both), with the same waiter and conditions:
+   as predicted above, with the same read-back of 1.0472 rad within 0.0011 rad from Isaac's
+   `ENVIRONMENT_APPLIED`.
+4. A note: the CARLA world server stores the angle it is given and its read-back converts the
+   same number back, so on CARLA a read-back is no physical check of an angle out of range.
+   The rule in 1 closes that for knobs; issue 161 (243, after K9f; K9e does not wait for it)
+   makes the world servers validate `SetEnvironment`'s fields themselves, refusing by name,
+   and read back the physical value.
 
 **Step 3, the close-out.** K9's row to done, with the Isaac result; scenario-description.md's
 "the same names on every target" marked built. D2's region-scoped knobs (`applies:`) and
