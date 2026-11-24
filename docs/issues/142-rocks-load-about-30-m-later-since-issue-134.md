@@ -413,3 +413,17 @@ boulder_35 passes).
   at 10 m/s on siw main 56b8e39 (issues 137, 139, 140; not 142).
 - **118's prediction for it:** base contacts again (a few), so they are not 142's; the rocks'
   leads on Haruna as short (the pace).
+
+### The attribution run (2026-11-24)
+
+The same Haruna drive at 10 m/s on siw main 56b8e39 (no 142): 9 base contacts, least in-path
+lead 2.9 m (29 of 35 under 35 m), no local makes, at 21.9 frames a second (about real time: its
+frames waited for their tiles, `tile_of` waiting on the worker's job). **118's prediction:
+held** (base contacts there too, so not 142's; leads as short).
+
+So on Haruna the leads are as short on main at real time (its straight line) as with 142 at four
+times real time (the pace); 142 at real time is not yet measured.
+
+- **118's prediction for it** (the same drive, siw 8547b30, `fixture_cost`'s frames paced to
+  the wall clock, 20 a second): the least in-path lead at least 35 m, no local makes, base
+  contacts as on main (a few).
