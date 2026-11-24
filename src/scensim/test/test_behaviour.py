@@ -279,22 +279,21 @@ def test_a_hidden_walker_appears_at_its_start_gap_and_decides_at_the_kerb():
                                                      abs=0.11)
 
 
-def test_a_given_draw_is_the_threshold_on_numpy_and_torch_and_the_seed_is_unchanged():
+@pytest.mark.parametrize("name", ["numpy", "torch"])
+def test_a_given_draw_is_the_threshold_on_numpy_and_torch_and_the_seed_is_unchanged(name):
     """092 K11d: `draw` is the episode's u itself, so the threshold is logit(draw) in every
-    xp form; without it the seed's draw stands, as before."""
+    xp form; without it the seed's draw stands, as before. torch through the probe, as the
+    file's other torch tests (issue 151): a torch that does not work with this NumPy skips."""
+    if name == "torch":
+        usable_torch()
     u = 0.3
     want = math.log(u / (1 - u))
-    seeds = [11, 12]
-    for name in ("numpy", "torch"):
-        try:
-            xp = xpmod.namespace(name)
-        except (ImportError, ValueError):
-            continue
-        m = w.GapAcceptanceWalker([{"draw": u}, {}], seeds, [anchors()] * 2, xp)
-        th = [float(x) for x in xp.to_host(m.threshold)]
-        assert th[0] == want
-        assert th[1] == w.GapAcceptanceWalker.draw(12)
-        assert th[1] == math.log(random.Random(12).random() / (1 - random.Random(12).random()))
+    xp = xpmod.namespace(name)
+    m = w.GapAcceptanceWalker([{"draw": u}, {}], [11, 12], [anchors()] * 2, xp)
+    th = [float(x) for x in xp.to_host(m.threshold)]
+    assert th[0] == want
+    assert th[1] == w.GapAcceptanceWalker.draw(12)
+    assert th[1] == math.log(random.Random(12).random() / (1 - random.Random(12).random()))
 
 
 def test_the_draw_is_checked_and_decides_go_or_wait():

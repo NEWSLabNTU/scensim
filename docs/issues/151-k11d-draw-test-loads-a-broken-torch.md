@@ -1,6 +1,6 @@
 # 151: K11d's draw test loads a torch that does not work with this NumPy, and fails
 
-**Status:** open (241; filed by 133, 2026-11-24). **Severity:** low: a test; `just test` fails on
+**Status:** fixed 2026-11-24 (241; filed by 133). **Severity:** low: a test; `just test` fails on
 a host whose user site holds a NumPy the system torch was not built for, on a test of code that
 is fine.
 **Found:** 2026-11-24, scensim 243, in the gate of issue 149 (59439b38): the only failure;
@@ -35,3 +35,8 @@ The test is parametrized over `numpy` and `torch`, and its torch case goes throu
 `usable_torch()` before touching torch, as the file's other torch tests do: the NumPy half always
 runs, the torch half skips with the reason where torch does not work with this NumPy, and any
 other torch failure still fails. Nothing is caught around the assertions.
+
+Shown the same way (241, the stub first on `PYTHONPATH`, the user site off): `test_behaviour.py`
+15 passed, 2 skipped, the two skips being this test's torch case and the bit-for-bit test, each
+naming the NumPy ABI mismatch; without the stub, 17 passed. 241's own torch imports with its
+user site, so the stub stands in for 243's host.
