@@ -17,7 +17,9 @@ body pose, and the body's `origin_offset` (the latched entities topic) is taken 
 absent for that frame. Velocities are the entity origin's too (the body's, less the yaw rate
 times the offset). The model steps, and the frame's commands go out as one datagram answering
 that frame's `sim_frame`. A model whose entity or the ego is absent from a frame
-sends nothing for it (the world keeps its last command). Its decisions (the model's events)
+sends nothing for it (the world keeps its last command). Before SSv2 starts NPC logic (the
+frame's `npc_logic_started` false, the frames S) no model steps or commands, as SSv2 holds its
+own NPCs (issue 163); each frame is still answered. Its decisions (the model's events)
 are written, one JSON line per event, to `$SCENSIM_ATTACHMENT_DIR/decisions.jsonl` (D6),
 where K10's agreement check reads them.
 
@@ -49,8 +51,9 @@ class Runner:
         self.prev_t = self.prev_v = None
 
     def on_frame(self, frame: dict) -> dict:
-        """`frame`: {"frame", "sim_frame", "sim_time_ns", "entities": {name: (x, y, yaw, vx,
-        vy) or None when absent}}. Sends the frame's datagram; returns its commands."""
+        """`frame`: {"frame", "sim_frame", "sim_time_ns", "npc_logic_started", "entities":
+        {name: (x, y, yaw, vx, vy) or None when absent}}. Sends the frame's datagram; returns
+        its commands (none before SSv2 starts NPC logic, issue 163)."""
         np = self.np
         t = frame.get("sim_time_ns")
         dt = ((t - self.prev_t) / 1e9 if t is not None and self.prev_t is not None
@@ -62,6 +65,12 @@ class Runner:
                       ((ego[3] - self.prev_v[0]) / dt, (ego[4] - self.prev_v[1]) / dt))
             self.prev_v = (ego[3], ego[4])
         commands = {}
+        if not frame["npc_logic_started"]:
+            # SSv2 holds its NPCs until startNpcLogic, and a model is NPC logic: no step, no
+            # command, the entity at its Init pose (issue 163). The frame is still answered,
+            # so the tick gate never waits on it.
+            self.gate.send(int(frame["sim_frame"]), commands)
+            return commands
         for name, m in self.models.items():
             me = frame["entities"].get(name)
             if me is None:
@@ -185,7 +194,7 @@ def frame_of(msg, offsets) -> dict:
         wz = msg.angular_velocities[3 * k + 2]
         ents[name] = (x, y, yaw, *entity_velocity(v[0], v[1], wz, p[0], p[1], x, y))
     return {"frame": msg.frame, "sim_frame": msg.sim_frame, "sim_time_ns": msg.sim_time_ns,
-            "entities": ents}
+            "npc_logic_started": bool(msg.npc_logic_started), "entities": ents}
 
 
 def main(argv=None) -> int:

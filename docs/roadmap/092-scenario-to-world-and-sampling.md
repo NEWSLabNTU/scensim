@@ -1714,3 +1714,14 @@ walker's 1.5e-4 m.
 or its stop; the lead's under 0.03 m; `stopped` at the same frame on both sides. A disagreement
 is named by run, column and number, and its cause found before anything is rerun.
 
+**Run 1 (2026-11-25): failed, on items 2 and 4; two defects, issues 163 and 164.** Outcomes
+passed on both, the ego 0, every element offset 0, the lead within 6.0e-5 m; the follower 4.73,
+7.49 and 5.20 m apart and its decisions unmatched. Issue 163: the seats runner stepped models
+from the first truth frame, before SSv2's `startNpcLogic`, the batch from S, so the seats
+follower ran 8 to 15 frames ahead. Issue 164: the batch recorder named the follower's events with
+the walker's table. Rows: `~/nas/autoveh/logs/k13-check3/run1/`. The rule is unchanged (133):
+the failures were defects. Tooling, not the subject: `agreement_run.py` passes the map's
+resolved anchors to `BatchRun` (its `--map`, as the seats runner reads them), which a
+car-follower's lane needs; without it the batch side could not start. Check 2 is rerun after 163
+(133), then run 2.
+

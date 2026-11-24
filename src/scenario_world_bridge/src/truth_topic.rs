@@ -79,11 +79,14 @@ impl TruthState {
     /// The frame after SSv2 step `frame`: one row per alive entity, in spawn order, with the
     /// simulator's state from `state_of` (by sim id; `None`: not in the snapshot, the row's
     /// values 0 and `present` false). Takes the contacts and signals gathered since the last.
+    /// `npc_logic_started` is SSv2's for the frame (scensim issue 163: a model on seats waits
+    /// for it, as SSv2's own NPCs do).
     pub fn frame<F>(
         &mut self,
         frame: u64,
         sim_time_ns: i64,
         sim_frame: u64,
+        npc_logic_started: bool,
         mut state_of: F,
     ) -> TruthFrame
     where
@@ -95,6 +98,7 @@ impl TruthState {
             frame,
             sim_time_ns,
             sim_frame,
+            npc_logic_started,
             index: Vec::with_capacity(n),
             names: Vec::with_capacity(n),
             present: Vec::with_capacity(n),
@@ -235,7 +239,7 @@ mod tests {
             other_type: "vehicle".into(),
             impulse: 30.0,
         });
-        let f = t.frame(7, 1_000_350_000_000, 5007, |id| {
+        let f = t.frame(7, 1_000_350_000_000, 5007, true, |id| {
             (id == 10).then(|| sim(4.0, true))
         });
         assert_eq!(
@@ -253,9 +257,14 @@ mod tests {
         assert_eq!(f.velocity_measured, [true, false]);
         assert_eq!(f.signals.len(), 1);
         assert_eq!(f.contacts[0].impulse, 30.0);
+        assert!(f.npc_logic_started);
         // Events go out once.
-        let f = t.frame(8, 1_000_400_000_000, 5008, |_| None);
+        let f = t.frame(8, 1_000_400_000_000, 5008, false, |_| None);
         assert!(f.signals.is_empty() && f.contacts.is_empty());
+        assert!(
+            !f.npc_logic_started,
+            "SSv2's flag for the frame (issue 163)"
+        );
     }
 
     /// The topics on a real ROS graph: a frame arrives, and a subscriber that joins after the
@@ -317,7 +326,9 @@ mod tests {
             frame += 1;
             let f = topic
                 .state
-                .frame(frame, 1_000_000_000_000, frame, |_| Some(sim(1.0, true)));
+                .frame(frame, 1_000_000_000_000, frame, true, |_| {
+                    Some(sim(1.0, true))
+                });
             topic.publish_frame(f);
             executor.spin(SpinOptions::default().timeout(Duration::from_millis(100)));
         }

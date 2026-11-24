@@ -118,7 +118,9 @@ Signals are events, not repeated every frame: a reader keeps the last state per 
 
 ## 4. The topic
 
-`TruthFrame` carries one frame: `episode`, `frame`, `sim_time_ns`, `sim_frame`, and one row per
+`TruthFrame` carries one frame: `episode`, `frame`, `sim_time_ns`, `sim_frame`,
+`npc_logic_started` (SSv2's for the frame, as the file's; a model on seats waits for it, issue
+163), and one row per
 entity alive, in spawn order: `index` (its slot), `names`, `present` (the simulator had the body),
 and flat row-major arrays `poses` (six values a row, as the file's), `velocities` and
 `angular_velocities` (three a row), `velocity_measured`; then the contacts and signal changes

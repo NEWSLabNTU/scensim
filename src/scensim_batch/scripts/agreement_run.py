@@ -60,6 +60,17 @@ def _seats_outcome(run_dir):
     return json.loads(p.read_text()).get("verdict")
 
 
+def resolved_anchors(map_dir):
+    """The map's resolved anchors (K9's anchors.resolved.json), as the seats runner reads them
+    (scensim.behaviour.seats.build), for a car-follower's lane (092 K13); {} without a map
+    directory or the file."""
+    if not map_dir:
+        return {}
+    from scensim_sampler import anchors as SA
+    f = Path(map_dir) / SA.RESOLVED
+    return SA.load_resolved(f, map_dir=map_dir) if f.is_file() else {}
+
+
 def from_truth(a, run_dir, trace, S, A):
     """092 K10's agreement: BatchRun on the seats ego's truth (no engine), the models' poses
     and decisions, the storyboard and the outcome against the seats run."""
@@ -79,7 +90,8 @@ def from_truth(a, run_dir, trace, S, A):
     states = A.ego_states(trace, S, steps, ego_name)
     run = core.BatchRun(c, world, TruthPlayback(states),
                         ecu_batch.load_batch(NoComponent, {}, {}, [0]), points=a.route_points,
-                        allow_loop=True, start_frames=S, step_time=step_time)
+                        allow_loop=True, start_frames=S, step_time=step_time,
+                        anchors=resolved_anchors(a.map))
     run.reset()
     rec = A.BatchRecorder(run)
     rec.record(run.obs)
@@ -136,7 +148,9 @@ def main(argv=None):
     ap.add_argument("--scenario", required=True)
     ap.add_argument("--world", required=True)
     ap.add_argument("--map", default="", help="the map directory the run used (its digest "
-                    "checks the export; with --ego-from-truth it may be left out)")
+                    "checks the export, its anchors.resolved.json gives a car-follower's "
+                    "lane; with --ego-from-truth it may be left out when no model needs "
+                    "an anchor)")
     ap.add_argument("--ego", help="aib's ego config (engine runs)")
     ap.add_argument("--commands", help="the replay pilot's commands (engine runs)")
     ap.add_argument("--ego-from-truth", action="store_true",

@@ -173,3 +173,31 @@ class AgreementTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModelEventNames(unittest.TestCase):
+    """Issue 164: the batch recorder names each model's events from that model's own table, as
+    the seats runner does, not the walker's for every model."""
+
+    def setUp(self):
+        sys.path.insert(0, str(HERE.parents[1] / "scensim"))
+        try:
+            import numpy  # noqa: F401
+            import scensim.behaviour  # noqa: F401
+        except ImportError as e:
+            self.skipTest(f"scensim.behaviour is not importable here ({e})")
+
+    def test_a_followers_codes_print_as_follow_and_stopped(self):
+        from types import SimpleNamespace as NS
+        import numpy as np
+        ents = [NS(name="ego", role="ego", model=None),
+                NS(name="car", role="model", model={"model": "idm_follower"}),
+                NS(name="walker", role="model", model={"model": "gap_acceptance_walker"})]
+        run = NS(c=NS(entities=ents), storyboard=None)
+        rec = A.BatchRecorder(run)
+        z = np.zeros((1, 3))
+        for car, walker in ((1, 1), (0, 0), (4, 4)):
+            rec.record({"x": z, "y": z, "yaw": z,
+                        "model_events": {"car": np.array([car]), "walker": np.array([walker])}})
+        self.assertEqual(rec.decisions["car"], [(0, "follow"), (2, "stopped")])
+        self.assertEqual(rec.decisions["walker"], [(0, "go"), (2, "hesitate")])

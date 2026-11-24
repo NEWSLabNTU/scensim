@@ -5,6 +5,7 @@ uint64 episode
 uint64 frame            # SSv2's frame
 int64 sim_time_ns       # the time SSv2 is told
 uint64 sim_frame        # the simulator's frame of the snapshot
+bool npc_logic_started  # SSv2's, in the entity status that staged this frame (false: S)
 uint32[] index
 string[] names
 bool[] present          # the simulator had the body this frame; otherwise its row's values are 0

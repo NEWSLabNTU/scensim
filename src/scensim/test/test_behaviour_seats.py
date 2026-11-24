@@ -31,9 +31,9 @@ class Model:
                  "accel_limit": np.array([1.5])}, np.array([1 if self.k == 2 else 0]))
 
 
-def frame(n, ents, t0=1_000_000_000_000):
+def frame(n, ents, t0=1_000_000_000_000, started=True):
     return {"frame": n, "sim_frame": 5000 + n, "sim_time_ns": t0 + n * 50_000_000,
-            "entities": ents}
+            "npc_logic_started": started, "entities": ents}
 
 
 def test_each_frame_is_answered_with_its_commands_and_decisions():
@@ -53,6 +53,26 @@ def test_each_frame_is_answered_with_its_commands_and_decisions():
     assert json.loads(line) == {"frame": 2, "sim_frame": 5002, "entity": "walker", "event": "go"}
 
 
+def test_a_model_does_not_step_command_or_decide_before_ssv2_starts_npc_logic():
+    """Issue 163: SSv2 holds its NPCs until startNpcLogic, and a model is NPC logic. Before it
+    (the frames S) the runner answers each frame with no command and does not step the model,
+    so the entity stands at its Init pose; from the first started frame it runs as before."""
+    gate, model, out = Gate(), Model(), io.StringIO()
+    r = seats.Runner({"walker": model}, "ego", gate, out, step_time=0.05)
+    ents = {"ego": (0.0, 0.0, 0.0, 10.0, 0.0), "walker": (3.0, 4.0, 0.0, 0, 0)}
+    for n in (1, 2, 3):
+        r.on_frame(frame(n, ents, started=False))
+    assert gate.sent == [(5001, {}), (5002, {}), (5003, {})]
+    assert model.seen == [] and out.getvalue() == ""
+    r.on_frame(frame(4, ents))
+    r.on_frame(frame(5, ents))
+    assert gate.sent[3:] == [(5004, {"walker": (3.0, 0.0, 1.5)}),
+                             (5005, {"walker": (3.0, 0.0, 1.5)})]
+    assert len(model.seen) == 2                      # its first step is the first started frame
+    (line,) = out.getvalue().splitlines()
+    assert json.loads(line)["frame"] == 5            # its second step's event, as before
+
+
 def test_the_record_is_the_runs_sample_else_its_parameters_and_seed(tmp_path):
     env = {"SCENSIM_RUN_DIR": str(tmp_path), "SCENSIM_RUN_SEED": "42",
            "SCENSIM_PARAMETERS": json.dumps({"walk_speed": 1.4})}
@@ -66,12 +86,14 @@ def test_the_record_is_the_runs_sample_else_its_parameters_and_seed(tmp_path):
 def test_a_truth_frame_message_becomes_a_frame():
     class Msg:
         frame, sim_frame, sim_time_ns = 3, 5003, 1_000_150_000_000
+        npc_logic_started = True
         names, present = ["ego", "walker"], [True, False]
         poses = [1, 2, 0, 0, 0, 0.5] + [0] * 6
         velocities = [4, 0.5, 0] + [0] * 3
         angular_velocities = [0] * 6
     f = seats.frame_of(Msg, {"ego": (0.0, 0.0, 0.0), "walker": (0.0, 0.0, 0.0)})
     assert f == {"frame": 3, "sim_frame": 5003, "sim_time_ns": 1_000_150_000_000,
+                 "npc_logic_started": True,
                  "entities": {"ego": (1, 2, 0.5, 4, 0.5), "walker": None}}
     # an entity whose offset has not arrived (the latched entities topic) is absent
     assert seats.frame_of(Msg, {})["entities"]["ego"] is None
@@ -98,6 +120,7 @@ def test_a_model_reads_the_entitys_pose_as_boxes_takes_it_from_the_truth():
 
     class Msg:
         frame, sim_frame, sim_time_ns = 7, 107, 10**12
+        npc_logic_started = True
         names, present = ["ego"], [True]
         poses = [body.x, body.y, 0, 0, 0, body.yaw]
         velocities = [-8.0, 0.1, 0.0]
@@ -126,6 +149,7 @@ def test_a_turning_bodys_velocity_becomes_the_entity_origins():
 
     class Msg:
         frame, sim_frame, sim_time_ns = 1, 101, 10**12
+        npc_logic_started = True
         names, present = ["ego"], [True]
         poses = [10.0, 0.0, 0, 0, 0, 0.0]              # heading +x
         velocities = [8.0, 0.0 + 0.3 * 1.387, 0.0]     # the body's: the entity's 8 m/s + w x r

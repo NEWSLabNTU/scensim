@@ -719,6 +719,9 @@ pub struct RemoteBackend {
     gap_trace: GapTrace,
     /// The live truth stream, when the stack asked for it (roadmap 092 K4).
     truth: Option<crate::truth_topic::TruthTopic>,
+    /// SSv2's `npc_logic_started` for the frame it staged: (frame, started), for the truth
+    /// stream (scensim issue 163), as the gap trace records it.
+    npc_logic_staged: Option<(u64, bool)>,
     contact_dir: Option<PathBuf>,
     ego_run: Option<EgoRun>,
     /// The agent relay connection for `agent` entities, started at the first such spawn.
@@ -745,6 +748,7 @@ impl RemoteBackend {
             load_timeout: Duration::from_secs(config.world.load_timeout_seconds.max(1)),
             gap_trace: GapTrace::new(config.gap_trace_dir()),
             truth: None,
+            npc_logic_staged: None,
             contact_dir: config.contact_report_dir(),
             config,
             server,
@@ -1937,9 +1941,14 @@ impl SimBackend for RemoteBackend {
                 );
             }
             if let Some(t) = self.truth.as_mut() {
-                let msg = t.state.frame(self.frame, sim_time_ns, step.frame, |id| {
-                    by_id.get(&id).copied()
-                });
+                let started = self
+                    .npc_logic_staged
+                    .is_some_and(|(f, started)| f == self.frame && started);
+                let msg = t
+                    .state
+                    .frame(self.frame, sim_time_ns, step.frame, started, |id| {
+                        by_id.get(&id).copied()
+                    });
                 t.publish_frame(msg);
             }
         }
@@ -2398,6 +2407,7 @@ impl SimBackend for RemoteBackend {
         if let Some(link) = self.agent_link.as_ref() {
             link.set_npc_logic_started(batch.npc_logic_started);
         }
+        self.npc_logic_staged = Some((self.frame + 1, batch.npc_logic_started));
         let reads_back = self.offers(wire::Capability::ReadsBack);
         let mut unknown = Vec::new();
         let mut agent_failures = Vec::new();

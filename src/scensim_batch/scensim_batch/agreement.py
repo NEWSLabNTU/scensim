@@ -250,6 +250,18 @@ def element_paths(storyboard):
     return out
 
 
+def event_names(compiled) -> dict:
+    """{model entity: {event code: name}}: each model's own `events` table, as the seats runner
+    names them (issue 164; the walker's table only for a model that has none)."""
+    from scensim import behaviour
+    from scensim.behaviour.walker import EVENTS
+    out = {}
+    for e in compiled.entities:
+        if e.role == "model" and e.model:
+            out[e.name] = getattr(behaviour.MODELS[e.model["model"]], "events", None) or EVENTS
+    return out
+
+
 class BatchRecorder:
     """What the runner records per batch step of slot `slot`: poses and element states."""
 
@@ -261,6 +273,7 @@ class BatchRecorder:
         self.poses = {e.name: [] for e in run.c.entities}
         self.steps = {}
         self.decisions = {}      # {model entity: [(step, event)]} (092 K10)
+        self.event_names = event_names(run.c)
         self.k = 0
 
     def record(self, obs):
@@ -274,11 +287,11 @@ class BatchRecorder:
             if name is not None:
                 self.steps.setdefault(path, {}).setdefault(name, self.k)
         if obs.get("model_events"):
-            from scensim.behaviour.walker import EVENTS
             for ent, ev in obs["model_events"].items():
                 e = int(ev[self.slot])
                 if e:
-                    self.decisions.setdefault(ent, []).append((self.k, EVENTS.get(e, str(e))))
+                    names = self.event_names.get(ent, {})
+                    self.decisions.setdefault(ent, []).append((self.k, names.get(e, str(e))))
         self.k += 1
 
 
