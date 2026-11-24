@@ -956,3 +956,21 @@ seed's last 20 iterations, 11:39): seed 3 118.7 s, seed 4 117.5 s, seed 5 113.3 
 later (12:41): 89.5, 98.5 and 97.5 s, the host's other load having moved too (load 87.6): no
 slowdown, inside the 20 % rule.
 
+### K11d, an observation during the run (2026-11-24, 241; 133): a uniform's start puts less mass where failures live
+
+K11d's g0 does not draw `accept_u` from its base, by design: K11a searches a uniform as a normal
+within its range, centred at the middle (here normal(0.5, sd 1/sqrt 12) on [0, 1], drawn from
+the defensive mixture). Its other four variables are the base's, so g0's weights are
+`accept_u`'s factor alone: their largest is 1 / (0.9 x 0.336 + 0.1) = 2.483 at u = 0 or 1
+(measured 2.459), and they average 1 (by quadrature exactly; g0's 1000: 1.0109, SE 0.0128;
+2 x 10^6 draws: 0.99999, SE 0.00028). The weights are right.
+
+But the start is the wrong way round for a search. Failures live at small u (the walker accepts
+when u < P, and P is small at CS1's gaps), and the centred normal puts less mass there than the
+base: below u = 0.02, 0.0084 under g0's mixture against 0.02 under the uniform; below 0.05,
+0.0226 against 0.05; below 0.1, 0.0505 against 0.1. So K11d's g0 found fewer failures (8) than
+K11c's (17), which drew from the base. A candidate cause, beside the flat score, if prediction 1
+fails. For a variable whose base is uniform, the next spec starts g0 at the base itself: the
+uniform kept for g0 and refitted to a truncated normal from g1, or a beta family, which holds
+the uniform exactly (beta(1, 1)).
+
