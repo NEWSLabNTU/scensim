@@ -93,12 +93,24 @@ own client) and not seen there landed late, which is what issue 135 measures. Is
 server leaves it unset, as it sends no `commands`: no `control` in an Isaac truth, never a
 zero one. A file without it reads as before.
 
+A frame may also have `tick_mono_ns` and `tick_return_mono_ns` (schema 3, optional; issue 135
+step 3): `CLOCK_MONOTONIC` on the world server's host, in ns, just before its tick call for the
+step and when that call returned (with substeps, the last substep's: the tick that ends at
+`sim_frame`). The server begins the tick up to one RPC send after the first stamp, so a message
+another process sent before it may still reach the simulator after the tick began; the return
+stamp bounds that window from above. The `episode` line then has `world_boot_id`, the host's
+boot id (`/proc/sys/kernel/random/boot_id`): `CLOCK_MONOTONIC` compares only between processes
+under one boot, so a reader comparing these stamps with another process's (acb's apply trace)
+refuses unless both name the same boot id. The CARLA world server stamps; Isaac's does not, and
+its truth has neither field.
+
 Schema 2 names the simulator's values neutrally. Schema 1 (CARLA only) named them `carla`
 (`sim_pose`), `carla_frame` (`sim_frame`), `actor_id` (`sim_id`), `blueprint` (`asset`) and
 `blueprint_box` (`asset_box`), and lacked `index`, `role`, `subtype`, `sim_time_ns`,
 `angular_velocity`, `velocity_source`, the `episode` line's map fields and the `signal` lines.
 Schema 3 (roadmap 092 K12) adds the role `model`, its entities' `cmd_frame` and the frame's
-`commands`, and (within it, optional, issue 135) a physics vehicle's `control`; nothing else
+`commands`, and (within it, optional, issue 135) a physics vehicle's `control`, the frame's
+tick stamps and the episode's `world_boot_id`; nothing else
 changes. A reader takes the names of the file's `schema`: versioned reading of a versioned
 format.
 

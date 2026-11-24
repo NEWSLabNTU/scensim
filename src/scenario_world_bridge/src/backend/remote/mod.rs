@@ -599,6 +599,9 @@ struct ServerInfo {
     capabilities: BTreeSet<i32>,
     instance: String,
     max_physics_dt: f64,
+    /// The server host's boot id, empty when it does not say: names the clock its tick
+    /// stamps are on, for the truth's episode line (scensim issue 135 step 3).
+    boot_id: String,
 }
 
 impl ServerInfo {
@@ -609,6 +612,7 @@ impl ServerInfo {
             capabilities: world_client::capabilities(h),
             instance: h.instance.clone(),
             max_physics_dt: h.max_physics_dt,
+            boot_id: h.boot_id.clone(),
         }
     }
 
@@ -1751,6 +1755,7 @@ impl SimBackend for RemoteBackend {
             .and_then(|d| d.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
+        self.gap_trace.world_boot_id(&self.server.boot_id);
         self.gap_trace.begin_episode(
             self.episode,
             motion,
@@ -1921,6 +1926,9 @@ impl SimBackend for RemoteBackend {
                         stale: c.stale,
                     });
                 }
+                // the server's tick start and return, CLOCK_MONOTONIC (issue 135 step 3)
+                self.gap_trace
+                    .tick_times(step.tick_start_mono_ns, step.tick_return_mono_ns);
                 self.gap_trace.emit_staged_at(
                     self.frame,
                     Some(step.frame),

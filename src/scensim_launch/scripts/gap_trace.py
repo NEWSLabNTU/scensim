@@ -68,6 +68,9 @@ class Episode:
     npc_motion: str
     map: object = None  # schema 2: the map's name
     step_time: object = None  # schema 2: s
+    # schema 3, optional: the world server host's boot id, which names the CLOCK_MONOTONIC its
+    # frames' tick stamps are on (issue 135 step 3); None when the server does not say
+    world_boot_id: object = None
 
 
 @dataclass(frozen=True)
@@ -195,6 +198,10 @@ class Frame:
     npc_logic_started: object = None
     # schema 3: a COMMANDS world server's CommandCounts since its world's last load, or None
     commands: object = None
+    # schema 3, optional: CLOCK_MONOTONIC ns on the world server's host just before its tick
+    # call for this frame and when it returned (issue 135 step 3), or None
+    tick_mono_ns: object = None
+    tick_return_mono_ns: object = None
 
 
 @dataclass(frozen=True)
@@ -391,6 +398,8 @@ def _episode(ln):
         npc_motion=ln.str_(o, "npc_motion", choices=NPC_MOTIONS),
         map=ln.str_(o, "map") if two else None,
         step_time=ln.num(o, "step_time", minimum=0.0) if two else None,
+        world_boot_id=(ln.str_(o, "world_boot_id")
+                       if schema >= 3 and o.get("world_boot_id") is not None else None),
     )
 
 
@@ -525,9 +534,11 @@ def _frame(ln, known):
                                        f"(stale optional), got {counts!r}")
         counts = CommandCounts(*(ln.integer(counts.get(k, 0), f"commands.{k}", minimum=0)
                                  for k in COMMAND_COUNT_KEYS))
+    ticks = [ln.int_(o, key, minimum=0) if ln.schema >= 3 and o.get(key) is not None else None
+             for key in ("tick_mono_ns", "tick_return_mono_ns")]
     return Frame(frame=frame, sim_time=sim_time, entities=states, sim_frame=sim_frame,
                  sim_time_ns=sim_time_ns, wall_ns=wall_ns, npc_logic_started=npc,
-                 commands=counts)
+                 commands=counts, tick_mono_ns=ticks[0], tick_return_mono_ns=ticks[1])
 
 
 def _contact(ln):
@@ -708,6 +719,8 @@ def to_json(record, schema=SCHEMA):
         }
         if two:
             out |= {"map": record.map, "step_time": record.step_time}
+        if schema >= 3 and record.world_boot_id is not None:
+            out["world_boot_id"] = record.world_boot_id
         return out
     if isinstance(record, EntityHeader):
         bp = record.asset_box
@@ -766,6 +779,9 @@ def to_json(record, schema=SCHEMA):
             if two and record.npc_logic_started is not None else {}) | (
             {"commands": {k: getattr(record.commands, k) for k in COMMAND_COUNT_KEYS}}
             if schema >= 3 and record.commands is not None else {}) | {
+            key: v for key, v in (("tick_mono_ns", record.tick_mono_ns),
+                                  ("tick_return_mono_ns", record.tick_return_mono_ns))
+            if schema >= 3 and v is not None} | {
             "entities": entities,
         }
     if isinstance(record, Contact):

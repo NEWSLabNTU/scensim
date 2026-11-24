@@ -629,6 +629,31 @@ class SchemaThree(unittest.TestCase):
             with self.assertRaisesRegex(gt.TraceError, field):
                 gt.load_trace(lines(bad))
 
+    def test_tick_stamps_and_the_boot_id_are_read_and_written_back(self):
+        # issue 135 step 3: optional within schema 3; absent where the server does not stamp
+        stamped = copy.deepcopy(SAMPLE3)
+        stamped[0]["world_boot_id"] = "6a1f0c2e-1b7d-4c55-9a43-0d2b8e9f1a77"
+        for r in stamped:
+            if r["type"] == "frame":
+                r["tick_mono_ns"] = 5_000_000_000 + r["frame"] * 50_000_000
+                r["tick_return_mono_ns"] = r["tick_mono_ns"] + 900_000
+        trace = gt.load_trace(lines(stamped))
+        self.assertEqual(trace.episode.world_boot_id, "6a1f0c2e-1b7d-4c55-9a43-0d2b8e9f1a77")
+        for f in trace.frames:
+            self.assertEqual(f.tick_mono_ns, 5_000_000_000 + f.frame * 50_000_000)
+            self.assertEqual(f.tick_return_mono_ns - f.tick_mono_ns, 900_000)
+        self.assertEqual([gt.to_json(r) for r in trace.records()], stamped)
+        plain = gt.load_trace(lines(SAMPLE3))
+        self.assertIsNone(plain.episode.world_boot_id)
+        self.assertTrue(all(f.tick_mono_ns is None and f.tick_return_mono_ns is None
+                            for f in plain.frames))
+
+    def test_a_malformed_tick_stamp_is_refused(self):
+        bad = copy.deepcopy(SAMPLE3)
+        next(r for r in bad if r["type"] == "frame")["tick_mono_ns"] = "soon"
+        with self.assertRaisesRegex(gt.TraceError, "tick_mono_ns"):
+            gt.load_trace(lines(bad))
+
     def test_a_negative_cmd_frame_is_refused(self):
         bad = copy.deepcopy(SAMPLE3)
         f = next(r for r in bad if r["type"] == "frame" and "truck" in r["entities"])
