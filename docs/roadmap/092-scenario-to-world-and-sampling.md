@@ -609,9 +609,13 @@ Both start after K9e lands.
 **A dependency.** 118's issue 158: the road layer double-counts the grade on road-detail
 worlds. If Town01's Isaac stage has road detail on any grade, K9f-a's stopping-distance exit
 on Isaac runs after 158's fix. Town01's `isaac/world.yaml` (carla-0.9.16-isaac-usd 38347e26)
-names no road detail, and neither does isaac_soil. Asked of 118 (2026-11-25): does 158 reach a
-world without `road_detail.yaml`? The exit's zone is chosen on the flat, or waits for the fix,
-by 118's answer.
+names no road detail, and neither does isaac_soil. 118's answer (2026-11-25): 158 touches
+road-detail worlds only. The road layer, whose contact double-counts the grade, is built only
+when the map has a `road_detail.yaml` (`world.py`'s `_load_road` returns early without one).
+The surface layer's soil and friction zones and the roll bars never use the cams' slope, and
+the soil resistance is a separate path that is right. Town01's only road detail is siw's
+example (`examples/road/town01/road_detail.yaml`), which applies only if it is copied in, and
+Town01 is level. So K9f-a's stopping-distance exit on Town01 does not wait for 158's fix.
 
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
