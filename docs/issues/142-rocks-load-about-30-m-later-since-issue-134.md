@@ -236,3 +236,25 @@ the car turns.
 
 - **118's prediction:** all pass, and on siw c6ec980 (today's `_ahead`) the hairpin and the
   standing-car tests fail.
+
+### Steps (iii) and (ii) in siw (2026-11-24)
+
+siw `issue-142`: 80df3f6 (the blocks) and 47de0b2 (the prefetch along the corridors), on
+c6ec980 (the skip). The siw suite passes (466 tests). Issue 128's test reference is now the
+plain loop over every segment (`_uv` with no cull), and the blocked `uv` equals it bit for bit,
+ties included.
+
+- **118's prediction for step (ii)'s tests:** all pass with the change **held**; on c6ec980 "the
+  hairpin and the standing-car tests fail" **held**, but the two-corridor test failed there too,
+  which the prediction did not say (today's straight line follows the first corridor only); the
+  off-corridor test passes on both, as it should.
+
+## The throughput with all three steps (before the run)
+
+The driver now calls `RoadLayer._ahead` itself (the car's yaw along the centreline); Haruna, u
+100 to 1100, 8.3 to 20 m/s, siw 47de0b2, host idle.
+
+- **118's prediction:** the worker's median a tile at most 180 ms (the projection 63, the
+  heights 27, the look 13, the rocks' placement 58); the least road-tile lead at least 35 m at
+  13.9 m/s (pre-134's, the no-regression bar), at least 20 m at 16.7 m/s, and at least 0 at
+  20 m/s.
