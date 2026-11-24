@@ -73,3 +73,20 @@ here, that the filtering works. The warnings are the log's flood, not the contac
 - **118's prediction (before any run):** the live haruna_down drive on *rough_rocks* (issue 152's
   run) logs about 2 of the warnings instead of 770, its base contacts stay 0, and it passes. The
   run waits for a GPU window from the other session that holds GPU0, and for 133's word.
+- **Two checks before the run (133).**
+  - What keys on these paths across runs. Probe144's lists key on the tile `(i, j)`, not on a
+    path. The run's records (`contacts/`, `gap_trace/`, `timeline.jsonl`, `result.json`) name
+    no road collider path. The contacts take everything under `/World/RoadCollision` as ground
+    by prefix (issue 033). Issue 123's self-check names the rock's prim path, and issue 152
+    compared runs by those names (`r196` in every run). With a session serial a rock's path
+    depends on how many loads came before, so across runs a rock is named by its index in the
+    road's rocks (issue 152's probe logged it as "rock 129"), not by its path. Issue 152's
+    comparisons were all between runs with the same load count (a preload, then one scenario
+    load), so they stand.
+  - The old stream's prims on a reload. `_load_env` calls `SurfaceLayer.remove_tiles`, which
+    calls `RockStream.remove` (it removes every rock prim, every tile's static rocks and the
+    pool's parked prims, and empties `rocks` and `rockTiles`) and `DetailColliders.remove` (every
+    collision tile, and empties `roadDetail`). So fresh paths leave nothing behind. The proof
+    run counts the prims under `/World/RoadRocks` and `/World/RoadCollision` after the
+    scenario's load (a probe line, not landed). **Predicted:** 768 under `/World/RoadRocks`, the
+    new pool alone, not 1536.
