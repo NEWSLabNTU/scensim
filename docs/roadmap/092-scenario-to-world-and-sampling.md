@@ -1188,3 +1188,56 @@ at g11, K11e at g3): seed 3 88.3 s, seed 4 91.5 s, seed 5 89.7 s, against 88.9, 
 91.0 s before; the largest change is seed 4's +0.7 %, well inside the 20 % rule. The host's
 load was 81 to 93.
 
+### K11e's result (2026-11-24, 241; the run ended 17:39)
+
+**Stop: the level reached the threshold, at g8.** Each generation's level, failures, the draws
+that went and were avoided (`went_avoided`), those in the elite, and the elite's mean
+`accept_u` (the 100 lowest scores; computed from the saved records and outcomes):
+
+| g | level (m) | failures | went and avoided | in the elite | elite mean `accept_u` |
+|---|---|---|---|---|---|
+| 0 | 1.1025 | 11 | 65 | 33 | 0.189 |
+| 1 | 0.7174 | 11 | 188 | 58 | 0.174 |
+| 2 | 0.7265 | 19 | 146 | 46 | 0.157 |
+| 3 | 0.5205 | 33 | 228 | 61 | 0.084 |
+| 4 | 0.5205 | 61 | 255 | 27 | 0.064 |
+| 5 | 0.5205 | 29 | 97 | 35 | 0.138 |
+| 6 | 0.5205 | 49 | 158 | 38 | 0.087 |
+| 7 | 0.5205 | 76 | 167 | 18 | 0.050 |
+| 8 | 0 | 101 | 185 | 0 | 0.029 |
+
+The elite was 100 a generation, 101 at g7 and g8 (ties at the level). From g3 to g7 the level
+held at 0.5205 m, one went-and-avoided gap shared by the tie, while the failures in each
+generation rose from 33 to 76; at g8 more than rho N of the draws failed and the level was 0.
+
+**The fresh stage (g9, N 1000, from g8's proposal).** 225 failures, 225 distinct records, no
+errors; 184 went and were avoided. The estimate under the invented base: **p = 0.0148**, SE
+0.0011, normal 95 % interval **[0.0126, 0.0171]**, relative SE 0.077; n_eff 115.2; the largest
+weight 10.0, at its bound (10 Z_q / Z_b, the normaliser 1: the defensive mixture's floor, beta
+0.1). The adaptive generations' own estimate, 0.0155, is a diagnostic only. 615 failures were
+found over the whole run.
+
+**The predictions.**
+
+1. **Met.** Every g0 weight is 1 (1000 of 1000, within 1e-15), and g0 had 11 failures, inside
+   9 to 27.
+2. **Met.** The level reached 0 at g8.
+3. **Met.** The elite's mean `accept_u` was 0.084 at g3 (0.189 already at g0, where K11d's was
+   0.467).
+4. **Met for K11c, open for K11d.** The interval [0.0126, 0.0171] overlaps K11c's g0 interval
+   (Wilson [0.0106, 0.0271]) and its fresh stage's ([0.0074, 0.0285]). K11d's fresh stage has not
+   run yet (K11d is at g16, still on the plateau).
+5. **Met for K11c, open for K11d.** The relative SE, 0.077, is below K11c's fresh stage's, 0.30.
+
+The went-and-avoided draws were in the elite from g0 on (33), as expected from g1, and left it
+at g8, when failures filled it. A reading, not a prediction: with the same N, the sloped score
+gave an interval about a fifth of K11c's width, but on n_eff 115 of 1000, with the largest
+weight at its bound; the proposal sits far from the base on `accept_u`, and the defensive
+mixture is what holds the weights.
+
+**Data.** `~/nas/autoveh/logs/092-k11e/`: the search's records and proposals (`search/`), each
+generation's `outcomes.jsonl` and `run.json` (`runs/`), `report.json`, the run's log and script,
+the fresh stage's 225 failing record ids (`fresh_failures.txt`), with `SHA256SUMS` (45 files).
+The truth exports, with each slot's `decision.json` from which the sloped score is recomputed,
+stay on 241 in `/var/tmp/aeon/k11e-run/runs/*/truth/`. The run executed 7be7775b (main 90f598eb).
+
