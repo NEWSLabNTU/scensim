@@ -1584,6 +1584,30 @@ everywhere.
   - NDT iterations: p50 the same on both maps within 1 iteration, p95 within 2.
   - World server tick: p50 about 50 to 55 ms on both; p95 up to about 4 ms higher on
     *rough_rocks* (C6b's rocks +3.5 ms on smooth), not judged.
+- **The judged rule against noise (133; set before the runs, no C6d result exists).** The bar is
+  the approved one: the rocks fail when their mean pose error p95 is 0.05 m or more above
+  *rough_none*'s. (118's 0.03 above is a prediction, not the bar.) Haruna's run-to-run spread,
+  from the 12 smooth-road haruna_down runs on record (C5's clean pairing: 0.181, 0.182, 0.126,
+  0.184, 0.180, 0.185; C6b's budget: 0.1231, 0.1229, 0.1231, 0.1237, 0.1263, 0.1238), is
+  bimodal, about 0.12 m or about 0.18 m a run:
+  - The 12 runs' sd is 0.030 m. A mean of 3 against a mean of 3 then has a difference sd of
+    0.030 x sqrt(2/3) = 0.0245 m, and 2 sd is 0.049 m. The bar, 0.05 m, is at least 2 sd. (C5's
+    six alone: sd 0.023, 2 sd of the difference 0.038. C6b's six alone, all in the low mode: sd
+    0.0013.)
+  - Taken as modes: a run is high with p = 5/12 = 0.42, and the modes are 0.058 m apart. With no
+    rock effect, the rule fails only when the rocks have 3 more high runs than *rough_none*, so
+    the chance of a false fail at 3 runs a side is 0.42^3 x 0.58^3 = 1.4 % (0.08 % at 5 a side).
+  - So three runs a side stay. The rough road's own spread is not known before the runs. If
+    *rough_none*'s three p95s have an sd over 0.030 m, the widest seen on the smooth road, the
+    pairing is reported as inconclusive rather than judged, and two more runs a side follow
+    (5 against 5).
+- **Issue 144 in these runs (133; before the runs).** A run counts only with `wait_missed` 0: any
+  tile still not ready after a frame's 2 s wait leaves that frame pace-dependent. The landed code
+  logs each such tile as a WARN ("issue 144: ... not ready"), so each run's count is read from the
+  world server's log. The frame waits over 50 ms are not logged by the landed code (it keeps
+  `wait_ms` in memory only), so they are not recorded unless a logging change lands first (asked
+  of 133). The tick p95 stays reported, not judged. Issue 147 (the look-ahead's prefetch) is not
+  in these runs, so their ticks include its waits.
 
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
