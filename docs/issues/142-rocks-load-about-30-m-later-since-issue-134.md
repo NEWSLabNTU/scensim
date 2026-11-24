@@ -1,6 +1,6 @@
 # 142: since issue 134 the road's rocks load about 30 m later along the course
 
-**Status:** open; a probe comes first (133). **Severity:** high until shown otherwise: a rock not
+**Status:** fixed, landed as siw main 77075e3 (scensim main 096d828f). **Severity:** high until shown otherwise: a rock not
 loaded when a wheel reaches it is silently missing from a study on rocks. **Found:** 2026-11-24,
 scensim 118, issue 139's bisection.
 
@@ -494,3 +494,8 @@ loop, on the tests' tiles:
 So the culled projection is the full one bit for bit under numpy 1.x, and up to rounding in u and
 the choice at an exact tie under 2.x. Issue 128's doc has the whole account and the tests' bounds
 (siw branch `exact-numpy2`).
+
+**The "bit for bit" claim is withdrawn under the world server's numpy (133).** Under numpy 2.3.1,
+Isaac 6.2's and so the world server's, 142's cull is not bit-identical to the full projection. It
+differs by up to 2.0e-8 m in u, and at one tie point in 71538 it takes the other of two equally near
+segments (0.42 mm in v). That is harmless, but the claim holds only under numpy 1.x, the gate's.

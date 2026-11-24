@@ -1,6 +1,6 @@
 # 137: the fixture car stops and rolls back on a rough map
 
-**Status:** open, being diagnosed (the cause narrowed to the contact's or the vehicle's response). **Severity:** medium until understood: a car that cannot
+**Status:** fixed, landed as siw 4df3198 in siw main 56b8e39 (scensim main 75626c3b). **Severity:** medium until understood: a car that cannot
 hold its speed on the rough record road makes every cost or check on it a measure of something
 else. **Found:** 2026-11-24, scensim 118, 086 C6d's live guard.
 
