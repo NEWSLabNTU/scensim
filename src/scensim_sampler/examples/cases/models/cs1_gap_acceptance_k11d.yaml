@@ -1,0 +1,30 @@
+# The base of K11d's search (roadmap 092, "K11d's spec"): K11c's base (cs1_gap_acceptance_k11c.yaml)
+# and the walker's decision draw, accept_u, uniform on [0, 1] (the law of the seed's draw).
+# K11c's description of its four variables follows, unchanged; accept_u is the fifth.
+# INVENTED, NOT FITTED FROM DATA. A rate estimated under it is a rate under this invented base,
+# not a risk rate: K11c demonstrates purpose B (finding failures) and the search-to-rate
+# mechanism, not purpose A.
+#
+# SIMPLIFIED: the four variables are independent here. The CS1 model it takes its numbers from
+# (examples/walker_dartout/models/walker_dartout.yaml) draws ego_speed jointly with van_offset
+# and conditions walk_speed, behaviour and ttc_entry on walker_type (ttc_entry on illumination
+# too). This file fixes those conditions at the day / adult case, where one exists:
+#   walk_speed: walker_dartout's walk_speed, case adult
+#   behaviour:  walker_dartout's behaviour, case adult
+#   ttc_entry:  walker_dartout's ttc_entry at walker_type adult, illumination day (mean 2.6)
+#   ego_speed:  no day / adult case (a joint group): the marginal of walker_dartout's first
+#               mixture component (weight 0.7, mean 8.3, variance 1.6), truncated to
+#               walker_dartout's constraint ego_speed <= 1.2 * speed_limit (16.68 m/s) and,
+#               ours, at least 1 m/s
+model: 1
+header:
+  name: cs1_gap_acceptance_k11d
+  dataset: "none: invented, numbers from walker_dartout.yaml's day / adult case"
+  version: "0"
+  licence: CC0-1.0
+variables:
+  - {name: ego_speed, normal: {mean: 8.3, sd: 1.2649110640673518}, range: [1.0, 16.68]}
+  - {name: walk_speed, normal: {mean: 1.4, sd: 0.2}, range: [0.6, 2.4]}
+  - {name: behaviour, categorical: {steady: 0.75, hesitate: 0.2, run: 0.05}}
+  - {name: ttc_entry, lognormal: {mean: 2.6, sd: 0.8}, range: [0.3, 8.0]}
+  - {name: accept_u, uniform: {low: 0.0, high: 1.0}}

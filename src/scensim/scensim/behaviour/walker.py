@@ -6,7 +6,8 @@ default: Khaki and Mohammadnazar 2021, Table 3). The ego offers the gap when the
 decides: its time to the conflict point, ((c - p) . v) / (v . v), is the GAP. LAG is 1 (the
 first vehicle's gap). The walker accepts when U > logit(u), where u is the walker's uniform
 draw for the episode; that is the same event as u < P = 1 / (1 + exp(-U)). The draw and its
-logit are taken once per walker at reset, on the host (`random.Random(seed)`, `math.log`), so
+logit are taken once per walker at reset, on the host (`random.Random(seed)`, `math.log`; or
+the parameter `draw`, u itself, when given: 092 K11d), so
 the per-step path is only + - * /, comparisons and where. That path is one code over
 sim_vehicle_ecu.xp, and its numpy and torch forms agree bit for bit.
 
@@ -68,6 +69,8 @@ PARAMS = {
                                                 "close in time (CS1's ttc_entry)"),
     "approach":      (float, 0.0, (0.0, 20.0), "the scenario's: m walked to the kerb before "
                                                "deciding"),
+    "draw":          (float, None, (0.0, 1.0), "ours: the episode's uniform draw u, given "
+                                               "(092 K11d); default: from the seed"),
 }
 
 
@@ -172,10 +175,12 @@ class GapAcceptanceWalker:
                             else APPROACH if p["approach"] > 0.0 else UNDECIDED))
 
     @staticmethod
-    def draw(seed: int) -> float:
-        """A walker's draw for an episode, and its logit: the same on seats and in a batch."""
-        u = random.Random(int(seed)).random()
-        u = min(max(u, 1e-12), 1.0 - 1e-12)
+    def draw(seed: int, u=None) -> float:
+        """A walker's draw for an episode, and its logit: the same on seats and in a batch.
+        `u`: the draw given (the parameter `draw`, 092 K11d), else the seed's."""
+        if u is None:
+            u = random.Random(int(seed)).random()
+        u = min(max(float(u), 1e-12), 1.0 - 1e-12)
         return math.log(u / (1.0 - u))
 
     def reset(self, mask=None, seeds=None):
@@ -191,7 +196,7 @@ class GapAcceptanceWalker:
             return
         th = [float(x) for x in self.xp.to_host(self.threshold)]
         for i in idx:
-            th[i] = self.draw(self.seeds[i])
+            th[i] = self.draw(self.seeds[i], self.params[i]["draw"])
         self.threshold = xp.asarray(th, xp.float64)
         m = xp.ones(n, xp.bool) if mask is None else xp.asarray(mask, xp.bool)
         self.phase = xp.where(m, self.phase0, self.phase)
