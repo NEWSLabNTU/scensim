@@ -1741,7 +1741,9 @@ reference (cams, R2's damper):
 
 - **The check passes** under both queries: every amplitude within 30 % of the reference's,
   the largest at 14.3 Hz as the reference's, then falling (to 0.72 of it at 28.6 Hz); class C's
-  peaks within 2 Hz and their heights within 30 % (14-15 % under).
+  peaks within 2 Hz and their heights within 30 %. A pass is not a match: class C's peak height
+  is about 14 % under the reference's at both speeds (1.42 against 1.66, 1.93 against 2.24),
+  beside frequencies that agree (0 and 0.97 Hz).
 - **118's predictions**: the amplitudes within 10 % **failed under raycast** at two speeds
   (7 and 8 m/s, -10.4 and -10.1 %) and held under sweep (worst -9.9 %); the class C peak within
   1 Hz held (0 and 0.97 Hz); both queries alike held (within 3 % of each other everywhere).
@@ -1753,6 +1755,12 @@ reference (cams, R2's damper):
   (4.39 Hz, 1.1-1.2 times its 4-6 Hz level): no hop peak in the chassis, as the reference showed
   under R2's damper (Open: the damper).
 - The runs took 75 s each (11 886 PhysX steps a query).
+- **Corridors without a profile are unchanged** (133): `test_course_c6c.Unchanged` hashes the
+  heights of a corridor with every other feature and equals siw 7813843's hash. It is pinned to
+  numpy 1.21 (the gate host's) and skips elsewhere, so the guarantee holds on the gate host
+  only; a version-independent form (the profile path not entered without `profiles`) is a
+  follow-up. The pin is 30eb19a, 8429497 plus that test's docstring saying so (no code change
+  from the run's).
 
 #### C6d's spec: sensors and Autoware on the rough record road (written 2026-11-24, before any run; approved to write by 133)
 
