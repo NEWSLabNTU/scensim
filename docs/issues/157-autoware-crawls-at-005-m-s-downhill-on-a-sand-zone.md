@@ -50,3 +50,38 @@ with no brake and no throttle, then with the controller's -0.1 m/s^2. It reads i
 wheel's soil force and the ECU's brake and traction control. A car that does not roll with no
 brake at 3.5 degrees on sand of mu 0.25 is the physics bug; one that rolls and stops only when
 braked is the controller on loose ground.
+
+## The probe (133; before the runs)
+
+The live world server, the same testbench and map (`haruna_sand`, its zone over the start), and a
+scenario that names the map at the Init and ends at 90 s (`p157_sand`). A local probe commit of
+siw (7b13f5f on main 7813843, never pushed) replaces the ego's command in aib's `Vehicle.apply`,
+one arm a run, and logs every 6th physics step: the vehicle's speed and pitch, the request, the
+ECU's debug (brake pressure, the ABS and TC factors, motor torque), the drive and brake torques
+set on the wheels after aib's sticky-tire release, and each wheel's soil output (sinkage,
+resistance, thrust, load). Autoware runs as before; its command reaches the car only in the
+third arm, and then through the replay, not live.
+
+- **free:** no ECU and no torque: drive 0 and brake 0 on every wheel, the car released.
+- **brake:** the request -0.1 m/s^2 at 0.25 m/s in drive, through the ECU.
+- **replay:** the original run's commands (its gap trace, 4688 changes), by the vehicle's own sim
+  time, through the ECU.
+
+**What the sand's closed form gives (computed before the runs, `soil.wong_reece` for `sand` on
+a 0.37 m wheel 0.235 m wide):** resistance 0.18 to 0.21 of the wheel's load at 3500 to 5500 N,
+sinkage 2 to 3 cm. Gravity along a 3.5 degree grade is 0.061 of the weight. So the closed form
+alone resists about three times what the slope pulls.
+
+- **118's prediction.**
+  - free: the car does not roll freely. It creeps under 0.1 m/s, the soil's resistance about
+    0.2 of each wheel's load and its brakes 0 throughout. If it rolls, gaining speed down the
+    grade, the sand is not what held the car in the original run.
+  - brake: the same creep. The ECU's brake pressure small or nothing,
+    ABS and TC inactive (factors 1).
+  - replay: as the original run, about 0.05 m/s, the ECU braking lightly or not at all, its drive
+    torque near zero.
+  - So issue 157 is the sand's resistance (0.2 of the load, the closed form's compaction), not
+    the ECU nor a stuck brake. Whether 0.2 is too much for this class on a car is a modelling
+    question for 054's sand class, not a bug in the code. And why the controller asks for
+    deceleration below its plan's speed is Autoware's slope compensation: on a downhill it
+    expects gravity to supply the acceleration, so it commands less.
