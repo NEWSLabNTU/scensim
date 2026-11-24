@@ -522,6 +522,23 @@ that this be recorded too). The unit was assumed, not read; the bridge's doc com
    makes the world servers validate `SetEnvironment`'s fields themselves, refusing by name,
    and read back the physical value.
 
+**Step 2a again (2026-11-25, after the units fix d80dfd41): as predicted.** k9_cs3 pm=current, the
+same install (its Python links to the source, so the fix ran) and setup, my CARLA on RPC 2100,
+started at 05:52 with 10.9 GB of VRAM free; on the card teacup1117's unidrivevla python (9.5 GB)
+and CARLA 0.9.15 (6.9 GB) and a ddcm python (4.7 GB).
+
+- The knob: `illumination.sun_elevation` read back 1.0471975511965976 rad on 5039 of 5039 frames
+  after its send, deviation 0.0 against 0.0011; `knobs.ok` true. The CARLA world server's log
+  shows the sun it set, `Sky { ... sun: Some((270.0, 60.0)) }`: altitude 60 deg, attempt 3's
+  (the first step 2a's line read `(270.0, 3437.7468)`). The azimuth, 270 deg, is the field's
+  for a sun not yet placed (scenario azimuth 0, north); attempt 3 set only the altitude, so the
+  azimuth is not compared.
+- The rest as in step 2a and attempt 3: route 28257, 41654, 6583, 42451, 32189; the ego in 6583
+  from sim 31.2 s, stopped for good at 36.2 s, centre x 313.96 (y -129.50), before the
+  barriers; exitFailure at 240 s; no contact; barriers at x 305.64, y -128.21, -129.51, -130.81;
+  `anchors.barrier_lane` 6583 (commit 732fd615); `maps` a85836f5. CARLA stopped by its group,
+  nothing left, ports free.
+
 **Step 3, the close-out.** K9's row to done, with the Isaac result; scenario-description.md's
 "the same names on every target" marked built. D2's region-scoped knobs (`applies:`) and
 `zone_layout` are K9f (243, plan only; it says how its CARLA side relates to 086 C7).
