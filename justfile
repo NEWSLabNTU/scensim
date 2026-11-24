@@ -144,8 +144,14 @@ setup:
     fi
     # rosdep's database: initialised once per host (`rosdep init`, root) and fetched once per
     # user (`rosdep update`); a fresh host or account has neither (092 K6)
-    [ -d /etc/ros/rosdep/sources.list.d ] || sudo rosdep init
-    [ -d "$HOME/.ros/rosdep/sources.cache" ] || rosdep update --rosdistro "${ROS_DISTRO:-humble}"
+    if [ ! -d /etc/ros/rosdep/sources.list.d ]; then
+        echo "setup: rosdep is not initialised on this host; running: sudo rosdep init"
+        sudo rosdep init
+    fi
+    if [ ! -d "$HOME/.ros/rosdep/sources.cache" ]; then
+        echo "setup: no rosdep cache for $USER; running: rosdep update --rosdistro ${ROS_DISTRO:-humble}"
+        rosdep update --rosdistro "${ROS_DISTRO:-humble}"
+    fi
     # python-yamale-pip (SSv2's scenario_test_runner) resolves only from a rosdep source some
     # hosts add (autonomoustuff's), not from rosdistro, so not in the Autoware 2.0.0 image: skipped
     # here and installed with pip.
@@ -262,6 +268,13 @@ build-autoware-overlay:
     source "{{project}}/scripts/autoware_overlay.bash"
     scensim_autoware_overlay_build "{{autoware_overlay_dir}}" "{{autoware_setup}}"
 
+# The simulation side on ROS 2 Jazzy (092 K6): HEAD, in an Ubuntu 24.04 + Jazzy container
+# (scripts/jazzy/Dockerfile), through `just setup`, `just build` and `just test`, in a worktree
+# under build/jazzy-check so this checkout's own build is left as it is. Needs docker; host
+# settings JAZZY_CHECK_CPUS (default 8) and JAZZY_CHECK_MEMORY (default 24g).
+jazzy-check:
+    scripts/jazzy/check.sh
+
 # Fetch sim.repos' pinned message packages into third_party/sim_vendor and build them against
 # ROS alone: the simulation side's Autoware messages on a distro Autoware 1.5.0 does not support
 # (Jazzy), sourced by `just build` there in place of Autoware (092 K6). `just setup` runs it;
@@ -324,6 +337,8 @@ check:
     #!/usr/bin/env bash
     set -e
     source install/setup.bash
+    # carla-sys compiles against libclang 14 on Jazzy, as in `just build` (092 K6)
+    if [ "${ROS_DISTRO:-humble}" != humble ]; then source scripts/sim_side.bash; export LIBCLANG_PATH=$(scensim_libclang_path); fi
     # CARLA_DIR (a host setting, .env) is CARLA's install; carla-sys would take it for a
     # CARLA source tree to build from, and the build fails.
     unset CARLA_DIR
@@ -341,6 +356,8 @@ test:
         import numpy; v = f"{numpy.__version__} {numpy.__file__}"
     except Exception as e: v = f"numpy fails: {e}"
     print("numpy (python3" + (", no user site" if sys.flags.no_user_site else "") + "):", v)'; done
+    # carla-sys compiles against libclang 14 on Jazzy, as in `just build` (092 K6)
+    if [ "${ROS_DISTRO:-humble}" != humble ]; then source scripts/sim_side.bash; export LIBCLANG_PATH=$(scensim_libclang_path); fi
     # CARLA_DIR (a host setting, .env) is CARLA's install; carla-sys would take it for a
     # CARLA source tree to build from, and the build fails.
     unset CARLA_DIR
@@ -383,7 +400,13 @@ test:
     python3 -m pytest -q src/scensim_sampler/test
     # The batch executor (scensim_batch, 092 K2): SSv2's default vehicle behaviour in torch,
     # against SSv2's logic transcribed; skipped where torch is absent
-    PYTHONNOUSERSITE=1 python3 -m pytest -q src/scensim_batch/test
+    # (its modules import torch at load, so without torch the suite is not collected at all:
+    # run only where torch imports, and say so where it does not; 092 K6, on Jazzy's image)
+    if PYTHONNOUSERSITE=1 python3 -c "import torch" 2>/dev/null; then
+        PYTHONNOUSERSITE=1 python3 -m pytest -q src/scensim_batch/test
+    else
+        echo "scensim_batch: skipped, torch does not import (PYTHONNOUSERSITE=1 python3 -c 'import torch')"
+    fi
     # The conflict-zone protocol's library: unit and property tests (roadmap 078 I2)
     python3 -m pytest -q src/czp/test
     # The world server shell, on a fake world (roadmaps 037, 046; protobuf only), and the Isaac

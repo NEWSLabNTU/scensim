@@ -10,6 +10,7 @@ import sys
 import textwrap
 import threading
 import time
+import zipfile
 from pathlib import Path
 from _ceiling import ceiling
 
@@ -124,6 +125,14 @@ def fake_root(tmp: Path) -> Path:
         f'#!/bin/sh\n"{sys.executable}" "$(dirname "$0")/fake_carla.py" "$@"\n')
     (root / "CarlaUE4.sh").chmod(0o755 | stat.S_IXUSR)
     (root / "VERSION").write_text("0.9.16\n")   # what the package ships
+    # its Python client, for the running Python, as the package's PythonAPI/carla/dist holds it:
+    # a carla_basic pilot needs the server's release, and without this the tests passed only on
+    # a host whose own Python had carla 0.9.16 installed (092 K6, on Jazzy's Python 3.12)
+    py = f"cp{sys.version_info[0]}{sys.version_info[1]}"
+    dist = root / "PythonAPI" / "carla" / "dist"
+    dist.mkdir(parents=True)
+    with zipfile.ZipFile(dist / f"carla-0.9.16-{py}-{py}-linux_x86_64.whl", "w") as z:
+        z.writestr("carla/__init__.py", "# a stand-in client\n")
     return root
 
 

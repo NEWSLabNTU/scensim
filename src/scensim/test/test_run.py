@@ -117,6 +117,24 @@ def where(host):
     return host
 
 
+def _vehicle_side_built():
+    """Whether the car's Autoware packages are in the sourced workspaces: the multi-pilot
+    template's Autoware ego needs them, and the project check refuses a stack without them.
+    They are Humble's vehicle side, not built on Jazzy (092 K6)."""
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        get_package_share_directory("tesla_model3_launch")
+        return True
+    except Exception:
+        return False
+
+
+NEEDS_VEHICLE_SIDE = pytest.mark.skipif(
+    not _vehicle_side_built(),
+    reason="the car's Autoware packages (tesla_model3_launch) are not built: the vehicle side "
+           "is Humble's (092 K6)")
+
+
 def make(where, testbench_yaml=None):
     d = where["tmp"] / "proj"
     project.new_project(d, "multi-pilot")
@@ -917,6 +935,7 @@ def _stack_json(where):
     return json.loads(link.read_text())
 
 
+@NEEDS_VEHICLE_SIDE
 def test_stop_stack_starts_runs_and_stops(where, maps_hub, launcher):
     d = make(where)
     cmd, calls = launcher
@@ -965,6 +984,7 @@ def test_stack_argv_names_the_map_only_when_given(where, maps_hub):
     assert not any(w.startswith("map:=") for w in run.stack_argv(d, host, seat, log_dir))
 
 
+@NEEDS_VEHICLE_SIDE
 def test_start_stack_leaves_it_up_and_reuses_a_live_one(where, maps_hub, launcher):
     d = make(where)
     cmd, calls = launcher
@@ -1034,6 +1054,7 @@ def test_the_stack_is_planned_here_first_and_a_refusal_said_plainly(where, maps_
     assert asked == [{"project_arg": str(d), "seat_arg": "1", "logs": str(where["tmp"] / "logs")}]
 
 
+@NEEDS_VEHICLE_SIDE
 def test_api_stack_block(where, maps_hub, launcher):
     d = make(where)
     cmd, _ = launcher
