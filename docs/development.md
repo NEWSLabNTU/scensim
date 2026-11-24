@@ -126,6 +126,11 @@ Notes on a checkout:
 
 - **Always `just build`**, never a bare `colcon build`: it adds `--symlink-install` and
   checks for the setuptools that breaks editable Python installs.
+- **Keep a pip numpy out of `~/.local` while you use apt's torch.** A `pip install --user`
+  that brings numpy 2 shadows apt's numpy 1 (`python3-numpy`), and apt's `python3-torch`,
+  built against numpy 1, then fails at import with `AttributeError: _ARRAY_API not found`.
+  `python3 -c 'import torch'` shows it. On 2026-11-24 it failed a test in `just test`
+  (issue 151); `pip uninstall numpy` falls back to apt's.
 - **Stop every stack before building.** A running bridge or `acb_bridge` makes the install
   step fail with `Text file busy` -- after compiling everything.
 - **Rebuild acb's workspace, then this one, from a clean environment.** Both hold an
