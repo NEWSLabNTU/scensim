@@ -359,3 +359,16 @@ latency is the time from its data load to its prim.
   - no tile is made on the caller's thread;
   - the default cases' verdicts are those of issue 140's run (embedded_15, loose_15 and loose_8
     fail in raycast, boulder_35 passes), 0 base contacts.
+
+### The Haruna drive (133's addition, before the runs)
+
+The straight fixture course does not exercise step (ii). One car, `fixture_cost --follow` on
+C6b's *rocks* Haruna map (its own record, rocks on), through `probe142c.py` (the same logs),
+siw 8547b30, about 1.4 km from s 40 m: at haruna_down's 13.9 m/s (50 km/h), and at
+fixture_cost's own 10 m/s. fixture_cost holds one speed and does not slow for a bend, so at
+13.9 m/s the car may leave the road in a hairpin (9 to 20 m radii); the 10 m/s drive is the one
+that keeps to it.
+
+- **118's prediction:** in both, 0 tiles made on the caller's thread, and the least in-path prim
+  lead at least 35 m while the car is on the road. At 13.9 m/s the car leaves the road at the
+  first tight hairpin (pursuit at a fixed speed); the leads up to there count.
