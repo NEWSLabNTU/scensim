@@ -11,6 +11,10 @@ pilot), each slot run to its end or `--steps` steps. The batch's truth is export
 gap the seats judge measures, into `<out>/outcomes.jsonl`. A summary goes to `<out>/run.json`
 and stdout.
 
+Run it from a pinned copy (a detached worktree or a copy at one commit) that nobody edits
+while the search runs: every generation is a new process and imports the tree as it is then
+(133's rule, after K11c's run spanned two commits).
+
 Interim: when K2's `scensim bench` lands, this runner calls into it or is retired (roadmap 092,
 "K11c's spec, completed"). Run with the system Python, scensim_batch, sim_vehicle_ecu, scensim
 and scensim_launch's scripts importable; no Isaac, no GPU.

@@ -833,6 +833,25 @@ table's ego row compared the batch's entity pose with the seats body pose and so
 check 2) still fed its model the body pose (every event 3 frames early, 0.21 m), fixed by 243
 in scensim 79775334.
 
+### K11c's run: the restart and the two-commit span (2026-11-24, 241)
+
+**The restart.** g0 at N = 1000 took 3649 s: `scensim_batch.truth`'s writer computed the
+ego's overlap over all N slots for every slot and frame (N^2). Fixed in 7f436b99 (each row's
+overlap once). g0 rerun with it on a copy: `outcomes.jsonl` and all 1000 truth files
+byte-identical, in 857 s. g1 had finished on the old code; g2 was stopped mid-run at 08:46 (its
+partial output kept as `runs/g2.stopped-0846`) and the search resumed from g2 (drawn,
+deterministic) at 08:56 on 7f436b99, settings unchanged.
+
+**The two-commit span.** K11d's walker change (2c7a6df9, an optional `draw`) was committed in
+the worktree K11c runs from while it ran, so generations from g3 import 2c7a6df9's walker; g0
+to g2 ran on 7f436b99 or before. Without `draw` the walker makes the same calls on the same
+values. Proof (133): 50 of g0's records rerun from a pinned detached worktree at 2c7a6df9:
+`outcomes.jsonl` identical byte for byte, and every slot's `truth.jsonl` and `sample.json`
+identical; each `outcome.json` differs only in its `scenario` path, the checkout's directory
+(`scensim-k11c-pin` for `scensim-k11c`), and is identical with that replaced. The run's results
+therefore do not depend on which of the two commits ran a generation. From now on a run executes
+from a pinned copy nobody edits while it runs (`search_run.py`'s notes).
+
 ### K11c, an observation during the run (2026-11-24, 241; offline, the run untouched): the score's plateau
 
 The scores of g0 and g1 (1000 each), histogrammed from the runs' `outcomes.jsonl`:
