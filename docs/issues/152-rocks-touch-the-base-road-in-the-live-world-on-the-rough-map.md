@@ -171,3 +171,54 @@ Two hypotheses from 133, checked against the probe's record before the run:
     taken in with `rocks` before its first step, resting on a tile flush with a `roadBase` mesh,
     with and without the pool's 768. The pool's warnings come with issue 145's fix, so the
     stage test asks whether a rock that PhysX warns for keeps `rocks`' filter.
+
+### The fix test's result (2026-11-24, 21:26 to 21:34)
+
+The fix with the probe (3e4b1ff), the same package and drive. The run passed haruna_down.
+`roadBase`'s includes are `/World/env/Terrain`, `/World/env/Road` and `/World/env/Lines`. No tile
+was made in two groups. Issue 123's check logged 10 contacts, every one with `/World/env/Road` or
+`/World/env/Terrain`. The "only in one collision group" warnings: 770.
+
+- Passes haruna_down: **held**.
+- Tiles in `roadDetail` alone: **held**.
+- Tile contacts 0: **held** (by construction).
+- Env contacts about 8 (5 to 11), the probe's rocks: **held** in number (10). Five of them
+  (r196, r561, r422, r590, r112) met a tile in the probe's run and meet `env/Terrain` or
+  `env/Road` now. The check logs a rock's first base contact only, so in the probe's run those
+  five touched a tile first. They touch the base road as well, as the other five do. r195, r2
+  and r162 did not come this time.
+- Warnings 770: **held** (768 at the pool's step, 2 later).
+
+So the fix removes the tiles from `roadBase` and the check's false count, and nothing else. Each
+of the 10 rocks met the base at the pose it was placed at (the same poses to the millimetre as in
+the probe's run), where the detail is flush with the base (-0.012 to +0.011 m). These are pairs
+PhysX did not filter. Before issue 145's fix, C6b's live runs (on the smooth map, where the pool
+joined `rocks` only after PhysX took it in) had 11 or 12 such contacts and 2 warnings. So base
+contacts in the live world are older than the 768 warnings, although on another map; whether the
+two are linked now is the next probe's question.
+
+## The second probe (133's hypothesis; before the run)
+
+133's hypothesis ties the two open items together. PhysX sees each pool rock in two groups at
+intake, whatever the first probe's query said, because some group holds an ancestor of
+`/World/RoadRocks` (`/World`, an env or vehicle group with expandPrims, or a collection with
+includeRoot). For the rocks where PhysX picks the other group, `rocks`' filter against `roadBase`
+does not apply, and those are the rocks that meet the base.
+
+The first probe looked only at the groups under `/World/vehicleCollisionGroups`. The second
+(probe v2, 2fcbdd1, local, on the fix) logs at the pool's step every collision group anywhere on
+the stage: includeRoot, expansion rule, merge group, invert, filtered groups, includes and
+excludes. It also logs UsdPhysics' collision group table for rocks against roadBase and against
+roadDetail, and a pool rock's groups among all of them. At each contact it logs the rock's groups
+among all of them. PhysX's own group for each rock shape is not exposed to Python, as far as 118
+found (133's check (b)), so the probe cannot read it.
+
+- **118's prediction.** Every collision group is under `/World/vehicleCollisionGroups`. The world
+  USD holds none, and aib and scensim_isaac_world define their groups only there. None holds an
+  ancestor of `/World/RoadRocks` or has includeRoot. The table has `rocks` and `roadBase` not
+  colliding. A pool rock and each rock met are in `rocks` alone. Contacts are about 10 again, and
+  the warnings 770. If so, 133's mechanism has no second group in USD, and the next step is a
+  stage test of the filter (a rock in `rocks` at intake, resting on a tile flush with a `roadBase`
+  mesh, with and without a 768-rock pool, counting the warnings and the contacts).
+- **133's prediction, if the probe finds a second group:** the fix is to exclude
+  `/World/RoadRocks` from it. In a second fix run the env contacts go to 0 and the warnings to 2.
