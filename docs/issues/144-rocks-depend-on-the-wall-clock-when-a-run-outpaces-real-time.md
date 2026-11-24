@@ -81,20 +81,46 @@ between paces: 0), so no difference below is the physics' spread.
   later than held to the wall clock, and 4 come in one run only. Held (prediction).
 - **On 19ad467 the lists are identical,** every rock tile and every collision tile at the same
   frame, with 0 tiles missed. Held.
-- **The waits at real time:** p95 0.17 ms, as predicted (under 5 ms). But they are not "about
-  nothing": 48 frames waited over 50 ms, 27 s in all, about one every 32 frames (1.6 s, a 16 m
-  tile at 10 m/s). Partly failed.
+- **The waits at real time:** p95 0.17 ms, as predicted (under 5 ms). **Failed** on the rest of
+  the prediction ("a run at real time waits about nothing"): 48 frames waited over 50 ms, 27 s
+  in all, about one every 32 frames (1.6 s, a 16 m tile at 10 m/s). Found after the results.
 - **Unpaced it slowed** from 45.4 to 33.7 frames a second, inside the predicted 25 to 40. Held for
   the fix's rate. The baseline was 45.4 on this loaded host, not the doc's 55 to 80.
 
-**What the long waits are.** The fix loads 21 rock tiles and 61 collision tiles that b9eb233 never
-made in the whole drive, even held to the wall clock. They are tiles within 32 m of the car that
+**What the long waits are.** The fix loads 21 rock tiles and 21 collision tiles that b9eb233 never
+made in the whole drive, even held to the wall clock. (The table's 239 against 178 counts every
+make, a tile made again after it left the reach and came back; 61 makes more, 21 tiles.) They are tiles within 32 m of the car that
 `RoadLayer._ahead`'s look-ahead never asks for (it takes the corridors' centrelines ahead, 6 m
 about them), mostly a column beside the road. Before the fix nothing asked for them, so they never
 existed. Two of them held rocks (8 and 3): before the fix those 11 rocks were never there, at any
 pace. The frame-end wait now asks for them as they come within reach, and waits while the worker
 makes them. That is the 27 s.
 
-**Proposed next step (not built):** the look-ahead also asks for every tile within the reach
-around each car, so the worker makes these ahead of the wait. Its measure is the same drive held
-to the wall clock, with far fewer waits over 50 ms, and the same identical lists.
+**Where they lie (found after the results).** The 11 rocks are 31.9 to 40.2 m from the car's path
+at their nearest, so none was in-path (a wheel within 1 m) and none could wake. The 21 collision
+tiles are 7.7 m from the car's path at their nearest (median 13.5 m), beyond anything the car
+touches. The difference is the rocks and tiles that existed beside the road, not what the car met.
+
+**Earlier results on Haruna's rocks map before 19ad467, and whether they can move** (133; a list,
+no reruns now). None of them had these tiles, at any pace:
+
+- 086 C6b's Haruna budget (scensim ddf1c32e, the Autoware ego at real time): pose error, NVTL and
+  the two cars' p50 cannot move by the car's contact (nothing it touched was missing). The tick
+  times can: about 21 collision tiles and 11 rock prims a drive were never made or simulated,
+  so the frame cost was measured a little low. Its p95 line (rocks +3.5 ms, failed) is the one
+  that could move, and only upward. The lidar could have seen rock prims at 32 m; their effect
+  on pose is not measured.
+- 086 C6b's p95 diagnostic (the rocks run with the step split): the same as the budget's ticks.
+- Issue 142's Haruna drives (paced and unpaced: the in-path rocks' leads, "every in-path rock
+  loads"): cannot move. The rocks never made were not in-path.
+- Issue 142's like-for-like base contacts (9 and 9 at 10 m/s, 36 and 37 at 13.9 m/s), issue
+  145's bisection (9 on every commit), its diagnosis (9 and 37) and its fix's proof (0 and 0):
+  cannot move. A rock 32 m from the path does not wake, and base contacts come from woken rocks.
+- Issue 128's guard (0 base contacts over the first 280 m): cannot move, for the same reason.
+- The rough maps (issue 136's 12 and the fix's 0 on *rough_rocks*, C6d's guard checks) share the
+  look-ahead, so they likely missed tiles beside the road too, with the same reading: contacts
+  cannot move, frame cost can, a little.
+
+**The prefetch is issue 147 (133).** 144 lands as the correctness fix. Making the look-ahead ask
+for every tile within the reach, so the wait seldom blocks, is speed only, with its own measure
+and prediction.
