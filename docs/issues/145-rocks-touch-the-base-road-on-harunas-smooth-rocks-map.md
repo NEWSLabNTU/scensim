@@ -1,6 +1,7 @@
 # 145: rocks touch the base road on Haruna's smooth rocks map
 
-**Status:** open; a bisection first (133). **Severity:** medium: issue 123's self-check fires, so
+**Status:** fixed, siw 1535c3b: the rock pool joins `rocks` before the next physics step,
+and an intake self-check. **Severity:** medium: issue 123's self-check fires, so
 rocks rest on or fall to the world's own road and terrain instead of the true surface.
 **Found:** 2026-11-24, scensim 118, issue 142's Haruna drives. Cross-linked with issue 136 (the
 rough map's base contacts).
