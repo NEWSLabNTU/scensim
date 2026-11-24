@@ -45,3 +45,11 @@ waits are timings), each held to the wall clock and unpaced.
   and 152), so the fix is judged against both: the filed numbers (19ad467: 48 waits over 50 ms,
   27 s, 33.7 frames a second unpaced) and the baseline's. The filed prediction stands as written.
   The (frame, tile) lists are compared with the baseline's real-time run.
+- **Amended before the runs (133, labelled):** with the prefetch, tiles come from the worker
+  earlier than on the baseline, so the comparisons are:
+  - (a) the fix held to the wall clock against the fix unpaced: identical (frame, tile) lists
+    (probe144's `rocks` and `coll` events), issue 144's pace invariant on the fix;
+  - (b) the fix against the baseline: at each frame's end, the same set of tiles ready within
+    32 m of the car (issue 144's wait guarantees it on both), read as the same (frame, tile)
+    lists of rocks loaded and collision tiles made, which depend only on that set.
+  - A run counts only with `wait_missed` 0, on all four.
