@@ -426,7 +426,7 @@ with 10.3 GB of VRAM free; on the card were teacup1117's unidrivevla python (9.5
 | outcome | exitFailure at 240 s | exitFailure at 240 s |
 | contacts | none | none (`contacts`, `npc_contacts` empty) |
 | barriers (truth, map frame) | x 305.64; y -128.21, -129.51, -130.81 | the same |
-| knob read-back | `sun_altitude_angle` 60.0 (get_weather) | `sun_elevation` 60.000001 on 5019 of 5019 frames after its send (frame 1), max deviation 9.7e-7 against 0.007; `knobs.ok` true |
+| knob read-back | `sun_altitude_angle` 60.0 (get_weather) | `sun_elevation` 60.000001 on 5019 of 5019 frames after its send (frame 1), max deviation 9.7e-7 against 0.007; `knobs.ok` true. **Withdrawn (2026-11-25, after step 2b):** the field is in radians, so the value sent was 60 rad, and CARLA's sun stood at 3437.7 deg of altitude; the read-back only echoed it (below) |
 | `maps` lanelet2 digest | a85836f5... | the same |
 | `anchors.barrier_lane` | 6583 | 6583 |
 | `anchor_source` | digests ee291b6e..., 428462cc...; commit 19d52699 | the same digests; commit 732fd615: **FAILED (wording)**, below |
@@ -467,6 +467,36 @@ Predicted, before any run:
 Named risks: a 490 m Autoware drive on Isaac Town01 has not been run before, and a drive
 failure not of K9's making is the pilot's result, not a binding failure; a stage reload on the
 switch, or aib not restarting on the variant, is a K9 finding, reported before any rerun.
+
+**Step 2b's result (2026-11-25): the knob FAILED, by my units error; the rest as predicted.**
+k9_cs3_isaac, suite `both` on one stack, from f429787b's own install (wt-k9e; scensim_isaac_world
+46c09ec, aib as pinned there), Isaac Sim 6.2 from NVMe, seat 0. The waiter started it at 05:25,
+the card's other jobs then teacup1117's unidrivevla python (9.5 GB), with 39 GB of memory
+available; by its end a ddcm python (5.6 GB) and teacup1117's CARLA 0.9.15 (6.6 GB) had come
+back. Both runs are error runs (`knob_profile`), so neither counts as a result until rerun.
+
+| | pm=current (Town01, stale) | pm=works (Town01_west_street_closed) |
+|---|---|---|
+| Autoware's route | 28257, 41654, 6583, 42451, 32189 (CARLA's) | 28257, 42063, 28958, 39793, 21828, 41443, 32855, 42824, 32189 (CARLA's) |
+| ego in 6583 | from sim 27.85 s | never |
+| outcome (SSv2) | stopped for good at sim 32.4 s, centre x 314.77 (y -129.59), before the barriers; exitFailure at 240 s | reached the goal at sim 129.3 s: exitSuccess |
+| contacts | none | none |
+| barriers (truth, map frame) | x 305.64; y -128.21, -129.51, -130.81: CARLA's to the centimetre | the same |
+| `anchors.barrier_lane` | 6583, `anchor_source` step 2a's (digests, commit 732fd615) | the same |
+| `maps` | Town01, a85836f5 | the variant, a2daf41c; the switch restarted the pilots alone in 10.0 s, no stage reload |
+| knob | **FAILED**: `sun_elevation` read back -0.3097 on every frame, 60.31 off | **FAILED**, the same |
+
+*The knob's cause: my value, not either world.* `sun_elevation` is in radians: OpenSCENARIO's
+Sun, the bridge's profile field (`Field::SunElevation`, "rad above the horizon") and both
+world servers use radians. I wrote `environment: {sun_elevation: 60}` meaning 60 deg, so
+both worlds were sent 60 rad. Isaac placed its sun along that direction and read back the
+physical elevation: asin(sin 60) = -0.3097 rad, the value logged. It was right to fail. The
+CARLA world server turned 60 rad into `sun_altitude_angle` 3437.7 deg and its read-back
+converted the same number back, 60.000001: an echo of an impossible angle, not the 60 deg sun
+of attempt 3. So step 2a's knob line is withdrawn (its other lines stand: the ego's perception
+is lidar's, which no light changes) and step 2b's knob line is FAILED. Nothing checked the
+unit: the unit test's `ENV_WORLD` used 60 too, as did the docs' example and both
+testbenches. The fix is proposed to 133 before any rerun.
 
 **Step 3, the close-out.** K9's row to done, with the Isaac result; scenario-description.md's
 "the same names on every target" marked built. D2's region-scoped knobs (`applies:`) and
