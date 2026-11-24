@@ -2097,6 +2097,49 @@ fords; a zone's water depth asked for is refused by name).
 - 118's prediction: the wet zone within 15 % of Isaac's stopping distance (both scale the
   tyre's friction linearly in mu; the tyre models differ at the limit).
 
+**P0's result (2026-11-25, 06:14 to 06:16, 118).** CARLA 0.9.16 on 118's port 2010 (GPU0,
+offscreen, Town01; started and stopped by its process group; codec told), synchronous at 0.05 s,
+`p0.py` (`/mnt/renegade/aeon/isaac-ex/c7p0`, its log `p0.jsonl`). Departure from the spec: the
+cars ran the blueprint's physics, not the spec's (the questions are the trigger's and the
+apply's; the blueprint's tyre friction is 3.5, as the spec's Model 3). A, the probe's car; B, a
+Model 3 parked 40 m behind, never in a box.
+
+| question | 118's prediction | measured | |
+|---|---|---|---|
+| (a) the trigger's value | absolute | every wheel reads 1.0 (the box's `friction`) from 3.5 | held |
+| (b) which wheels | all four, by the car's overlap | all four, from the car's body touching the box (x 57.4 m for a box from 60 m); a box 1.2 m wide under the left track only gave all four 1.0 too | held |
+| (c) on leaving | back to the value on entry | back to 3.5 (the car's own and the blueprint's are both 3.5 here, so which of the two is not settled) | not settled |
+| (d) `physics_control` reads it | yes | yes (so acb's check would see it, as a factor on every wheel) | held |
+| (e) cost | none measurable at 20 | tick p50 / p95 0.46 / 0.66 ms with 1 box, 0.56 / 0.91 ms with 20 | held |
+| (g) the trigger on another car of the blueprint | leaks | **B read 1.0 on every wheel while A was in the box**, and 3.5 again after | held |
+| (g) a per-wheel apply on another car | leaks | B stayed 3.5 on every wheel; A read [1.0, 3.5, 1.0, 3.5] (per wheel works) | **failed** |
+| (h) the apply, raw | the speed near 0 at the apply | 10.1 to 0.0 m/s at the apply, and the car stays at 0 (coasting, no command) | held |
+| (f, h) the apply, velocity set back | a dip of one tick, under 0.05 m/s; yaw rate under 0.5 deg/s | a step of about 0.17 m/s (mean 10.05 to 9.88), kept; the yaw rate alternating +-1.05 deg/s every tick from the apply on (the left wheels at 1.0) | **failed** |
+
+What it means for C7:
+
+- **CARLA's friction trigger cannot carry a zone.** It acts on the whole car, and its value
+  reaches every car of the blueprint, in the box or not: a wet zone under one Model 3 would make
+  every Model 3 in the world wet. Not only split-mu: the trigger is unusable for any zone in a
+  world with two cars of one blueprint (an ego and a background AV of the same car, 092's
+  seats).
+- **A per-wheel `apply_physics_control` is per car and per wheel** (no leak to B), but it
+  disturbs the car: raw, it stops it; with the velocity set back, a 0.17 m/s step and a yaw-rate
+  chatter. An apply happens each time a wheel crosses a zone edge (four a zone, entering and
+  leaving), so a crossing at speed costs a step and a chatter each time.
+- So both of C7's mechanisms as planned fail a check. The options, for 133:
+  (1) per-car friction by `apply_physics_control` (the world server's existing `apply_kept`,
+  decoy and velocity restore) when the car's set of wheels on a zone changes, accepting the
+  step, measured and stated; split-mu per wheel by the same apply, and acb's drift check taught a
+  per-wheel factor (an acb change);
+  (2) C7 on CARLA reduced to whole-world conditions (today's) with zones refused by name, and the
+  zone checks on Isaac only, recorded as CARLA 0.9.16's limit; revisit on CARLA 1.0 (Chaos), whose
+  P0 comes after 083 step 5;
+  (3) P0b first: whether the step comes from the apply's rebuild or from the velocity restore
+  (a restore with no apply, an apply with the angular velocity left alone), and whether the chatter
+  is the friction split itself (an apply of equal friction on all four). 118's lean: (3) then (1)
+  if the step is the restore's and small, else (2).
+
 **The hosts.** CARLA on 118 (its own CARLA on port 2010; issue 005 is Isaac's SimReady render on
 118's driver, not CARLA's, so 118 runs C7's CARLA side, P0 included). The Isaac reference is
 K9f-a's own Isaac Town01 run on 243's host for the same zone and class; if K9f-a's run cannot
