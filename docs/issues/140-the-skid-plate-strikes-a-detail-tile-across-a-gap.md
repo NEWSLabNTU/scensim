@@ -60,3 +60,37 @@ from step 997, after the strike), logging at t 16.45 to 16.70 s (steps 987 to 10
   authored offsets, and the plate's own contact offset (with the tile's) reaches past the
   8.3 cm gap: PhysX made the point from the face's plane within that reach and the solver acted
   on it as closing.
+
+### The geometric probe's result (2026-11-24)
+
+*rough_none*, siw main 4df3198, GPU0 quiet. Two starts died in the probe's own code within 8 s
+(a stale commit checked out, stopped before it ran; then the probe reading issue 137's old plane
+tuple) and measured nothing. The third ran to its end (rc 0). The strike repeats to the digit:
+step 994, the skid plate on tile `t_5_21_26` at (81.60, 345.30, -108.996), normal (-0.021,
+-0.479, 0.877), separation +0.0826 m, 6283 N s.
+
+- **Not a true strike.** Over steps 987 to 1004, of the plate bottom's 1288 points (a 5 cm grid
+  and its edges, every one over the tile), the least vertical gap to the tile was **9.75 cm**
+  (step 993, along its next step's path), and 10.4 cm at step 994 itself. Near the struck point
+  the plate's bottom was 11.2 cm above the tile at step 994. The plate passed over the pothole's
+  far wall with about 10 cm to spare.
+- **What the solver acted on.** The plate's motion over step 994 along the struck face's normal
+  was 8.63 cm, against the point's 8.26 cm: on the face's plane, extended past the 3 cm wall, the
+  step would have closed the gap, and the solver removed the closing speed (the impulse is along
+  the normal alone).
+- **The contact offsets.** Neither the plate, the body nor the tile carries PhysxCollisionAPI:
+  nothing is authored, so PhysX's own defaults apply. They reach far: in this window PhysX made
+  contact points with separations up to 0.33 m between the plate and the tile, 1.8 m against the
+  base road and 7.4 m against the terrain. So a point on any tile face within about a third of a
+  metre of the plate exists, and a steep face whose plane the plate approaches fast enough draws
+  an impulse.
+- **118's prediction: held.** No point of the plate within 3 cm of the tile (the least was
+  9.75 cm), the strike again at step 994, no authored offsets, and a reach past the 8.3 cm gap.
+
+So the strike is PhysX acting on a tile face's plane across a real gap, not geometry: the tile's
+5 cm mesh turns a pothole's 3 cm wall into faces as steep as 29 deg, and the default contact
+reach lets the plate's approach to the plane of one count as a collision. Not changed yet (133:
+the record and the probe first). Options for whoever takes it: author a small contact offset on
+the detail tiles and the plate (a few cm: the gap at which a contact may form), or keep steep
+tile faces out of the chassis's filter, each with its own probe that the plate still meets a
+real ridge or rock.
