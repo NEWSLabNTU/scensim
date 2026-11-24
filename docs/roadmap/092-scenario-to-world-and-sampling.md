@@ -49,7 +49,7 @@ From the design's section 10.
 | K10 | 093 D3's behaviour models (scenario-description.md section 4): the model interface (a parameter schema, `reset`, `step`, one array API code for numpy on seats and `step_batch` in torch; truth in, a kinematic command out, decisions into the truth), the starter model (a gap-acceptance walker for CS1, from a published model named before any coefficient), batched in scensim_batch, on seats as a K4 attachment that commands its entity through K12; the agreement check in K2.4's style (the same records on both forms: decisions and their frames, the walker's trajectory error, trigger times, verdict); the latency from a truth frame to the command taking effect measured free-running and in lockstep (093's open question 1) | component | K2, K4, K12 | swb 241 | done 2026-11-24; its open recheck (issue 130) closed the same day, the decisions at the same frames on new seats runs ("K10's open recheck" below) (the close-out below: the engines' map-frame velocity, D3's section 4 out of draft; not covered: a vehicle model, parked with the user, and an agreement with an engine in the loop, until both targets share an ego). Before: planned 2026-11-22 (133 approved), the section 4 draft corrected (SSv2 takes a world-owned pose for any entity; pilots do not see truth, attachments do); (i)-(ii) landed ce760b69: `scensim.behaviour`, the walker on numpy and torch bit for bit (0 of 2800 arrays differ on an RTX 5090), its coefficients the cited set `khaki2021_restricted` (Khaki and Mohammadnazar 2021, CC0; the gap's 2.021 against the 2021 meta-analysis's pooled 1.98); (iii) in the batch: a model entity (role `model`) compiled from its ObjectController (its properties per slot, `anchor.*` for the crossing, its seed from `seeds.pilots.<entity>`), stepped after the ego's physics on its truth and moved kinematically within its acceleration limit; CS1's start trigger is the model's `start_gap` (`$ttc_entry`), as the subset keeps ActivateControllerAction seats-only; the walker decides where it can still stop at the kerb; `cs1_walker_gap_acceptance.xosc` the batch example (the description's CS1 stays refused: a storyboard SpeedAction on a model entity); (iv) the agreement with seats passed 2026-11-24 on K12's exit set 3 ("K10's agreement" below: the seats ego played back, no engine; the batch now takes a model entity as world-owned with the channel's lag 1), (v) the latency is K12's (set 3: lag 1 in lockstep and free-running); not covered: an engine in the loop, the engines' map-frame velocity |
 | K12 | Truth-fed pilots: a command channel from a K4 attachment to the world server (`entity_command`: an entity's kinematic command, carried with the tick gate's acknowledgement, integrated and applied by the world, read back to SSv2, whose fork adopts it for a simulator-driven pedestrian), under lockstep held to one frame; for K10's behaviour models and learned background agents | component | K4 | swb 243 | landed 2026-11-23 (scensim 0cc054d8; the SSv2 fork's model pedestrian, COMMANDED on the world protocol, the CARLA world server's integrator, the bridge, truth schema 3, attachments' `commands:`, `scensim.behaviour.seats`); pedestrians first, CARLA only; exit passed 2026-11-23 on set 3, by the rule fixed before the runs ("K12's exit runs" below) |
 | K11 | 093 D4's search (purpose B): an adaptive search over cells that writes the record's reserved `search` | component | K1, K7 | swb 241 | in progress: K11a done 2026-11-24 (`scensim-sample search`; "K11a's result" below, check 1's fourth part failed, its cause named); K11b, K11c open |
-| K13 | A vehicle behaviour model ([vehicle-behaviour-model.md](../design/vehicle-behaviour-model.md)): the Intelligent Driver Model as a car-follower on a lane anchor, its coefficients a cited set (`zhang2024_highd_car`), commanded through K12's channel as it is (speed, heading, acceleration limit); K12's vehicle side in the fork and `scensim run`; numpy and torch bit for bit; seats against the batch; a first K11 search on a platoon | component | K10, K12, K11 | swb 241 | planned 2026-11-25 (user approved the model through 133); plan below, approved by 133 the same day |
+| K13 | A vehicle behaviour model ([vehicle-behaviour-model.md](../design/vehicle-behaviour-model.md)): the Intelligent Driver Model as a car-follower on a lane anchor, its coefficients a cited set (`zhang2024_highd_car`), commanded through K12's channel as it is (speed, heading, acceleration limit); K12's vehicle side in the fork and `scensim run`; numpy and torch bit for bit; seats against the batch; a first K11 search on a platoon | component | K10, K12, K11 | swb 241 | landed 2026-11-25 (scensim 73575ba9; issues 160, 163, 164, 165 after it); exit: checks 1, 2 and 4 held (check 2 rerun after issue 163), check 3 held except one threshold event, failed with its cause ("K13's exit check 3" below); open: step v, the K11 search on Town05. Before: planned 2026-11-25 (user approved the model through 133); plan below, approved by 133 the same day |
 | E1 | Examples | examples | the above | | open |
 
 ## K6: Jazzy for the whole set (plan, 2026-11-24, 243; approved by 133, before any build)
@@ -1758,4 +1758,49 @@ old seats runner and the old batch. One case again, both new: L seed 2 of K12's 
 agrees as K10's run 2 did. The walker waits for its `start_gap` well past S, so neither fix moves
 it: outcomes passed on both, the decisions the same sequence at the same steps on both sides
 (appear, reject, go_after), every element offset 0, the walker's max xy error about 1.5e-4 m.
+
+**Run 3 (2026-11-25): holds but for one threshold event, FAILED with its cause.** scensim
+f924c3b4 (issues 163, 164 and 165), on check 2's rerun 2 records, the rule unchanged.
+
+| run | outcome (seats / batch) | follower max / RMS xy | lead | ego | element offsets | decisions (step, event) |
+|---|---|---|---|---|---|---|
+| decel 2 (S 10) | passed / passed | 0.0288 / 0.0100 m | 6.0e-5 m | 0 | all 0 | 0 follow, 366 stopped on both |
+| decel 4 (S 14) | passed / passed | 0.0278 / 0.0098 m | 6.0e-5 m | 0 | all 0 | 0 follow, 356 stopped on both |
+| decel 6 (S 11) | passed / passed | 0.0277 / 0.0098 m | 6.0e-5 m | 0 | all 0 | 0 follow on both; stopped 354 seats, 355 batch: FAILED |
+
+Items 1, 3 and 4 hold in all three runs: the follower within 0.029 m against the 0.10 m bar,
+inside the prediction (0.005 to 0.03 m). Item 2 holds for decel 2 and 4 and fails for decel 6,
+by one step on `stopped`. Its cause (133: recorded as FAILED, not re-judged): `stopped` fires when
+the follower's speed drops below `STOP_SPEED` 0.05 m/s, and at step 355 the seats follower was at
+0.04944 m/s and the batch's at 0.05047, 1 mm/s apart with their positions 0.2 mm apart. The 1 mm/s
+comes from inputs that differ by design: the seats follower reads CARLA's car tracking SSv2's
+lead, the batch reads SSv2's lead itself (within 0.021 m after the start, measured before the
+rule). Rows and the decel 6 pose dump: `~/nas/autoveh/logs/k13-check3/run3/`.
+
+**K13's exit (133).** Checks 1, 2 and 4 held (check 2 on its rerun after issue 163); check 3
+held except one threshold event, which failed with its cause.
+
+**Amended for future agreement checks, set after K13 check 3 run 3 (133).** A threshold event
+(a decision that fires when a model's state crosses a fixed value, such as the follower's
+`stopped` at `STOP_SPEED`) may occur one step apart on the two sides when the model's state at
+that step is within the bound its inputs' difference allows of the threshold. The rule states
+that bound before the run, derived apart from the run it judges. For a car-follower reading
+another vehicle, the inputs differ by the seats leader's tracking error, at most 0.021 m after
+the start (measured before check 3's rule), and the bound is **0.0066 m/s** of speed. Its
+derivation, a batch-only sensitivity run (no CARLA; `k13_threshold_sensitivity.py`): the
+platoon of check 2's rerun 2 records in the batch, the lead's position as the follower reads it
+moved along the lead's heading by +0.021 m, by -0.021 m, and by uniform noise in [-0.021, 0.021]
+m per step (seed 1); the follower's largest speed difference from the unperturbed run while it
+slows to rest (under 0.2 m/s, until both stop) was 0.94 to 0.98 mm/s for the constant offsets
+and 2.72, 3.27 and 3.24 mm/s for the noise (decel 2, 4 and 6); twice the largest, 6.54 mm/s,
+rounded up. Every other event, and every threshold event farther from its threshold than the
+bound, must still occur at the same step. K13's run 3 is not re-judged under it (its straddle,
+1.03 mm/s, would be within). Results: `~/nas/autoveh/logs/k13-check3/sensitivity/`.
+
+**K10's confirmation case (2026-11-25): agrees, as predicted.** L seed 2 on seats with issue 163
+(`2026-11-25T06-45-35_cs1_town01_street-6583_r0`, passed; commands lag 1, held 9, uncommanded
+1) against the batch with issue 165, K10's rule: outcomes passed on both; decisions appear 64,
+reject 85, go_after 124 on both; every element offset 0; the walker's max xy 1.49e-4 m (RMS
+1.28e-4), the van 2.0e-5 m, the ego 0. K10's agreement holds with both new runners
+(`~/nas/autoveh/logs/k13-check3/k10-confirm/`).
 
