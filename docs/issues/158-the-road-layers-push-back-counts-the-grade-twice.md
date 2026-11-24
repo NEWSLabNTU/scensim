@@ -169,6 +169,7 @@ only, as C6d's runner accepts); GPU0 with nothing else on it; codec told. NAS "2
   The road layer ran in both (the log's road detail line). **Every prediction held**: both
   passed, each pose error p95 within 0.0005 m of its side's earlier mean (low mode), NVTL p05
   within 0.001 of 3.12, no false stops, NDT 3 / 4, durations inside the earlier runs' spread.
-  So on Haruna the second force moved none of C6d's absolutes measurably: Autoware's speed
-  control took it out (it braked against it), and the trajectory and the scans did not change.
+  So on Haruna the second force moved none of C6d's absolutes measurably. *A hypothesis, not
+  tested here:* Autoware's speed control took it out (braking against it), so the trajectory and
+  the scans did not change; the runs logged no brake or drive command to show it.
   C6d's absolutes stand as recorded, now with this note.

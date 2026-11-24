@@ -719,6 +719,19 @@ checks pass and land. The fixture's localization becomes its own step, C5d2.
 
 #### C5d2's results (2026-11-23, 118, GPU0)
 
+*Note 2026-11-25 (issue 158, 133's question): C5d and C5d2 are plain-map fixtures, by design.
+Their checks are Autoware's maps from the course meshes (the lanelet heights within 5 mm, the
+divided cloud) and NDT's localization on a road whose crown and bank are the mesh's, PhysX's base;
+none of them is about R5's contact. The course builder writes the record's road detail to
+`course/road_detail.yaml`, not to the map directory the world server reads (`course/record.py`
+says so), so these runs drove the mesh alone, with PhysX's wheel and aib's roll bars, and never
+loaded the road layer. C5's exit claims nothing about R5's contact on them: its items are the
+mesh against the record (C5b, geometric), the lip re-entries (C5c, `lip_drive` building the layer
+itself on a level course), the slope matrix, and haruna_down on a crowned course, which C5d2
+stands in for as a localization check. Copying a course's `course/road_detail.yaml` into its map
+directory would turn the layer on, and with no `features:` the layer's default roughness (ISO
+class D) with it.*
+
 scensim_isaac_world 086-c5d2 (41a0102: the fixture's `barrier_offset_*` columns, `photo:
 forest`, `courses/fixture_c5d2.yaml`). Logs and data: NAS "2026-11-23 086 C5d2 fixture with
 lateral features (118)". Run on 118 in `/mnt/renegade/aeon/isaac-ex/c5d2`.
