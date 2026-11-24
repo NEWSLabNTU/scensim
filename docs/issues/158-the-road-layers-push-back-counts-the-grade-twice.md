@@ -1,7 +1,7 @@
 # 158: the road layer's push back along the road counts the base road's grade a second time
 
-**Status:** open: found offline 2026-11-25; the fix (F1) and its test are planned (below), not
-yet run. **Severity:** high on graded road-detail worlds: on any grade the car feels the grade's
+**Status:** fixed: scensim_isaac_world 31adacc (scensim main a41f92c7, 2026-11-25); the
+affected results' reruns and notes below. **Severity:** high on graded road-detail worlds: on any grade the car feels the grade's
 pull twice, forward downhill and backward uphill, about the load times the grade (1100 N on a
 6 % grade for aib's Model 3). **Found:** 2026-11-25, scensim 118, issue 157's force balance
 (numbered by 133).
@@ -122,3 +122,25 @@ restored to 30eb19a after; GPU0 empty at the start, non-timing (codec told); the
 - So 157's creep is now the ramp's alone, F2's question; 158 is fixed by F1 for the creep.
 
 Record: NAS "2026-11-25 issue 158 F1 and 157 P2 (118)".
+
+## Rerun or annotate (133's decision, 2026-11-25), and the predictions, before the runs
+
+- **Annotated, not rerun:** C6b's Haruna budget and C4's Haruna runs (a note at each in 086),
+  and issues 128, 134, 142, 144, 147 and 152 (this issue's reach table stands as their note):
+  none judged a dynamic quantity that the force moves.
+- **C5d2: rerun once** on main a41f92c7, its bars unchanged (NVTL p05 at least 2.5, pose error
+  p95 at most 0.2 m, the scenario passing); a fresh testbench workspace built against that
+  install, `isaac_c5d2_fixture`, `fixture_c5d2_down`, GPU0 non-timing. Before: passed, 127.4 s,
+  NVTL p05 3.08, pose error p95 0.103 m (median 0.054, max 0.127).
+  118's prediction: passes; pose error p95 0.07 to 0.14 m; NVTL p05 3.0 to 3.15; the run's
+  simulated time within 5 % of 127.4 s. On -3 % the second force was about 0.03 of the load
+  forward, which Autoware's speed control took out with less drive or more brake; with it gone
+  the speed profile, which the planner sets, should stay, and with it the scan's poses.
+- **C6d: one run a side** (rough_rocks r4, rough_none n4) on a41f92c7 under C6d's runner and its
+  quiet rule, each side's testbench rebuilt against that install; the absolutes then annotated
+  with the measured shift. Before (means of three): pose error p95 0.1238 m rocks, 0.1235 none;
+  NVTL p05 3.118 and 3.119; false stops 0 a km; NDT iterations p50 / p95 3 / 4.
+  118's prediction: both pass; each pose error p95 within 0.02 m of its side's earlier mean,
+  unless the run falls in Haruna's high mode (about 0.18 m, C5's exit pairing), which is then
+  named as that mode, not a shift; NVTL p05 within 0.02 of 3.12; false stops 0; NDT iterations
+  3 / 4. The rocks' delta is not judged again from one run a side.

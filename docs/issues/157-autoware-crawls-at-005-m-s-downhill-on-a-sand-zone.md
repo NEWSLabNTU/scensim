@@ -1,6 +1,6 @@
 # 157: Autoware's Model 3 crawls at 0.05 m/s downhill on a sand zone on Haruna
 
-**Status:** open: the probe found the sand's resistance, not the brakes (below); a modelling question for 054's sand class. **Severity:** to judge: a sand
+**Status:** open, low priority: its cause was issue 158 (fixed) plus the soil's low-speed ramp, a known limit (below). **Severity:** to judge: a sand
 model that holds a car still downhill would be a physics bug; the record cannot yet tell that
 from the controller's braking. **Found:** 2026-11-25, scensim 118, 086 C4's acceptance runs
 (numbered by 133).
@@ -216,3 +216,9 @@ Autoware's slope compensation (hypothesis 3).
 the 0.052 to 0.055 before, and gravity, the soil and the road layer close to -85 N; the creep left
 is the ramp's alone. Details and the predictions' outcomes in issue 158's "Issue 157's P2 on F1".
 F2, the ramp, is 133's choice next.
+
+**A known limit (133, 2026-11-25):** on soil below the ramp's speed a car whose soil resistance
+exceeds the grade's pull creeps, at about RESIST_V0 x pull / resistance: 0.025 m/s on this map
+and grade (P2). F2, lowering RESIST_V0 or a static hold, is deferred: it moves every soil
+world's low-speed behaviour and would need 055's suite rerun. 157 stays open, low priority;
+revisit when a scenario needs a true standstill on soil.

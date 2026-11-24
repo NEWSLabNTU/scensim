@@ -256,6 +256,11 @@ scensim_isaac_world 6177ced (pins cebb5557), scensim 82787b91; 056's steps 1-4.
 
 #### C4's acceptance (found late and finished 2026-11-25, 118)
 
+*Annotated 2026-11-25 (issue 158, 133's decision): these runs had the road layer's second grade
+force (about the load times the grade, forward downhill). The judged items (the named map set at Init, a refusal reaching SSv2) do not depend on the
+car's speed; scenario 1's crawl on sand (issue 157) halves with the fix, to the ramp's own. Not rerun.*
+
+
 - **Item 3, found late (2026-11-25).** 241 ran it on 2026-11-20, assigned by 133: `isaac_soil`'s
   suite `soil` on Isaac Town01 at scensim cc7bf09, one world server, town01_soil, town01_mud,
   town01_snow and town01_zones one after another, each naming its own map from the testbench
@@ -1479,6 +1484,11 @@ unchanged. The runner now accepts a provenance whose commit has the landed main'
   minutes between every pair of runs, about 4 hours for the budget instead of about 1.5.
 
 #### C6b's budget on Haruna: results (2026-11-24, 118)
+
+*Annotated 2026-11-25 (issue 158, 133's decision): these runs had the road layer's second grade
+force (about the load times the grade, forward downhill). The judged quantity, frame time with rocks against none, does not take the force except
+through the trajectory, and both sides had it; the driving under it was never judged. Not rerun.*
+
 
 scensim main ddf1c32e (siw 31593ab: issues 128, 132 and 134 in), workspace `gate-c5c` as gated
 (ee643c0b, the same tree; provenance accepted by the rule), testbenches rebuilt over it, GPU0
