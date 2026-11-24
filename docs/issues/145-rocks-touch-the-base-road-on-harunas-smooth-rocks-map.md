@@ -165,8 +165,8 @@ contacts with the base from the contact report.
 |---|---|---|---|
 | D | before play | before play | no: a body from the start |
 | D2 | before play | before play | yes |
-| P | after play, parked, then reused (the pool's way) | the frame it is made, collision on | yes |
-| L | after play, at rest (a prim made live) | the frame it is made, collision on | yes |
+| P | after play, parked, then reused (the pool's way) | a physics step after it is made | yes |
+| L | after play, at rest (a prim made live) | the frame it is made, before any step | yes |
 | L2 | after play, collision off | the frame it is made; collision on a frame later | yes |
 | N | before play | never (the control) | no |
 
@@ -180,3 +180,11 @@ the base and is pushed up onto it, its lowest point near 0.05 m.
   not applied (issue 123's rule for a group, here for a member). Waking alone is not the cause
   (D2). The fix would be L2's order: a new rock's collision on only after its membership is in.
 - If D2 also fails, waking is the cause (its body enabled drops the filter), and L2 fails too.
+- **Amended before the run (118, on reading the code again).** P and L were first both written as
+  joining `rocks` in the frame they are made. They do not. `reserve` makes the pool's prims at the
+  road's load and the ego's spawn, and they join at the next `update`'s flush, after at least one
+  physics step. A live prim (`_stream_rocks`) joins in the same `update`, before any step. The
+  table above now says so, and the test does that. The prediction for L changes with it: by the
+  same reasoning L, whose membership is in before PhysX's first step with it, stays on the tile
+  like L2. P still fails. All 46 hits of the diagnosis were pool prims: r2 to r623, within the
+  pool's r1 to r768 (`rocks` held 768 members at the first hit).
