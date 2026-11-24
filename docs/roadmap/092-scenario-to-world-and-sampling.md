@@ -121,6 +121,72 @@ cargo and pip; `/` kept 909 GB free):
   (39) in 2 min 11 s, the simulation packages (45, acb_bridge included) in 11 min 21 s, 4
   workers.
 
+**Result** (2026-11-24, 243). `just jazzy-check` passed on f8e65c58 (22:00 to 22:46, host load
+3 to 27): a fresh worktree of HEAD in `scensim-jazzy-check` (1.47 GB; its home volume 3.9 GB
+after setup), `just setup`, `just build` (the vendored packages, 39, in 3 min 5 s; the
+simulation packages, 45, in 13 min 52 s), then `just test`, every suite:
+
+| suite | Jazzy (f8e65c58) |
+|---|---|
+| Rust: the bridge, the protocol, the CARLA world server | 117, 188 (1 skipped), 212 passed |
+| scripts | 125 passed, 14 skipped |
+| scensim_launch | 394 passed, 17 skipped |
+| scensim | 794 passed, 5 skipped |
+| roboracer | 41 passed, 1 skipped |
+| scensim_agent and the relay | 273 passed, 1 skipped |
+| scensim_sampler | 141 passed, 2 skipped |
+| scensim_batch | skipped: torch does not import |
+| czp | 86 passed |
+| scensim_world_server | 39 OK |
+| scensim_isaac_world | 487 OK, 47 skipped (no aib, no pyproj) |
+| autoware_sim_vehicle, the scenario vehicle checks | 40 passed, 8 skipped; 10 passed |
+
+Python is 3.12 and numpy 1.26.4 (apt's). The developer path (item 2) ran from a fresh image and
+home: install `just` 1.40.0, `just setup` (20 min, apt and rosdep included), `just build` (13
+min). 241's bundle "jazzy scensim tests (241)" (2026-11-18) had already shown the Python suites
+pass on Jazzy run by hand; this is the same through the recipes.
+
+Against the predictions:
+
+- the Rust crates: met, unchanged;
+- the Python suites: met in sum, not in the breaks. None of the predicted breaks appeared (no
+  Humble path or package named, no deprecation made an error). What broke were tests that
+  leaned on the developer's host, which a fresh 24.04 does not have: carla's wheel in
+  `~/.local` (6 keeper tests; the test now writes a stub wheel), the vehicle side's Autoware
+  packages (3 stack tests; skipped when the vehicle side is not built), aib (the Isaac world
+  server's surface layer imported it at load: issue 149, siw 7d032d6), pyproj (siw's lanelet
+  heights; skipped without it), libclang 14 for `just test` and `just check` (they now set
+  `LIBCLANG_PATH` off Humble as `just build` does), and rosdep's cache (`just setup` now runs
+  `rosdep init` and `rosdep update` when they are missing, and prints them). Each also hid on
+  Humble behind the developer's own host;
+- `scensim_batch`: met, after a fix: its suite did not collect without torch; `just test` now
+  runs it only when torch imports and says so;
+- `just setup` and PEP 668: met;
+- the relay's messages: not met. acb_bridge needed `third_party/sim_vendor` (above);
+- the conformance check (item 3): not run yet. It is the one GPU step, asked of 133 first.
+
+**Two failed runs, and a wrong first reading.** jazzy-check's runs 1 and 2 (0222418e) failed
+the same way: four of `scripts/test_t3.py`'s stop tests timed out at their 30 s wait, and the
+suite took 1072 s instead of about 64 s. Run 1 had shared the host with another project's CI
+gate (20:38 to 21:04, up to 98 runnable threads on 32), and I read the failure as load. That
+reading was wrong. Run 2, at load 3 to 4, failed identically, and the cause was the container:
+`bash -c '...; just test'` makes `just` PID 1, which never reaps orphans. The tests' fake stack,
+orphaned, stayed a zombie, and a zombie still counts as a member of its process group, so t3's
+`stop_group` waited out every grace. With pytest as PID 1 the sigterm test fails at 30.3 s;
+under `docker run --init` all 29 t3 tests pass in 22.6 s. check.sh runs with `--init` since
+f8e65c58. t3 itself would hang the same way in any container without an init, a released
+stack's included: issue 153 (241).
+
+**A host hazard found on the way.** On this Humble host a pip numpy 2.2.6 in `~/.local`
+shadows apt's numpy 1.21, and apt's torch then fails at import (`_ARRAY_API not found`); a
+torch test K11d added failed `just test` here for it (issue 151). development.md now names it
+beside the setuptools rule.
+
+**Lapses.** Containers ran with `--rm` after `just setup` had installed apt packages in
+them, so the next step started without them; one kept container, committed as an image, fixed
+it. Issue 146's first gate ran beside my own Jazzy image build and was stopped by its memory
+guard. And the load reading above was reported before it was tested against a quiet run.
+
 ## K9's CS3: the pilot's map variants (2026-11-24, 243; reviewed by 133)
 
 **The plumbing.** `world.pilot_maps` in testbench.yaml declares, per world map, the maps a pilot
