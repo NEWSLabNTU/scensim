@@ -285,3 +285,30 @@ before its first step, woken together, 3 s) with one change each, two runs each:
 If S5 holds, the fix is to set `roadBase`'s members in the same stage edit that adds the world's
 ground (`_load_env`), before any step. That is issue 123's fix plan's step 2, which step 1's
 result made look unneeded. Its proof would be the live drive: 0 contacts.
+
+### The stage tests' result (2026-11-24, 21:49 to 21:51)
+
+siw issue-152 e0559e5 (`stage152.py`, from `stage145b.py`), GPU0 (free; no timing measured),
+two runs a variant. Record: `/mnt/renegade/aeon/isaac-ex/c6d/i152/stage` (`times.txt`,
+`s152.jsonl`, a log a run).
+
+| variant | base touched (run 1, run 2) | warnings | prediction |
+|---|---|---|---|
+| S1 base flush | 0 of 64, 0 of 64 | 0, 0 | held |
+| S2 pool of 768 | 0 of 768, 0 of 768 | 0, 0 | held |
+| S3 triangle-mesh base, flush | 0 of 64, 0 of 64 | 0, 0 | held |
+| S4a rocks' filter before the pool's intake | 0 of 64, 0 of 64 | 0, 0 | held |
+| S4b rocks' filter after the pool's intake | 64 of 64, 64 of 64 | 0, 0 | held |
+| S5 `roadBase` set after 60 steps of the base, flush | 64 of 64, 64 of 64 | 0, 0 | held |
+
+All held. In S4b every rock rests on the box 5 cm up, the case of issues 123 and 145. In S5 every
+rock rests on the tile (lowest point -2.4 mm) and touches the flush base. A flush base, a large
+pool and a mesh base keep the filter when the groups come first. Writing the filter after the
+pool's intake, or `roadBase`'s members after the base's, loses it. No variant logged the warning:
+the live world's 768 are of something none of these stages has, and they are not the contacts'
+cause (issue 123's record).
+
+S5 is the live world's order: the world server preloads the map's USD and steps it, with a
+warm-up ego, before the road's load writes `roadBase`'s members. So the remaining contacts are
+the preload hypothesis, and the fix is part 2: write `roadBase`'s members where the world's ground
+is added (`_load_env`), before the next step.
