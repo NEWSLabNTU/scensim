@@ -2213,6 +2213,29 @@ net of R0's (the coast's own loss over the same ticks, 0.030 m/s):
   `scensim_world_check conformance` passes. 118's prediction: all equal (tyre friction is
   float32: 3.5 x 0.6 reads back to within 1e-6 of 2.1, so 1e-5 holds).
 
+**C7 on 0.9.16: the result (2026-11-25, 118).** Code: scensim_world_protocol d1d65c3 (the
+proto as 092 states it, `World::applied_road_condition` in both shells) and f2d9103
+(`scensim_world_check conformance` reads the reply back at every wetness level and at 0.8 at
+wetWithPuddles, and checks the road capabilities' needs); scensim_carla_world 7bbf50f (the
+read-back, `ROAD_CONDITION_APPLIED`, the refusal naming the limit) and 4aeceff (below). Run: 118's
+CARLA on port 2010 (GPU0; started and stopped by its process group; codec told), the CARLA world
+server from that tree on port 5594, conformance with Town01's map (`isaac-ex/c7acc`).
+
+- **The first run failed one check** (06:53): after a wet condition, dry at scale 1 read back
+  scale 1.333 and wetWithPuddles. The tyre friction was right (1.0 = 1.333 x 0.75); the look was
+  wet. A probe of CARLA's weather calls (06:54) showed set and get immediate, and this CARLA's
+  Town01 boot weather already wetness 80 and deposits 40: the server's dry put back the weather
+  from before the scenario, wet look and all. So the read-back caught a real fault, not a stale
+  read. **Fixed** (4aeceff): once a scenario sets a road condition, its look (dry too) is the
+  road's until `Initialize`.
+- **The rerun** (06:55): conformance 30 passed, 0 failed. Every level read back, its scale within
+  1e-5 of the request's (1.000000 at each level, 0.800000 at 0.8, 0.6999999 at 0.7) and its
+  wetness the request's, from a spawned car (the server's fallback, "no vehicle the road has
+  reached", never logged). 118's prediction (all equal, within 1e-5 through f32 friction):
+  **held** on the rerun. The breaking test (a car's friction at another factor reads back that
+  factor) is a unit test, not live.
+- `ROAD_ZONES` is not declared; a zone is refused, in the reply, naming the limit.
+
 **The hosts.** CARLA on 118 (its own CARLA on port 2010; issue 005 is Isaac's SimReady render on
 118's driver, not CARLA's, so 118 runs C7's CARLA side, P0 included). The Isaac reference is
 K9f-a's own Isaac Town01 run on 243's host for the same zone and class; if K9f-a's run cannot
