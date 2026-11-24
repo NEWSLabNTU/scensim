@@ -542,6 +542,7 @@ class Models:
     def __init__(self, run, indices):
         self.run, self.idx = run, list(indices)
         self.models, self.events = [], {}
+        self.follower = []
         if not self.idx:
             return
         from scensim import behaviour

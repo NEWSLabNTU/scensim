@@ -50,6 +50,7 @@ def model_reads(st):
 
     m = core.Models.__new__(core.Models)
     m.idx, m.models, m.events, m._prev_v, m.pending = [0], [Stub()], {}, None, [None]
+    m.follower = [False]
     m.run = types.SimpleNamespace(c=types.SimpleNamespace(
         n=1, entities=[types.SimpleNamespace(name="walker")]))
     zz = torch.zeros(1, 1, dtype=torch.float64)

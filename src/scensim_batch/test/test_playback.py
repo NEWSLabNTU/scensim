@@ -98,6 +98,7 @@ class Playback(unittest.TestCase):
 
         m = core.Models.__new__(core.Models)
         m.idx, m.models, m.events, m._prev_v, m.pending = [0], [Stub()], {}, None, [None]
+        m.follower = [False]
 
         class Run:
             class c:
@@ -131,6 +132,7 @@ class LagAndView(unittest.TestCase):
 
         m = core.Models.__new__(core.Models)
         m.idx, m.models, m.events, m._prev_v, m.pending = [0], [North()], {}, None, [None]
+        m.follower = [False]
 
         class Run:
             class c:
