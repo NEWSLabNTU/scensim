@@ -195,3 +195,19 @@ the base and is pushed up onto it, its lowest point near 0.05 m.
   box whose top is at 0.05 m. The cases and the prediction are unchanged. Run 1's log also has
   omni.physx's warning "Collisions are supported currently only in one collision group", and
   run 2 lists every group's members to find which collider it means.
+- **133's question, and 118's prediction for it (before run 2).** omni.physx's warning means a
+  collider in two collision groups, of which PhysX keeps one. If a rock kept a group without the
+  `roadBase` filter, it would collide with the base exactly as measured. Is a pool prim already in
+  another group when it wakes? Run 2 lists every group's members before play and at the wake
+  frame, each rock's groups by its path or an ancestor's, and a line before each event's physics
+  step, so the warnings fall between them in the log.
+  - In the stage, nothing but `rocks` lists a rock (aib's `chassis` and `groundQuery` list the
+    car's colliders, and there is no car; `roadBase` lists the base; `rockTiles` and
+    `roadDetail` list tiles, and there are none). 118 predicts every rock in `rocks` only, at both
+    listings. If the warning comes again, it does not name a second group for a rock; 118 expects it
+    near the pool prim's late join (frame 11), from omni.physx taking an includes edit on a
+    collider it already holds.
+  - In the drive, a rock prim's path is under `/World/RoadRocks`, which no other group lists. The
+    tiles' static rock meshes (`/World/RoadRocks/s_*`) are in `rockTiles`, not `rocks`. So 118
+    does not expect a second group there either. Run 2 tests the stage only. If it shows a rock
+    in a second group, the drive's groups get the same listing next.
