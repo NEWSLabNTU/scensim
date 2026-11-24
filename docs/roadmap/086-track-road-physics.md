@@ -1617,7 +1617,7 @@ PhysX's body at 60 Hz, its peak the largest inner-step load (480 Hz).
 
 So C6a measured R2's and R5's modelling choices against R0's simpler car, not PhysX's
 coupling. C6a's verdict stands as measured (its rule is not amended); this is a reading beside
-it. Two modelling questions remain, neither of them wheel hop, proposed for Open:
+it. Two modelling questions remain, neither of them wheel hop, registered in Open:
 
 1. **R2's damper** (assumed: Tesla publishes no curves). Its bump side is what halves the
    small cleats' body rise. Settling it needs a measured damper curve for the car or its class,
@@ -1635,10 +1635,20 @@ predictions (same tools; `offline/` in the record):
   3.7-3.8 kN to 28.6 Hz (20 m/s), with no peak over the plateau: the rig's damper damps the hop
   heavily (about 0.55 of critical at the linear rate), and near 14 Hz the load clips at 0. On a
   1 cm washboard the shape is the same (0.99 to 1.81 kN, flat from 14 Hz).
-- On an ISO 8608 class C random profile (400 m, 14 mm rms), the reference's load spectrum
-  peaks at 9.8 Hz at 10 m/s and 10.7 Hz at 20 m/s, 1.7 and 2.2 times its level at 4-6 Hz. With
-  a linear damper there is no peak in 4-40 Hz. The body's acceleration shows no hop peak with
-  either damper.
+- On an ISO 8608 class C random profile, the reference's load spectrum peaks at 9.8 Hz at
+  10 m/s and 10.7 Hz at 20 m/s, 1.7 and 2.2 times its level at 4-6 Hz. With a linear damper
+  there is no peak in 4-40 Hz. The body's acceleration shows no hop peak with either damper:
+  a conclusion that holds for R2's assumed damper only (Open).
+- **The profile** (`offline/iso.py`, the one the Isaac section is built from): numpy
+  `default_rng(1)`, 400 m sampled every 0.01 m, ISO 8608's class C displacement PSD
+  (Gd(n0) = 256e-6 m^3 at n0 = 0.1 cycle/m, waviness 2) with uniform random phases, band-limited
+  to 0.011-2.83 cycle/m and scaled to that band's rms (14.3 mm); the same profile under both
+  tracks (no roll, as C6a's cleats).
+- **The spectrum** (both sides alike): Welch's method on the front-left wheel's load less its
+  mean, Hann windows of 2.048 s (1024 samples at the reference's 500 Hz; 983 at Isaac's 480 Hz
+  inner steps), 50 % overlap, averaged periodograms (0.49 Hz resolution); the peak is the
+  largest bin in 4-40 Hz, its height taken over the mean of the 4-6 Hz bins. Only the section's
+  constant-speed part counts (from 10 m into it to 10 m before its end).
 
 So 066's check, "a 10-15 Hz peak in the chassis and wheel-load spectra on washboard", cannot
 hold even for the reference: washboard gives one line a speed, and the chassis shows no hop
@@ -1663,7 +1673,10 @@ under the rig's damping. C6c1's check, proposed in its place:
   of the reference's. The body's 60 Hz force hold does not show in the wheel's load, which is
   integrated at 480 Hz. Both queries alike (the load is our contact's whichever query runs).
 
-**C6c2. Grip loss on washboard (a model choice for 133 before any spec).** Friction follows
+**C6c2. Grip loss on washboard: decided (b), 133, 2026-11-25.** Friction stays linear, and
+grip loss leaves R6's check. (a) would move earlier bars on every world, so it needs a sourced
+coefficient (Pacejka's load-sensitivity terms, say) and becomes its own item, which 133 puts to
+the user; registered in Open as a candidate. The proposal as sent: Friction follows
 the load linearly today (`friction_scale`), so a swinging load grips on average as the flat
 road does, and on 2 cm washboard the load stays above 0 (offline minimum 0.08-0.57 kN at
 10-20 m/s). Grip
@@ -1893,6 +1906,20 @@ C3 has written Haruna's record. About 4-5 weeks of work to C5, which gives one r
 record to Isaac, Autoware's maps and the planner.
 
 ### Open
+
+- **The corner's damper** (C6c's spec): R2's two-way damper is assumed (Tesla publishes no
+  curves). Its bump side halves the small cleats' body rise against R0's linear damper, and it
+  damps the wheel hop at about 0.55 of critical. C6c1's "no hop peak in the chassis" holds for
+  that damper only. A wheel hop's damping is commonly taken as lower than that; no source giving
+  a typical value for the hop mode was found in writing this (the course notes found give 0.2-0.4
+  for the body mode only, where the rig sits at 0.45, and remark that the hop peak is harder to
+  control). Settled by a measured damper curve for the car or its class, or a ride measurement.
+- **The cams on a box-edged cleat at speed** (C6c's spec): 60 kN on a 10 cm cleat at 20 m/s,
+  2.5 times the rigid disc's. Settled by cleat test data at speed.
+- **Load-sensitive friction, a candidate** (C6c2, 133, 2026-11-25): friction falling with
+  load (Pacejka's load-sensitivity terms) would give grip loss on washboard, and would change
+  every world's limit handling, so it needs a sourced coefficient and the user's decision as its
+  own item.
 
 - **The budget with two Autoware egos on Haruna** (C6b's two-ego line, which C6b measures with
   two cars without Autoware): when a two-ego Haruna scenario exists. Not built for C6b (133).
