@@ -440,8 +440,14 @@ def _world_anchors(project: Path):
 def _anchors_for(project: Path, dist: Path):
     """A distribution's anchors (092 K9a): the project's `world.anchors` and its map's resolved
     file (`assets/maps/<map>/anchors.resolved.json`, refused when resolved on another map),
-    merged by name; a resolved anchor's source names the lock's dataset and commit (K9d)."""
-    return anchorsmod.for_map(project, scenario_map(Path(dist)))
+    merged by name; a resolved anchor's source names the lock's dataset and commit (K9d). A map
+    that is not fetched is refused by name (issue 159): without it no resolved anchor exists,
+    and a binding would fail on a missing function instead."""
+    name = scenario_map(Path(dist))
+    if name and not (Path(project) / "assets" / "maps" / name).is_dir():
+        raise Refused(f"{Path(dist).name}: map {name} is not fetched (assets/maps/{name}), so "
+                      f"the world's anchors are unknown: run `{projectmod.FETCH}` in the project")
+    return anchorsmod.for_map(project, name)
 
 
 def sample_spec(record, scenario: Path, replay_of=None, **kw) -> "RunSpec":

@@ -490,6 +490,19 @@ def test_a_scenarios_anchor_bindings_are_set_before_ssv2_starts(tmp_path):
         run.expand(sc, tmp_path, params={"cyclist_s": [31.0]})
 
 
+def test_a_bound_scenario_on_a_map_not_fetched_is_refused_naming_the_fetch(tmp_path):
+    """Issue 159: with the project's map not fetched, a run of a scenario bound to its anchors
+    was refused with "lanelet_at(...): no such function of the world's anchors"; it is now
+    refused naming the missing map and `scensim assets fetch`, before any binding."""
+    import shutil
+    sc = _cs7_on_a_resolved_exit(tmp_path)
+    shutil.rmtree(tmp_path / "assets")
+    with pytest.raises(run.Refused, match=r"cs7_cyclist_low_sun.xosc: map town_street is not "
+                                          r"fetched \(assets/maps/town_street\).*scensim assets "
+                                          r"fetch"):
+        run.expand(sc, tmp_path, params={"cyclist_s": [20.0]})
+
+
 def test_repetitions_and_seeds_of_a_bound_scenario_each_bind_their_own_parameters(tmp_path):
     """Issue 126: every RunSpec of one parameter combination shared its dict, so the first
     spec's anchor binding wrote the bound value into the second's, which was then refused as
