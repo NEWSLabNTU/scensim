@@ -119,5 +119,35 @@ class Runner(unittest.TestCase):
             self.assertEqual(r["outcome"]["failed"], r["outcome"]["score"] <= 0)
 
 
+    def test_the_sloped_score_is_recomputed_from_the_saved_files_alone(self):
+        """092 K11e: with margin_k, each outcome carries closest_gap, decision_margin and the
+        score; scensim.truth.sloped_score on the saved slot directory (truth, record,
+        decision) gives the same, and a failure is still exactly gap <= 0."""
+        import importlib.util
+        from scensim import truth as T
+        spec = importlib.util.spec_from_file_location("search_run",
+                                                      HERE.parent / "scripts" / "search_run.py")
+        sr = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sr)
+        recs = [{"id": f"{i:064x}", "values": {"ttc_entry": t},
+                 "scenario": {"path": "cases/cs1.xosc", "sha256": "0" * 64},
+                 "seeds": {"scenario": 1 + i, "pilots": {"walker": 2 + i}}}
+                for i, t in enumerate((0.5, 1.5, 3.0, 6.0))]
+        with tempfile.TemporaryDirectory() as d:
+            sr.run(recs, CASE, StraightWorld(), Path(d), steps=240, step_time=DT, margin_k=1.0)
+            rows = [json.loads(x) for x in Path(d, "outcomes.jsonl").read_text().splitlines()]
+            for k, r in enumerate(rows):
+                o = r["outcome"]
+                again = T.sloped_score(Path(d, "truth", f"slot_{k}_ep0"), 1.0)
+                self.assertEqual(again["score"], o["score"])
+                self.assertEqual(again["decision_margin"], o["decision_margin"])
+                self.assertEqual(o["failed"], o["closest_gap"] <= 0)
+                m = o["decision_margin"]
+                want = (o["closest_gap"] if o["closest_gap"] <= 0 or m is None
+                        else o["closest_gap"] + max(m, 0.0))
+                self.assertEqual(o["score"], want)
+        self.assertTrue(any(r["outcome"]["decision_margin"] is not None for r in rows))
+
+
 if __name__ == "__main__":
     unittest.main()

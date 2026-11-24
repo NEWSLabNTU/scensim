@@ -181,6 +181,39 @@ class Files(unittest.TestCase):
             self.assertEqual(r["scenario"]["path"], "s.xosc")       # not this host's path
             self.assertEqual(R.check(r), [])
 
+    def test_a_uniform_is_the_base_in_g0_and_a_normal_from_g1(self):
+        """092 K11e: g0 keeps a uniform variable uniform, so every g0 weight is 1."""
+        self.d.write("u.yaml", "model: 1\n" + HEADER + "variables:\n"
+                     "  - {name: speed, uniform: {low: 0, high: 20}}\n"
+                     "  - {name: gap, normal: {mean: 0, sd: 1}}\n")
+        out, st = run(self.d, spec(4, n=200, model="u.yaml"),
+                      lambda r: r["values"]["speed"], until_done=False)
+        g0 = records(out / "g0.jsonl")
+        self.assertLess(max(abs(r["weight"] - 1.0) for r in g0), 1e-12)   # log-space rounding
+        self.assertIn("uniform", (out / "g0.yaml").read_text())
+        self.assertNotIn("uniform", (out / "g1.yaml").read_text())   # refitted: a normal
+
+    def test_went_and_avoided_is_counted_per_generation_and_in_the_elite(self):
+        """092 K11e: an outcome with decision_margin < 0 and closest_gap > 0 is a walker that
+        went and was avoided; the generation counts them, and those in its elite."""
+        self.d.write("spec.yaml", spec(3, n=100))
+        out = self.d.path / "r"
+        st = S.init(self.d.path / "spec.yaml", out)
+        recs = records(out / st["generations"][0]["records"])
+        lines = []
+        for i, r in enumerate(recs):
+            if i < 5:      # went, avoided: scored by their gap, lowest of all
+                o = {"score": 0.1 + 0.01 * i, "closest_gap": 0.1 + 0.01 * i,
+                     "decision_margin": -1.0}
+            else:          # waited: the plateau plus the margin
+                o = {"score": 0.45 + i, "closest_gap": 0.45, "decision_margin": float(i)}
+            lines.append(json.dumps({"record": r["id"], "outcome": o}) + "\n")
+        o = self.d.write("o.jsonl", "".join(lines))
+        st = S.next_step(out, o)
+        g0 = st["generations"][0]
+        self.assertEqual((g0["went_avoided"], g0["elite_went_avoided"]), (5, 5))
+        self.assertNotIn("_avoided", g0)
+
     def test_an_outcome_missing_is_refused(self):
         self.d.write("spec.yaml", spec(3, n=50))
         out = self.d.path / "r"
