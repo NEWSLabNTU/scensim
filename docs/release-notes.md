@@ -23,6 +23,15 @@
   drives differently from the raycast the mud classes were fitted with, so leave soil
   scenarios on the default (`raycast`).
 
+### Interface changes
+
+- **`TruthFrame` gains `npc_logic_started`** (`scensim_interfaces`, the `/scensim/truth`
+  topic): SSv2's flag for the frame, false before it starts its NPCs. A behaviour model on
+  seats now waits for it, as SSv2's own NPCs do (issue 163). The message's type hash changes,
+  so a testbench attachment built against an earlier scensim_interfaces must be rebuilt. The
+  truth file's schema stays 3. A run's `result.json` `commands` gains `held_frames` per
+  commanded entity: the frames before NPC logic started, which carry no command.
+
 ## v0.2.1
 
 scensim 0.2.1 runs a suite or a scenario's rollouts on several seats of one host at once,

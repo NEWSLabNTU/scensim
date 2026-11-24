@@ -130,6 +130,17 @@ latched on `/scensim/truth/entities` (`TruthEntities`, transient local), republi
 spawn and despawn, with the episode's map and step time. A reader that joins late gets the
 current entities at once.
 
+The topic's messages (`scensim_interfaces`) carry no version of their own: the file's `schema`
+is the truth's versioned format. Any change to a message, an added field included, changes its
+ROS type hash, so a reader or recording built against the old definition does not match the new
+one. Such a change lands with every reader in this workspace (the bridge publishes;
+`scensim.behaviour.seats` and scensim_isaac_world's `course/ego_trace.py` subscribe) and is
+named in the issue that makes it. For a testbench attachment it is a breaking change: an
+attachment built against an earlier scensim_interfaces must be rebuilt; the release notes name
+every message change. Nothing here records the topic to a bag (the file is the record). Issue
+163 is the first such change (`TruthFrame.npc_logic_started`); the file's schema does not change
+with it, since the file already had the field.
+
 ## 5. Shaped for tensors
 
 The batch path (092 K2, Isaac Lab) carries truth as tensors per slot, so every per-entity

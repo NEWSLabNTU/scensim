@@ -213,7 +213,9 @@ def commands(traces, lockstep=True) -> dict:
     frames (p50, p95, max) and the frames before its first command. ``cmd_frame`` is the world's
     frame the command answered (a truth frame's ``sim_frame``, as the gate's ``DONE``), so the
     lag is this frame's number minus that truth frame's; a ``cmd_frame`` no truth frame names is
-    ``unmatched``. From the
+    ``unmatched``. A frame before SSv2 starts NPC logic (``npc_logic_started`` false) and before
+    the entity's first command is ``held``, not uncommanded: a model waits for it, as SSv2's own
+    NPCs do (issue 163). From the
     world server's counts, the commands naming an unknown entity, the gate's misses, the
     dropped datagrams and the commands dropped as stale (each episode's last frame; ``stale``
     is a record, outside ``ok``: a leak to see, never a failure). Under lockstep ``ok`` holds when every frame
@@ -233,10 +235,12 @@ def commands(traces, lockstep=True) -> dict:
                 if s is None or s.cmd_frame is None:
                     continue
                 seen = True
-                e = per.setdefault(n, {"lags": [], "uncommanded": 0, "unmatched": 0})
+                e = per.setdefault(n, {"lags": [], "uncommanded": 0, "unmatched": 0, "held": 0})
                 if s.cmd_frame == 0:
                     if e["lags"]:
                         e["lags"].append(None)   # a command lost after the first: no answer
+                    elif f.npc_logic_started is False:
+                        e["held"] += 1           # SSv2's NPCs not started: no model runs (163)
                     else:
                         e["uncommanded"] += 1
                 elif s.cmd_frame in by_sim:
@@ -253,8 +257,9 @@ def commands(traces, lockstep=True) -> dict:
     for n, e in sorted(per.items()):
         lags = sorted(x for x in e["lags"] if x is not None)
         lost = sum(x is None for x in e["lags"])
-        rec = {"commanded_frames": len(lags), "uncommanded_frames": e["uncommanded"],
-               "lost_frames": lost, "unmatched_frames": e["unmatched"]}
+        rec = {"commanded_frames": len(lags), "held_frames": e["held"],
+               "uncommanded_frames": e["uncommanded"], "lost_frames": lost,
+               "unmatched_frames": e["unmatched"]}
         if lags:
             rec["lag_frames"] = {"p50": _rank(lags, 0.5), "p95": _rank(lags, 0.95),
                                  "max": lags[-1]}

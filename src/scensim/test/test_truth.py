@@ -191,12 +191,15 @@ def test_the_runs_own_real_time_factor_wins_over_the_testbenchs():
     assert truth.settings(ps, {"global_real_time_factor": 2.0})["rtf"] == 2.0
 
 
-def _commanded_trace(tmp_path, cmd_frames, counts=None, name="20261123T000000.000Z_1.jsonl"):
+def _commanded_trace(tmp_path, cmd_frames, counts=None, name="20261123T000000.000Z_1.jsonl",
+                     started_from=None):
     walker = entity("walker", "pedestrian", 1, dims=(0.6, 0.6, 1.8)) | {"role": "model"}
     lines = [EP | {"schema": 3}, entity("ego", "ego", 0), walker]
     for n, cf in enumerate(cmd_frames, start=1):
         f = frame(n, {"ego": (0, 0, 0), "walker": (5.0, 0, 0)})
         f["entities"]["walker"]["cmd_frame"] = cf
+        if started_from is not None:
+            f["npc_logic_started"] = n >= started_from
         if counts is not None:
             f["commands"] = counts
         lines.append(f)
@@ -210,9 +213,25 @@ def test_commands_lag_one_under_lockstep_is_ok(tmp_path):
     c = truth.commands(traces, lockstep=True)
     assert c["ok"] and c["mode"] == "lockstep"
     w = c["entities"]["walker"]
-    assert w == {"commanded_frames": 4, "uncommanded_frames": 1, "lost_frames": 0,
-                 "unmatched_frames": 0, "lag_frames": {"p50": 1, "p95": 1, "max": 1}}
+    assert w == {"commanded_frames": 4, "held_frames": 0, "uncommanded_frames": 1,
+                 "lost_frames": 0, "unmatched_frames": 0,
+                 "lag_frames": {"p50": 1, "p95": 1, "max": 1}}
     assert (c["unknown_entity"], c["gate_misses"], c["malformed"]) == (0, 0, 0)
+
+
+def test_commands_the_frames_before_npc_logic_are_held_not_uncommanded(tmp_path):
+    """Issue 163: a model on seats waits for SSv2's NPC logic, so the frames before it carry no
+    command by design. They are held, apart from the one frame before the first answer, and
+    lockstep is still ok; an uncommanded frame after NPC logic starts still counts."""
+    traces = _commanded_trace(tmp_path, [0, 0, 0, 0, 104, 105, 106], started_from=4,
+                              counts={"unknown_entity": 0, "gate_misses": 0, "malformed": 0})
+    c = truth.commands(traces, lockstep=True)
+    w = c["entities"]["walker"]
+    assert c["ok"], c
+    assert (w["held_frames"], w["uncommanded_frames"], w["commanded_frames"]) == (3, 1, 3)
+    traces = _commanded_trace(tmp_path, [0, 0, 0, 0, 0, 105, 106], started_from=4,
+                              counts={"unknown_entity": 0, "gate_misses": 0, "malformed": 0})
+    assert not truth.commands(traces, lockstep=True)["ok"]
 
 
 def test_commands_a_late_command_fails_lockstep_and_is_a_record_free_running(tmp_path):

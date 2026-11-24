@@ -30,6 +30,17 @@ shift of 0.4 to 0.75 s, which at up to 9.9 m/s is the 4.7 to 7.5 m.
 
 Evidence: `~/nas/autoveh/logs/k13-check3/run1/`.
 
+## The interface change
+
+`TruthFrame` gains `npc_logic_started`. truth-stream.md's versioning rule (section 3) is the
+file's `schema` and covered no change to the topic's messages; section 4 now says how one is
+handled. An addition changes the message's type hash: it lands with every reader in this
+workspace in one build (here the bridge, the seats runner and scensim_isaac_world's
+`ego_trace.py`, which reads the rows and stamps, not the new field), and an attachment built
+against an earlier scensim_interfaces must be rebuilt, which the release notes say (v0.2.2,
+"Interface changes"). No bag of the topic exists to convert. The file's schema stays 3: its
+`frame` lines carried `npc_logic_started` already.
+
 ## The fix (133, 2026-11-25)
 
 Seats is aligned to SSv2, not the batch to seats: a model is NPC logic, so the seats runner holds
@@ -39,5 +50,13 @@ as SSv2 holds its own NPCs. The bridge publishes SSv2's `npc_logic_started` for 
 runner steps its models only on frames where it is true. In lockstep it still answers every frame
 (an empty command set), so the tick gate never waits on it. Test: a model on seats does not move,
 step or decide before S.
+
+The run's command check (`scensim.truth.commands`, `result.json` `commands`) allowed one frame
+before an entity's first command, the frame before the first answer. With the model held, the
+frames before NPC logic carry no command by design: they are counted as `held_frames`, apart
+from `uncommanded_frames`, and the lockstep rule is otherwise unchanged (found by check 2's
+rerun after the fix: three error runs, lag 1 throughout, each with S + 1 frames before the
+first command). Test: frames before NPC logic are held, and an uncommanded frame after it still
+fails lockstep.
 
 092 K13's exit check 2 is rerun after the fix (133), so its landed record describes this code.
