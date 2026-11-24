@@ -472,6 +472,147 @@ switch, or aib not restarting on the variant, is a K9 finding, reported before a
 "the same names on every target" marked built. D2's region-scoped knobs (`applies:`) and
 `zone_layout` are K9f (243, plan only; it says how its CARLA side relates to 086 C7).
 
+## K9f's plan: region-scoped knobs and prop layouts (2026-11-25, 243; approved by 133 with its conditions, before any code)
+
+D2 (scenario-description.md section 3) leaves two things that K9a-e did not build: a surface
+knob that `applies:` to named regions rather than the whole road, and `zone_layout`, a prop set
+as a knob value. Read first: 086's C7 row, C4's record (named surface maps, landed 2026-11-20,
+done 2026-11-25), and off-road-surfaces.md D3 ("the map says where, the scenario says what
+state").
+
+### What exists
+
+- **Where:** a map's zones are polygons in `<map>/surfaces.yaml` (or a named map,
+  `surfaces/<name>.yaml`, which a scenario picks with `scensim.surface_map`; C4). This is 086's
+  surface record, the shared data.
+- **What state:** the scenario's `RoadCondition` carries `scensim.zone.<id>.<field>` (`class`,
+  `wetness`, `water_depth`). The SSv2 fork sends it, and the bridge forwards it as
+  `SetRoadCondition` to a server that declares `CAPABILITY_ROAD_CONDITION`.
+  - Isaac's surface layer checks the properties against the loaded map and applies them.
+  - The CARLA world server applies only the world-wide scale and wetness, and refuses
+    `scensim.` properties.
+  - Making CARLA read the zones (friction trigger boxes, class `mu` x `wet`) and take the zone
+    fields is 086 C7. It is 118's track and not started.
+- **Knobs:** a static surface knob today names a surface map (`surface_map:`, Isaac) or a
+  world-wide friction (`mu`). The scenario's RoadCondition sends it, and it is not read back:
+  `unverified`, issue 095.
+- **K9c's regions:** polygons in the map's `anchors.yaml`, for reading geometry (`area`, the
+  centroid, `from_<lane>`/`to_<lane>`). Nothing applies state through them.
+
+### The decision: one implementation
+
+**K9f's CARLA side is C7, not a second path.** K9f adds no CARLA world-server code. A
+region-scoped knob reaches either world as `scensim.zone.<id>.<field>` in a RoadCondition, the
+form both servers will take:
+- Isaac's surface layer takes it today.
+- CARLA takes it once C7 lands.
+
+Until then, K9f's check refuses a zone-scoped value on CARLA by name, giving C7 as the reason.
+It does not refuse once the CARLA world server declares zones. That needs one capability bit,
+`ROAD_ZONES` (below), which C7 sets on CARLA when it lands, and K9f sets on Isaac.
+
+**Zones, not anchor regions, carry state.** A knob `applies:` to zone ids of the map's surface
+record, never to K9c's anchor regions, so there is one polygon per place that has state. Where a
+scenario also wants a zone's geometry (its area, say), its anchors.yaml region names the zone
+(`{zone: <id>}`) and resolves its polygon from `surfaces.yaml`. A second copy of the outline is
+refused.
+
+### K9f-a: zone-scoped surface knobs
+
+- **The form.** A static knob value may carry `zones: {<zone id>: {class?, wetness?,
+  water_depth?}}`, with the fields as `scensim.zone.<id>.<field>` names them. Example:
+  `surface: {values: {dry: null, wet_junction: {zones: {junction_1: {wetness: wet}}}}}`. A
+  value without `zones:` is world-wide, as today, which is D2's `applies: route`.
+- **How it reaches the world.** The scenario binds the knob (`scensim.knob.surface =
+  param:road`), as every knob is bound. Before SSv2 starts, `scensim run` writes the value's
+  zone fields into a RoadCondition in the scenario's Init, with the same properties a scenario
+  writes by hand today. SSv2, the bridge and the world servers see nothing new.
+  - The rewritten scenario is a new file in the run's directory. `resolved.yaml` names it
+    beside the source, which it names today by path, sha256 and parameters. `scensim run`
+    never rewrites a scenario today, so this is new (decision 2).
+  - A scenario that already sets one of those zone fields itself is refused: two writers, as
+    for the environment form.
+- **The check.** `testbench check` refuses each of these by name:
+  - a zone id that the map's surface record (or the named map the scenario picks) lacks;
+  - a class not in the table;
+  - a `class` on a soil zone (refused as C4 refuses it);
+  - a zone-scoped value on a simulator whose world server lacks `ROAD_ZONES`, which is CARLA
+    until C7 lands.
+
+  This is issue 154's one-rule pattern: the check and the run use the same function.
+- **The read-back.** Issue 095 left surface maps `unverified`. K9f-a adds the applied zones to
+  the world's answer: `ROAD_ZONES`, a `SetRoadCondition` reply listing each zone's applied
+  fields, recorded in `result.json` `knobs.<knob>.zones`. A mismatch is an error run.
+  - Isaac's surface layer already holds the overridden zones and answers from them.
+  - CARLA answers when C7 implements the capability: C7 gains one acceptance line, its
+    trigger boxes' friction and wetness per zone, read back.
+  - This is the one protocol change, a reply field with a capability bit. It is
+    scensim_world_protocol's, pinned in lockstep.
+- **Exit checks, with predictions before any run.**
+  - Isaac Town01: `isaac_soil`'s zones. A knob takes one zone to `wet` against `dry`. The
+    applied zone is read back. The ego's stopping distance across the zone differs as the
+    class table's wet factor predicts, within C7's 25 % band, so the same number later checks
+    CARLA.
+  - CARLA: the same suite refused by name before C7. After C7, the same scenario and knob pass
+    with the zone read back, and C7's own acceptance runs it.
+
+### K9f-b: prop layouts as a knob
+
+- **The form.** A layout is a list of props beside the map, `<map>/layouts/<name>.yaml`. Each
+  prop is an OpenSCENARIO MiscObject (category, model, bounding box) with a pose bound to an
+  anchor: `lane: west_street, s: 20, offset: -1.3` or `point: <anchor>`. The knob's value names
+  a layout or none: `works: {values: {none: null, closed: {layout: west_street_closed}}}`.
+- **How it reaches the world.** As K9f-a does: before SSv2 starts, `scensim run` adds each prop
+  to the run's resolved scenario as a ScenarioObject with an Init TeleportAction on a
+  LanePosition. The lanelet and its s come from the anchor, exactly as K9b's bindings compute
+  them.
+  - SSv2 owns the props, so its collision verdict and the truth see them.
+  - Both targets already spawn MiscObjects: CS3's barriers on CARLA, and cubes or the dressed
+    props on Isaac.
+  - No world server changes.
+  - Props the world spawns behind SSv2's back would be invisible to the verdict: refused as a
+    design.
+- **The check.** `testbench check` refuses each of these by name:
+  - a layout the map lacks;
+  - a pose off its lane;
+  - a category SSv2 does not implement (issue 131 and CS3's `barrier`);
+  - a prop name that clashes with a scenario entity.
+- **The exit check.** CS3 rewritten: its three barriers move from the scenario into
+  `Town01/layouts/west_street_closed.yaml`, bound by a knob. Both maps' runs repeat attempt 3's
+  results on CARLA, and K9e's on Isaac: the same barrier truth positions within 0.05 m, the
+  same routes and the same outcomes.
+
+### Order and dependencies
+
+1. K9f-b first. It needs nothing from C7, and CS3 is its exit.
+2. Then K9f-a: Isaac's half and the protocol field. Its CARLA half is checked when C7 lands,
+   in C7's acceptance, not in K9f.
+
+Both start after K9e lands.
+
+### 133's answers (2026-11-25)
+
+1. **One implementation, agreed:** K9f's CARLA side is C7. 133 tells 118, who owns C7. C7 gains
+   one acceptance line, the zones' read-back on CARLA, and sets `ROAD_ZONES`. When K9f-a lands,
+   this is recorded both here and in 086's C7 row.
+2. **The run's copy, on four conditions:**
+   - the copy is saved in the run record beside the source;
+   - both digests are in `resolved.yaml`;
+   - the injection is deterministic: the same inputs give a byte-identical copy, with a test;
+   - a source that already defines an injected entity or zone field is refused as two writers.
+
+   projects-and-pilots.md says that what a run executes is the copy.
+3. **Read-back in K9f-a.** It matches K9e's environment form, and an unverified zone is the gap
+   issue 095 left.
+4. **Sizes as planned.** K9f-b comes first, and both start after K9e lands.
+
+**A dependency.** 118's issue 158: the road layer double-counts the grade on road-detail
+worlds. If Town01's Isaac stage has road detail on any grade, K9f-a's stopping-distance exit
+on Isaac runs after 158's fix. Town01's `isaac/world.yaml` (carla-0.9.16-isaac-usd 38347e26)
+names no road detail, and neither does isaac_soil. Asked of 118 (2026-11-25): does 158 reach a
+world without `road_detail.yaml`? The exit's zone is chosen on the flat, or waits for the fix,
+by 118's answer.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
