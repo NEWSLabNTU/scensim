@@ -143,3 +143,18 @@ subreaper and without it (logs in `~/nas/autoveh/logs/153-zombies/`):
 
 Under the subreaper the orphan's zombie is still there after each stop, as it must be: only its
 parent can remove it. The stops no longer wait for it.
+
+## Seen while gating the fix
+
+A first gate of the fix, on main a03a01a7, was stopped part way through when main moved under
+it. Its `scensim_agent` and relay pytest group had shown two failures by then, at the places of
+`test_simple_pilot_ros.py`'s two tests; a side run of the group showed those two and four of
+`test_ros_adapter.py`. Both files are rclpy tests on the fixed DDS domain 77 and import nothing
+this fix changes, and the gate on cb6c89f5 passed the group (276 passed). They are issue 155
+(the tests' fixed DDS domains), not this one.
+
+When that gate was stopped, its pytest for the group ignored SIGTERM and was left behind,
+orphaned, until killed by its pid. Its `/proc/<pid>/status` showed SIGTERM caught, not ignored:
+the rclpy tests call `rclpy.init()` in the pytest process, and rclpy then installs its own
+SIGINT and SIGTERM handlers, which shut the context down on SIGTERM and do not exit. For the rest
+of the run the pytest process does not die on SIGTERM. Recorded as issue 156.
