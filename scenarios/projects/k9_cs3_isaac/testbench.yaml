@@ -1,0 +1,24 @@
+# k9_cs3_isaac (roadmap 092 K9e): k9_cs3 on Isaac Sim. The same scenario, byte for byte, and the
+# same names: Town01's anchors (west_street), the illumination knob, and the pilot's map
+# variants (current: Town01, the stale case; works: Town01_west_street_closed). The world is
+# Isaac's Town01 stage; the Autoware ego is aib's.
+simulator: isaac
+assets:
+  - dataset: carla-town-autoware-maps
+    take: [Town01, Town01_west_street_closed]
+  - dataset: carla-0.9.16-isaac-usd
+    take: [Town01, vehicles]
+maps: [Town01]
+world:
+  knobs:
+    # day only: the binding is under test, not the light (issue 131). environment: is the
+    # portable form, which CARLA and Isaac both apply and read back (092 K9e)
+    illumination: {values: {day: {environment: {sun_elevation: 60}}}, default: day}
+  pilot_maps:
+    Town01: {current: Town01, works: Town01_west_street_closed}
+pilots:
+  ego: {kind: autoware, autoware_profile: scensim, vehicle: tesla_model3}
+judges:
+  - {name: context_log, run: ["true"], needs: [context]}
+logging: {capture: standard, gap_trace: true, keep: {passed: full, failed: full, error: full}}
+default: both
