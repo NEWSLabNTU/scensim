@@ -91,3 +91,62 @@ geometry. So the geometry says where they touch; whether they may touch at all i
   car knocks more), and the hits are the 10 m/s run's nine plus others of the same kind. A
   rock reports at most once per wake (the check stops at its first hit), so the count grows with
   the wakes, not with repeat touches.
+
+### The diagnosis's result (2026-11-24)
+
+siw main 77075e3; the 10 m/s run drove 1020 m and the 13.9 m/s run 1328.5 m of the 1527 m
+course (1900 frames each, as the bisection). Both exited 0. Record: `run145d.sh`, `probe145.py`,
+`d145_77075e3_v10.*`, `d145_77075e3_v139.*`.
+
+| | 10 m/s | 13.9 m/s |
+|---|---|---|
+| rocks woken (first wakes) | 9 | 37 |
+| of them touching the base | 9 | 37 |
+| wakes again (the check runs once a rock) | 0 | 17 |
+| on `/World/env/Road`, least separation | 5, -2.5 to 1.9 mm | 14, -3.7 to 3.5 mm |
+| on `/World/env/Terrain`, least separation | 4, 74 to 112 mm | 23, 67 to 88 mm |
+| across the road, \|v\| | 3.29 to 3.56 m, all right | 3.26 to 4.00 m, 24 right, 13 left |
+
+- **Every rock that woke touched the base, in the very physics step it woke** (0 frames awake at
+  every hit), 46 of 46 first wakes in the two runs. The self-check counts the rocks woken, once
+  each: a rock woken again is not checked again.
+- **The USD state was right at every hit.** The prim was in `rocks` (768 to 770 members), with
+  nothing pending to add or drop, `rocks` filtered `roadBase`, and `roadBase` held
+  `/World/env/Terrain`, `Road` and `Lines`. So PhysX made a pair the filter should have killed.
+- **Where they lie.** Every one is on the shoulder: \|v\| from 3.26 to 4.00 m, against the
+  carriageway's half width of 3.25 m and the shoulder's 0.75 m (C6b's cover puts no rocks on the
+  carriageway). Their distance to a tile's edge spreads from 0.08 to 7.2 m, so a seam plays no
+  part; the smooth map has no potholes. Each rock rested on its tile, its lowest point within
+  4 mm of the tile's surface (one at 7 cm, the 13.9 m/s run's only one). On this map the base
+  coincides with the tile there: the base was within 6 mm of the rock's lowest point. On the
+  Road the contacts touch (separations of a few mm either side of 0). On the Terrain they are
+  within the pair's contact reach, 7 to 11 cm, without touching.
+- **Speed.** The count grows because more rocks wake, not because the same rocks touch more
+  often. At 13.9 m/s the car woke rocks on both shoulders (why its path came nearer the left
+  shoulder is not measured) and drove further (1328.5 m against 1020). The activation window hardly differs (0.6 s
+  of travel ahead, at least 8 m: 8 m at 10 m/s, 8.3 m at 13.9). Six of the 10 m/s run's nine woke
+  and touched again; three did not wake at all.
+
+**118's prediction, as measured:**
+
+- The USD state: held.
+- Reading (a) against (b): (a) held. No woken rock lay as close to the base as the hits without
+  touching it; every woken rock touched.
+- Where: partly held. They are off the carriageway, on the shoulder, and not at tile edges, as
+  predicted. But the base does not come up above the detail: base and tile coincide to the mm
+  there. The contact separations are 0 or small, as predicted.
+- Speed: partly failed. More rocks wake, as predicted. But they are not the nine plus others
+  (three of the nine did not wake). And a rock reports at most once per run, not once per wake,
+  so the count is the number of distinct rocks woken.
+
+**What it says.** An asleep rock is a static collider, and two static colliders never make a
+pair. So a missing filter would show only when a rock wakes, and then at once. That is what all
+46 do. This points at the filter on the rock as PhysX takes it when its body is enabled (asleep
+to awake), not at the geometry. On this map it does no harm: the base and the tile agree on the
+shoulder, so a rock rests at the same height either way. On a rough road (issue 136) they do not
+agree, and a rock touching the base could rest on it above a rut. So 136 and 145 are most likely
+one mechanism, seen where the base and the tile part.
+
+The next test, not yet run: wake a rock in a small stage where the base sits 5 cm above the tile
+under it. With the filter in effect the rock falls through to the tile; without it, it rests on
+the base. Run it on a pool prim, on a prim made live, and on one made dynamic from the start.
