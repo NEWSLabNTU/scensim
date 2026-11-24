@@ -312,3 +312,27 @@ S5 is the live world's order: the world server preloads the map's USD and steps 
 warm-up ego, before the road's load writes `roadBase`'s members. So the remaining contacts are
 the preload hypothesis, and the fix is part 2: write `roadBase`'s members where the world's ground
 is added (`_load_env`), before the next step.
+
+### The live order, from the stack's log
+
+The stack's own log (`stacks/2026-11-24T21-35-11_seat0/proc/simulator/console.log`) shows where
+S5's order comes from. The world server preloads its `--world` at its start with
+`IsaacWorld.preload(usd)`, which calls `self.load(usd, [])`: the world's ground paths are
+**empty**. The preload's road load then gives the rock stream no base ground. Before part 1
+`roadBase` held `/World/RoadCollision` alone; with part 1 it holds nothing. The map's env meshes
+enter PhysX and are stepped (the preload's warm-up ego) outside `roadBase`. The scenario's
+`LoadWorld` names the same USD, so `_load_env` keeps the preloaded world, and the new road load
+writes `roadBase`'s members (the env meshes), after their intake.
+
+The warnings: the preload logs 1, the scenario's load 770. The scenario's load makes a new rock
+stream, whose pool takes the old pool's prim paths (`r1` to `r768`): issue 034's case, a collider
+made again at a removed one's path taken for one in two groups. They are not the contacts' cause.
+
+- **Part 2 (proposed; prediction before its run).**
+  - (a) `preload_list` reads each world file's `ground_paths`, and `preload(usd, ground_paths)`
+    passes them to `load`, so `roadBase` is right at the env's first intake.
+  - (b) `_load_env` keeps a preloaded world only when the request's ground paths are the ones it
+    was loaded with, else it loads the env again.
+  - Tests without Isaac for both.
+  - **118's prediction:** the live haruna_down drive on *rough_rocks* logs 0 base contacts, and
+    the scenario's load still logs about 770 warnings (the pool's paths, not touched here).
