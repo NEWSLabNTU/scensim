@@ -138,3 +138,33 @@ no skip) and c6ec980 (the skip), the host otherwise idle.
   projection, 213 ms of it), about 3 tiles a second, and the least road-tile lead is negative
   from 13.9 m/s up on both codes. If so, step 2 is a cheaper projection: culling the segments
   per block of a tile rather than per tile (exact, as issue 128's), not a second worker.
+
+### The throughput measurement's result (2026-11-24)
+
+Host idle (load 0.4 and 1.1 at the starts). Leads in m; tiles a second made by the worker.
+
+| record, speed | 87591b4: median ms, tiles/s, least lead (p05) | c6ec980 (skip): the same |
+|---|---|---|
+| fixture_c6b, 11.1 m/s | 298, 1.74, 25.6 (31.7) | 297, 1.74, 26.2 (32.4) |
+| Haruna, 8.3 m/s | 385, 1.82, -45.3 (-16.5) | 345, 1.82, -28.9 (-2.9) |
+| Haruna, 11.1 m/s | 375, 2.29, -110.8 (-69.1) | 342, 2.44, -60.2 (-44.7) |
+| Haruna, 13.9 m/s | 376, 2.32, -251.5 (-194.8) | 329, 3.15, -130.8 (-115.2) |
+| Haruna, 16.7 m/s | 402, 2.32, -204.6 (-168.3) | 322, 3.43, -207.7 (-161.9) |
+| Haruna, 20 m/s | 370, 2.42, -249.3 (-156.8) | 129, 4.31, -359.5 (-172.1) |
+
+- **118's prediction:** on fixture_c6b the skip bringing the worker under 60 ms and the least lead
+  to 30 m **failed** (297 ms, 26.2 m: in this driver every tile prefetched ahead on the straight
+  fixture course touches the road, unlike the Isaac probe's 80 off-road tiles, which something
+  else in the world asks for, not yet found); on Haruna the median near 300 ms **held** (322 to
+  402, 129 at 20 m/s with the skip), about 3 tiles a second **held** (1.8 to 4.3), and the least
+  lead negative from 13.9 m/s up **held**, but it is negative at 8.3 and 11.1 m/s too, with the
+  worker not saturated (1.8 tiles a second at 8.3 m/s).
+- So on Haruna the lack is not only the worker's pace. `RoadLayer._ahead` prefetches along a
+  straight line from the car's heading (max(48 m, 4 s v), a point every 8 m, 6 m around). On a
+  road of hairpins that line leaves the road within a few tens of metres, and the road's tiles
+  round the bend are asked for only once the car has turned. This is older than 134.
+
+- **118's prediction for the next run** (the same driver on c6ec980, Haruna, the same speeds,
+  `_ahead` replaced by points along the centreline from the car's u to u + max(48 m, 4 s v)):
+  the least road-tile lead is at least 0 at 8.3 and 11.1 m/s and the 5th percentile at least
+  20 m at 13.9 m/s; above that the worker's pace limits it (negative leads at 16.7 and 20 m/s).
