@@ -1650,6 +1650,20 @@ predictions (same tools; `offline/` in the record):
   largest bin in 4-40 Hz, its height taken over the mean of the 4-6 Hz bins. Only the section's
   constant-speed part counts (from 10 m into it to 10 m before its end).
 
+*Amended 2026-11-25, before any C6c run: the reference as `c6c_check` reads it* (siw
+`spikes/c6c_reference.py`, its numbers `c6c_check`'s REF_WB and REF_CC). Taken in the check's
+window (the washboard less its two-wave ramps; the profile less its first and last 10 m) and
+through the cams on the profile, the reference differs from the two bullets above, which took
+the whole run and the bare profile:
+
+- washboard amplitude, kN, at 5, 7, 8, 9, 10, 12, 14 and 20 m/s: 1.50, 2.52, 3.31, 3.88, 3.92,
+  3.38, 3.05, 2.57. So the load does peak, at 9-10 m/s (12.9-14.3 Hz), and falls a third by
+  28.6 Hz; the plateau above came from the ramps' transients;
+- class C, peak and its height over 4-6 Hz: 9.77 Hz and 1.66 at 10 m/s, 12.7 Hz and 2.24 at
+  20 m/s (the bare profile's 10.7 Hz at 20 m/s: the cams filter the short waves).
+
+The bars and 118's predictions below are unchanged.
+
 So 066's check, "a 10-15 Hz peak in the chassis and wheel-load spectra on washboard", cannot
 hold even for the reference: washboard gives one line a speed, and the chassis shows no hop
 under the rig's damping. C6c1's check, proposed in its place:
