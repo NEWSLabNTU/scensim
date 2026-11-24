@@ -658,8 +658,10 @@ message ZoneApplied {
   string surface_class = 1;
   // Its OpenSCENARIO wetness level (dry, moist, wetWithPuddles, lowFlooded, highFlooded).
   string wetness = 2;
-  // Its water depth, m, when it has one (a ford); unset otherwise.
-  optional double water_depth = 3;
+  // Its water depth, m, when it has one (a ford); unset otherwise. A one-member oneof, not
+  // proto3 `optional`, which Jammy's protoc 3.12 refuses without an experimental flag: the same
+  // wire format and presence (Python `HasField("water_depth")`, prost `Option<zone_applied::Depth>`).
+  oneof depth { double water_depth = 3; }
   // The friction coefficient its surface now gives a tyre: the class's mu times the wetness
   // factor, times the condition's friction_scale_factor (the class table's numbers).
   double mu = 4;
@@ -693,7 +695,11 @@ on CARLA 0.9.16 (above), while a world-wide read-back there is: 133 wanted it, t
 claiming zones, and the no-bump argument rested on that one gate; with two, each holds alone.
 118's C7 plan (086, cba0fbfe) had already taken per-zone `mu`, no fords on CARLA and the
 split-mu question; the last is now answered by the measured limit, and zones are not declared
-on CARLA 0.9.16 at all. The bridge records the reply in the gap trace (a `road` line per
+on CARLA 0.9.16 at all. *Amended again the same day (118, before either side landed it):*
+`water_depth` is `oneof depth { double water_depth = 3; }` instead of `optional double`, since
+Jammy's protoc 3.12.4 refuses proto3 `optional` without `--experimental_allow_proto3_optional`
+in scensim_core's prost build and the Python shell's descriptor script; the wire format and the
+presence are the same. The bridge records the reply in the gap trace (a `road` line per
 `SetRoadCondition`), and `scensim run` judges each knob-set zone against it: `result.json`
 `knobs.<knob>.zones.<id>` with the fields sent and read back, a mismatch an error run.
 
