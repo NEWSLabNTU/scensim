@@ -1,0 +1,15 @@
+# 092 K11d's search (roadmap 092, "K11d's spec"): K11c's with the walker's decision draw
+# (accept_u) searched too.
+# CS1 on Town01 in one cell (day, dry, van), five variables searched on an invented base, the
+# ego aeb_ttc on a CPU point mass (scensim_batch/scripts/search_run.py). Fixed before the run:
+# N 1000, seed 11.
+search: 1
+id: k11d_cs1_town01_day_dry_van
+scenario: ../scenarios/cs1_town01_k11d.xosc
+model: ../../../../src/scensim_sampler/examples/cases/models/cs1_gap_acceptance_k11d.yaml
+map: ../assets/maps/Town01
+variables: [ego_speed, walk_speed, behaviour, ttc_entry, accept_u]
+n: 1000
+seed: 11
+threshold: 0
+acceptance_draws: 100000

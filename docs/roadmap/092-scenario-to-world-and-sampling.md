@@ -895,6 +895,16 @@ the same decision, where today it depends on the pilot seed reaching the runner.
   seed 11; the plan's parameters. A sloped score (U against its threshold) is not used: it would
   change two things at once. It is the next lever if K11d's elite still stalls.
 
+**One draw per episode, deciding the branch (133's question).** The walker draws once per
+episode, at reset: `random.Random(seed).random()` is its only random call, and its logit is the
+threshold. It decides once (UNDECIDED, at the kerb): it goes if U > threshold, else it waits,
+and a waiting walker crosses once the ego has passed the conflict point, with no second draw
+(a `hesitate` walker's re-check compares the ego's time with `abort_gap`, deterministic). So
+`draw` replaces the only draw, and with the record's other values it decides go or wait;
+nothing random about the walker stays unsearched. The binding `draw = $accept_u` sits in the
+walker's controller properties, an entity property, not the FileHeader, so issue 131's rule
+(on FileHeader bindings) does not apply.
+
 **Predictions, fixed before the run.**
 
 1. The level reaches 0 (the stop rule, not the cap) within 6 generations.

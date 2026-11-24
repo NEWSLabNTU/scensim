@@ -277,3 +277,33 @@ def test_a_hidden_walker_appears_at_its_start_gap_and_decides_at_the_kerb():
     stop = speed ** 2 / (2 * 1.5)
     assert float(m.decision_gap[0]) == pytest.approx(start_gap - (approach - stop) / speed,
                                                      abs=0.11)
+
+
+def test_a_given_draw_is_the_threshold_on_numpy_and_torch_and_the_seed_is_unchanged():
+    """092 K11d: `draw` is the episode's u itself, so the threshold is logit(draw) in every
+    xp form; without it the seed's draw stands, as before."""
+    u = 0.3
+    want = math.log(u / (1 - u))
+    seeds = [11, 12]
+    for name in ("numpy", "torch"):
+        try:
+            xp = xpmod.namespace(name)
+        except (ImportError, ValueError):
+            continue
+        m = w.GapAcceptanceWalker([{"draw": u}, {}], seeds, [anchors()] * 2, xp)
+        th = [float(x) for x in xp.to_host(m.threshold)]
+        assert th[0] == want
+        assert th[1] == w.GapAcceptanceWalker.draw(12)
+        assert th[1] == math.log(random.Random(12).random() / (1 - random.Random(12).random()))
+
+
+def test_the_draw_is_checked_and_decides_go_or_wait():
+    with pytest.raises(ValueError, match="draw: 1.5 outside"):
+        w.resolve({"draw": 1.5})
+    # the same gap: a low draw accepts (u < P), a high one rejects
+    xp = xpmod.namespace("numpy")
+    params = [{"draw": 0.001}, {"draw": 0.999}]
+    _, trace = episode(xp, params, [1, 2], [8.0, 8.0])
+    events = {int(e) for row in trace for e in row[1][:1]}, {int(e) for row in trace
+                                                              for e in row[1][1:]}
+    assert w.GO in events[0] and w.REJECT in events[1]
