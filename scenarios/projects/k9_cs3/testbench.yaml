@@ -5,7 +5,7 @@
 simulator: carla
 assets:
   - dataset: carla-town-autoware-maps
-    take: [Town01]   # + Town01_west_street_closed from v2026.11f
+    take: [Town01, Town01_west_street_closed]
 maps: [Town01]
 world:
   knobs:

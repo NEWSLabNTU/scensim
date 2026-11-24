@@ -135,6 +135,11 @@ route honours it, so the fallback was not needed. The variant carries no anchors
 impassable lanelet2 gives it no followers, so `west_left_turn` cannot resolve there, and anchors
 are read from the world's map only.
 
+**Published:** the maps dataset's revision v2026.11f (commit 732fd61, 2026-11-24, with the user's
+OK) adds `Town01_west_street_closed/`; the tag's files match the staged copy and its SHA256SUMS.
+Only k9_cs3's lock moves to it: no other testbench takes the variant,
+and every file they take is unchanged, so moving their locks would be churn.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
