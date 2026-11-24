@@ -86,3 +86,51 @@ rule), logging at the step after `reserve` and at each of the contacts above:
   Isaac: `RockStream`'s ground from `_load_road` does not hold `COLL_ROOT`. Its proof: the three
   C6d *rough_rocks* runs' drive in the live world, 0 contacts and 2 "one collision group"
   warnings a run.
+
+### The probe's result (2026-11-24, 21:15 to 21:22)
+
+One haruna_down run on *rough_rocks* in the live world server (testbench
+`isaac_c6d_haruna_rough_rocks`, rebuilt over main aa731a17's install), with a local probe commit
+of siw (8900110 on 7d032d6, never pushed) checked out in the gate checkout for the run and
+restored after. GPU0 shared with another session's encode job by agreement; nothing timed. The
+run passed haruna_down. Two earlier attempts ended early: one was refused because the testbench
+was built over the previous install, and the other ended at the first contact on the probe's own
+error (it read an empty rock set). Neither counts.
+
+What the probe built, against the plan above: (1) in full (the groups' includes, every collider's
+groups at the step after the pool); (3) as each tile's groups when it is made, not its intake
+frame; (2), the pool history, was not built. At each contact it logged the rock's groups, its
+pose, what it met and that prim's groups, and the detail tile under the rock with the detail's
+height above the base there.
+
+- `roadBase`'s includes are `/World/env/Terrain`, `/World/env/Road`, `/World/env/Lines` and
+  `/World/RoadCollision` (expandPrims). `rocks` holds the 768 pool prims; `rockTiles`,
+  `roadDetail` and `groundQuery` are empty at that step.
+- At the step after the pool: 893 colliders, **none in two or more groups** by USD membership.
+  The same step logs omni.physx's "only in one collision group" 770 times, as in C6d's runs.
+- Every detail tile made in the drive is in both `roadBase` (through its root) and `roadDetail`.
+- 13 contacts (C6d's runs had 10 or 11; r195 and r162 are new, the rest are C6d's). Every rock
+  met is in `rocks` alone. 5 met a detail tile, 8 met `/World/env/Road` or `/World/env/Terrain`.
+  At every one, the detail under the rock is within 1.2 cm of the base (its height above the base
+  -0.012 to +0.011 m).
+
+**118's prediction against the probe:**
+
+- (a) **Held.** `roadBase` holds `/World/RoadCollision`, every tile is in two groups, and the
+  contacts with a tile are rocks in `rocks` resting on the detail, which issue 123's self-check
+  counts as the base. There were 5 of them here, not 3.
+- (b) **Failed.** The contacts with the world's road and terrain are not rocks that fell through
+  a tile. Each lies where the rough road's detail is flush with the base (within 1.2 cm), so a rock
+  resting on the tile is also within contact distance of the world's own road. Why the `rocks`
+  against `roadBase` filter does not hold for those pairs is not answered by the probe.
+- The 770 warnings: **not** two-group memberships in USD. At the step that logs them, no collider
+  is in two groups and each pool rock is in `rocks` alone. Their source is open. C6b's live runs,
+  before issue 145's fix, logged 2, so they came with that fix in the live world, where the pool
+  joins `rocks` before PhysX takes it in.
+- 133's questions. Pool rocks placed again later: at each contact the rock is in `rocks` alone,
+  so a lost membership is not the cause. Its placement history was not logged. Tiles made after
+  the membership was set: the tiles are in `roadBase` from their intake, through the root
+  include, as well as in `roadDetail`.
+
+Record: `/mnt/renegade/aeon/isaac-ex/c6d/i152` (`run152.sh`, `times.txt`), the run's directory
+`isaac_c6d_haruna_rough_rocks/runs/2026-11-24T21-15-12_haruna_down_r0`.
