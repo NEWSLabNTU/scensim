@@ -67,6 +67,12 @@ class Classify(unittest.TestCase):
         self.assertEqual(run(lines, [(11, ctl(0.3))])[0], {11: "in_time"})
         self.assertEqual(run(lines, [(11, ctl(0.3001))])[0], {11: "other"})
 
+    def test_the_gear_carla_reports_is_not_matched(self):
+        # automatic transmission: sent 0, CARLA holds the gear it is in
+        lines = [tick(0, 10), apply(1, 10, 10, 0.1), tick(2, 11)]
+        held = dict(ctl(0.1), gear=1)
+        self.assertEqual(run(lines, [(11, held)])[0], {11: "in_time"})
+
     def test_velocity_rows_are_counted_not_matched(self):
         lines = [tick(0, 10), "velocity,1,10,10,,,,,,,5.0", tick(2, 11)]
         labels, counts = run(lines, [(11, ctl(0.0))])

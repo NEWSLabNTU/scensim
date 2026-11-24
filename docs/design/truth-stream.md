@@ -79,7 +79,7 @@ construction (`scensim.truth.commands`).
 A vehicle the simulator moves by its physics may also have `control` (schema 3, optional;
 scensim issue 135): the actuator control the simulator held for it in the step that ended at
 this frame, raw, in the simulator's units: `throttle` and `brake` 0..1, `steer` -1..1 (CARLA's
-sign, right positive), `hand_brake`, `reverse`, `manual_gear_shift` and `gear`. It is not an
+sign, right positive), `hand_brake`, `reverse`, `manual_gear_shift` and `gear` (on CARLA, under the automatic transmission, the gear engaged, not the 0 a pilot sends). It is not an
 Autoware command (that is `command`): CARLA's throttle and brake do not map back to an
 acceleration without the car's pedal map, so none is made up. The CARLA world server reports it
 for the ego and for every vehicle it moves by physics (a tracked NPC vehicle, an autopilot or

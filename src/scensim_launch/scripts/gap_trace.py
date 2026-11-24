@@ -136,7 +136,8 @@ COMMAND_KEYS = ("stamp_ns", "acceleration", "velocity", "tire_angle", "gear", "a
 class AppliedControl:
     """A physics vehicle's actuator control as the simulator held it in a frame (schema 3,
     optional; scensim issue 135): raw, in the simulator's units (CARLA: throttle and brake
-    0..1, steer -1..1 with right positive, the flags and the gear asked for). Not an Autoware
+    0..1, steer -1..1 with right positive, the flags and the gear: under CARLA's automatic
+    transmission the gear engaged, not the 0 a pilot sends). Not an Autoware
     command, which `TakenCommand` is."""
     throttle: float
     brake: float

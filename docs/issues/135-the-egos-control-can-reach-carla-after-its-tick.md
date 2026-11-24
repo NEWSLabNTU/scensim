@@ -126,3 +126,36 @@ since the world server ticks only after SSv2's request and acb sends after takin
 frame; `raced` is rare too; `ambiguous` is common while the car is held (Autoware repeats a
 stop's control); and about a third of frames have two or more sends (Autoware at 30 Hz against
 20 frames a second), only the last of which is judged.
+
+**The run (2026-11-24, 08:26 to 08:28):** `dev_trace` (the dev project's Autoware ego, scensim's
+profile, `town01_ego_drive`), passed. Built from a clean environment, acb's workspace then
+scensim's (acb 6600e3a, scensim 00d3dd9d); both `acb_bridge` binaries carry the new parameter.
+`ros2 pkg prefix acb_bridge` named this repository's `install/`, but the stack's launch ran acb's
+own workspace's copy (`src/autoware_carla_bridge/install/acb_bridge/lib/acb_bridge/acb_bridge`,
+from the stack's `cmdline`): built from the same acb commit a minute apart, so the measurement
+stands; the live-process check in the run script found no `acb_bridge` yet when the stack
+reported ready, so the binary is read from the launch's logs. The trace: 487 `apply` rows, 672
+`tick` rows, no `velocity` row, no row dropped.
+
+**A correction to the matching, after the first classification:** it labelled 438 frames
+`other`, every one of them differing only in the gear: acb sends gear 0 with the automatic
+transmission, and CARLA's read-back holds the gear the car is in (1). The gear was taken out of
+the match (`apply_alignment.py`; a test), and step 1's documents said wrongly that `gear` is the
+gear asked for: on CARLA, under the automatic transmission, it is the gear engaged (corrected in
+`truth-stream.md`, the proto's comment and `world-protocol.md`).
+
+| Frames with `control` | judged | in_time | late | other | ambiguous | no_send | raced |
+|---|---|---|---|---|---|---|---|
+| 685 | 477 | 468 | 9 | 0 | 6 | 202 | 1 |
+
+**The prediction was not met as stated:** 9 `late` in 477 judged frames is 1.9%, not under 1%.
+But they are not scattered: they are one stretch, CARLA frames 1482 to 1492 (9 judged, frame 1491
+not sent for), in which every frame held the control acb sent while its newest frame was s - 2,
+not s - 1: a lag of two ticks for about ten frames, against one everywhere else. Every send in
+the stretch left 0.15 to 0.4 ms after acb took its frame and its call took 11 to 21 us, about
+50 ms before the next tick by acb's own clock. The stretch ended when acb's tick follower
+skipped frame 1491 (it drained two frames at once) and its sends landed one tick later again.
+That is the shape of acb's view of the frames running one tick behind the server's (the stream
+delay the method names as its limit), not of an asynchronous call lost in flight; this trace
+cannot tell the two apart, which needs the world server's tick-start time on the same clock
+(`CLOCK_MONOTONIC`). Outside the stretch, every judged frame held acb's control in its tick.

@@ -28,7 +28,10 @@ Per truth frame with the entity's `control`, CARLA frame s:
   frame's neighbouring `tick` rows: what acb sent there is not known.
 
 Controls match by value: throttle, brake and steer within FLOAT_TOL (CARLA keeps them as float32,
-whose step near 1.0 is 6e-8; acb prints the float32 in full), the flags and the gear exactly.
+whose step near 1.0 is 6e-8; acb prints the float32 in full), the flags exactly. Not the gear:
+under the automatic transmission (`manual_gear_shift` false, as acb sends) CARLA's read-back
+holds the gear the car is in (1 while driving forward), not the 0 that was sent (seen on issue
+135 step 2's run, 2026-11-24).
 """
 import argparse
 import csv
@@ -79,7 +82,7 @@ def control_of_state(c):
 
 def same(a, b):
     return (all(abs(a[k] - b[k]) <= FLOAT_TOL for k in FLOATS)
-            and all(a[k] == b[k] for k in ("hand_brake", "reverse", "gear")))
+            and all(a[k] == b[k] for k in ("hand_brake", "reverse")))
 
 
 def classify(rows, drops, truth):
