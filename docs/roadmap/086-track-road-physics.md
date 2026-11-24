@@ -291,6 +291,35 @@ scensim_isaac_world 6177ced (pins cebb5557), scensim 82787b91; 056's steps 1-4.
   - Not tested here: 056 step 5's "one scenario setting a label class beside a road it leaves".
     haruna_down never leaves the road, so a label class beside it changes nothing the drive
     meets.
+- **The first runs (2026-11-25, 01:56 to 02:05; GPU0 shared with another session's encode,
+  nothing timed).** One world server for all five. NAS record to follow.
+  1. `c4_named_then_late`: the world server loaded `haruna_sand` (1 zone) at the Init, and all
+     four wheels were on sand (zone `start_sand`, mu 0.24 to 0.26) 5.5 s in. On the downhill
+     road the car then crawled at 0.05 m/s (12.5 m in 238 s), so it never reached the 20 m point
+     whose condition would name the late map. SSv2 timed the run out (error). The late refusal
+     was **not tested**; the scenario, not the world server, missed it. The prediction stands.
+  2. `c4_missing_map`: refused at the Init: "The simulator refused the environment:
+     SetRoadCondition: RoadCondition refused: scensim.surface_map: no_such_map: no
+     .../state/haruna/surfaces/no_such_map.yaml or .../assets/maps/haruna/surfaces/no_such_map.yaml
+     (maps: haruna_sand, haruna_verge)" (the bridge's log and the JUnit). **Held.**
+  3. `c4_next_gets_its_own`: the world server loaded `haruna_verge` (0 zones) with
+     `scensim.default.SideWalk=gravel`, after the two runs before it: the next scenario got its
+     own. **Held** for item 1's last clause and item 2's applying. The run then ended in error
+     13 s in: the pilot had restarted after the run before it ended, and stock Autoware's
+     `pose_instability_detector` died with "cannot store a negative time point in rclcpp::Time"
+     (issue 027). The overlay that carries 027's fix was not built on this host ("Autoware
+     overlay not built; running stock Autoware"). So the run did not pass, for a reason that is
+     not C4's. **Failed** as predicted (pass), cause named.
+  4. `c4_unknown_label`: refused, "scensim.default.Kerb: no ground label 'Kerb' (one of Road,
+     RoadLine, SideWalk, Terrain, Ground, ...)". **Held.**
+  5. `c4_unknown_class`: refused, "scensim.default.Terrain: unknown class 'moon_dust' (the table
+     has asphalt, concrete, dirt, grass, ...)". **Held.**
+  - One world server served all five: **held**.
+- **Amended after the first runs (labelled): the second runs.** Scenario 1's late condition
+  fires at 30 s of simulated time, when the wheels have been on the sand for about 25 s,
+  instead of at a place, and the run ends at 60 s. Its prediction is unchanged. The Autoware
+  overlay is built (`scensim autoware overlay`), and scenarios 1 and 3 run again, 1 then 3, on
+  one world server. Prediction for 3 unchanged: it passes.
 
 ### C5's steps (approved by 133, 2026-11-23)
 
