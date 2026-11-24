@@ -292,3 +292,29 @@ base contacts and end heights, and omni.physx's "only in one collision group" wa
   the wheels' ground query may also take a rock for ground (not yet measured). A pair filter
   for the base mends one of the two. The fix needs the membership in before intake, B's or C's
   order. D stays in the runs, as a measure of the pair filter alone.
+
+### The orders' result (2026-11-24, 15:11; GPU0 held by another user's job from 14:02)
+
+siw 77075e3 code, `stage145b.py`, `run145b.sh`, `s145b.jsonl`, `s145b_{A,B,C,D}.log`.
+
+| order | pool prims meeting the base | ending on the base | "only in one collision group" |
+|---|---|---|---|
+| A (today: membership a step later) | 64 of 64 | 64 | 0 |
+| B (membership in the same frame, one edit) | 0 | 0 | 0 |
+| C (includes written before the prims exist) | 64 of 64 | 64 | 0 |
+| D (A plus a pair filter to the base) | 0 | 0 | 0 |
+
+Each run also logged omni.fabric's "includes not found for path .../rocks" once.
+
+**118's prediction, as measured:**
+
+- A: held.
+- B: held on the contact (none meet the base), failed on the warnings: 0, not about 63.
+- C: failed. A membership naming paths not yet in the stage is not applied when the prims
+  arrive, so C is the same as A.
+- D: held. The pair filter keeps a pool rock off the base, but not off `groundQuery` (amended
+  before the runs).
+
+**The fix takes B's order**, as built: `reserve` writes the pool's membership before it returns
+(siw branch `issue-145`). Issue 123's 769 warnings for that order did not come in the stage. Whether
+they come in a drive is read in the proof runs below.
