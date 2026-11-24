@@ -1100,7 +1100,9 @@ compares (`test_pointmass.py`).
 (gap > 0) scores its own gap, with no margin term: below every waiting walker. Those draws are
 the near-failures the elite should climb through, and they are expected in the elite from g1
 on. The search counts them per generation, and those in its elite (`went_avoided`,
-`elite_went_avoided` in its state and report).
+`elite_went_avoided` in its state and report). A waiting walker near its threshold can outrank one, though (it
+scores its plateau gap, about 0.45 m, while a went-and-avoided walker scores its own gap, 0.73
+m in the smoke): so the count in the elite may be small. The prediction stands as written (133).
 
 **2. g0 at the base for a uniform variable.** K11a turns a uniform into a centred truncated
 normal from g0, which put less mass where failures live (K11d's observation). From K11e a
@@ -1120,4 +1122,12 @@ and is refitted to a truncated normal within its range from g1 on, as before.
 If 2 fails with 3 met, the score is ranked but the cross-entropy still cannot reach the failure
 branch in 10 generations (rho or N, then). If 3 fails, the margin does not reach the elite (a
 fault to find before any reading). If 4 fails, the rate is not used.
+
+### K11e's run: started in parallel with K11c and K11d (2026-11-24, 241; 133's go)
+
+Started 14:04:11 from a pinned detached worktree at 7be7775b (`scensim-k11e-pin`; nobody edits
+it while the run lasts), under `nice -n 10`, with `search_run.py --margin-k 1.0`, while K11c
+(g16) and K11d (g7) ran on. P4's iteration time just before (the mean of each seed's last 20,
+14:02): seed 3 88.9 s, seed 4 90.9 s, seed 5 91.0 s, the host's load 66 to 74 on 24 CPUs;
+checked again an hour later against P4's 20 % rule.
 
