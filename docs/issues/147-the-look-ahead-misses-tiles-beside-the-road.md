@@ -1,6 +1,7 @@
 # 147: the road's look-ahead never asks for the tiles beside the road
 
-**Status:** open (filed by 133 from issue 144's proof). **Severity:** low: speed only. Since
+**Status:** fixed (siw 26a3573, once landed; filed by 133 from issue 144's proof).
+**Severity:** low: speed only. Since
 issue 144 the frame's end waits for these tiles, so nothing is missing, but the wait blocks while
 the worker makes them. **Found:** 2026-11-24, scensim 118, issue 144's two-pace proof.
 
@@ -121,3 +122,29 @@ beside it get no lead, and a tile takes 134 to 823 ms to make here.
     "touches a corridor" already took the column. v1 missed in time (no lead), not in place.
   - Built: siw issue-147 26a3573 on 07bf74c (local). Runs: the v2 pair, real time and unpaced,
     against the baseline pair above (46c09ec, 22:54 and 22:58), under the same quiet rule.
+
+### v2's result (2026-11-24, 23:03 to 23:06)
+
+GPU0 alone (the quiet lead from 22:44:31; nothing on it between the runs); the other session's
+GPU1 job loading the CPU. Load average at the starts: 13.48 (real time) and 4.33 (unpaced).
+
+| run | waits over 50 ms | their total | all waits | longest | unpaced rate | wait_missed |
+|---|---|---|---|---|---|---|
+| baseline 46c09ec, real time (22:54) | 47 | 14.18 s | 14.36 s | 809 ms | | 0 |
+| v2 26a3573, real time | **0** | 0 | 0.15 s | 0.3 ms | | 0 |
+| baseline 46c09ec, unpaced (22:58) | 50 | 18.20 s | 18.40 s | 894 ms | 49.1 frames/s | 0 |
+| v2 26a3573, unpaced | 29 | 9.38 s | 9.52 s | 1029 ms | 62.2 frames/s | 0 |
+
+Rocks loaded 163 and collision tiles made 239, as in every run.
+
+- Real time: at most 5 waits over 50 ms (0) and under 2 s in all (0.15 s): **held**, under a
+  higher load than the baseline's run (13.48 against 1.43).
+- The (frame, tile) lists: v2 at real time against v2 unpaced identical, and against the
+  baseline identical: **held**.
+- Unpaced: fewer waits than the baseline's 50 (29), and a rate at least 49.1 (62.2): **held**.
+- The filed predictions: under 5 waits (0), under 2 s (0.15 s), over 33.7 frames a second (62.2):
+  **held**. The relative line: at most a tenth of the baseline's waits (0 against 47) and a rate
+  at least the baseline's (62.2 against 49.1): **held**.
+
+The unpaced run still waits where a row's work outlasts its lead at 3.1 times real time, as the
+throughput check said it would. Status: fixed by siw 26a3573 (with 07bf74c), once landed.
