@@ -250,3 +250,38 @@ stage test (64 pool prims, a tile at z 0, the base 5 cm above it, the fix's orde
 meeting the base. The live world differs from it in the base's height (flush, not 5 cm above),
 the pool's size (768) and the base's kind (the world's large env meshes, not a box). The next
 step is to put those differences into the stage test one at a time (prediction first).
+
+## The stage tests (before any run)
+
+The 770 warnings are not the contacts' cause, on issue 123's record. Its diagnosis took the
+warnings from 769 to 1 and the base contact stayed, to the newton. Its "server order" run logged
+771 warnings with no base contact. The warnings stay recorded in each variant, but the variants
+ask about the contacts.
+
+A hypothesis the record gives, not yet tested. In the live world server the world's USD (the
+map's `/World/env`) is on the stage long before the road's load sets `roadBase`'s members. The
+server preloads the world and keeps it from load to load, and a warm-up ego drives on it ("kept
+from the last vehicle" in the run's log). So PhysX takes `/World/env/Road` and `Terrain` in, and
+steps with them, while `roadBase` is still empty. By issue 123's rule (a group's members set after
+PhysX took a collider in are not applied to it), the rocks are then not filtered from the env
+meshes. They meet them wherever the base is within contact distance of the detail they rest on,
+which is where the probe found every contact, within 1.2 cm. Issue 123's "server order" run added
+the USD and the road in one load, with no steps between, which is why it did not show this.
+`fixture_drive` sets `roadBase` before the simulation starts, which is why 145's proof saw none.
+
+Issue 145's stage (`stage145b.py`, order B: 64 pool prims, a rock 1 mm over a tile at z 0, the
+base a box 5 cm above, the groups and `roadBase`'s members before play, the pool joining `rocks`
+before its first step, woken together, 3 s) with one change each, two runs each:
+
+| variant | change from B | 118's prediction (base touched, of 64; warnings) |
+|---|---|---|
+| S1 | the base's top flush with the tile (z 0) | 0; 0 |
+| S2 | a pool of 768 (the live pool's size) | 0 of 768; 0 |
+| S3 | the base a triangle mesh (as the env meshes), flush | 0; 0 |
+| S4a | `rocks`' filteredGroups authored before the pool's intake (B's order) | 0; 0 |
+| S4b | `rocks`' filteredGroups authored after the pool's intake (133) | 64 (all); 0 |
+| S5 | `roadBase`'s members set after the base has been through 60 physics steps, flush (the preload) | 64 (all); 0 |
+
+If S5 holds, the fix is to set `roadBase`'s members in the same stage edit that adds the world's
+ground (`_load_env`), before any step. That is issue 123's fix plan's step 2, which step 1's
+result made look unneeded. Its proof would be the live drive: 0 contacts.
