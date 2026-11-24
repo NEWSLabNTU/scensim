@@ -63,3 +63,46 @@ waits are timings), each held to the wall clock and unpaced.
     below 33.7.
   - (2) A relative line: the fix's waits over 50 ms at real time are at most a tenth of the
     same-day baseline's, and the fix's unpaced rate is at least the baseline's.
+
+### The runs' result (2026-11-24, 22:54 to 23:00)
+
+GPU0 alone (the other session's last process left it at 22:44:31; the quiet lead from then).
+The other session's GPU1 training job loaded the CPU throughout. Load average at each start: 1.43,
+6.15, 5.09, 5.95. Record: `/mnt/renegade/aeon/isaac-ex/c6d/i147` (`run147.sh`, `times.txt`, a
+`.jsonl` and a log a run).
+
+| run | waits over 50 ms | their total | all waits | longest | unpaced rate | wait_missed |
+|---|---|---|---|---|---|---|
+| baseline 46c09ec, real time | 47 | 14.18 s | 14.36 s | 809 ms | | 0 |
+| fix 07bf74c, real time | 47 | 14.22 s | 14.37 s | 824 ms | | 0 |
+| baseline 46c09ec, unpaced | 50 | 18.20 s | 18.40 s | 894 ms | 49.1 frames/s | 0 |
+| fix 07bf74c, unpaced | 48 | 17.14 s | 17.36 s | 886 ms | 50.4 frames/s | 0 |
+
+All four count (`wait_missed` 0). Rocks loaded 163 and collision tiles made 239 in each.
+
+- (a) Fix held to the wall clock against fix unpaced: identical (frame, tile) lists, rocks and
+  collision tiles. **Held.**
+- (b) Fix against baseline: identical lists at real time. **Held.**
+- Filed: waits over 50 ms under 5 (47) and their total under 2 s (14.2 s): **failed**. Unpaced
+  rate over 33.7: **held** (50.4), and the same-day baseline also clears it (49.1).
+- Relative: the fix's waits at most a tenth of the baseline's (47 against 47): **failed**. The
+  fix's unpaced rate at least the baseline's (50.4 against 49.1): **held**.
+
+So the fix changed nothing that matters. Both real-time runs wait at the same 47 frames, about
+every 32 frames (frames 95, 130, 162, 194, 226, 257 and so on, 134 to 823 ms each). At 10 m/s
+and 20 frames a second, 32 frames is 16 m, one tile (`TILE`). Each wait comes as the car crosses
+into a new tile row. `tiles_near` takes a square of tiles about the car, so a new row of tiles
+enters the frame end's 32 m reach at that frame. The fix asks for the tiles within the same
+32 m, so it asks for that row at the same frame the frame's end waits for it. The look-ahead
+along the corridors covers only the tiles within 6 m of the centreline ahead. The row's tiles
+beside it get no lead, and a tile takes 134 to 823 ms to make here.
+
+- **Proposed second version (prediction before its runs).** `_ahead` asks for the corridor tiles
+  within `AROUND + TILE` (48 m) of the car, one tile row ahead of the frame end's reach in every
+  direction: 1.6 s of lead at 10 m/s, against a tile's 134 to 823 ms. The tiles in that square
+  that touch a corridor number about 15 to 30 on Haruna, under the layer's `max_tiles` (96).
+  - **118's prediction:** the fix's real-time run waits over 50 ms at most 5 frames (the first
+    frames' burst, frame 44, may stay), under 2 s in all. The (frame, tile) lists stay identical
+    to the baseline's and between the fix's two paces. The unpaced rate stays at least the
+    baseline's 49.1. Runs: the fix's pair (real time and unpaced), against today's baseline
+    pair, under the same quiet rule, with the load recorded.
