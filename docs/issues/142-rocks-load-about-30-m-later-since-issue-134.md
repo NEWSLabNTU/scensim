@@ -43,3 +43,40 @@ half the tread, 0.83 m). The car's stopping distance at 11.1 m/s, braking at 7 m
   ahead of the car. On main the least lead over those rocks is under 14 m: rocks are being
   missed in effect, since a wheel can reach one before the car could stop for it. Tiles are made
   on the caller's thread on main and not, or far less, on 6c6a044.
+
+### The probe's result (2026-11-24)
+
+C6b's fixtures (raycast) through `probe142.py`, GPU0 quiet through both runs (load 0.7 and 1.8),
+on siw 6c6a044 (before 134) and siw main 56b8e39. 206 rocks loaded in each, 18 of them in a
+wheel's path. A case start is where `fixture_drive` places the car for the next case (three in
+the run); the first case's start, s 43 m, is at the run's beginning.
+
+| | 6c6a044 | 56b8e39 |
+|---|---|---|
+| worker time a tile, median (p90) | 47 ms (308) | **379 ms** (475) |
+| tiles made on the caller's thread | 0 | 0 |
+| in-path rocks loaded while driving: leads | 35.7 to 46.6 m | **14.1 to 18.0 m** |
+| in-path rocks loaded at the next case's placing: leads | 29.0 m and more | **0.0, 1.2, 11.0, 12.2** m, then 16.1 and more |
+| the first case's rock at s 58 m | 13.3 m | 13.3 m |
+| all rocks: least lead, median | -0.3 m, 37.2 m | -18.2 m, 14.2 m |
+
+- **Since 134 a worker tile takes eight times as long** (47 to 379 ms median). The worker makes
+  about 2.6 tiles a second now. At 11.1 m/s the tiles ahead come about as fast as that, so the
+  rocks load about 20 m later than before, all of them in the end.
+- **While driving, no in-path rock was missed at this speed**, by a thin margin: the least lead
+  was 14.1 m, against a stopping distance of about 14 m at 11.1 m/s. At a higher speed the
+  margin would go: by estimate (two or three new tiles every 16 m of travel), the tiles ahead
+  come faster than 2.6 a second from about 15 to 20 m/s, and Haruna's study speeds reach
+  80 km/h. Not measured.
+- **At a case start the car is placed where its rocks are not loaded yet**: four in-path rocks
+  loaded within 0 to 0.33 s of the placing with leads of 0 to 12 m. The car stands there, so it
+  can still stop; a car placed at speed (a teleported ego, a scenario's start) would not.
+- **118's prediction:** the worker's time up at least 1.5 times **held** (8.1 times); a least lead
+  on main under 14 m **held** (0.0 m), but only at case starts, with the car at rest, not while
+  driving (14.1 m); every in-path rock at least 25 m ahead on 6c6a044 **failed** (13.3 m, the
+  first case's start, the same on both); tiles made on the caller's thread on main **failed**
+  (none on either).
+
+So 142 is real and grows with speed. The cause is the worker's time a tile; the cure is to make
+the look's part of it cheap again (or a second worker), and its proof a lead over the in-path
+rocks at Haruna's speeds at least the stopping distance with a margin, written before the run.
