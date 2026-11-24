@@ -479,3 +479,18 @@ The same pair's leads: in-path rocks under 35 m, 46 of 67 on main and 6 of 68 wi
 34.2 m: the reach). In both, one rock counts as passed before its prim (-143 and -144 m): a loose
 rock the car knocked, which rolled more than 3 m and whose prim was made again where it stopped
 (its data had loaded at its first place); not a rock missed.
+
+## Bit for bit, and under which numpy (2026-11-24, from issue 145)
+
+The exactness tests ran only under the system numpy (1.21.5), the gate's. The world server runs
+Isaac 6.2's Python, with numpy 2.3.1, which sums in another order. Measured there against the full
+loop, on the tests' tiles:
+
+- The winding tiles (`Blocks`): u within 2.0e-8 m, near identical, v identical except at one point
+  of 71538, a vertex tie where numpy 2.3 takes the other segment (0.42 mm in v).
+- The hairpin (`Blocks`): u within 2.8e-14 m, v and near identical.
+- The heights, base road, zones and rocks placed tests pass exactly under both.
+
+So the culled projection is the full one bit for bit under numpy 1.x, and up to rounding in u and
+the choice at an exact tie under 2.x. Issue 128's doc has the whole account and the tests' bounds
+(siw branch `exact-numpy2`).

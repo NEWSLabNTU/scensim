@@ -78,3 +78,13 @@ happened, at 0.1 s (the first tile at the spawn), and none after, so the worker 
 reach and no change of cure is needed. No step was slow (over 500 ms). The largest step, 340 ms
 at sim 136.45 s, was not the flush; it is within the p95 bar and reported here. Before the
 fix the same run was 1855 ms p50 and 2029 ms p95 and timed out.
+
+## Bit for bit, and under which numpy (2026-11-24, from issue 145)
+
+The exactness tests ran only under the system numpy (1.21.5), the gate's. The world server runs
+Isaac 6.2's Python, with numpy 2.3.1, which sums in another order. Measured there against the full
+loop, on the tests' tiles:
+
+134's own tests (a tile's surface and zones against the old path) are exact under both numpy 1.21.5
+and 2.3.1: both paths make the tile the same way, so the summation order is the same on each side.
+Issue 128's doc has the projection's account under numpy 2.3.
