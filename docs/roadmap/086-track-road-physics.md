@@ -1991,6 +1991,105 @@ and on 1.0 after 083 step 5. C8 runs beside the others. C9 comes after C5 and C6
 C3 has written Haruna's record. About 4-5 weeks of work to C5, which gives one road from the
 record to Isaac, Autoware's maps and the planner.
 
+#### C7's spec: CARLA as a second target for the surface record (written 2026-11-25, before any code or run; for 133's review)
+
+C7 is 086's row: the CARLA world server reads the map's `surfaces.yaml` zones as friction
+trigger boxes and takes `scensim.zone.<id>.*`, on 0.9.16 first, on 1.0 once 083 step 5 maps the
+spec to Chaos. Since 2026-11-25 it also carries 092 K9f-a's two lines: the `ROAD_ZONES`
+capability and the zones' state read back in a `RoadConditionReply`, one protocol change with
+K9f-a's (below).
+
+**What there is (read writing this spec).**
+
+- The CARLA world server takes `SetRoadCondition` world-wide only
+  (`backend/carla/road_condition.rs`): `frictionScaleFactor` times asphalt's wet factor
+  (`WET_FRICTION`, the class table's numbers) becomes a factor on every vehicle's
+  `WheelPhysicsControl::tire_friction`, set by `apply_physics_control` (which rebuilds the car's
+  PhysX vehicle, so only when the tires are not already the road's), kept on each car after
+  every spawn (0.9.16 puts a blueprint's tire friction back on live cars of it), and the wet
+  look on the weather. Every `scensim.` property is refused ("the CARLA world server has no
+  surface map").
+- acb's physics check tolerates that factor: it reads the road's factor from wheel 0's
+  friction over the spec file's and accepts the same factor on every wheel
+  (`acb_bridge/src/vehicle_physics.rs`). A factor that differs between wheels would read as
+  drift, and acb exits 4 after 20 frames (CLAUDE.md).
+- A zone in `surfaces.yaml` is an id, a class (the class table's `mu` and `wet` factors), an
+  optional wetness, water depth and soil, and a map-frame polygon (ROS frame; CARLA's is the
+  Y-flip). CARLA's towns have no ground labels per wheel, so outside the zones the road stays
+  asphalt, as today.
+- CARLA's own friction trigger (`static.trigger.friction`: `friction`, `extent_x/y/z`, a
+  transform) is the native way to change tyre friction over an area. What it does to a
+  vehicle on 0.9.16 (every wheel or the wheels inside, its value absolute or a scale, what
+  happens on leaving, whether `physics_control` reads it) is not documented well enough to
+  build on; P0 measures it first.
+
+**The protocol: 092 K9f-a's, as written there** (243, 28574f29 on 092-k9e): `CAPABILITY_ROAD_ZONES
+= 13` (needs `ROAD_CONDITION`), `ZoneApplied {surface_class, wetness, optional water_depth,
+mu}`, `RoadConditionReply {friction_scale_factor, wetness, map<string, ZoneApplied> zones}` in
+`Reply`'s oneof at 12, no `PROTOCOL_VERSION` bump. Whichever of K9f-a and C7 lands first adds it
+as written. C7's side: the CARLA server declares `ROAD_ZONES` once its boxes take the zone
+fields, and answers every `SetRoadCondition` with a reply read back from CARLA (each named
+zone's class and wetness as its boxes hold them, its `mu` from the box's friction over the
+car's own tyre friction times the reference class's mu; `water_depth` unset, C7 models no
+fords; a zone's water depth asked for is refused by name).
+
+**The steps.**
+
+- **P0, the trigger measured** (a probe, CARLA 0.9.16, 118's own CARLA on port 2010, no Autoware,
+  a script spawning the Model 3 with the spec's physics and driving it straight at 10 m/s over
+  one trigger box 6 m long across the lane, then one under its left wheels only). Logged per
+  tick: each wheel's `tire_friction` as `physics_control` reads it, the car's speed, yaw rate
+  and deceleration under a fixed brake. Questions, each answered by the log: (a) does a wheel's
+  friction change inside the box, and to what (the `friction` attribute absolute, or times the
+  car's own); (b) all four wheels or only those inside; (c) back to the car's own on leaving,
+  or to the blueprint's 3.5; (d) does `physics_control` read the trigger's value (acb's check
+  would see it); (e) the cost a tick with 1 and 20 boxes. And, for the split-mu fallback, (f) an
+  `apply_physics_control` setting the left wheels' friction while driving: the step in speed
+  and yaw rate at the apply.
+  118's predictions: (a) absolute; (b) all four, the trigger acting on the car's overlap, not
+  per wheel; (c) back to the value the car had on entry; (d) yes; (e) no measurable cost at 20
+  boxes; (f) a step under 0.05 m/s and 0.5 deg/s.
+- **C7a, zones as boxes** (code, after P0): the server finds the map's `surfaces.yaml` as the
+  Isaac server does (the map directory or the project's state, `names`), turns each zone's
+  polygon into oriented boxes (a rectangle within 1 cm is one box; otherwise strips along its
+  principal axis, the boxes' area within 2 % of the polygon's, more than 32 boxes a zone
+  refused by name), Y-flipped, and spawns a trigger per box at load, with the zone's class mu x
+  wet factor x the condition's scale over the reference class's mu, times the ego's own tyre
+  friction (if P0 (a) is absolute). `scensim.zone.<id>.<field>` (class, wetness, mu scale)
+  replaces that zone's boxes. Back to the map's at `LoadWorld` and `Release`. acb's check: if
+  P0 (b) and (d) hold, the trigger is a factor on every wheel at once, which acb already
+  accepts; nothing changes in acb.
+- **Split-mu** (the row's second check) depends on P0 (b). If the trigger acts on the whole
+  car, a zone under one side's wheels cannot be one on CARLA with triggers. Two ways, for 133
+  after P0, not chosen now: (i) per-wheel friction by `apply_physics_control` when a wheel's
+  zone changes (a few applies per crossing; acb's check extended to a factor per wheel, an acb
+  change; P0 (f) says whether an apply mid-drive disturbs the car), or (ii) zones narrower than
+  the car's track refused on CARLA by name, and split-mu out of C7's check on CARLA, recorded.
+- **C7b, the reply and the capability**: `RoadConditionReply` from the boxes (above), and
+  `ROAD_ZONES` declared. Tests without CARLA: the polygon-to-box cut, the reply from a stand-in
+  set of boxes, a refused field.
+- **C7 on 1.0** after 083 step 5: P0 again on Chaos first (friction triggers on CARLA 1.0 are
+  not assumed to exist or to behave the same).
+
+**The acceptance (086's row, with K9f-a's lines), before any run:**
+
+- On Town01, CARLA 0.9.16, the Model 3 under acb (Autoware or a fixed brake test): a wet zone
+  (a class and wetness K9f-a's Isaac check also uses) lengthens the stopping distance from
+  10 m/s, within 25 % of Isaac's for the same class and zone; and, if split-mu is kept on CARLA
+  after P0, its yaw at the same brake within 25 % of Isaac's.
+- `RoadConditionReply` lists each named zone's class, wetness and mu read back from the boxes,
+  equal to the class table's numbers (mu within 1e-6); a mismatch is an error run (K9f-a's
+  rule).
+- `ROAD_ZONES` declared on CARLA once C7b lands; `scensim_world_check conformance` passes.
+- CARLA's T3 suites unchanged on a map without zones (paired, the same host and port).
+- 118's prediction: the wet zone within 15 % of Isaac's stopping distance (both scale the
+  tyre's friction linearly in mu; the tyre models differ at the limit).
+
+**The hosts.** CARLA on 118 (its own CARLA on port 2010; issue 005 is Isaac's SimReady render on
+118's driver, not CARLA's, so 118 runs C7's CARLA side, P0 included). The Isaac reference is
+K9f-a's own Isaac Town01 run on 243's host for the same zone and class; if K9f-a's run cannot
+match C7's case, 118's point-cloud Town01 (no SimReady render) runs it, non-timing.
+
 ### Open
 
 - **The corner's damper** (C6c's spec): R2's two-way damper is assumed (Tesla publishes no
