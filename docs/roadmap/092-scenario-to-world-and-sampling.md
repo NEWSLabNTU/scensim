@@ -1743,3 +1743,19 @@ The follower's first decision is now at the first frame of NPC logic (truth fram
 runs, not attempt 6's, whose seats runner stepped the follower before S (the code that lands is
 this one).
 
+**Run 2 (2026-11-25): failed, on items 2 and 4, by one step; issue 165.** On check 2's rerun
+runs: outcomes passed on both, the ego 0, the lead 6.0e-5 m, every element offset 0, the event
+names right (164); but the follower's decisions a step later in the batch (`follow` at 1 against
+0, `stopped` 1 to 2 later) and its position 0.48 m apart. The batch never stepped a model on the
+reset observation, so its entity first moved at step 2, a step after seats and SSv2's own NPCs;
+shifted by one step the error is 0.046 m (`~/nas/autoveh/logs/k13-check3/run2/`). Issue 165:
+`BatchRun.reset` has each model decide on the reset observation.
+
+**K10's agreement after 163 and 165 (133: one case end to end).** The landed K10 record ran the
+old seats runner and the old batch. One case again, both new: L seed 2 of K12's set
+(`k12_commanded`, `cs1_town01.xosc`, CARLA 0.9.16 at the default Epic, carla_basic, lockstep), then
+`agreement_run.py --ego-from-truth` on it, K10's rule unchanged. Predicted before the run: it
+agrees as K10's run 2 did. The walker waits for its `start_gap` well past S, so neither fix moves
+it: outcomes passed on both, the decisions the same sequence at the same steps on both sides
+(appear, reject, go_after), every element offset 0, the walker's max xy error about 1.5e-4 m.
+
