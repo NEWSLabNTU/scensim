@@ -101,3 +101,28 @@ first nonzero control is at frame 2; from there all 245 frames with a world pose
 `control` (none missing), all in range, and throttle and brake are never both above 0.5 (their
 maxima 0.75 and 1.0). The prediction held. The run's other bodies, the commanded walker and the
 van (a misc object), carry none: live, the exclusion the bench set could not show.
+
+## Step 2: acb's sends against CARLA's frames (2026-11-24, 133 approved)
+
+acb records, with `apply_trace_path` set, one row per actuation of the hero (its
+`apply_trace.rs`): `CLOCK_MONOTONIC` before the call, the newest frame its main loop had taken
+(`f_obs`), the newest its client had received when the call returned (`f_after`), and the
+control as sent; and one row per frame it takes. The rows go through its writer thread, never
+the control path's disk. `scensim_launch/scripts/apply_alignment.py` joins them with the
+truth's `control` by CARLA frame: for frame s, the expected control is the last sent with
+`f_obs == f_after == s - 1`; the truth holding it is `in_time`, holding the one sent just before
+it is `late`, a send a tick finished during is `raced` (not judged), two equal values are
+`ambiguous`, and frames near a row the writer dropped are `unclassified`. Values match within
+1e-6 (CARLA keeps float32), the flags and gear exactly. A `late` is a candidate, bounded by the
+stream delay: acb's view "still s - 1" is not proof the server had not begun tick s.
+
+**The run:** one Autoware ego scenario of the `dev` project on Town01 (scensim's profile,
+tesla_model3), on a stack built from scensim main with acb's change, both workspaces rebuilt
+from a clean environment, acb's built binary checked against the source.
+
+**Prediction, written before it runs:** every truth frame after the ego's first `control` is
+labelled; `late` is under 1% of the judged frames (`in_time` + `late` + `other`), possibly none,
+since the world server ticks only after SSv2's request and acb sends after taking the previous
+frame; `raced` is rare too; `ambiguous` is common while the car is held (Autoware repeats a
+stop's control); and about a third of frames have two or more sends (Autoware at 30 Hz against
+20 frames a second), only the last of which is judged.
