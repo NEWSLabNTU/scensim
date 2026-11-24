@@ -1224,10 +1224,10 @@ found over the whole run.
 2. **Met.** The level reached 0 at g8.
 3. **Met.** The elite's mean `accept_u` was 0.084 at g3 (0.189 already at g0, where K11d's was
    0.467).
-4. **Met for K11c, open for K11d.** The interval [0.0126, 0.0171] overlaps K11c's g0 interval
-   (Wilson [0.0106, 0.0271]) and its fresh stage's ([0.0074, 0.0285]). K11d's fresh stage has not
-   run yet (K11d is at g16, still on the plateau).
-5. **Met for K11c, open for K11d.** The relative SE, 0.077, is below K11c's fresh stage's, 0.30.
+4. **Met.** The interval [0.0126, 0.0171] overlaps K11c's g0 interval (Wilson [0.0106,
+   0.0271]), its fresh stage's ([0.0074, 0.0285]) and K11d's ([0.0117, 0.0297], judged when
+   K11d ended at 19:33).
+5. **Met.** The relative SE, 0.077, is below K11c's fresh stage's, 0.30, and K11d's, 0.22.
 
 The went-and-avoided draws were in the elite from g0 on (33), as expected from g1, and left it
 at g8, when failures filled it. A reading, not a prediction: with the same N, the sloped score
@@ -1251,4 +1251,56 @@ p; the five largest together 10.5 %; the median 0.057), and the failures' own n_
 225. The 82 draws over 5, 71 of them at the bound, are all non-failures: draws in the base's bulk
 (the walker waits) that the proposal reaches rarely. They lower the whole sample's n_eff to 115
 but add nothing to p. So no replicate was run; the SE of 0.0011 stands as the estimate's.
+
+### K11d's result (2026-11-24, 241; the run ended 19:33)
+
+**Stop: the generation cap (20).** As K11c, the level stayed on the plateau, 0.416 to 0.431 m
+from g0 to g19 (prediction 1 failed at g5, recorded above). Each generation's level, failures
+and the elite's mean `accept_u` (the 100 lowest scores; from the saved records and outcomes):
+
+| g | level (m) | failures | `accept_u` | g | level (m) | failures | `accept_u` |
+|---|---|---|---|---|---|---|---|
+| 0 | 0.4314 | 8 | 0.467 | 10 | 0.4216 | 21 | 0.298 |
+| 1 | 0.4287 | 10 | 0.441 | 11 | 0.4239 | 28 | 0.310 |
+| 2 | 0.4228 | 9 | 0.459 | 12 | 0.4194 | 24 | 0.381 |
+| 3 | 0.4209 | 19 | 0.375 | 13 | 0.4241 | 14 | 0.371 |
+| 4 | 0.4252 | 15 | 0.320 | 14 | 0.4192 | 15 | 0.367 |
+| 5 | 0.4234 | 13 | 0.361 | 15 | 0.4188 | 20 | 0.305 |
+| 6 | 0.4246 | 7 | 0.393 | 16 | 0.4161 | 20 | 0.318 |
+| 7 | 0.4187 | 14 | 0.401 | 17 | 0.4181 | 21 | 0.272 |
+| 8 | 0.4234 | 24 | 0.302 | 18 | 0.4204 | 19 | 0.318 |
+| 9 | 0.4220 | 23 | 0.321 | 19 | 0.4213 | 26 | 0.277 |
+
+**The fresh stage (g20, N 1000, from g19's proposal).** 26 failures, 26 distinct records, no
+errors. The estimate under the invented base: **p = 0.0207**, SE 0.0046, normal 95 % interval
+**[0.0117, 0.0297]**, relative SE 0.22; n_eff 405.1; the largest weight 9.86, inside its bound of
+10. The adaptive generations' own estimate, 0.0179, is a diagnostic only. The check 133 set for
+K11e, made here too after the results: no failure weighs more than 5 (the largest 1.73; 30 draws
+over 5, all non-failures).
+
+**The predictions.**
+
+1. **Failed** (at g5, as recorded): the plateau filled the elite; the sloped score (K11e) was
+   the next spec, and reached 0 at g8.
+2. **Met, not monotonically.** The elite's mean `accept_u` fell from 0.467 at g0 to 0.277 at
+   g19, the last generation, through 0.272 to 0.401 from g3 on: the elite leant towards small u
+   without a score to climb.
+3. **Met.** [0.0117, 0.0297] overlaps K11c's g0 interval (Wilson [0.011, 0.027]) and its fresh
+   stage's ([0.0074, 0.0285]).
+4. **Met.** The relative SE, 0.22, is below K11c's fresh stage's, 0.30.
+
+**The three rates.** K11c 0.0179 [0.0074, 0.0285], K11d 0.0207 [0.0117, 0.0297], K11e 0.0148
+[0.0126, 0.0171], and K11c's g0 by plain sampling 0.017 (Wilson [0.0106, 0.0271]): every
+interval overlaps every other, one rate under one base (K11e's narrow interval holds neither
+K11c's nor K11d's point estimate, which their wider intervals allow). The relative SEs, 0.30, 0.22 and 0.077 at
+the same N, rank the three searches; only K11e's score reached the failure branch.
+
+A reading, not a result (133): K11e and K11d differ by z = 1.25 (0.0059 over a combined SE of
+0.0047), not significant. And an importance-sampling estimate can miss a failure region its
+proposal never reaches, which the weight check cannot see: K11e's narrow interval is
+conditional on its proposal covering every failure region.
+
+**Data.** `~/nas/autoveh/logs/092-k11d/`, as K11c's and K11e's, with `fresh_failures.txt` (26
+ids) and `SHA256SUMS` (89 files). The truth exports stay on 241 in
+`/var/tmp/aeon/k11d-run/runs/*/truth/`. The run executed a0d6c257 (main 190a172b).
 
