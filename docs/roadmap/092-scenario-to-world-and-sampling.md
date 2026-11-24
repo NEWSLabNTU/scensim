@@ -944,3 +944,15 @@ absolute form.
 If 1 fails, the elite is still filled by the plateau (the sloped score is then the next spec);
 if 3 fails, the weights or the variable's law are wrong, and K11d's rate is not used.
 
+### K11d's run: started in parallel with K11c (2026-11-24, 241; 133's go)
+
+Started 11:40:43 from a pinned detached worktree at a0d6c257 (`scensim-k11d-pin`: 2c7a6df9 plus
+the notes and the spec-relative scenario path; nobody edits it while the run lasts), under
+`nice -n 10`, while K11c ran on (g9). One generation is a single process of about one core; the
+host's load was 74 to 79 on 24 CPUs, so 133 judged one more niced process to cost the others
+about 1 %, well inside P4's 20 % rule. Both searches are deterministic, so running them together
+changes no result, only wall time. P4's iteration time before the start (the mean of each
+seed's last 20 iterations, 11:39): seed 3 118.7 s, seed 4 117.5 s, seed 5 113.3 s; an hour
+later (12:41): 89.5, 98.5 and 97.5 s, the host's other load having moved too (load 87.6): no
+slowdown, inside the 20 % rule.
+
