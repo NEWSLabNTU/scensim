@@ -252,3 +252,38 @@ holds for a member too.
 returns, before the next physics step, as a live prim's is (L's order). Its proof: the stage
 test's P made that way stays on the tile, and the Haruna drive at 10 and 13.9 m/s gives 0 base
 contacts over the course. On the rough map (issue 136) the same should end its 12.
+
+## The rule, a second time: membership before intake (133)
+
+Issue 123 found PhysX applying no group to ground it took in before `roadBase` existed. Here PhysX
+applies no `rocks` membership to a rock it took in before the membership was written. One rule,
+met twice: **PhysX fixes a collider's filtering when it takes the collider in, and a group
+membership written afterwards is ignored.** A collider's membership must be in the stage before the
+first physics step that sees the collider.
+
+History matters here. Issue 123 first made the pool's membership one edit at the road's load, which
+logged 769 "only in one collision group" warnings. It then moved that edit a frame later, "as a
+live rock does", which ended the warnings. That later edit is what leaves every pool prim
+unfiltered. (Issue 123's diagnosis could not see it, because its base was then unfiltered for
+another reason, the groups made after play.)
+
+## The fix's order (before the runs)
+
+The pool's membership has to be in before intake, without bringing back issue 123's 769
+warnings. Four orders, each in its own process on the stage (`stage145b.py`): 64 pool prims made
+after play and parked, then reused over the base box and woken. Read for each: the woken prims'
+base contacts and end heights, and omni.physx's "only in one collision group" warnings.
+
+| order | how the pool is made |
+|---|---|
+| A (today) | made and parked; `rocks` includes written a physics step later, in one edit |
+| B | made and parked; `rocks` includes written in the same frame, one edit, before any step |
+| C | `rocks` includes written first, naming paths not yet defined; then the prims made and parked, all before any step |
+| D | as A, plus each prim's own `UsdPhysics.FilteredPairsAPI` naming the base, written as it is made |
+
+- **118's prediction.** A: all 64 meet the base, with 1 warning at most. B: none meet it, with
+  about 63 warnings, issue 123's "each collider added after the first" (so B's filter holds
+  despite its warnings, as the stage's L did). C: none meet it; the warning count is unknown to
+  118. D: none meet it, with 1 warning at most. The fix takes D's or C's order, whichever holds
+  with no warnings: D, if both. D's filter is the rock's own and needs no group timing. The
+  `rocks` membership stays, for `groundQuery`.
