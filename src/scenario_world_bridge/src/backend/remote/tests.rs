@@ -77,6 +77,8 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
                 max_physics_dt: if reads_back { 0.0 } else { 1.0 / 60.0 },
                 ready: true,
                 not_ready_reason: String::new(),
+                // the host's boot, naming the clock of the tick stamps below (issue 135 step 3)
+                boot_id: "stand-in-boot".into(),
             }))),
             R::LoadWorld(_) => {
                 bodies.clear();
@@ -237,6 +239,9 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
                             stale: 0,
                         },
                     ),
+                    // CLOCK_MONOTONIC around the tick, ns (issue 135 step 3): 1 us a tick
+                    tick_start_mono_ns: 5_000_000_000 + frame as i64 * 1_000_000,
+                    tick_return_mono_ns: 5_000_001_000 + frame as i64 * 1_000_000,
                 })))
             }
             R::SetGoal(_)
@@ -1617,9 +1622,18 @@ fn a_model_pedestrian_is_commanded_and_its_cmd_frame_is_in_the_truth() {
     let _ = std::fs::remove_dir_all(&dir);
     let of = |t: &str| lines.iter().filter(|l| l["type"] == t).collect::<Vec<_>>();
     assert_eq!(of("episode")[0]["schema"], 3);
+    // the server's boot and tick stamps ride the truth (issue 135 step 3)
+    assert_eq!(of("episode")[0]["world_boot_id"], "stand-in-boot");
     let frames = of("frame");
     assert!(!frames.is_empty());
     for f in &frames {
+        let start = 5_000_000_000 + f["sim_frame"].as_i64().unwrap() * 1_000_000;
+        assert_eq!(f["tick_mono_ns"].as_i64(), Some(start), "{f}");
+        assert_eq!(
+            f["tick_return_mono_ns"].as_i64(),
+            Some(start + 1_000),
+            "{f}"
+        );
         let w = &f["entities"]["walker"];
         // the stand-in answers the previous server frame's command: lag 1
         assert_eq!(
