@@ -341,3 +341,23 @@ rule:
     back, as in the stage's B.
   - (2): 0 rocks on the base, where 136 had 12. The guard passes, unless a first frame takes
     over 10 s (136 measured 10.4 s on a loaded host; this host is quiet before each start).
+
+### The fix's proof: result (2026-11-24, 15:22 to 15:27)
+
+siw issue-145 1535c3b, aib 4e8d684, GPU0 under the quiet rule; record `run145p.sh`,
+`f145_1535c3b_v10.*`, `f145_1535c3b_v139.*`, `g136_1535c3b_rough_rocks.*`.
+
+| run | 77075e3 | 1535c3b | first wakes | intake WARN | "one collision group" |
+|---|---|---|---|---|---|
+| Haruna, 10 m/s, 1020 m | 9 | **0** | 9 | 0 | 1 |
+| Haruna, 13.9 m/s, 1329.8 m | 37 | **0** | 34 (and 19 wakes again) | 0 | 1 |
+| 136's run, *rough_rocks*, 280.4 m | 12 (31593ab) | **0** | (not probed) | 0 | 1 |
+
+**118's prediction: held.** 0 base contacts in all three. The intake self-check found nothing.
+The warning came once a run, as before the fix, and issue 123's 769 did not come back. 136's guard
+passes (first frames' largest 182 ms, base contacts 0). The rocks woken are about as before: 9, and
+34 against 37 at 13.9 m/s, a start-sensitive count (issue 141). Each log still ends on the tile
+worker's `BrokenPipeError` at exit (issue 139's follow-up).
+
+**Status:** fixed by the pool's order. Issue 136's 12 on the rough map are the same mechanism
+and go to 0 with it. 136's own doc records that, and C6d's runs are no longer blocked by it.
