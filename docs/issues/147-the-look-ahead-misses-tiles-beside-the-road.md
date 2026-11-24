@@ -65,7 +65,7 @@ waits are timings), each held to the wall clock and unpaced.
   - (2) A relative line: the fix's waits over 50 ms at real time are at most a tenth of the
     same-day baseline's, and the fix's unpaced rate is at least the baseline's.
 
-### The runs' result (2026-11-24, 22:54 to 23:00)
+### The runs' result (2026-11-24, 22:54 to 23:00; one run each)
 
 GPU0 alone (the other session's last process left it at 22:44:31; the quiet lead from then).
 The other session's GPU1 training job loaded the CPU throughout. Load average at each start: 1.43,
@@ -123,7 +123,7 @@ beside it get no lead, and a tile takes 134 to 823 ms to make here.
   - Built: siw issue-147 26a3573 on 07bf74c (local). Runs: the v2 pair, real time and unpaced,
     against the baseline pair above (46c09ec, 22:54 and 22:58), under the same quiet rule.
 
-### v2's result (2026-11-24, 23:03 to 23:06)
+### v2's result (2026-11-24, 23:03 to 23:06; one run each)
 
 GPU0 alone (the quiet lead from 22:44:31; nothing on it between the runs); the other session's
 GPU1 job loading the CPU. Load average at the starts: 13.48 (real time) and 4.33 (unpaced).
@@ -137,8 +137,8 @@ GPU1 job loading the CPU. Load average at the starts: 13.48 (real time) and 4.33
 
 Rocks loaded 163 and collision tiles made 239, as in every run.
 
-- Real time: at most 5 waits over 50 ms (0) and under 2 s in all (0.15 s): **held**, under a
-  higher load than the baseline's run (13.48 against 1.43).
+- Real time: at most 5 waits over 50 ms (0) and under 2 s in all (0.15 s): **held**, on one
+  run, started at a load average of 13.48 against the baseline run's 1.43.
 - The (frame, tile) lists: v2 at real time against v2 unpaced identical, and against the
   baseline identical: **held**.
 - Unpaced: fewer waits than the baseline's 50 (29), and a rate at least 49.1 (62.2): **held**.
