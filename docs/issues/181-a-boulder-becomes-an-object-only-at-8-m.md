@@ -83,3 +83,20 @@ diagnostics), and the non-ground cloud was 22 MB a run in C6e3. Expected total: 
 The log disk (`/mnt/renegade`, NVMe) had 190 GB free at 21:2x on 2026-11-25. It is checked
 again just before the run, which goes ahead only with at least 60 GB free. The record is moved
 to the NAS and then off the log disk after the judgement.
+
+**Amended before the run (133, 2026-11-25): reach, and a bounded record.**
+- *The start.* b1 stopped dead on the static rock at x 100 and never reached the boulder. A run
+  that sticks there gives 181 and 182 nothing. So the run's scenario (a copy of
+  `fixture_c6b_down.xosc`, `tesla_model3`) starts the ego at x 320 m, past the rocks at 100, 200
+  and 300, the goal unchanged at x 490. This is for reach. It is not meant to avoid issue 180,
+  which stands as recorded.
+- *The window.* With the start at x 320, the ego is 80 m before the boulder and the record
+  covers from there. That is a little more than the window asked for (from x 340, about 60 m
+  before, past the boulder's first points at 31 m). scensim records the whole run, and a later
+  start would give NDT too little road to settle. The run ends by the scenario's
+  `SimulationTimeCondition`, set to 150 s instead of 600. At about 4.2 m/s after start-up
+  (stack ready, then motion about 10 s in, as in C6e3), the first strike comes about 30 s in,
+  so 150 s leaves at least 90 s after it. If the strike comes later than 60 s, the record says
+  how much of the 90 s it holds.
+- *Expected size from that window.* The raw cloud over at most 150 s at about 40 MB a second is
+  about 6 GB. With the rest, about 6.5 GB. The 60 GB floor is checked just before the run.
