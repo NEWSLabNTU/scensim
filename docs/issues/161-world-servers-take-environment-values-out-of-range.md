@@ -1,8 +1,8 @@
 # 161: the world servers take environment values out of range, and read back what they stored
 
 **Status:** fixed in code and tests, 2026-11-25; the probe (step 0) done the same day (the cause:
-the unordered send); live check pending (118's C7 conformance on CARLA 2010, 092 K9e's knob runs
-on CARLA) (243; numbered by 133 on 2026-11-25;
+the unordered send); the live check's two knob runs on CARLA done the same day, as predicted
+(below); 118's C7 conformance on CARLA 2010 pending (243; numbered by 133 on 2026-11-25;
 after 092 K9f). **Severity:** medium. A world server's read-back is the check behind every knob
 and every road condition. On CARLA it can echo an impossible value, or show the value before a
 send.
@@ -258,3 +258,29 @@ files.
   60 deg (`set_weather`'s unit, CARLA's own) within 1e-3, `off` empty; the knob ok; no
   `knob_mismatch`. The read right after the send may be stale (about one time in six, by the
   probe), and then it is listed under `weather_read_off`, which fails nothing.
+
+**The live check's two runs, the result (2026-11-25, 20:45-20:57, 243).** Both as predicted.
+Built: scensim main 8ad9f151 in `/var/tmp/aeon/wt-161p` from a clean environment, acb from
+20:06:21, scensim to 20:29:55; the bridge's install binary 20:23:57, the CARLA world server's
+20:27:58. My CARLA 0.9.16 alone on RPC 2100 (Epic, Town01, 6185 MiB free on the card at the
+start; RPC up at 20:45:23); each run on its own stack, stopped after it. The live processes'
+`/proc/<pid>/exe` were those install files for the bridge and the CARLA world server in both
+runs; `acb_bridge` ran acb's own workspace copy
+(`src/autoware_carla_bridge/install/acb_bridge/...`), built in the same clean build. After both,
+CARLA's process group was gone and its ports free.
+
+- **(a)** `2026-11-25T20-46-15_cs3_stale_map_pm-current_barrier_lane-6583_r0`: failed, exitFailure
+  at 240 s (the `limit` condition), no error. `knobs` ok: `illumination.sun_elevation` sent 2
+  times, 5018 frames, 5017 judged, none unread, `off_frames` empty, largest deviation 0.0 against
+  the 0.0011047 rad tolerance, read back 1.0471975511965976 rad. The truth (schema 3): knob lines
+  at frames 1 and 2 `sent: true` with no `after_step`, every line from frame 3 on `after_step:
+  true`, each read-back 1.0471975511965976.
+- **(b)** `2026-11-25T20-51-54_cs3_stale_map_pm-current_barrier_lane-6583_r0`, on the scratch copy:
+  failed, exitFailure at 240 s, no error. `knobs` ok: `weather_read` "after the run",
+  `weather_after_run.read.sun_altitude_angle` 60.0, `off` empty, the knob's `applied` and
+  `applied_after_run` both 60.0; no `weather_read_off` (the read right after the send was not
+  stale this time), no `knob_mismatch`. The copy that ran is the one predicted:
+  `testbench.yaml` sha256 0c7d70cb...; the tree hash 73bde034... as before, which is (correcting
+  its description above) the sha256 of `sha256sum`'s lines over the copy's files in sorted order,
+  names included, taken without `assets/` (fetched after) and without
+  `state/Town01/traffic_lights.yaml`, which the run itself wrote.
