@@ -167,3 +167,33 @@ speed, the truth's body roll, and NDT's roll error.
   component of one sign in both bends would point to something that follows the bend's
   presence (speed, yaw rate's size, steering) rather than its direction. The split reports the
   residual against |κ| and speed for that.
+
+## The bend split's result (2026-11-25, offline)
+
+`isaac-ex/i170/bends170.py` (`bends170.jsonl`), the 18 runs. The residual is the across error less
+the run's straight median (-0.078 to -0.086 m), binned by the truth's curvature κ (+ left).
+
+| κ bin (1/m) | samples a run | residual, level runs | residual, off-along runs | NDT roll error | -2.0 sin(roll error) |
+|---|---|---|---|---|---|
+| under -0.02 (right hairpins, R about 20 m) | 1190 to 1250 | +0.134 to +0.149 m | +0.173 to +0.189 m | +0.075 to +0.097 deg | -0.003 m |
+| -0.02 to -0.005 | about 1360 | +0.007 to +0.015 m | +0.011 to +0.015 m | about 0 | 0 |
+| -0.005 to 0.005 | about 3390 | 0 (by construction, about) | 0 | -0.01 deg | 0 |
+| 0.005 to 0.02 | about 258 | +0.002 to +0.010 m | -0.019 to -0.021 m | -0.04 to -0.07 deg | +0.002 m |
+| over 0.02 (left hairpins, R about 18 m) | 1067 to 1113 | +0.024 to +0.033 m | -0.013 to -0.030 m | -0.085 to -0.102 deg | +0.003 m |
+
+- *Hypothesis R (body roll):* **FAILED.** NDT's roll error in the hairpins is under 0.1 deg,
+  which predicts about 3 mm against residuals of 0.03 to 0.19 m. The fitted slope of the residual
+  on -2.0 sin ε is -1.5 to -18.6 m/rad across runs, not about +1. The residuals are also not of
+  opposite sign in the two directions in the level runs.
+- *Hypothesis A (the along error through the bend):* as predicted, **it cannot explain** the
+  mode-dependent split. It predicts under 1 mm, and the off-along runs differ from the level runs
+  by about 0.04 m in the right hairpins and about 0.05 m in the left ones.
+- *What the split shows (not predicted).* The across error has two parts. (1) A level of -0.078 to
+  -0.086 m on the straights and gentle bends, the same in every run and mode: the bulk of 170.
+  (2) A hairpin part, large in the right hairpins (+0.13 to +0.19 m, toward their outside) and
+  small in the left ones, which shifts with 172's along mode. NDT's yaw error in the hairpins
+  stays under 0.25 deg (two runs checked), so the heading does not carry it.
+- *Next.* Step 3 (the map) for the straights' level, since it is constant and mode-free, which is
+  what a map or frame offset would give and the frames are ruled out. For the hairpins, whether
+  the map's road and lanelets in Haruna's tight bends sit where the world's road mesh is, in the
+  same check.
