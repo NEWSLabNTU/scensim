@@ -913,6 +913,9 @@ and R6 build on it. R5 must show on the same fixtures that the reference's shape
   `scan_ground_filter` on the fixtures (false obstacles over washboard and ruts, rocks passed
   as ground); NDT on rough tiles. Measured: false-stop rate, rock and pothole detection range,
   NDT iterations.
+  - *Realised (2026-11-25, 086 C6e3 run b1):* "rocks passed as ground" holds, and a 15 cm rock
+    passed as ground under the plate stopped the Isaac car dead: issue
+    [180](../issues/180-an-obstacle-taller-than-the-clearance-is-passed-as-ground.md).
 - [ ] **R8. The road's section and its edges** (planned 2026-11-02, with
   [069](069-road-tilt-load-and-edges.md); 1-1.5 weeks after 069 E0 and R5). Entering and
   leaving the road as a real car meets it, from the one record 069 E0 writes
