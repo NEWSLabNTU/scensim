@@ -2438,3 +2438,17 @@ prediction does not fail the check. Batch numbers are not seats numbers; no CARL
 
 **Order.** This plan and the exit's correction (docs); the scenario, the specs and the dry run;
 the prediction (docs); the run and its result; one gated landing, asking 133 first.
+
+**The dry run, check 1 (2026-11-25): FAILED.** 36 slots (decel 2, 4, 6, 8 x onset 1, 2.5, 4 x
+T 0.6, 1.133, 1.8; a 0.362, b 2.140), lead_s = 73.13 + s_e(T), the anchors bound as the
+sampler binds them, at k13-step-v 7223aa53 (`k13v_dryrun.py`). M starts at 22.0 m/s in every
+slot (issue 175 works). M's first command, decided on the reset observation, gives a0 =
+-2.51e-4, -1.45e-4 and -9.48e-5 m/s^2 at T 0.6, 1.133 and 1.8, whatever decel and onset:
+**max |a0| 2.5e-4 against the bound 1e-6, FAILED**; nothing was judged. Backed out of IDM,
+M measures gaps of 26.7478, 46.3292 and 70.8335 m against s_e 26.7737, 46.3551 and 70.8594: a
+shortfall of 0.025864, 0.025870 and 0.025867 m, one constant 2.587 cm while L starts on
+lanelet 219 (anchor s 97.19 to 150.75), as every slot's does. The anchor's s places the cars
+(lanelet_at, local_s, the world's per-lanelet spline); the follower measures its gap along its
+resampled copy of the anchor's x/y. 133: investigate the cause first (an hour): a mismatch that
+depends on the loops between two cars would hit any model on such a lane, and a measured
+constant would hide it.

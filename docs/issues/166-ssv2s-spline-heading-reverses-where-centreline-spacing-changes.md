@@ -217,3 +217,28 @@ gate's `test_simulator.py::test_a_carla_deaf_to_sigterm_is_killed_after_its_keep
 under load (the gate at nice 10 beside other work), and passing on its own re-run. Issue 166
 does not touch `scensim.simulator`. A kill-timing flake under load is the class of issues 148
 and 150: a second sighting is not waived, it stops the landing and gets its own number.
+
+## A placement s and a model's gap (092 K13 step v, 2026-11-25)
+
+The spline's s counts each reversed loop's overshoot; the resolved anchor's `x`/`y` (the spline
+sampled at `heading_s`, up to 0.36 m apart) skip it, so arc length along that polyline runs
+short of s across a loop. Cars are placed by s (`lanelet_at`, `local_s`, the world's spline);
+`idm_follower` measures its gap along its resampled copy of the polyline. Its gap is therefore
+short by the loops' overshoot between it and its leader.
+
+Found by K13 step v's dry run: M's first command was -2.51e-4, -1.45e-4 and -9.48e-5 m/s^2
+where IDM's exact equilibrium gives 0, and backing the gap out of IDM gave shortfalls of
+0.025864, 0.025870 and 0.025867 m. Polyline arc against s over M to L on `west_avenue`
+(`k13v_arc.py`) gives 0.025868, 0.025871 and 0.025866 m, within 4e-6 m of those: 7.7 mm at the
+loop pair at s 73.2, 19.1 mm from s 95.9 to 97.1 (the pair at 96.45 and lanelet 117337's end),
+-0.9 mm just after the join at 71.84, and under 1e-5 m in the loop-free spans. Over the whole
+lane the polyline is 0.0935 m shorter than s.
+
+**Scope.** Any car-follower on a lane anchor with a reversed stretch between it and its leader,
+in the batch and on seats alike (one model code): its gap reads short by up to the sum of
+those loops' overshoot, a few centimetres per loop pair here, and IDM's acceleration is off by
+about its gap sensitivity (0.004 to 0.01 (m/s^2)/m at K13 step v's gaps) times that.
+Measuring the gap in s instead (each polyline point's `heading_s`) would remove it; that is a
+model change, not made here. K13 step v corrects its placement instead: L starts at 73.13 +
+0.025868 + s_e(T), the arc difference computed from the polyline, not fitted to a0. The
+difference varies by under 5e-6 m over L's range, all on lanelet 219, past the loops.
