@@ -426,3 +426,30 @@ clock lag p50 of at least 64.8 s (r2 64.8, r7 107.5, r9 97.0). Of the 24 level r
 three steps, one reached that (step 2's r8, 85.9 s, at a start load of 53). The rest were at
 53.2 s or less. So the behind mode went with a slow run, in-run contention, more than with the
 load at the start.
+
+## Step 5's plan, contention (written 2026-11-26, before any run; 133's OK, the user's go)
+
+**The runs.** Step 4's configuration exactly (scensim main 0291abb3, siw 4706ff9, aib 86a9207,
+`isaac_i172_smooth` with `/clock` in the record, GPU0 under the quiet rule), with one change: a
+CPU load for each run's length. stress-ng is not installed on 118, and installing it needs sudo,
+so the load is `step5/burn.py` instead (133's OK). It runs N worker processes, each multiplying
+256x256 float64 matrices in a loop with single-threaded BLAS (comm `python3`, cmdline
+`python3 .../i172/step5/burn.py N`). It is started by setsid 30 s before each run, in a process
+group of its own, with its pids recorded. It is killed by that group when the run ends, and
+verified gone by its recorded pids and by an empty group (`ps -o pid= -g`), never by a pattern.
+Before each run, any other user's job over about 4 cores (`ps -eo user,pcpu`) is waited out in
+60 s steps for up to 20 minutes, else the run is skipped and recorded (133).
+
+**Calibration.** A first run, c1, at 24 workers. If its clock lag p50 is outside step 2's behind
+range, 65 to 110 s, there is one adjustment (32 workers if under, 16 if over) and a run c2. If
+that also misses, the set stops and is reported, with no more tuning (133). Then r1 to r9 at the
+calibrated count. Each run's clock lag p50 and worker count are recorded.
+
+**Predictions (before any run).**
+- *H-b as contention (the behind mode needs CPU contention during the run):* behind runs return,
+  about 3 in 9 as in step 2, along about -0.09 m, and they have clock lag p50 of 65 s or more.
+- *If none return,* contention alone does not make the mode. The next set reverts step 2's other
+  differences (aib 3b69851, the record without `/clock`) under the quiet rule, with its plan to
+  133 first.
+- *The timing* (`to_sim`, the substeps, NDT's stamps against aib's) in any behind run is read
+  against the level runs' for the first difference.
