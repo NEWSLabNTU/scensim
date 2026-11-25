@@ -10,6 +10,7 @@
   <FileHeader revMajor="1" revMinor="3" date="2026-11-25T00:00:00" author="scensim"
               description="a lead brakes; the model car between it and the ego follows it under IDM, on Town05">
     <Properties>
+      <Property name="scensim.category" value="R1.lead_brake.platoon_idm"/>
       <Property name="scensim.anchor.ego_lane" value="west_avenue.lanelet_at(18.73)"/>
       <Property name="scensim.anchor.ego_s" value="west_avenue.local_s(18.73)"/>
       <Property name="scensim.anchor.m_lane" value="west_avenue.lanelet_at(68.43)"/>
