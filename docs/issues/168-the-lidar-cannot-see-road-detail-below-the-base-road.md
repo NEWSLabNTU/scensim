@@ -1,6 +1,6 @@
 # 168: on road-layer worlds the lidar cannot see road detail below the base road
 
-**Status:** open; doc and predictions first (133, 2026-11-25), no fix yet. **Severity:** high
+**Status:** fix coded (siw 4706ff9, branch issue-168, local) and checked static; the NDT A/B next. **Severity:** high
 for any sensor result on a road-detail world: the lidar (and the camera) see no pothole, no rut
 and only the upper half of the roughness. **Found:** 2026-11-25, scensim 118, 086 C6e1
 (predicted from the code before the run; numbered by 133).
@@ -189,6 +189,60 @@ judge; on fixture_c6a, the static C6e1 method plus one Autoware drive a side.
   reach. The cleats and the washboard are unchanged.
 - C6d rerun (one rough_none run): the roughness's effect on localization stays within C6d's
   noise. *Hypothesis:* NDT's 2 m voxels average a few centimetres out.
+
+## The fix as coded (siw 4706ff9, local, 2026-11-25)
+
+- `scensim_isaac_world/base_drop.py`: the depth per corridor (`sampled`, `bound`), the hash
+  (`entry_hash`), `depths` and `drop` (stored if current, else the bound with a WARN naming the
+  CLI), `render_paths`, and the CLI that writes `base_drop` into a road_detail.yaml in place,
+  keeping its comments.
+  - The bound counts the section's fall where the world's road does not carry it
+    (`section_in_base: false`): there the detail mesh draws the crown and the shoulders, and
+    the world's road is level. Found by a test, before any run.
+- `road_layer.BaseRender`: each prim to lower is hidden (its collision stays) and drawn again
+  under `/World/RoadBaseRender` as a reference to the layer that defines it, `drop` m down, with
+  its collision off. It is made in world.py's `_load_road` beside `MeshStream`, and removed
+  with the road's tiles.
+- Which prims: road_detail.yaml's `base_render` (a list; `[]` lowers nothing, which the A/B's
+  "off" maps use). Otherwise, the world's ground prims named `Road`: the terrain and the lane
+  lines stay where they are.
+- The tests: `test/test_base_drop.py`, 7 tests. siw's suite in the same environment as main
+  gives the same 7 environment-only import errors as main, with 382 tests run against 375.
+- The CLI on the maps: smooth Haruna 0.000 m (bound 0.000), *rough_none* 0.104 m (bound
+  0.137), fixture_c6a 0.080 m (bound 0.080).
+
+## The fix's static check (2026-11-25, 10:13 to 10:17, GPU0; non-timing)
+
+C6e1's six stops on fixture_c6a with the world's road drawn 0.090 m lower (`base_drop` written
+into the fixture's local `course/road_detail.yaml`, stored and current; `c6e1_lidar.py
+--base-render`; aib bb2283f, so issue 167's offset is gone). Output: `c6e1-fix168/`.
+
+- **The prediction held.** Over the pothole 260 returns at 9.6 m, every one at its floor:
+  dz to the detail 0.0 mm (median and p95), to the base -80.0 mm. Before the fix all 540
+  returns there were at the base road. Fewer returns land in the hole than on the road that
+  was there, because its near edge hides the near part of the floor at a grazing angle.
+- The cleats, the washboard and the flat road are unchanged: dz 0.0 mm median in every band.
+
+## The NDT A/B as built (before any run)
+
+- **Maps:** four hard-linked copies under `/mnt/renegade/aeon/isaac-ex/c6e/maps/`, each with
+  its own road_detail.yaml (the source maps unchanged, checked):
+  - `rough_on`: C6d's *rough_none*, `base_drop` 0.104 m written, drop 0.114 m;
+  - `rough_off`: the same with `base_render: []`;
+  - `smooth_on`: C6b's smooth Haruna, `base_drop` 0.000 m, drop 0.010 m;
+  - `smooth_off`: the same with `base_render: []`.
+- **Packages:** `isaac_i168_<side>`, C6d's package with only the map path changed, in one
+  testbench workspace (`/var/tmp/aeon/tb-i168`).
+- **Build:** a scensim worktree at main 1f4fb340 with siw at 4706ff9 (`/mnt/renegade/aeon/ws168`),
+  built by `env -i just build` with the gate's caps and memory guard.
+- **Runs:** each run is refused unless the bridge and the world server run from ws168's
+  install and result.json names main 1f4fb340 and siw 4706ff9. They are interleaved rough_off,
+  rough_on, smooth_off, smooth_on, three rounds. Not timing runs: the tick is reported only.
+- **Measured per run, offline:** NDT's pitch and z against the truth (medians above 1 m/s),
+  along and across the track, from `/localization/kinematic_state` against `ego.csv`; NVTL p05
+  and the pose error p95 from the judges.
+- **Judged:** by this doc's noise rule and its eight-comparison rule. The "off" sides are also
+  issue 167's reach check, judged by 167's doc.
 
 ## Reach
 
