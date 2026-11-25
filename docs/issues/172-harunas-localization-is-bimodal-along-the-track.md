@@ -154,3 +154,11 @@ and with its log for the age.
   runs' host CPU use and load average in the first 30 s after the stack's start are higher than
   every level run's, with no overlap. *If they overlap,* load at start-up is not the cause. Read
   offline from each run's `play_launch` `system_stats.csv`.
+- *The load hypothesis, measured by proxies (amended before looking, 133; only r1's values had
+  been seen).* These runs have no `system_stats.csv`: scensim's stacks keep ros2-launch logs, not
+  play_launch's. So load is read through proxies, with these directions predicted if the
+  hypothesis holds: the behind runs are slower from `stack.start` to `world.ready` and to
+  `pilot.ready` (`stacks/<id>/events.jsonl`), and have a higher `tick_p95` (result.json) than
+  the level runs. r8's and r9's load averages at their starts come from a watcher. A start-up
+  lag is a weaker signal than the load itself, so a "no overlap" on the proxies counts as
+  suggestive at most, not as shown.
