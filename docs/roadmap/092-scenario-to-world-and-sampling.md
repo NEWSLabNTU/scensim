@@ -798,6 +798,67 @@ the soil resistance is a separate path that is right. Town01's only road detail 
 example (`examples/road/town01/road_detail.yaml`), which applies only if it is copied in, and
 Town01 is level. So K9f-a's stopping-distance exit on Town01 does not wait for 158's fix.
 
+## K9f-b: prop layouts as a knob (spec and predictions, 2026-11-25, 243; before any code or run)
+
+As K9f's plan (above), with what building it decides:
+
+- **The layout file.** `layouts/<map>/<name>.yaml` in the testbench, or `<map dir>/layouts/<name>.yaml`
+  published with a map; a name in both is refused. *A deviation from the plan, for 133:* the plan
+  put layouts beside the map only, but a map directory is a link into the shared dataset cache,
+  and a file there needs a maps dataset revision, published with the user's OK; so a testbench
+  may carry its own, and CS3's lives in its testbench. Its form:
+
+  ```yaml
+  layout: 1
+  props:
+    barrier_a:
+      category: obstacle                 # OpenSCENARIO miscObjectCategory, one SSv2 implements
+      model: static.prop.streetbarrier   # the MiscObject's name: the simulator's asset key
+      mass: 50
+      box: {center: [0, 0, 0.55], dimensions: [0.4, 1.2, 1.1]}
+      at: {lane: west_street, s: 20, offset: -1.3}   # or {point: <anchor>}
+      h: 1.5708                          # rad: relative to the lane, absolute at a point
+  ```
+- **The knob.** A static value may carry `layout: <name>` (one layout, or `null`), on every
+  target: `works: {values: {none: null, closed: {layout: west_street_closed}}, default: none}`.
+- **The run's copy.** With a layout bound, `scensim run` writes `<run dir>/scenario.xosc`: the
+  source with each prop added as a `ScenarioObject` (a `MiscObject`) at the end of `Entities` and
+  a `Private` `TeleportAction` at the end of the Init's `Actions`, on a `LanePosition` with the
+  literal lanelet (`anchor.<lane>.lanelet_at(s)`) and lanelet-local s (`local_s(s)`), or on a
+  `WorldPosition` at a point anchor. Relative file references in the source (`Directory path`,
+  `LogicFile filepath`) are made absolute from the source's directory, so the copy runs from
+  the run directory; `$(env ...)` and `$`-parameters stay as they are. Props are written in
+  name order and the copy is serialised the same way every time: the same source, layout and
+  anchors give a byte-identical copy (a test). SSv2 is handed the copy; `override_parameters`
+  as before. `resolved.yaml` `scenario` gains `copy: {path, sha256, layouts: [...]}` beside the
+  source's `path` and `sha256`; `result.json` `knobs.<knob>.layout` names the layout, its
+  file's sha256 and each prop's placed lanelet, s, offset and the map-frame x, y it resolves to.
+  projects-and-pilots.md says that what a run executes is the copy.
+- **Refused, by name, in `testbench check` and in the run (one rule):** a layout neither place
+  has; a lane or point anchor the world lacks; an s off its lane; a category SSv2 does not
+  implement (issue 131's and CS3's `barrier`); a prop name that is already a scenario entity,
+  or in two bound layouts (two writers); a layout knob on a distribution (SSv2's own draws,
+  as for profiles).
+- **Not in K9f-b:** props spawned behind SSv2's back (refused as a design), a layout's read-back
+  beyond the truth (the props are SSv2's entities, so the truth file shows where they stand).
+
+**Exit runs, predicted before any.** A scenario `cs3_layout.xosc` in both k9_cs3 and
+k9_cs3_isaac (byte for byte): CS3 without its three barriers and without the `barrier_lane`
+binding, binding instead `scensim.knob.works = param:closure`; the barriers move to
+`layouts/Town01/west_street_closed.yaml` in each testbench (the same file), at west_street s 20
+with offsets -1.3, 0 and 1.3 and h pi/2 relative, as CS3 had them. CS3 itself stays as it is.
+
+- CARLA 0.9.16 (my CARLA on RPC 2100, Epic, Town01), closure=closed, pm=current and pm=works:
+  attempt 3's and K9e step 2a's results: the stale route through 6583 and a stop before the
+  barriers, exitFailure at 240 s; the round route and exitSuccess; no contact.
+- CARLA, closure=none, pm=current: no barrier in the copy or the truth; the ego drives the
+  stale route through 6583 unobstructed and reaches the goal, about 358 m: exitSuccess.
+- Isaac Sim 6.2, closure=closed, pm=current and pm=works: K9e step 2b's results, the same way.
+- In every closed run the barriers' truth positions equal CS3's (x 305.64; y -128.21, -129.51,
+  -130.81) within 0.01 m, in the map frame; `knobs.works.layout` names the layout and its props
+  on lanelet 6583 at s 20; `resolved.yaml` names the copy and both digests.
+- Two runs of the same case make byte-identical copies (the same sha256).
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
