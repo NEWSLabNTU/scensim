@@ -5,6 +5,7 @@ import argparse
 import io
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -491,6 +492,49 @@ def test_the_front_ends_commands_go_to_it_when_it_is_installed(monkeypatch):
     assert cli.main(["autoware-side", "build"]) == 0
     assert got == [["--version"], ["install", "--force"], ["setup", "--no-sudo"],
                    ["carla", "fetch", "0.9.16"], ["autoware-side", "build"]]
+
+
+def test_a_front_end_in_a_virtual_environment_is_found_on_path(monkeypatch, tmp_path):
+    # Ubuntu 24.04's form (install.md): the front end in a venv, whose Python this entry's
+    # cannot import; a release's setup.bash puts this entry first on PATH, the venv's after
+    monkeypatch.setattr(cli.importlib, "import_module",
+                        lambda name: (_ for _ in ()).throw(ImportError(name)))
+    release, venv = tmp_path / "sim" / "bin", tmp_path / "venv" / "bin"
+    for d, line in ((release, "#!/bin/bash"), (venv, f"#!{tmp_path}/venv/bin/python3")):
+        d.mkdir(parents=True)
+        (d / "scensim").write_text(line + "\n")
+        (d / "scensim").chmod(0o755)
+    # a venv's python is a link to the system's: known by the link's place, not its target
+    os.symlink(sys.executable, venv / "python3")
+    monkeypatch.setenv("PATH", f"{release}{os.pathsep}{venv}")
+    monkeypatch.setattr(cli, "_can_import_front_end", lambda python: True)
+    calls = []
+    monkeypatch.setattr(cli.subprocess, "call", lambda argv: calls.append(argv) or 0)
+    assert cli.main(["autoware-side", "build"]) == 0
+    assert calls == [[f"{tmp_path}/venv/bin/python3", "-m", "scensim_frontend",
+                      "autoware-side", "build"]]
+    monkeypatch.setattr(cli, "_can_import_front_end", lambda python: False)
+    assert cli._front_end() is None
+
+
+def test_an_env_shebang_names_the_python_env_would_pick(monkeypatch, tmp_path):
+    # ``#!/usr/bin/env python3`` (pipx and hand-written scripts): the python3 first on PATH
+    monkeypatch.setattr(cli.importlib, "import_module",
+                        lambda name: (_ for _ in ()).throw(ImportError(name)))
+    release, venv = tmp_path / "sim" / "bin", tmp_path / "venv" / "bin"
+    for d, line in ((release, "#!/bin/bash"), (venv, "#!/usr/bin/env -S python3")):
+        d.mkdir(parents=True)
+        (d / "scensim").write_text(line + "\n")
+        (d / "scensim").chmod(0o755)
+    os.symlink(sys.executable, venv / "python3")
+    monkeypatch.setenv("PATH", f"{release}{os.pathsep}{venv}")
+    assert cli._shebang_python(str(venv / "scensim")) == f"{venv}/python3"
+    assert cli._shebang_python(str(release / "scensim")) is None
+    monkeypatch.setattr(cli, "_can_import_front_end", lambda python: True)
+    calls = []
+    monkeypatch.setattr(cli.subprocess, "call", lambda argv: calls.append(argv) or 0)
+    assert cli.main(["carla", "fetch", "0.9.16"]) == 0
+    assert calls == [[f"{venv}/python3", "-m", "scensim_frontend", "carla", "fetch", "0.9.16"]]
 
 
 def test_without_the_front_end_a_source_build_answers_version_and_refuses_install(

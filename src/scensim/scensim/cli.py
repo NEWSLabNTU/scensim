@@ -1,6 +1,9 @@
 """``scensim <command> ...``: one entry for every scensim command (roadmap 081 step 3).
 ``scensim run ...`` is ``scensim run ...``; 082's front end puts ``scensim`` on PATH."""
 import importlib
+import os
+import shutil
+import subprocess
 import sys
 
 # command: (module, its entry, what it does), in the order `scensim --help` lists them
@@ -26,11 +29,62 @@ FRONT_END_MODULE = "scensim_frontend.cli"
 
 
 def _front_end():
-    """The pip front end's ``main(argv) -> int``, or None when it is not installed."""
+    """The pip front end's ``main(argv) -> int``, or None when it is not installed.
+
+    It is found in this Python first (``pip install --user``), then on PATH: a front end
+    installed in a virtual environment (Ubuntu 24.04's form, install.md) runs on that
+    environment's Python, which this entry's (the system's, ``#!/usr/bin/python3``) cannot
+    import, and a release's setup.bash puts this entry before it on PATH."""
     try:
         return importlib.import_module(FRONT_END_MODULE).main
     except ImportError:
+        return _front_end_on_path()
+
+
+def _shebang_python(path: str):
+    """The interpreter a ``scensim`` script on PATH names, when it is a Python, else None."""
+    try:
+        with open(path, "rb") as f:
+            line = f.readline(512).decode("utf-8", "replace").strip()
+    except OSError:
         return None
+    if not line.startswith("#!"):
+        return None
+    words = line[2:].split()
+    if words and os.path.basename(words[0]) == "env":
+        # ``#!/usr/bin/env python3``: the Python env would pick, on this PATH (options and
+        # VAR=value assignments skipped; ``env -S`` splitting is not followed)
+        names = [w for w in words[1:] if not w.startswith("-") and "=" not in w]
+        found = shutil.which(names[0]) if names else None
+        words = [found] if found else []
+    if not words or "python" not in os.path.basename(words[0]):
+        return None
+    return words[0]
+
+
+def _can_import_front_end(python: str) -> bool:
+    return subprocess.call([python, "-c", f"import {FRONT_END_MODULE}"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
+
+
+def _front_end_on_path():
+    """A front end installed for another Python, found by its ``scensim`` script on PATH, as a
+    ``main(argv) -> int`` that runs it in that Python; None when there is none."""
+    # not realpath: a venv's python is a link to the system's, and the venv is known by the
+    # link's own place (its pyvenv.cfg beside it), so resolving it would skip the venv
+    own = os.path.abspath(sys.executable)
+    seen = set()
+    for d in os.environ.get("PATH", "").split(os.pathsep):
+        path = os.path.join(d or ".", "scensim")
+        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+            continue
+        python = _shebang_python(path)
+        if python is None or os.path.abspath(python) in seen | {own}:
+            continue
+        seen.add(os.path.abspath(python))
+        if _can_import_front_end(python):
+            return lambda argv: subprocess.call([python, "-m", "scensim_frontend"] + list(argv))
+    return None
 
 
 def own_version() -> str:
