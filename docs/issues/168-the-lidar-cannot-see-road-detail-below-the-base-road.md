@@ -265,6 +265,11 @@ into the fixture's local `course/road_detail.yaml`, stored and current; `c6e1_li
     10:42:47, before the file was replaced (atomically), so it kept the old one. Both were
     refused and then accepted by hand on the same evidence (`i168/times.txt` says so).
   - From run 3 (smooth_off_1) the widened check runs.
+- *A reading added during the series (133, 2026-11-25; not a judgement, the rule unchanged):*
+  Haruna's localization is bimodal along the track per run, either about level with the car
+  or 0.086 m behind it (issue 172). The result gives each run's mode, and compares the pose
+  error p95 within a mode where both sides have runs in it. The rule's s, from the "off"
+  side's own sd, carries the bimodality into the threshold as written.
   - Run 2's log shows the road lowered 0.114 m from the stored depth, with no fallback WARN.
 
 ## Reach
