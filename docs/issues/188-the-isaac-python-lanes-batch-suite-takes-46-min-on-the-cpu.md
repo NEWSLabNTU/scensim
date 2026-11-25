@@ -107,9 +107,15 @@ tests, `OK (skipped=7)`, 0 failures, 0 errors.
    time does not move with the load (61.0 s at 47, 60.9 s at 12), while A at 18 to 20 took
    973.5 s. B took 61.0 s, 0.063 of A's, under the higher
    load: load cannot explain the difference, its direction is the opposite.
-4. **Run C: not run today** (no free GPU on 241; the GPUs' owners are other users, and codec
-   139, asked, holds none). 133: not moved to 118, whose 78 s total already bounds
-   `test_device`'s cases.
+4. **Run C: not run today** (no free GPU on 241; codec 139, asked, holds none). 133: not moved to
+   118, whose 78 s total already bounds `test_device`'s cases. **Corrected 2026-11-26 (133):**
+   this line first said the GPUs' owners "are other users", taken from codec 139's reply, not
+   checked. By `ps` on nvidia-smi's compute pids at 2026-11-26T03:44:07+08:00, GPU0 (11.6 GB,
+   100 %) held two of our own WheeledLab P1 runs (user aeon, 3086 MiB each: seed2r, running since
+   2026-11-25 03:18, and seed5r, started 03:41 by P1's guard) and three of waynecheng191's
+   jobs; GPU1 (12.7 GB, 99 %) held thsxw's (10258 MiB) and one of waynecheng191's. seed2r was
+   on GPU0 through every window this record names (22:05, both 186 runs, 01:04, runs A and B).
+   The timings stand.
 
 A's top 10 tests, with their class's fixture share (B's time in brackets where in B's top 10):
 
