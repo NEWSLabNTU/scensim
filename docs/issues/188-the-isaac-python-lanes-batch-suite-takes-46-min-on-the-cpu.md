@@ -1,7 +1,7 @@
 # 188: the Isaac-Python lane's scensim_batch suite runs 1.2 to 49 times the system lane's time, depending on the host
 
-**Status:** open (241; numbered by 133 on 2026-11-25); the cause open, CPU load and threads
-suspected; per-test timing next (133, 2026-11-26).
+**Status:** open (241; numbered by 133 on 2026-11-25); the cause found by the per-test timing
+(torch's threads oversubscribing a shared host; 2026-11-26), the fix to be planned.
 **Severity:** low. Nothing fails, but since issue 186 a full gate on a host with an Isaac
 install runs the lane, and on a loaded host this one suite adds up to about 45 minutes to it.
 **Found:** 2026-11-25, scensim 241, issue 186's first real run of the lane.
@@ -69,4 +69,55 @@ only with codec 139's OK that one is free here ("not run today" is an outcome).
 3. Run B, at a start load within 30 % of A's: its total at most half of A's. Over 0.8 of A's,
    the thread hypothesis fails.
 4. Run C, if it runs: `test_device`'s CUDA cases under 30 s together.
+
+## The per-test timing's result (2026-11-26, runs A and B)
+
+`i188_timing.py` and `i188_runs.sh` in Isaac's Python, CPU only, nice 0, the dev worktree at
+e4cf5010 (`scensim_batch` identical to main's), `/proc/loadavg` every 10 s (105 samples: the
+1-minute load from 18.1 to 51.5, median 42.7, run A's own threads among it). Both runs: 259
+tests, `OK (skipped=7)`, 0 failures, 0 errors.
+
+| run | torch threads | 1-minute load at start | at end | total |
+|---|---|---|---|---|
+| A, 01:06:54 to 01:23:12 | 24 (the default) | 18.12 (the driver, just before), 20.27 (the runner, after `isaac_env.sh`) | 47.18 | 973.5 s |
+| B, 01:23:12 to 01:24:17 | 4 | 47.18 | 26.71 | 61.0 s |
+
+1. **Torch's default threads = `os.cpu_count()` = 24: held.**
+2. **A's total by its start load: held or FAILED by which reading counts.** At the driver's
+   18.12 the band is 300 to 1000 s, and 973.5 s is in it; at the runner's own 20.27 the band is
+   1000 to 3000 s, and A is 27 s short. Both readings are recorded; neither is chosen. **For future predictions (133): a run's "start
+   load" is the runner's own reading, taken after `isaac_env.sh`.** **The top
+   10 share, 0.759 (bar 0.70): held.**
+3. **B's load condition was not met:** B started at 47.18, 2.3 to 2.6 times A's start, so by its
+   own rule B is repeated once in a quiet hour (1-minute load under 12; 133: not waived), and
+   recorded beside this one. B took 61.0 s, 0.063 of A's, under the higher
+   load: load cannot explain the difference, its direction is the opposite.
+4. **Run C: not run today** (no free GPU on 241; the GPUs' owners are other users, and codec
+   139, asked, holds none). 133: not moved to 118, whose 78 s total already bounds
+   `test_device`'s cases.
+
+A's top 10 tests, with their class's fixture share (B's time in brackets where in B's top 10):
+
+| A | test |
+|---|---|
+| 159.7 s | `test_storyboard.Episodes.test_the_truth_of_each_slot_reads_back_as_a_schema_2_file` |
+| 153.1 s | `test_lazy.LazyEpisodes.test_the_truth_of_each_slot_reads_back_as_a_schema_2_file` (2.1 s) |
+| 109.0 s | `test_pointmass.Runner.test_the_sloped_score_is_recomputed_from_the_saved_files_alone` |
+| 104.4 s | `test_pointmass.Runner.test_a_generation_gives_one_scored_outcome_per_record` |
+| 45.1 s | `test_storyboard.Episodes.test_a_reset_gives_each_slot_its_records_onset_and_rate_without_a_compile` (4.5 s) |
+| 41.2 s | `test_lazy.LazyEpisodes.test_a_reset_gives_each_slot_its_records_onset_and_rate_without_a_compile` (5.4 s) |
+| 41.0 s | `test_lazy.LazyEpisodes.test_one_slot_rebound_leaves_the_other_as_compiled` (5.0 s) |
+| 38.3 s | `test_storyboard.Episodes.test_one_slot_rebound_leaves_the_other_as_compiled` (3.8 s) |
+| 26.8 s | `test_npc.Following.test_n_slots_equal_n_scalar_runs` (2.1 s) |
+| 20.6 s | `test_lazy.LazyEpisodes.test_cs2s_lead_brakes_per_slot_at_its_own_onset_as_ssv2_brakes` (2.9 s) |
+
+By class in A: `test_storyboard.Episodes` 268 s, `test_lazy.LazyEpisodes` 261 s,
+`test_pointmass.Runner` 213 s, `test_npc.Following` 62 s. In B nothing dominates (top 10
+share 0.55; the slowest test 5.4 s).
+
+**So the cause is torch's intra-op threads oversubscribing a shared host** (24 threads per
+process on 24 CPUs already busy with other work), not Isaac's Python and not the GPU; 118's
+78 s on an idle host fits. The fix, to be planned before code: cap torch's threads in the
+lanes (`OMP_NUM_THREADS` or `torch.set_num_threads` in `scripts/isaac_lane.sh` and the system
+lane's batch step, or in the batch tests' setup).
 
