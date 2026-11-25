@@ -843,7 +843,10 @@ As K9f's plan (above), with what building it decides:
   or in two bound layouts (two writers); a layout knob on a distribution (SSv2's own draws,
   as for profiles).
 - **Not in K9f-b:** props spawned behind SSv2's back (refused as a design), a layout's read-back
-  beyond the truth (the props are SSv2's entities, so the truth file shows where they stand).
+  beyond the truth (the props are SSv2's entities, so the truth file shows where they stand),
+  and issue 166's reversed-stretch rule on a layout's props, which become LanePositions only in
+  the run's copy (issue 174, after K9f-b; CS3's are clean: `lane_positions.fixed_problems` on its
+  CARLA copy returned `[]`, and lanelet 6583 has no reversed stretch).
 
 **Exit runs, predicted before any.** A scenario `cs3_layout.xosc` in both k9_cs3 and
 k9_cs3_isaac (byte for byte): CS3 without its three barriers and without the `barrier_lane`
