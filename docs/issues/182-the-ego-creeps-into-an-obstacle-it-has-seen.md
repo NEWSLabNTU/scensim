@@ -60,3 +60,36 @@ emergency state. The names are checked against a live stack before the run, as f
   object is lost when the car is at it, so the planner asks to move each time the MRM releases.
 - If the velocity factors do show a stop at the boulder and the car still creeps, the cause is
   in control (the stop is not held at 0 m/s), and the control command's acceleration shows it.
+
+## Step 1's result (2026-11-25, run r1, after the predictions above)
+
+The same run as issue 181's step 1 (its result section has the run's identity and the NAS copy).
+The ego struck the boulder at sim 1032.75 s and **did not creep this time**. Base_link stayed at
+x 396.9 to within 0.1 m for the 117 s after it. Contact was continuous (2488 contact reports,
+max impulse 2327 N s). The wheels' reported speed had a median of 0.000 m/s, and a maximum of
+0.016 m/s. So this run held the car against the boulder. b2's creep, which ran from a start at
+x 20, was not reproduced, and the record is of a car pushing, not one moving.
+
+Against the predictions:
+- The MRM operates and cancels about once a second: **held**. It operated 95 times (state
+  OPERATING, behavior EMERGENCY_STOP), with a median gap of 0.7 s between operations, 94 of them
+  after the strike.
+- H1, `collision_detector`'s diagnostic: **FAILED**. Its level changed twice, both at start-up
+  (ERROR, then OK "vehicle is stopping"). It was OK through every operation.
+- H2, the planner never stops for the boulder: **held** as far as the record shows. The velocity
+  factors held only `route-obstacle` (5 messages in all). obstacle_stop's planning factor was in
+  11 of 1508 messages. After the strike the control command asked for 0.25 m/s at +0.51 m/s^2 in
+  every sample.
+
+Found, not predicted (an association, NOT a tested cause; *hypothesis H3*): in 93 of the 94
+operations after the strike, `/diagnostics` carried `localization: ekf_localizer` at WARN
+("mahalanobis distance of pose topic is large") about 0.15 s before the MRM operated (56.64 s
+before 56.80 s, 68.29 s before 68.48 s, 72.93 s before 73.08 s, and so on). Outside those windows
+it was at WARN in 3 of 1579 samples. The system's hazard status reported an emergency only at
+start-up and from 27.6 s to 30.4 s, around the strike, so it does not record the 94 later
+operations' cause. The diagnostic graph had `/autoware/localization/accuracy` and
+`/localization/state` at ERROR in 60 and 61 messages. H3: with the car pressed against the
+boulder, NDT's pose and the EKF's prediction disagree, the EKF gates the pose, localization's
+accuracy goes to ERROR, and the MRM stops the car, then cancels when the next pose passes.
+Not tested: what NDT reports in those frames (iteration_num and NVTL are recorded), and whether
+the MRM's input is the graph's localization node.

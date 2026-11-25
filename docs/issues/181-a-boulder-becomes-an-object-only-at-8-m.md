@@ -119,3 +119,41 @@ For 182: `/system/fail_safe/mrm_state`, `/system/mrm/emergency_stop/status`,
 and `/control/collision_detector/debug_markers` (the collision detector publishes no other topic;
 its state is in `/diagnostics`). `stop_reasons` is not published in this stack (Autoware 1.5 has
 planning factors instead).
+
+## Step 1's result (2026-11-25, run r1, after the predictions above)
+
+The run: scensim main 1ed265d7 (scensim_isaac_world 3a948eea), `isaac_c6e3_r181`, 22:28:11 to
+22:31:43. It ended on the scenario's 150 s timeout, as planned (verdict "failed"; nvtl and
+pose_error passed). The record is 3.6 GB. The ego struck the boulder at sim 1032.75 s, base_link
+at x 396.9, and stayed there in contact for the rest of the run. The NAS copy is
+`autoveh/logs/2026 SSv2 on CARLA/2026-11-25 issues 181 182 step 1 run (118)`, with
+SHA256SUMS checked there.
+
+The frames in which each stage had the boulder (a centre within 1.0 m of x 400, y 1.625, put
+into the map by the kinematic state's pose), by range from base_link:
+
+| stage | 40 to 31 m | 31 to 20 m | 20 to 10 m | 10 to 5 m | first seen |
+|---|---|---|---|---|---|
+| non-ground points (max in one frame) | 0 | 8 | 19 | 128 | 30.9 m |
+| clustering's clusters, shape estimation, feature remover | 0/43 | 0/53 | 8/47 | 30/30 | 12.3 m; every frame from 10.8 m |
+| the validator | 0/43 | 0/53 | 0/47 | 22/30 | 8.8 m |
+| detection by tracker | 0/43 | 0/53 | 0/47 | 0/30 | never |
+| tracking; the final objects | 0/21 | 0/26 | 0/24 | 11/15 | 8.2 m |
+
+After the strike, at about 3 m, no stage had it in any of 2555 frames, and the non-ground cloud
+held at most 1 point there in a frame.
+
+Against the predictions:
+- (a) the non-ground cloud from about 31 m: **held** (30.9 m; up to 8 points a frame from 31 to
+  20 m, 19 from 20 to 10 m).
+- (b) H1, the clustering: **held**, slightly earlier than predicted. The clustering is the first
+  stage without the boulder. It has no cluster at the boulder beyond 12.3 m, and has one in every
+  frame from 10.8 m, against "beyond about 8 to 10 m".
+- (c) H2, a cluster from about 31 m dropped later: **FAILED**. No cluster exists beyond 12.3 m.
+  The validator loses it again in frames that the clustering had: it has none from 20 to 10 m,
+  and has it first at 8.8 m.
+- (d) tracking's confirmation alone: not the cause. Tracking has it from 8.2 m, close to the
+  validator's 8.8 m.
+
+So the boulder's first stage under 10 m is the clustering, with the validator a second, smaller
+delay (from 12.3 m to 8.8 m). Which parameter does it is the replay plan's question.
