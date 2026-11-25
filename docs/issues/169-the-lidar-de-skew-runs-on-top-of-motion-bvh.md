@@ -245,6 +245,31 @@ parts, each landed and checked before the next.
    with BVH on falls from +0.107 m to within 0.02 m of the BVH-off side's, and the pose error
    p95 on the two sides differs by less than C6e2's noise rule (168's rule) allows.
 
+**Part 3 and CARLA (133's condition, 2026-11-25, written before any code).** The Model 3's kit
+(`autoware_sim_vehicle`) is shared with the CARLA ego, so what the corrector does with CARLA's
+cloud decides how it goes in.
+
+- *CARLA's cloud.* acb publishes x, y, z, intensity, return_type and channel
+  (`acb_bridge/src/bridge/sensor_bridge.rs`): no `time_stamp` field.
+- *What the corrector does with it.* Autoware 1.5.0 ships the corrector as a binary. Its
+  library (`libpointcloud_preprocessor_filter.so`) holds the message "Required field time
+  stamp doesn't exist in the point cloud.", which is `DistortionCorrector::is_pointcloud_valid`'s
+  throttled WARN in Autoware's source. There, `undistort_pointcloud` returns without changing the
+  cloud when it is not valid, and the node publishes the cloud as it came: a pass-through with a
+  WARN per throttle period. That is read from the upstream source matching the strings, not
+  from 1.5.0's own source, which is not installed; the CARLA check below confirms it.
+- *So it is made conditional, per simulator, in the generator, and CARLA's format does not
+  change.* A pass-through that warns on every CARLA run is a change to CARLA's logs and an
+  untested path. The kit's existing `use_distortion_corrector` argument (declared, default
+  false, used nowhere today) includes the corrector only when true. aib's Autoware launch
+  passes true; acb's passes nothing, so CARLA's sensing stays as it is. How the argument
+  reaches the kit from each ego launch is read from the launch files before any code; if it does
+  not, the plan comes back to 133.
+- *The CARLA check (added to part 3's predictions).* One CARLA scenario from the K3 suite, on
+  this host's CARLA (port 2010), before and after part 3: the verdict and the pose error p95
+  unchanged (within the suite's own run-to-run noise, from its earlier runs), and no
+  `distortion_corrector` line in the ego's logs, since it is not launched.
+
 **Risks.** The corrector needs a twist and an IMU at its timestamps: the Isaac ego publishes
 both, and the rates are checked first. With the corrector on and motion BVH off, part 2 means
 aib's own distortion is what the corrector removes, so the cloud on that side changes too. Its
