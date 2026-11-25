@@ -283,3 +283,31 @@ are read with that bias in mind.
   or a step that moves one and not the other. (2) The same fit with the props included (the
   USD's props exported too), against the full map. (3) Whether the region-dependent offset
   explains the hairpin part of the across error.
+
+## The hairpin prediction from the registration (written 2026-11-25, before comparing)
+
+*Labelled:* the hairpin residuals are already measured (the bend split). This prediction comes
+only from the registration's per-region vectors and the straights' fit, made before the two are
+set side by side.
+
+- The model: in each region the across error is f x (the region's map vector) . n, plus the
+  car-fixed -0.037 m, with n the road's left normal at the sample (the truth's heading). f is the
+  part of the map's offset that NDT follows, from the straights: the runs' fixed vector
+  (+0.045, +0.026), 0.052 m, against the registration's straights vector (+0.104, +0.042),
+  0.112 m, so f is about 0.46.
+- Per region, its median over the samples of one level run (C6e2's f1), computed and written here
+  before it is compared with the measured hairpin medians (straights -0.078, right hairpins
+  -0.078 + 0.133 = about +0.055, left hairpins -0.078 + 0.024 = about -0.054).
+- *The numbers (labelled: the prediction and the measured medians were printed by the same
+  command, so the prediction was not written before the comparison was visible; the model and
+  its inputs above were).* C6e2 f1, median across:
+
+  | region | predicted (0.46 x map . n - 0.037) | measured | difference |
+  |---|---|---|---|
+  | straights (3391 samples) | -0.072 m | -0.079 m | 0.007 m |
+  | left hairpins (1090) | -0.036 m | -0.053 m | 0.017 m |
+  | right hairpins (1187) | -0.031 m | +0.055 m | 0.086 m |
+
+  The regional map offset reproduces the straights and roughly the left hairpins. It does **not**
+  explain the right hairpins: it predicts -0.03 m where +0.055 m is measured. The right hairpins'
+  +0.13 m residual has another cause, still open.
