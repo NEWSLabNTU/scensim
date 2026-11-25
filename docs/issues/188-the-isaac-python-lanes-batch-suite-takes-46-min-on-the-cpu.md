@@ -77,6 +77,10 @@ only with codec 139's OK that one is free here ("not run today" is an outcome).
 
 ## The per-test timing's result (2026-11-26, runs A and B)
 
+(The runs name this record's commits before it was rebased onto c5aad663 for landing:
+e4cf5010 landed as 7f61f1a5 and 62bfa985 as ab521da2, the same docs changes; at both, the code
+is main's.)
+
 `i188_timing.py` and `i188_runs.sh` in Isaac's Python, CPU only, nice 0, the dev worktree at
 e4cf5010 (`scensim_batch` identical to main's), `/proc/loadavg` every 10 s (105 samples: the
 1-minute load from 18.1 to 51.5, median 42.7, run A's own threads among it). Both runs: 259
