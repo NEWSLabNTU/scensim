@@ -366,7 +366,7 @@ mod tests {
         let mut a = Active::new(
             parse(
                 r#"{"profiles": [{"knob": "illumination.sun_elevation", "field": "sun_elevation",
-                    "step": 0.001, "coordinate": "time", "points": [[0, 1.0472]]}]}"#,
+                    "step": 0.001, "coordinate": "time", "points": [[0, 0.75]]}]}"#,
             )
             .unwrap()
             .remove(0),
@@ -375,7 +375,7 @@ mod tests {
         for f in 0..10 {
             let t = f as f64 * 0.05;
             let (v, send) = a.commanded(t, None);
-            assert!((v - 1.0472).abs() < 1e-12);
+            assert!((v - 0.75).abs() < 1e-12);
             if send {
                 a.mark_sent(v, t);
                 sent.push(f);
