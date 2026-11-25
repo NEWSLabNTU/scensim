@@ -239,6 +239,6 @@ in the batch and on seats alike (one model code): its gap reads short by up to t
 those loops' overshoot, a few centimetres per loop pair here, and IDM's acceleration is off by
 about its gap sensitivity (0.004 to 0.01 (m/s^2)/m at K13 step v's gaps) times that.
 Measuring the gap in s instead (each polyline point's `heading_s`) would remove it; that is a
-model change, not made here. K13 step v corrects its placement instead: L starts at 73.13 +
+model change, not made here: it is this record's **open fix** for the placement-against-gap mismatch, out of 092 K13, with a plan before any code (133). K13 step v corrects its placement instead: L starts at 73.13 +
 0.025868 + s_e(T), the arc difference computed from the polyline, not fitted to a0. The
 difference varies by under 5e-6 m over L's range, all on lanelet 219, past the loops.

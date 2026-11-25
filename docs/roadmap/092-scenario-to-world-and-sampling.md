@@ -2452,3 +2452,23 @@ lanelet 219 (anchor s 97.19 to 150.75), as every slot's does. The anchor's s pla
 resampled copy of the anchor's x/y. 133: investigate the cause first (an hour): a mismatch that
 depends on the loops between two cars would hit any model on such a lane, and a measured
 constant would hide it.
+
+**The dry run, check 1 rerun (2026-11-25): held.** The cause is issue 166's loops (166, "A
+placement s and a model's gap"): the polyline the follower measures along runs 0.025868 m short
+of s between M and L, within 4e-6 m of the back-out. L now starts at 73.13 + 0.025868 + s_e(T),
+the arc difference computed from the anchor, not fitted to a0. Max |a0| 4.0e-8 m/s^2 against
+the unchanged 1e-6: held (at e3ca36ec). Measuring the gap in s is 166's open fix, out of K13.
+
+**The dry run, step 2 (2026-11-25), as it came out: 0 of 36 failed; the planned ego could not
+fail, by construction.** Every slot's closest gap was the start's 30.0 m at frame 0, and its
+minimum time to collision undefined (never closing): the ego braked to rest by t of about 3.5 s
+in every slot. K11's `aeb_ttc` takes TTC as the gap over its own speed, as if the target stood
+(it was made for a walker crossing), and latches its braking: 30 m at 22 m/s is 1.36 s, under
+its 1.5 s, so it braked from t = 0.
+
+**Amendment after step 2's result (133, 2026-11-25).** The ego starts 45 m behind M (s 18.73,
+clear of the stretches at 0.05 and 23.99 m); no new pilot code. Its pilot, plainly: `aeb_ttc`,
+**invented**, TTC = gap / its own speed, braking latched at 6 m/s^2 to rest once TTC falls
+under 1.5 s; at 22 m/s it cruises while the gap stays above 33 m. A failure (closest gap at
+0 m or less) means M's braking, up to its cap of 8 m/s^2, outruns that. Step 2 is redone with
+it before the prediction; 0 or all 36 failing stops the work for a look at the bounds (133).

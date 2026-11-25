@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- 092 K13 step v's platoon (docs/roadmap/092, "K13 step v's plan"), a batch case: seats refuse it (issue 175: the model car
      starts at 22 m/s, an Init speed the batch alone takes). On base Town05's anchor west_avenue (372.518 m, 88.5 km/h; maps
-     dataset v2026.11g). The ego (s 33.73) follows the model car M (s 68.43, scensim.behaviour:idm_follower, set
-     zhang2024_highd_car with T, a and b drawn) at 30 m; M follows the scripted lead L, which starts at M's exact IDM
+     dataset v2026.11g). The ego (s 18.73) follows the model car M (s 68.43, scensim.behaviour:idm_follower, set
+     zhang2024_highd_car with T, a and b drawn) at 45 m (aeb_ttc cruises above 33 m; 092 K13 step v amendment); M follows the scripted lead L, which starts at M's exact IDM
      equilibrium gap (lead_s, derived by the search's model from T), all at 22 m/s, and brakes to rest at `decel` from `onset`
      s. Every start s lies in west_avenue's stretch-free span [96.49, 151.44] m or below it (issue 166). The model alone moves
      M after its start. Values invented; a search case, not a tuned scenario. -->
@@ -10,8 +10,8 @@
   <FileHeader revMajor="1" revMinor="3" date="2026-11-25T00:00:00" author="scensim"
               description="a lead brakes; the model car between it and the ego follows it under IDM, on Town05">
     <Properties>
-      <Property name="scensim.anchor.ego_lane" value="west_avenue.lanelet_at(33.73)"/>
-      <Property name="scensim.anchor.ego_s" value="west_avenue.local_s(33.73)"/>
+      <Property name="scensim.anchor.ego_lane" value="west_avenue.lanelet_at(18.73)"/>
+      <Property name="scensim.anchor.ego_s" value="west_avenue.local_s(18.73)"/>
       <Property name="scensim.anchor.m_lane" value="west_avenue.lanelet_at(68.43)"/>
       <Property name="scensim.anchor.m_s" value="west_avenue.local_s(68.43)"/>
       <Property name="scensim.anchor.lead_lane" value="west_avenue.lanelet_at(param:lead_s)"/>
