@@ -1,6 +1,6 @@
 # 186: every `env -i` gate skips the Isaac's-Python lane, and scensim_batch's suite there needs pytest
 
-**Status:** open (243; numbered by 133 on 2026-11-25; the fix to be planned before any code).
+**Status:** open (243; numbered by 133 on 2026-11-25); plan approved by 133 (2026-11-25), no code yet.
 **Severity:** low. The Isaac world server's suite in Isaac's own Python, where the world server
 runs (issue 090), has not been part of a scensim gate run from a clean environment. When it is
 run, `scensim_batch`'s suite fails there on an import, not on its code.
@@ -42,3 +42,41 @@ Two parts:
    (pytest installed in Isaac's venv, or run from it), or the tests stop importing pytest.
 
 Then the check: a gate log with the lane run, not skipped, and all three suites OK in it.
+
+## The plan (241; approved by 133, 2026-11-25, before any code)
+
+1. **No pytest in the lane's suites** (issue 090's convention; pytest is not installed into
+   Isaac's venv: the lane is Isaac's own Python as shipped, and tools are not installed).
+   `scensim_batch/test/test_layout.py` becomes a `unittest.TestCase` (parametrize as `subTest`
+   over the same values, `pytest.raises` as `assertRaisesRegex`, `approx` as
+   `assertAlmostEqual`), still collected by pytest in the system lane; `scensim_isaac_world`'s
+   `_plain` stays that package's, not copied. `test_device`'s two cases take only `CAR` from
+   roboracer's `test_batch.py`, which imports pytest: `CAR` moves to a plain module beside it
+   (`_car.py`), which `test_batch.py` re-exports and `test_device` imports. A check keeps it
+   so: no module under the three suites imports pytest at the top level except behind a
+   `SkipTest` guard like `test_installed`'s.
+2. **`ISAAC_ROOT` through the clean environment.** A gate passes `ISAAC_ROOT=$ISAAC_ROOT` into
+   its `env -i`, as a host setting like `HOME`; the procedure's docs say so. CLAUDE.md's
+   `clean=` line needs the same addition, which 133 takes to the user (not edited here).
+3. **Loud, not silent.** The lane moves into `scripts/isaac_lane.sh`, which `just test` calls.
+   Without a usable `ISAAC_ROOT` it prints to stderr "NOT RUN: the Isaac-Python lane
+   (scensim_isaac_world, scensim_sampler, scensim_batch in Isaac's own Python): ISAAC_ROOT
+   unset" (or "=<path>, no venv/bin/activate") and exits 0, since a host without Isaac still
+   gates; `just test`'s last line repeats it, and when the lane ran, says so with its count.
+   Checked by `scripts/test_isaac_lane.py` under the system pytest: `ISAAC_ROOT` unset (the
+   banner, exit 0); set to a directory without a venv (the banner naming the path); a stub
+   install whose `venv/bin/activate` puts a fake `python3` first (the lane runs it, "ran").
+4. **The first real run** with `ISAAC_ROOT=/mnt/evo/aeon/isaac-sim-6.2` in a fresh worktree,
+   its prediction committed before it; any failure in Isaac's Python beyond the pytest import
+   is recorded here and gets its own issue, not fixed under 186. The batch suite there picks a
+   GPU: the run sets `CUDA_VISIBLE_DEVICES` to one that is not P1's or P4's.
+5. **Tests:** `scripts/test_isaac_lane.py` (point 3's cases and point 1's check);
+   `test_layout` as a TestCase, passing in both Pythons.
+
+**A gate rule (133):** on a host with an Isaac install, a full gate passes `ISAAC_ROOT` and the
+lane must run; a gate there whose last line says NOT RUN is not a full gate. A host without
+Isaac may still gate, and its landing message says "Isaac lane not run (no install)".
+
+Order: this plan; point 4's prediction; the code and tests; the first real run and its result
+here; a full gate with the lane run; a landing request to 133.
+
