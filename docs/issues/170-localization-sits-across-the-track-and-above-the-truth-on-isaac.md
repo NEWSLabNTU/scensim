@@ -175,7 +175,7 @@ the run's straight median (-0.078 to -0.086 m), binned by the truth's curvature 
 
 | κ bin (1/m) | samples a run | residual, level runs | residual, off-along runs | NDT roll error | -2.0 sin(roll error) |
 |---|---|---|---|---|---|
-| under -0.02 (right hairpins, R about 20 m) | 1190 to 1250 | +0.134 to +0.149 m | +0.173 to +0.189 m | +0.075 to +0.097 deg | -0.003 m |
+| under -0.02 (right hairpins, R about 20 m) | 1190 to 1250 | +0.133 to +0.148 m | +0.173 to +0.189 m | +0.075 to +0.097 deg | -0.003 m |
 | -0.02 to -0.005 | about 1360 | +0.007 to +0.015 m | +0.011 to +0.015 m | about 0 | 0 |
 | -0.005 to 0.005 | about 3390 | 0 (by construction, about) | 0 | -0.01 deg | 0 |
 | 0.005 to 0.02 | about 258 | +0.002 to +0.010 m | -0.019 to -0.021 m | -0.04 to -0.07 deg | +0.002 m |
