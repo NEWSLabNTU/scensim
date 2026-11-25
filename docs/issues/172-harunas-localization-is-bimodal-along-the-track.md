@@ -1,6 +1,6 @@
 # 172: on Isaac's haruna_down, localization runs either level with the car or 0.086 m behind it, per run
 
-**Status:** open; mine after 168 (133, 2026-11-25). **Severity:** to be shown. It is the cause
+**Status:** open; plan written (2026-11-25, after 169's step 1 and 185), for 133. **Severity:** to be shown. It is the cause
 of Haruna's bimodal pose error p95 (about 0.12 or about 0.18 m), which has widened every A/B's
 noise on Haruna since 086 C5. **Found:** 2026-11-25, scensim 118, issue 168's A/B, round 1
 (numbered by 133).
@@ -43,3 +43,37 @@ remaining case of it.
    the phase predicts the mode.
 2. If it does, the fix is in aib's lidar (its stamp, or its revolution's phase at start-up),
    checked by runs that all land in one mode.
+
+## The plan (written 2026-11-25, after issue 169's step 1 and issue 185, before any run; for 133)
+
+**What 169 and 185 add.**
+
+- 169's probe measures the render's age directly: the sensor's position when a wall is hit,
+  against the root's, gave a lag of 0.100 s (two frames; 0.450 m at 4.5 m/s) in all 56
+  revolutions of A, and of E at 4.5 and 9 m/s: three processes, three start-ups, one value. That is the quantity 172's hypothesis says
+  varies per run. 0.086 m at 4.5 m/s is 19 ms.
+- 185 shows that the annotator's own times follow the read frame, not the render, and that aib
+  (on `xyzirc`) stamps each scan with the render frame's stamp, `latency` frames back, a
+  constant. If the render's real age differs from `latency` x frame by 19 ms in some runs, the
+  stamp is wrong by that much for the whole run, and localization sits v x 19 ms behind.
+  *Hypothesis, untested:* that is 172's behind mode.
+- 169's fix leaves this alone. Part 1 bases the times on `t_ref`, which uses the same
+  `latency`. *Prediction:* 172's two modes persist after 169's parts 1 to 3, in both proportion
+  and size, unless the render's age is fixed as well.
+
+**The steps.**
+
+1. *The render's age per start-up, with the probe* (169's probe, case A, 4.5 m/s, BVH off: 20
+   processes in a row, GPU0, non-timing; each gives the lag over 56 revolutions). *Prediction
+   (the hypothesis):* the lag is constant within a process. Across processes it takes two values
+   about 19 ms apart (0.45 m and about 0.36 m, or 0.45 and 0.54 m), in roughly 2 of 3 and 1 of 3
+   of the starts (168's 8 level against 4 behind). If all 20 give 0.100 s, the probe's
+   start-up does not show the mode. The world server steps differently (its substeps, its
+   frame pacing), so step 2 then measures it there.
+2. *The render's age in the world server, per run* (no new run: from the logs and records that
+   exist, if they hold enough; else a small addition to aib that logs, once per scan, the
+   annotator's first point time against the frame it is read in, in a new run). *Prediction:*
+   the behind runs' value differs from the level runs' by about 19 ms.
+3. If 1 or 2 shows the age varying: aib measures the render's age at start-up (the annotator's
+   time against the frame), not assuming `latency_frames`, and stamps from it. Checked by six
+   haruna_down runs that all land in one mode. Its spec comes to 133 first.
