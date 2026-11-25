@@ -2482,3 +2482,12 @@ its end, its first 100 m bending about 1 deg. It drifted 0.43 m/s sideways, 1.45
 by t = 5 s, so `aeb_ttc`'s corridor lost M and the ego passed beside it: the gaps are
 side-by-side passes, and the TTC's centre-distance gap went to 0 there. Stopped for 133 (the
 0-or-36 rule).
+
+**Second amendment, after the redone step 2 (133, 2026-11-25).** The ego starts with an absolute
+heading, the straight part's -179.863 deg (`<Orientation type="absolute" h="-3.13920"/>` in its
+Init LanePosition); the centreline stays within 0.39 m of its straight line from s 20 to 365. A
+guard: each sample records the ego's largest |lateral| from M's line (across M's heading); over
+1.9 m (`aeb_ttc`'s corridor, 0.95 + 0.95 m) the sample is **invalid**, an error row the search
+counts and leaves out of its estimate, not a pass or a fail (`search_run.py --corridor 1.9`).
+So the failure is judged only while the two are in one corridor, as the TTC is. The search
+reports the invalid count; step 2, redone again, should have none.

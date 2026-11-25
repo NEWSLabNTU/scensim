@@ -27,7 +27,7 @@ from pathlib import Path
 
 
 def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker",
-        margin_k=None, anchors=None, ttc_length=None):
+        margin_k=None, anchors=None, ttc_length=None, corridor=None):
     from sim_vehicle_ecu import batch as ecu_batch
     from scensim import truth as T
     from scensim_batch import core
@@ -51,7 +51,8 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
     label = paths.pop() if len(paths) == 1 and None not in paths else str(scenario)
     truth = TruthRecorder(r, step_time=step_time, start_unix=0.0, scenario=label)
     truth.begin(r.obs)
-    ttc = Ttc(names.index("ego"), names.index(walker), ttc_length, c.n) if ttc_length else None
+    ttc = (Ttc(names.index("ego"), names.index(walker), ttc_length, c.n, corridor)
+           if ttc_length else None)
     if ttc:
         ttc.add(r.obs)
     k = 0
@@ -73,6 +74,13 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
                 {"entity": walker, "threshold_logit": mrec["threshold_logit"],
                  "decision": mrec["decision"]}, sort_keys=True) + "\n")
     rows = T.slot_outcomes(out / "truth", margin_k=margin_k)
+    if ttc and corridor is not None:   # 092 K13 step v: off M's line is invalid, not judged
+        for i, x in enumerate(rows):
+            lat = ttc.max_lateral[i]
+            x["outcome"]["max_lateral"] = lat
+            if lat > corridor:
+                x["outcome"].update(error=True, failed=False, invalid=(
+                    f"the ego left {walker}'s line: max |lateral| {lat:.3f} m > {corridor} m"))
     (out / "outcomes.jsonl").write_text("".join(json.dumps(x, sort_keys=True) + "\n"
                                                 for x in rows))
     ends = r.outcome()
@@ -89,6 +97,12 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
         (out / "ttc.jsonl").write_text("".join(json.dumps({"slot": i, "min_ttc": v}) + "\n"
                                                for i, v in enumerate(mins)))
         summary["min_ttc_under_1s"] = sum(1 for v in mins if v is not None and v < 1.0)
+        if corridor is not None:
+            summary["invalid"] = sum(1 for x in rows if x["outcome"].get("invalid"))
+            summary["failed"] = sum(1 for x in rows if x["outcome"].get("failed"))
+            summary["errors"] = sum(1 for x in rows if x["outcome"].get("error"))
+            (out / "outcomes.jsonl").write_text("".join(json.dumps(x, sort_keys=True) + "\n"
+                                                        for x in rows))
     (out / "run.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
     return summary
 
@@ -96,18 +110,27 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
 class Ttc:
     """092 K13 step v's secondary output: each slot's minimum time to collision of the ego
     behind `target` on one lane, (centre distance - length) / closing speed while closing; the
-    two boxes share their length and centre offset (the case's cars). None: never closing."""
+    two boxes share their length and centre offset (the case's cars). None: never closing.
+    With `corridor` (m), also each slot's largest |lateral| of the ego from the target's line
+    (across the target's heading), and the TTC only while that is within it (133's guard)."""
 
-    def __init__(self, ego, target, length, n):
+    def __init__(self, ego, target, length, n, corridor=None):
         self.e, self.t, self.length = ego, target, float(length)
+        self.corridor = corridor
         self.best = [None] * n
+        self.max_lateral = [0.0] * n
 
     def add(self, obs):
         import math
-        x, y, v = obs["x"], obs["y"], obs["v"]
+        x, y, v, yaw = obs["x"], obs["y"], obs["v"], obs["yaw"]
         for i in range(len(self.best)):
-            gap = math.hypot(float(x[i, self.t] - x[i, self.e]),
-                             float(y[i, self.t] - y[i, self.e])) - self.length
+            dx, dy = float(x[i, self.e] - x[i, self.t]), float(y[i, self.e] - y[i, self.t])
+            h = float(yaw[i, self.t])
+            lat = abs(-dx * math.sin(h) + dy * math.cos(h))
+            self.max_lateral[i] = max(self.max_lateral[i], lat)
+            if self.corridor is not None and lat > self.corridor:
+                continue
+            gap = math.hypot(dx, dy) - self.length
             closing = float(v[i, self.e] - v[i, self.t])
             if closing > 1e-9:
                 tt = max(gap, 0.0) / closing
@@ -135,6 +158,9 @@ def main(argv=None):
     ap.add_argument("--ttc-length", type=float, default=None,
                     help="092 K13 step v: write each slot's minimum time to collision of the ego "
                          "behind --walker (ttc.jsonl), the cars' length in m")
+    ap.add_argument("--corridor", type=float, default=None,
+                    help="092 K13 step v (with --ttc-length): a slot whose ego leaves --walker's "
+                         "line by more than this many m is invalid, an error row, not judged")
     a = ap.parse_args(argv)
     from scensim_batch.world_lanelet import LaneletWorld
     out = Path(a.out)
@@ -145,7 +171,7 @@ def main(argv=None):
     world = LaneletWorld.load(a.world)
     anchors = json.loads(Path(a.anchors).read_text())["anchors"] if a.anchors else None
     print(json.dumps(run(recs, a.scenario, world, out, a.steps, a.step_time, a.walker,
-                         a.margin_k, anchors, a.ttc_length)))
+                         a.margin_k, anchors, a.ttc_length, a.corridor)))
     return 0
 
 

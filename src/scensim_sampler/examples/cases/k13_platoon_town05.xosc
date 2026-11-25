@@ -68,7 +68,9 @@
   <Storyboard>
     <Init><Actions>
       <Private entityRef="ego"><PrivateAction><TeleportAction><Position>
-        <LanePosition roadId="" laneId="$ego_lane" s="$ego_s" offset="0"/></Position></TeleportAction></PrivateAction>
+        <!-- the straight part's heading (-179.863 deg, s 100 to the end): the point-mass ego cannot steer, and the lane's
+             own heading here (-178.856 deg) drifts it off M's line (092 K13 step v); the centreline stays within 0.39 m -->
+        <LanePosition roadId="" laneId="$ego_lane" s="$ego_s" offset="0"><Orientation type="absolute" h="-3.13920"/></LanePosition></Position></TeleportAction></PrivateAction>
         <PrivateAction><LongitudinalAction><SpeedAction>
           <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
           <SpeedActionTarget><AbsoluteTargetSpeed value="$ego_speed"/></SpeedActionTarget>
