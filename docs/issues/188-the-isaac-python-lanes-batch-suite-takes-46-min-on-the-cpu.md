@@ -50,3 +50,23 @@ when one is free. Then the
 options 133 named: run in that lane only the tests that need Isaac's Python (its numpy 2 and
 torch), or parallelise the suite; or keep the slow tests to the system lane. The check: the
 lane's `scensim_batch` time with the plan's bar, in a full gate's log.
+
+## The per-test timing's predictions (2026-11-26, approved by 133; before the runs)
+
+A runner (not committed) runs `src/scensim_batch/test` by `unittest` in Isaac's Python
+(`isaac_env.sh`), timing each test and booking each class's fixtures to it, logging
+`torch.get_num_threads()`, `os.cpu_count()` and `/proc/loadavg` at start and end; a sampler
+writes `/proc/loadavg` every 10 s. Run A: no GPU (`CUDA_VISIBLE_DEVICES` empty), nice 0, torch's
+default threads. Run B: the same with `OMP_NUM_THREADS=MKL_NUM_THREADS=4` and
+`torch.set_num_threads(4)`; repeated once in a quiet hour if its 1-minute load at start differs
+from A's by more than 30 %, or is over 12 when A's was not. Run C: `test_device` on one GPU,
+only with codec 139's OK that one is free here ("not run today" is an outcome).
+
+1. Torch's default thread count is 24 (`os.cpu_count()`).
+2. Run A's total, by the 1-minute load at its start: 1000 to 3000 s at 20 or more; 300 to
+   1000 s, rising with the load, from 6 to 20; under 300 s under 6. The top 10 tests, with their
+   class's fixtures, take 70 % or more of A's total.
+3. Run B, at a start load within 30 % of A's: its total at most half of A's. Over 0.8 of A's,
+   the thread hypothesis fails.
+4. Run C, if it runs: `test_device`'s CUDA cases under 30 s together.
+
