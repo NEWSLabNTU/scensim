@@ -2672,6 +2672,28 @@ onsets 2.50 and 2.75 s moves, or halves to about 0.55 m (22 m/s times 0.025 s). 
 jump of 1.10 +- 0.05 m remains between 2.50 and 2.75 s and every jump between consecutive
 onsets is under 0.60 m; FAILED otherwise.
 
+**The step-size sweep's result: held** (`i166_step025.py`, the dev worktree at e6d3bc0a, the fix
+in it):
+
+| onset (s) | closest gap (m) at 0.025 s | at 0.05 s (166's check 4) |
+|---|---|---|
+| 1.00 | 0.98391 | 0.40693 |
+| 1.25 to 2.75 (7 slots) | 0.97572 to 0.97599 | 0.39870 to 0.39895, then 1.49871 at 2.75 |
+| 3.00 | 0.97942 | 1.49980 |
+| 3.25 | 0.97429 | 1.49794 |
+| 3.50 | 0.92810 | 1.44936 |
+| 3.75 and 4.00 | 0.92508, 0.92491 | 1.44786, 1.44762 |
+
+No jump of 1.10 m remains between 2.50 and 2.75 s (-4e-5 m there), and the largest change
+between consecutive onsets is 0.046 m (3.25 to 3.50 s), under 0.60 m; nor is there a 0.55 m
+jump: the closest approach's frame advances 10 frames per 0.25 s throughout. With the step
+halved, the gap sits at 0.976 m, between the two levels the 0.05 s step gave (0.399 and
+1.499 m), so the 1.1 m jumps were the 0.05 s step's, as hypothesised. Two things remain, not
+explained: the drop of about 0.05 m between onsets 3.25 and 3.50 s, at both steps and with
+the gap in s or not; and the closest gap's dependence on the step itself, about 0.5 m either
+way at 0.05 s, which bears on the search's smallest gap (0.374 m at 0.05 s) as a measure of
+the ego pilot's timing, not of the platoon. The question stays open.
+
 **The commits named above, before and after the landing's rebase (133, 2026-11-25).** K13 step
 v was written, run and judged on a branch based on d7a25ff5; it landed rebased onto
 77fcc1a3. The SHAs named in this section are the pre-rebase ones, the commits the dry runs, the
