@@ -145,7 +145,8 @@ judge; on fixture_c6a, the static C6e1 method plus one Autoware drive a side.
 - **Eight comparisons (133, 2026-11-25, before any run).** Four quantities on two maps at about
   2 sd each give a single exceed about a one-in-four chance of being noise. So:
   - exactly one quantity exceeds, by less than 1.5 times its threshold: three more runs a side
-    on that map, and the rule is applied again on the six a side before any switch;
+    on that map, and the rule is applied again on the six a side before any switch, with
+    sqrt(2/6) in place of sqrt(2/3) (the sd of a difference of two means of six);
   - two or more exceed, or one by 1.5 times its threshold or more: the fix switches to option
     1 directly.
 
