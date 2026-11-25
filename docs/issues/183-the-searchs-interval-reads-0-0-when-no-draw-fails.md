@@ -104,6 +104,32 @@ interval's coverage at 0.61 to 0.94 of its nominal 95 %.
 6. **K13 step v read again.** `search report` on its output (`/var/tmp/aeon/k13v-search`)
    prints [0, 3.68e-2], exact; the search is not re-run.
 
+**Amended 2026-11-25 (133), before the code: point 2 and its checks.** Wilson on Kish's n_eff is
+dropped. The repo's own evidence is against it: coverage.py's weighted path once used Kish's
+n_eff and its intervals were about 8 times too wide on a rare-event proposal (243), because a
+rare-event proposal ties the weights to the failures; it was replaced with the delta method.
+For the search's plain estimator the normal interval, p +- 1.96 se with se from the weighted
+failure terms, already is the delta-method interval. So:
+
+- **Point 2 becomes:** at k >= 1 failures the headline interval is the normal (delta) one,
+  labelled approximate with its measured coverage (point 3), its ends widened by the
+  normaliser's Bonferroni ratios, its lower end clipped at 0 as now.
+- **Point 1 holds at every k** (133): U_k = cap (Z_q upper / Z_b lower) CP-upper(k of n) at
+  ALPHA_F is a rigorous one-sided 95 % upper bound for any k, since p <= cap (Z_q / Z_b) q(F)
+  holds whatever k is. At k >= 1 it is reported beside the headline as `upper_exact`; when the
+  delta interval's upper end exceeds U_k, it is clipped there and the method says so. At k = 0
+  the interval is [0, U_0], as before.
+- **Point 3 becomes:** the delta interval's empirical coverage at 1 to 5 failures on
+  test_coverage's rare-event harness, recorded here; and U_k's coverage in every seed of the
+  same runs. U_k is a 95 % bound, so a miss is possible at up to 5 %; the cap makes it far
+  looser than that, and every seed covering is the prediction.
+- **Point 5 drops** the "within 10 % of the normal interval at many failures" test (there is
+  no second interval to compare); it adds that U_k is reported at k >= 1 and clips the delta's
+  upper end when that exceeds it.
+
+Points 1, 4 and 6 as before. Point 1's code was begun before this amendment and is changed to
+it before it is committed.
+
 Out of scope: a tighter bound that uses where the failures lie; the generations' diagnostic
 estimate. Order: this plan (docs); the code and tests; point 3's measurement into this record;
 local checks and a full gate; a landing request to 133.
