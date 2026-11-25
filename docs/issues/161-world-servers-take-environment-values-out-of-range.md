@@ -76,7 +76,8 @@ shell (`scensim_core::world_server`, which the CARLA world server runs on) and t
    *Amended 2026-11-25 (243, found writing the shells, before any run):* cloud cover takes 0 to
    9 oktas in the shells, not 0 to 8. The protocol defines 9 as "the sky cannot be seen"
    (`ScenarioWeather.CloudCover`), so a scenario may send it. scensim's knobs keep [0, 8], their
-   own narrower choice.
+   own narrower choice. 133 accepted the shells' 0 to 9 the same day (OpenSCENARIO's
+   `fractionalCloudCover` has `nineOktas`).
 2. **Read back the sun CARLA shows** (`scenario_weather.rs`, `scenario_sun`): CARLA's altitude
    folded into [-90, 90] deg, the azimuth turned by 180 deg when the fold crosses a pole. The
    other fields already read back what CARLA holds after its own clamps (rain at most 25 mm/h,
@@ -132,6 +133,18 @@ rest, and its read-back of the sun is already the physical one.
 Order (133, 2026-11-25): 092 K9f-b lands first, then this issue, then K9f-a's code, whose
 `road_condition` record then carries `after_step` from its start (K9f-a's plan amended to say
 so, labelled and dated).
+
+**Open follow-up, not in 161 (133, 2026-11-25): the knobs refuse 9 oktas while the protocol
+takes it.** scensim's `knobs.FIELD_RANGES` gives `cloud_cover_oktas` [0, 8], so a knob cannot ask
+for the sky that cannot be seen, which a scenario's own `EnvironmentAction` can. What each world
+server does with 9 today, read from the code (nothing run):
+
+- CARLA (`scenario_weather.rs`, `Sky::with`): `oktas.min(8)`, so 9 is shown as 8, `cloudiness`
+  100. Its read-back (`Sky::read_back`) gives `cloudiness / 100 x 8`, rounded: 8. A 9 sent reads
+  back as 8.
+- Isaac (`sky.py`): 9 is kept (`min(9, ...)`) and turns the sun light off (8 dims it by 80 %;
+  Isaac draws no clouds). Its read-back (`sky.read_back`) has no cloud cover: Isaac keeps no
+  cloud state of its own, so none is read back, whatever was sent.
 
 The check, after the landing, written before it:
 
