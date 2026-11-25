@@ -2567,7 +2567,8 @@ upper bound, and the fresh stage's draws from the defensive mixture give one wit
 assumption about where failures lie: every weight is at most 1 / beta = 10, so the rate is at
 most 10 times the mixture's own failure probability, whose exact one-sided 95 % bound at 0 of
 1000 is 3.68e-3: the rate on this invented base is under 3.7e-2 at 95 %. That is loose, and it
-is what 0 of 1000 can say (issue 183's fix; not in K13).
+is what 0 of 1000 can say (issue 183's fix; not in K13). For how much the tilt costs: the fresh
+stage's n_eff is 108.0 of its 1000 draws.
 
 The predictions:
 
@@ -2580,14 +2581,26 @@ The predictions:
    stage (record 842ce095153ce27c21eccd0f4d55358334dba48ca628a226468f95a2a2807f97, at 11.30 s):
    decel 7.991, onset 3.628, T 0.600, a 0.308, b 3.182. T, b and decel are where predicted;
    onset (predicted under 1.5 s) and a (under 0.3) are not. The search went to the late onsets,
-   which the dry run's corners never sampled (they held onset at 1 s); why a late onset brings
-   the ego closer is not explained here.
+   which the dry run's corners never sampled (they held onset at 1 s). See the open question
+   below.
 5. **Minimum TTC under 1 s: held on the count, FAILED on the place.** 892 of the fresh stage's
    1000 (bar: at least 300), smallest 0.335 s. Its draws gathered at T, b and decel's corner
    (901, 904 and 902 of 1000 past the predicted bounds; medians T 0.601, b 3.175, decel 7.975)
    but not at onset's or a's: 41 of 1000 have onset under 1.5 s (median 2.975) and 347 have a
    under 0.3 (median 0.305).
 6. **Invalid samples: held.** 0 in every stage.
+
+**Open question: why the late onsets.** Not explained; one hypothesis, not a claim. All three
+cars hold 22 m/s until L brakes (two fresh slots' traces: the ego's speed 22.0 and its
+centre distance to M 49.6 m, unchanged up to onset), so onset does not change the gaps at the
+moment L brakes; it moves where on `west_avenue` the platoon brakes and stops, 22 m further down
+the lane for every second. The ego holds a fixed absolute heading (-3.13920 rad) while M follows
+the lane, so their lateral offset, and with it the box-to-box closest gap, depends on where they
+come to rest (the offset reached 0.385 m). The hypothesis: the late onsets are where the lane's
+shape against the ego's fixed heading takes the most off the gap. A test: rerun record 842ce095
+with onset swept from 1 to 4 s, the others held, logging the stop s, the lateral offset at the
+closest approach and the closest gap; if the gap follows the offset, the hypothesis holds and the
+corner is a point-mass artefact, not the model's.
 
 **Check 4: held.** The search ran end to end in the batch and reported its estimate and interval;
 the prediction was written before it (0e6f4e4b). Batch numbers, not seats numbers; no CARLA
