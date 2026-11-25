@@ -58,3 +58,43 @@ short segments' ends and comes back. The probe and its points:
 
 Changing SSv2's spline would move every scenario's lane positions, so no fix is made before a
 plan and 133's approval (and possibly the user's).
+
+## The plan (133, 2026-11-25): flag the stretches, measure the impact, change nothing upstream
+
+Reporting upstream (tier4) is outward and waits for the user's OK, which 133 asks for. Changing
+the fork's spline (a centripetal or chord-length Catmull-Rom) moves every scenario's lane
+positions; it is planned only if the impact below shows it matters, and then goes to the user.
+Resampling the datasets' centrelines changes the maps, Autoware's too, and waits likewise.
+
+**(d) The resolver flags reversed stretches.** `scensim_batch.anchors.resolve_lane` finds, on
+each curve of each lanelet's spline (the cubic between two centre points), where its tangent
+points against that curve's chord (the dot product is a quadratic in the curve's parameter, so
+its roots give the range exactly), and lists the lane's stretches as `reversed: [{from_s,
+to_s}]`, merged where they touch. `heading_max_error` becomes the error outside them, and
+`heading_max_error_reversed` the error with them. `anchor.<lane>.heading(s)` refuses by name an
+s inside a stretch (`anchor.<lane>.heading(s): s in a reversed stretch [a, b] of SSv2's spline,
+issue 166`) rather than return the flipped value. The file stays `scensim-anchors` v1: `reversed`
+is an addition, and a file resolved before it (no `reversed`) reads as before, unchecked; the
+published Town01 file is one such, and stays until its next revision.
+
+Predictions, before the code:
+1. Town01's `west_street` (6583): `reversed` empty, its error 0.00099 rad as now.
+2. Town05's `west_avenue`: at least one stretch on each of its ten lanelets, at the spacing
+   changes near their ends, each under 0.1 m long and all of them under 1 m of its 372.5 m;
+   the error outside them at most 0.01 rad (the spline's wiggles that are not reversals, such
+   as the 0.05 rad at s 10, are within the table's halving), the error with them about 3.14.
+
+**The impact measure, before (b) or (c).** For each frame of a run's truth, each SSv2-driven
+entity's pose (its `ssv2` pose on seats, the batch's own on a batch truth) is placed on its
+lanelet by the port (toLaneletPose); the frame counts as in a stretch when its s on that lanelet
+lies in one, and as flipped when that entity's yaw is more than 90 degrees from the lanelet's
+direction there. Runs: K13's on this host (check 2's attempts and reruns, `k13_platoon`), K11's
+batch truths (K11c, K11d and K11e, `/var/tmp/aeon/k11*-run/runs/*/truth/`), and, since every
+K11 and K13 entity stays on Town01's `west_street`, which has no stretch, also K2.4's three
+seats runs (`~/nas/autoveh/logs/k24/`), whose SSv2 vehicles drive other lanelets.
+
+Predictions, before the measure:
+3. K13 and K11: 0 frames in a stretch, 0 flipped (their SSv2 entities stay on 6583).
+4. K2.4: few frames in a stretch, about the stretches' share of the length those vehicles drive
+   times their frames; each such frame flipped, since SSv2 takes a lane entity's yaw from the
+   spline's tangent; none flipped outside a stretch.
