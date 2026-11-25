@@ -2178,7 +2178,8 @@ runs. A step's own details (scripts, packages) are added to its section before i
   - **Note on the earlier modes:** Haruna's pose error p95 has been bimodal, about 0.12 or about
     0.18 m (C6d's rule). Here the split follows motion BVH exactly. Earlier runs were all
     without it (issue 138), so their high mode had another cause; this series does not explain
-    it.
+    it. (133: motion BVH explains this split; the earlier one's cause is still open.)
+  - **Issue 169** (133): the de-skew on top of motion BVH. Motion BVH stays off for C6e3.
 - **C6e3. The ground filter and detection on the fixtures (R7's fixtures).**
   - **Setup.** Autoware on two fixture courses, built with their Autoware maps as C5d's fixture
     was. fixture_c6a has the cleats, the pothole and the washboard. fixture_c6b has rocks on the
