@@ -67,8 +67,10 @@ shell (`scensim_core::world_server`, which the CARLA world server runs on) and t
    against the ranges scensim's knobs use (`knobs.FIELD_RANGES`: `sun_elevation` [-pi/2, pi/2]
    rad, `sun_azimuth` [0, 2 pi) rad, `fog_visual_range` above 0 m, `precipitation_intensity` 0
    or more mm/h, `cloud_cover_oktas` [0, 8]). An out-of-range value refuses the whole request,
-   before anything changes, naming the field, the value, the range and its unit, and for an
-   angle the value in degrees, as `knobs.field_range_problem` words it. This covers a scenario's
+   before anything changes, naming the field, the value with its unit, and the range with its
+   unit. For an angle it also gives what the number would be read as degrees, the K9e lapse:
+   `sun_elevation 60 rad is outside [-1.5708, 1.5708] rad (60 deg would be 1.0472 rad)`.
+   Every message names a unit, rad or deg as the field is. This covers a scenario's
    own `EnvironmentAction`, which SSv2 forwards and scensim does not check. The bridge passes the
    refusal to SSv2 as it passes any.
 2. **Read back the sun CARLA shows** (`scenario_weather.rs`, `scenario_sun`): CARLA's altitude
@@ -78,26 +80,36 @@ shell (`scensim_core::world_server`, which the CARLA world server runs on) and t
    `set_weather` in CARLA's own parameters (degrees, not checked) still can, and then reads back
    as shown. Written before the test: K9e's 60 rad (3437.7 deg stored) reads back as elevation
    -0.3097 rad, the value Isaac showed for the same send.
-3. **Read back after a step.** `StepReply` gains `environment_applied` (`ScenarioWeather`) and
-   `road_condition_applied` (`RoadConditionReply`), additive like its other recent fields (no
-   protocol bump). Each shell fills one on the first step after a `SetEnvironment` or
+3. **Read back after a step.** A new capability, `CAPABILITY_READBACK_AFTER_STEP = 15` (133's
+   choice, 2026-11-25, the protocol's pattern), needing `ENVIRONMENT_APPLIED` or
+   `ROAD_CONDITION_APPLIED`. `StepReply` gains `environment_applied` (`ScenarioWeather`) and
+   `road_condition_applied` (`RoadConditionReply`), additive (no protocol bump). On a server
+   declaring the bit, the shell fills one on the first step after a `SetEnvironment` or
    `SetRoadCondition`, from the server's `applied_environment` or `applied_road_condition`,
-   called after the simulator's tick returns, when the server declares `ENVIRONMENT_APPLIED` or
-   `ROAD_CONDITION_APPLIED`. The replies to the sends stay as they are.
+   called after the simulator's tick returns. The replies to the sends stay as they are.
+   Both world servers declare the bit.
+   - A server that declares the bit and leaves the field empty on the step after a send is a
+     protocol error, named by the bridge (the capability, the field, the frame), never a
+     silent fallback to the reply's value.
    - The bridge records a reply's value when it arrives. A step's value replaces it, and the
      gap trace's `knob` line and K9f-a's `road_condition` record gain `after_step: true` (absent
      otherwise; truth-stream.md). Issue 171's repeated first send stays, as a second guard.
    - scensim judges a read-back marked `after_step`, whatever the simulator. `run.apply_knobs`
      stops choosing by simulator name, and a CARLA `weather:` knob is judged again.
-     `weather_read: unverified` stays for a trace without the mark, from an older bridge or
-     server.
+     `weather_read: unverified` stays for a trace without the mark, from a server without the
+     bit.
 4. **Tests.**
    - Each shell refuses each field out of range by name and applies nothing. Each takes the
-     bounds themselves.
+     bounds themselves. Every refusal message names the unit.
+   - The K9e case (133, 2026-11-25), so the units lapse cannot come back: 60 sent as a degrees
+     field (CARLA's `sun_altitude_angle` by `set_weather` parameters) is accepted, and 60 sent
+     as `sun_elevation` (rad) by `SetEnvironment` is refused, the message saying rad and giving
+     60 deg as 1.0472 rad.
    - The step after a send carries the read-back taken after the tick. A step with no send
      carries none.
    - `scenario_sun` folds 3437.7 deg to -0.3097 rad.
-   - The bridge prefers the step's read-back and marks it.
+   - The bridge prefers the step's read-back and marks it. A server declaring the bit that
+     leaves the field empty after a send is refused by name.
    - `knobs.compare` judges a marked CARLA weather read-back, and a CARLA trace without the
      mark stays unverified.
    - A conformance check: `scensim_world_check conformance` sends an out-of-range
@@ -109,9 +121,13 @@ shell (`scensim_core::world_server`, which the CARLA world server runs on) and t
 
 Landing: `scensim_world_protocol` first, then `scensim_carla_world` and `scensim_isaac_world`
 with their `deps/` pins moved to it. scensim's pins last, with the bridge and scensim changes.
-Each lands after its own gate, scensim after the full gate on the exact tree. Isaac needs no
-code of its own beyond the pin: the Python shell does both parts, and its read-back of the sun
-is already the physical one.
+Each lands after its own gate, scensim after the full gate on the exact tree, and each push
+after 133's OK. Isaac's own code is one line, declaring the bit: the Python shell does the
+rest, and its read-back of the sun is already the physical one.
+
+Order (133, 2026-11-25): 092 K9f-b lands first, then this issue, then K9f-a's code, whose
+`road_condition` record then carries `after_step` from its start (K9f-a's plan amended to say
+so, labelled and dated).
 
 The check, after the landing, written before it:
 
