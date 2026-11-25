@@ -213,3 +213,39 @@ offset (the latency taken out of the annotator's times), its own distortion off 
 Autoware's corrector undoes the renderer's motion as on a vehicle; or (2) aib removes the
 renderer's motion itself before publishing `xyzirc`. Either way, aib's `motion_distort` time
 base is fixed first (the latent defect above). Then C6e2's pairing again, on the fix.
+
+## Step 2's plan (written 2026-11-25, before any code; for 133)
+
+133 chose option (1): the cloud carries its motion with times, as a real lidar's does, and
+Autoware's distortion corrector removes it. One more gap was found from the code while writing
+this. The Model 3's sensor kit runs no distortion corrector: `tesla_model3_sensor_kit_launch`'s
+`lidar.launch.xml` declares `use_distortion_corrector` (default false) and uses it nowhere, and
+its `pointcloud_preprocessor.launch.py` holds only a crop box. (Its source is
+`autoware_sim_vehicle`'s generator, `autoware_gen/templates/@KIT@_launch/`.) So there are three
+parts, each landed and checked before the next.
+
+1. **aib's time base (issue 185).** Each point's time is `t_ref + (ts - min(ts))`, the header
+   at `t_ref`. `motion_distort` is unchanged; it now gets times inside the track. A unit test
+   with a synthetic track and annotator times one latency late. *Predictions:* the probe's B
+   gives k 1 within 0.15 and no shift against A (|walls' difference| under 0.01 m); D gives k 2
+   within 0.15; A, C, E and F are unchanged.
+2. **The format under motion BVH.** The rig's lidar publishes `xyzircaedt`. aib's own
+   `motion_distortion` turns off when Kit's `/renderer/raytracingMotion/enabled` is set, read
+   once at start-up and logged, and stays on (the default) otherwise. *Predictions:* the probe
+   with the rig's settings gives k 1 with BVH on (the renderer's motion) and k 1 with BVH off
+   (aib's), the same cloud either way, within 0.15.
+3. **The corrector in the Model 3's kit.** `autoware_pointcloud_preprocessor`'s distortion
+   corrector goes before the crop box, on the cloud's own `time_stamp`, with the twist from
+   `/sensing/vehicle_velocity_converter/twist_with_covariance` and the IMU, as in Autoware's
+   own sample kits (`awsim_labs_sensor_kit_launch`). It is made in the generator's template,
+   and the kit is regenerated. *Predictions:* the probe's F rerun through the corrector (its
+   output cloud, in a small launch that feeds it the probe's clouds and a constant twist) gives
+   |D - D_true| under 0.017 m at 4.5 m/s and under 0.034 m at 9 m/s (0.15 in k). C6e2's
+   pairing rerun on the fix (motion BVH off and on, three runs a side): the along-track offset
+   with BVH on falls from +0.107 m to within 0.02 m of the BVH-off side's, and the pose error
+   p95 on the two sides differs by less than C6e2's noise rule (168's rule) allows.
+
+**Risks.** The corrector needs a twist and an IMU at its timestamps: the Isaac ego publishes
+both, and the rates are checked first. With the corrector on and motion BVH off, part 2 means
+aib's own distortion is what the corrector removes, so the cloud on that side changes too. Its
+pose error is checked against C6e2's BVH-off side.
