@@ -1,0 +1,24 @@
+# The base of 092 K13 step v's search (roadmap 092, "K13 step v's plan") on
+# k13_platoon_town05.xosc. INVENTED, NOT FITTED FROM DATA: uniform ranges that bracket the
+# means of the IDM set zhang2024_highd_car (T 1.133 s, a 0.362 m/s^2, b 2.140 m/s^2; s0 stays
+# the set's 2.833 m) and the lead's braking, chosen so the lead stops inside the anchor. A rate
+# estimated under it is a rate under this invented base, not a risk rate (as K11c's).
+#
+# lead_s is the lead's start on west_avenue: the model car's (68.43 m) plus a car length
+# (4.7 m) plus IDM's exact equilibrium gap at 22 m/s behind a leader at 22 m/s,
+# s_e = (s0 + v T) / sqrt(1 - (v / v0)^4), v0 the lane's limit (133: s0 + vT alone is the
+# equilibrium only when v << v0; here the free-road term makes it about 1.67 times longer).
+model: 1
+header:
+  name: k13_platoon_town05
+  dataset: "none: invented, bracketing zhang2024_highd_car's means"
+  version: "0"
+  licence: CC0-1.0
+variables:
+  - {name: decel, uniform: {low: 2.0, high: 8.0}}
+  - {name: onset, uniform: {low: 1.0, high: 4.0}}
+  - {name: time_gap, uniform: {low: 0.6, high: 1.8}}
+  - {name: accel, uniform: {low: 0.2, high: 0.6}}
+  - {name: comfort_decel, uniform: {low: 1.2, high: 3.2}}
+derived:
+  lead_s: "73.13 + (2.833 + 22 * time_gap) / sqrt(1 - (22 / anchor.west_avenue.speed_limit) ** 4)"

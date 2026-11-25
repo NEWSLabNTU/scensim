@@ -6,7 +6,7 @@
 simulator: carla
 assets:
   - dataset: carla-town-autoware-maps
-    take: [Town01]
+    take: [Town01, Town05]
 # Low: one town only (Town01, never a load_world), on GPU 1, which another user's jobs share
 carla: {quality: low}
 pilots:
