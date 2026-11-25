@@ -57,7 +57,7 @@ most frames, and say nothing about the boulder.
 
 **Step 1, the run (one, fixture_c6b, the boulder at s 400).** The same testbench as 086 C6e3's
 b runs, built at the main of the day, with the record extended to the raw cloud
-(`/sensing/lidar/top/pointcloud_before_sync`, about 100 MB a minute) and to each stage's output:
+(`/sensing/lidar/top/pointcloud_before_sync`) and to each stage's output:
 the clustering's clusters and objects, the shape estimator's objects, the validator's output,
 the lanelet filter's, detection by tracker's, and tracking's. The names are checked against a
 live stack's `ros2 topic list` between runs, before the run, and nothing is changed during it.
@@ -73,3 +73,13 @@ every stage from about 31 m and only the final objects lack it), tracking's conf
 cause. The stage where the boulder first appears at under 10 m in every frame before is the
 answer. A replay of the recorded raw cloud through the pipeline with one parameter changed comes
 after, as its own plan.
+
+**The record's size (133; corrected before any run).** An earlier figure here, about 100 MB a
+minute for the raw cloud, was wrong. The rig's OS1 gives about 126,600 points a scan (C6e2's
+first-scan log), at 16 bytes a point (`xyzirc`) and 20 scans a second: about 40 MB a second,
+**about 2.4 GB a minute**. The run lasts up to the scenario's 600 s timeout (b2 crept until it),
+so the raw cloud is up to about 24 GB. The stage outputs and 182's topics are small (objects,
+diagnostics), and the non-ground cloud was 22 MB a run in C6e3. Expected total: about 25 GB.
+The log disk (`/mnt/renegade`, NVMe) had 190 GB free at 21:2x on 2026-11-25. It is checked
+again just before the run, which goes ahead only with at least 60 GB free. The record is moved
+to the NAS and then off the log disk after the judgement.
