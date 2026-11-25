@@ -1,6 +1,6 @@
 # 186: every `env -i` gate skips the Isaac's-Python lane, and scensim_batch's suite there needs pytest
 
-**Status:** open (243; numbered by 133 on 2026-11-25); plan approved by 133 (2026-11-25), no code yet.
+**Status:** fixed in code and tests (plan approved by 133, 2026-11-25).
 **Severity:** low. The Isaac world server's suite in Isaac's own Python, where the world server
 runs (issue 090), has not been part of a scensim gate run from a clean environment. When it is
 run, `scensim_batch`'s suite fails there on an import, not on its code.
@@ -95,7 +95,7 @@ Held if all three end OK with 0 errors and 0 failures; any other failure is reco
 gets its own issue.
 
 **Point 4's result (2026-11-25, 22:23 to 23:12 +08:00): held.** `scripts/isaac_lane.sh` on
-365fc9b6 (the dev worktree), `ISAAC_ROOT=/mnt/evo/aeon/isaac-sim-6.2`, `CUDA_VISIBLE_DEVICES`
+365fc9b6 (the dev worktree; rebased onto 2e349687 it lands as db52a744, the same change), `ISAAC_ROOT=/mnt/evo/aeon/isaac-sim-6.2`, `CUDA_VISIBLE_DEVICES`
 empty, numpy 2.3.1 (Isaac's):
 
 - `scensim_isaac_world`: `Ran 525 tests`, `OK (skipped=19)`, as in 243's run;

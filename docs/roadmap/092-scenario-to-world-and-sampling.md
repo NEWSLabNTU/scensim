@@ -2700,8 +2700,9 @@ v was written, run and judged on a branch based on d7a25ff5; it landed rebased o
 search and the sweep actually ran at (the search at 4eb87377). They are not on main; the
 whole pre-rebase branch is kept as a verified git bundle,
 `/var/tmp/aeon/k13v-search/k13-step-v.bundle` (sha256
-`88ed5d406f3a16de4075764bce3b8b8171568310fede14d6d0f0256873b9e8df`; tip b6d6d4e3cf6e380c0c64878d83b46c3a7a506721, requires d7a25ff5e89e9e4cbef4120cbda375aae232a841), beside the search's output, and goes to the NAS with
-it. `git range-diff 77fcc1a3..72b99255 d7a25ff5..k13-step-v` pairs every commit: "=" is the
+`88ed5d406f3a16de4075764bce3b8b8171568310fede14d6d0f0256873b9e8df`; tip b6d6d4e3cf6e380c0c64878d83b46c3a7a506721, requires d7a25ff5e89e9e4cbef4120cbda375aae232a841), beside the search's output, and on the NAS with it
+(`~/nas/autoveh/logs/k13-step-v/search/k13-step-v.bundle`, verified by its SHA256SUMS,
+2026-11-25). `git range-diff 77fcc1a3..72b99255 d7a25ff5..k13-step-v` pairs every commit: "=" is the
 same change; the two "!" differ only in `docs/issues/README.md`'s context rows (the issues that
 landed on main in between), their own 175 and 183 rows the same.
 
