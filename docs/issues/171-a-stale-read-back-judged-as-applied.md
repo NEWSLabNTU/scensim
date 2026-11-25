@@ -1,6 +1,6 @@
 # 171: a read-back taken right after a send is judged as what the world applied
 
-**Status:** open (243; numbered by 133). **Severity:** medium. A run's knob judgement can
+**Status:** fixed 2026-11-25 (243; numbered by 133); the live check is 092 K9f-b's rerun on it. **Severity:** medium. A run's knob judgement can
 report a value the world shows as off, or one it does not show as applied, depending on whether
 CARLA ticked between the send and the read. Found as a false error run, and K9e's CARLA results
 stand. A false pass is also possible when the stale value happens to equal the one sent.
@@ -74,3 +74,11 @@ apply, for `EnvironmentReply`, `set_weather`'s reply and `RoadConditionReply`. T
 to know about the tick. 118 prefers the read-back after the tick: a value "it will apply" would
 report a stuck or refused apply as applied, and the post-tick read catches it. 118 will rerun
 C7's conformance on CARLA as 161's check when it lands.
+
+Shown after the fix (c671ecb4): the bridge's `profiles.rs` test
+`issue_171_the_first_send_is_repeated_on_the_next_frame_and_then_held` sends a constant on
+frames 1 and 2 and never after. `test_knobs` judges a constant from its second read-back: the
+stale first one (0.3491 against 1.0472, K9f-b's none-case) is recorded and not judged. The
+first one carried onto every frame, as before the fix, is not ok, and so is a constant read back
+only once ("unread after its send: no second send's read-back"). The live check is 092 K9f-b's
+CARLA suite run again on this fix, its none-case first.
