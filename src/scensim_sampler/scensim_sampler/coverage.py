@@ -156,7 +156,9 @@ def outcomes_from_runs(paths):
                     return v
                 # a knob applied but not read back (issue 095) is its own cell, named so, until
                 # the world reports it: not grouped with the confirmed ones (243)
-                if (e.get("surface_map") or {}).get("read") == "unverified":
+                # so is a weather knob whose CARLA read-back is not judged (issue 171)
+                if ((e.get("surface_map") or {}).get("read") == "unverified"
+                        or e.get("weather_read") == "unverified"):
                     return f"{e['value']} (unverified)"
                 return e["value"]
             rec = dict(rec, cell={a: applied(a, v) for a, v in rec["cell"].items()})

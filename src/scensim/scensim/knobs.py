@@ -553,10 +553,21 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
             "environment": environment}
 
 
-def compare(knobs: dict, world_knobs: dict, sent: dict, read: dict, maps_read=None) -> dict:
+# issue 171: CARLA 0.9.16's get_weather right after set_weather can show the weather before it
+# until the world ticks, and nothing ticks between a run's set_weather and its read-back (the
+# world server stays owned and synchronous through a suite). Such a read-back is recorded, not
+# judged, until the CARLA world server reads back after its tick (issue 161).
+WEATHER_UNVERIFIED = ("unverified: CARLA's read-back precedes its next tick (issue 171), "
+                      "judged once its world server reads back after the tick (issue 161)")
+
+
+def compare(knobs: dict, world_knobs: dict, sent: dict, read: dict, maps_read=None,
+            judge_weather: bool = True) -> dict:
     """result.json's `knobs`: per knob {value, applied: {param: read-back}, ok}, and `ok` over
     all. A weather parameter whose read-back differs from what was sent (beyond TOLERANCE) is
-    not ok; a surface map with no read-back is `unverified`."""
+    not ok; a surface map with no read-back is `unverified`. With `judge_weather` false (CARLA,
+    issue 171) the weather's read-back is recorded and the knob's `weather_read` is
+    `unverified`: it neither passes nor fails the knob."""
     out, all_ok = {}, True
     for knob, value in knobs.items():
         m = ((world_knobs or {}).get(knob) or {}).get("values", {})
@@ -565,9 +576,11 @@ def compare(knobs: dict, world_knobs: dict, sent: dict, read: dict, maps_read=No
         for p in (m.get("weather") or {}):
             got = (read or {}).get(p)
             applied[p] = got
-            if got is None or abs(float(got) - float(sent[p])) > TOLERANCE:
+            if judge_weather and (got is None or abs(float(got) - float(sent[p])) > TOLERANCE):
                 ok = False
         entry = {"value": value, "applied": applied}
+        if applied and not judge_weather:
+            entry["weather_read"] = "unverified"
         if m.get("surface_map"):
             got = (maps_read or {}).get(knob)
             entry["surface_map"] = {"sent": m["surface_map"],

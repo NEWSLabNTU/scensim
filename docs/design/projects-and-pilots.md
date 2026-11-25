@@ -290,6 +290,12 @@ an optional friction `mu`, or `physics: none` for a visual-only value. A scenari
 to a parameter (`<Property name="scensim.knob.surface" value="param:surface"/>`); before each run the
 runner sends the stack's weather baseline merged with the run's knobs' parameters, reads them
 back with `get_weather`, and records the result in `result.json`'s `knobs` (`scensim.knobs`).
+On CARLA that read-back is recorded and not judged (`weather_read: unverified`; a parameter that
+differs is listed under `weather_read_off`): CARLA 0.9.16 can return the weather before the send
+until it ticks, and nothing ticks between the send and the read (issue 171), so the read cannot
+tell a stuck weather from a stale one. A refused `set_weather`, or no answer, still ends the run.
+Coverage names such a knob's cell `<value> (unverified)`. It is judged again once the CARLA
+world server reads back after its tick (issue 161).
 Once `world.knobs` is declared, every run sends and checks the baseline, bound knobs or not:
 the world server keeps its weather across runs and world loads, so a run without knobs would
 otherwise run in the last knobbed run's. A scenario that binds a weather knob and also sets

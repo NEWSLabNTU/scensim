@@ -34,7 +34,8 @@ In the world servers, CARLA's first and then Isaac's where it applies:
 3. Report each read-back after CARLA has ticked (issue 171's deeper fix). The value the server
    will apply was the other option. 118 prefers the post-tick read: a stuck or refused apply
    would otherwise read back as applied. Issue 171's repeated first send in the bridge then
-   becomes a second guard, not the only one.
+   becomes a second guard, not the only one, and scensim judges a `weather:` knob's read-back on
+   CARLA again (since issue 171 it is recorded as unverified; `run.apply_knobs`).
 
 The check: 086 C7's `scensim_world_check conformance` on CARLA, rerun by 118, and 092 K9e's
 knob runs on CARLA.

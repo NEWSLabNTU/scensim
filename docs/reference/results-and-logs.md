@@ -129,7 +129,7 @@ class a report can count (`scensim runs coverage` lists the error runs by kind).
 | `pilot` | a pilot never became ready, or was lost during the run |
 | `ssv2` | SSv2 did not start or end, reported an error, or wrote no usable JUnit |
 | `scenario` | the scenario cannot be read or run here |
-| `knob_refused`, `knob_mismatch` | a bound knob the world cannot honour, or whose read-back differs |
+| `knob_refused`, `knob_mismatch` | a bound knob the world cannot honour, or whose read-back differs (a `weather:` read-back on CARLA is recorded, not judged: issue 171) |
 | `attachment` | a required attachment failed |
 | `clock_lag` | a paced run fell behind wall time by more than its budget |
 | `command_lag` | under lockstep, a commanded entity's commands were not the previous frame's at every frame (`commands` below) |

@@ -1,6 +1,7 @@
 # 171: a read-back taken right after a send is judged as what the world applied
 
-**Status:** fixed 2026-11-25 (243; numbered by 133); the live check is 092 K9f-b's rerun on it. **Severity:** medium. A run's knob judgement can
+**Status:** fixed in code and tests 2026-11-25 (243; numbered by 133); the live check is
+pending 092 K9f-b's CARLA rerun on the fix. **Severity:** medium. A run's knob judgement can
 report a value the world shows as off, or one it does not show as applied, depending on whether
 CARLA ticked between the send and the read. Found as a false error run, and K9e's CARLA results
 stand. A false pass is also possible when the stale value happens to equal the one sent.
@@ -44,7 +45,8 @@ Each is a single reply taken right after a send, with no tick between, on CARLA 
   CARLA world server replies with `self.weather()` read at once, then `get_weather`, before SSv2
   starts. Through a suite the world server stays owned and in synchronous mode (that stack's
   log: one release, after its last run), so nothing ticks between the set and the read. A
-  re-read would not help.
+  re-read would not help. Not fixable on the client side, so since this fix it is not judged
+  on CARLA (below).
 - **086 C7's `RoadConditionReply`** (`CarlaBackend::applied_road_condition`): the weather's wet
   look and the ego's tyre friction, read right after `update_environment` applies them. No
   scensim run judges it yet (092 K9f-a will). Told to 118, who owns C7.
@@ -64,8 +66,17 @@ In the bridge and `knobs`: the bridge's knob profiles repeat a profile's first s
 frame. That second send's reply is read after at least one tick. The static summary judges every
 frame from the second send's read-back on, and records the first, as the profile summary does.
 A constant never read back after its repeat is not ok ("unread after its send"). Every profile
-gains one send. This makes the knob judgement sound. The weather knobs' path and C7's reply are
-listed above and not changed here.
+gains one send. This makes the knob judgement sound.
+
+The static `weather:` knob's read-back (`run.apply_knobs`) has no tick to wait for before SSv2
+starts, so on CARLA it is recorded and not judged until issue 161 lands. `result.json`'s `knobs`
+says `weather_read: unverified` (with the reason, `knobs.WEATHER_UNVERIFIED`); each weather knob
+says `weather_read: unverified`; a parameter whose read-back differs is listed under
+`weather_read_off` and fails nothing. A refused `set_weather`, or no answer, still ends the run.
+Coverage names such a knob's cell `<value> (unverified)`, as for a surface map with no read-back
+(issue 095). A `weather:` knob runs only on CARLA (Isaac refuses it), so until 161 no run judges
+one; another world server's read-back is judged as before. C7's reply is listed above and not
+changed here.
 
 **The deeper fix belongs in the CARLA world server, and is folded into issue 161.** Issue 161
 already has the server validate the environment's ranges and read back the physical value. It
@@ -81,4 +92,7 @@ frames 1 and 2 and never after. `test_knobs` judges a constant from its second r
 stale first one (0.3491 against 1.0472, K9f-b's none-case) is recorded and not judged. The
 first one carried onto every frame, as before the fix, is not ok, and so is a constant read back
 only once ("unread after its send: no second send's read-back"). The live check is 092 K9f-b's
-CARLA suite run again on this fix, its none-case first.
+CARLA suite run again on this fix, its none-case first. On the weather path,
+`test_a_carla_weather_read_back_that_differs_is_recorded_not_judged` runs a CARLA suite whose
+read-back differs (12.5 against -30) and gets no error run, the difference recorded; with a world
+whose read-back is judged, the same read-back is a `knob_mismatch` error run, as before.

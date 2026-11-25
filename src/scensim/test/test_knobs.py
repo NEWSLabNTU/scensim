@@ -260,22 +260,47 @@ def test_sampled_night_and_wet_reach_the_world_and_the_record(knob_stack, where)
         assert rec["cell"] == {"illumination": light, "surface": road}
         assert r.knobs["ok"] and r.knobs["knobs"]["illumination"]["value"] == light
         want = -30.0 if light == "night" else 60.0
+        # recorded, not judged, on CARLA (issue 171)
         assert r.knobs["knobs"]["illumination"]["applied"]["sun_altitude_angle"] == want
+        assert r.knobs["knobs"]["illumination"]["weather_read"] == "unverified"
+        assert r.knobs["weather_read"] == K.WEATHER_UNVERIFIED
         assert r.knobs["sent"]["wetness"] == (80.0 if road == "wet_look" else 0.0)
         assert r.knobs["knobs"]["surface"]["physics"].startswith("none")
         seen.add((light, road))
     assert ("night", "wet_look") in seen or len(seen) >= 2
     # absolute: every run sent every knob's parameters, so none inherits another's weather
     assert all({"sun_altitude_angle", "wetness"} <= set(s) for s in bridge.sent)
-    # K7 groups the runs by the knobs the world applied
+    # K7 groups the runs by the knobs the world applied; a weather knob not judged on CARLA
+    # (issue 171; both knobs here set weather, the surface its wetness) is its own cell, named so
     from scensim_sampler import coverage
     rep = coverage.report(coverage.outcomes_from_runs([runs_dir(where)]))
     cells = {tuple(sorted(c["cell"].items())) for c in rep["layer3"]}
-    assert cells == {(("illumination", l), ("surface", r)) for l, r in seen}
+    assert cells == {(("illumination", f"{l} (unverified)"), ("surface", f"{r} (unverified)"))
+                     for l, r in seen}
 
 
-def test_a_world_that_did_not_apply_a_knob_gives_an_error_run(knob_stack, where):
+def test_a_carla_weather_read_back_that_differs_is_recorded_not_judged(knob_stack, where):
+    # issue 171: CARLA's get_weather right after set_weather may show the weather before it, and
+    # nothing ticks between them, so a differing read-back is no evidence the world kept it
     d, mp = knob_stack
+    _use(mp, Bridge(drop="sun_altitude_angle"))
+    out = io.StringIO()
+    run.main([str(_suite(d, 1)), "--project", str(d)], out=out)
+    rd = sorted(runs_dir(where).iterdir())[-1]
+    r = results.RunResult.read(rd / "result.json")
+    assert r.verdict != "error", (r.verdict, r.reason)
+    assert r.knobs["ok"] is True
+    assert r.knobs["knobs"]["illumination"]["applied"]["sun_altitude_angle"] == 12.5
+    assert r.knobs["knobs"]["illumination"]["weather_read"] == "unverified"
+    assert r.knobs["weather_read_off"] == ["sun_altitude_angle"]
+
+
+def test_a_world_that_did_not_apply_a_knob_gives_an_error_run(knob_stack, where, monkeypatch):
+    # a world server whose read-back follows its apply (not CARLA's, issue 171) is judged
+    d, mp = knob_stack
+    real = run.apply_knobs
+    monkeypatch.setattr(run, "apply_knobs", lambda rec, *a, **k: real(
+        dict(rec, simulator="judged"), *a, **k))
     _use(mp, Bridge(drop="sun_altitude_angle"))
     out = io.StringIO()
     run.main([str(_suite(d, 1)), "--project", str(d)], out=out)
@@ -314,10 +339,14 @@ def test_a_run_without_knobs_still_sends_and_checks_the_baseline(tmp_path):
     b, why = run.apply_knobs(rec, _Spec(plain), ps, call=bridge)
     assert b["ok"] and not why and b["knobs"] == {}
     assert bridge.sent[-1] == {"sun_altitude_angle": 45.0, "wetness": 0.0}   # back to the day
-    # a world that keeps the night anyway fails the plain run
+    # a world that keeps the night anyway fails the plain run, where the read-back is judged
     stuck = Bridge(drop="sun_altitude_angle")
-    b, why = run.apply_knobs(rec, _Spec(plain), ps, call=stuck)
+    b, why = run.apply_knobs(dict(rec, simulator="judged"), _Spec(plain), ps, call=stuck)
     assert not b["ok"] and b["baseline_not_applied"] == ["sun_altitude_angle"] and why
+    # on CARLA it is recorded, not judged (issue 171)
+    b, why = run.apply_knobs(rec, _Spec(plain), ps, call=Bridge(drop="sun_altitude_angle"))
+    assert b["ok"] and not why and b["weather_read_off"] == ["sun_altitude_angle"]
+    assert b["weather_read"] == K.WEATHER_UNVERIFIED
     # no knobs declared and none bound: nothing is sent
     assert run.apply_knobs(rec, _Spec(plain), {"world": {}}, call=bridge) == (None, "")
 

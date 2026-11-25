@@ -1369,12 +1369,20 @@ def apply_knobs(rec, spec, psettings, call=_ros_call, project=None):
             return ({"ok": False, "knobs": {k: {"value": v, "ok": False} for k, v in bound.items()},
                      "sent": plan["weather"], "error": err or "get_weather did not answer"},
                     "knobs: the world's weather could not be read back (get_weather)")
-    block = knobsmod.compare(bound, world.get("knobs"), plan["weather"], read)
+    # issue 171: on CARLA the read-back may predate the world's next tick, so it is recorded and
+    # not judged (knobs.WEATHER_UNVERIFIED); a refusal or no answer above still ends the run
+    judge = rec.get("simulator") != "carla"
+    block = knobsmod.compare(bound, world.get("knobs"), plan["weather"], read,
+                             judge_weather=judge)
     block["sent"] = plan["weather"]
     # the baseline too: a run with no bound knob still runs in the weather it sent
     off = sorted(p for p, v in plan["weather"].items()
                  if read.get(p) is None or abs(float(read[p]) - float(v)) > knobsmod.TOLERANCE)
-    if off:
+    if plan["weather"] and not judge:
+        block["weather_read"] = knobsmod.WEATHER_UNVERIFIED
+        if off:
+            block["weather_read_off"] = off     # recorded: possibly the weather before the send
+    elif off:
         block["ok"] = False
         block["baseline_not_applied"] = off
     if plan["notes"]:
