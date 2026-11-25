@@ -925,6 +925,27 @@ its order, which puts the none-case where the first suite's false error run was:
   did not recur, so this rerun shows the fixed judgement running live (two sends, judged from
   the repeat, no false error), and issue 171's tests show it judging a stale reply.
 
+**The Isaac closed cases (2026-11-25, 16:42-16:54, the same build: f0acfc70, aib bb2283f,
+scensim_isaac_world a8f6248): as predicted.** k9_cs3_isaac, `cs3_layout.xosc`, closure=closed,
+pm=current then pm=works on one stack, Isaac Sim 6.2:
+
+| case | verdict | knob profile `illumination.sun_elevation` |
+|---|---|---|
+| closure=closed, pm=current | failed: exitFailure at 240 s | read back 1.0472, ok |
+| closure=closed, pm=works | passed | read back 1.0472, ok |
+
+- No contact in either run. Both copies have sha256 5fd2feb1..., the CARLA copies' digest, and
+  each run directory kept its `scenario.xosc`. `knobs.works.layout` names west_street_closed
+  and its three props on lanelet 6583 at s 20.
+- The barriers' truth, read through `scensim.truth` (offset yaw 0 on Isaac): x 305.641,
+  305.641, 305.640; y -128.206, -129.506, -130.806; yaw -1.5712, as on CARLA.
+- The wait for the card (133, 2026-11-25): the run waited for 22528 MiB free from 10:36, a
+  guess (Isaac about 16 GB). K9e's Isaac runs had measured 7.6 GB at peak (scensim_isaac_world
+  7103 MiB, pointcloud_container 526 MiB), so 133 lowered it to 12288 MiB held 2 minutes, with
+  a stop guard on the run's own process group (card-wide free under 1024 MiB twice, 5 s apart).
+  Measured this time, card-wide every 5 s: 15970 MiB used before the run (others' jobs), 23606
+  at peak, so 7636 MiB ours; free never fell below 8505 MiB, and the guard did not fire.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
