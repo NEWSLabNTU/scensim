@@ -93,3 +93,33 @@ boulder, NDT's pose and the EKF's prediction disagree, the EKF gates the pose, l
 accuracy goes to ERROR, and the MRM stops the car, then cancels when the next pose passes.
 Not tested: what NDT reports in those frames (iteration_num and NVTL are recorded), and whether
 the MRM's input is the graph's localization node.
+
+## H3's offline check (asked by 133; predictions written before it, 2026-11-25)
+
+From run r1's record alone, no new run. For each of the 94 operations after the strike, the
+0.15 s (and 0.5 s) before it, against the same measures in the quiet stretches between them:
+
+- NDT's `iteration_num`, its NVTL, and the covariance of its pose
+  (`/localization/pose_estimator/pose_with_covariance`, if recorded; else from the EKF's input as
+  far as the record has it), against the EKF's own pose (`/localization/kinematic_state`).
+- The vehicle velocity the EKF fuses (`/vehicle/status/velocity_status`, through the twist
+  converter), against NDT's pose's motion.
+- Which diagnostic input the MRM handler acts on: read from the diagnostic graph's configuration
+  as installed in Autoware 1.5.0 and the profile (`/autoware/modes/autonomous` and what it links
+  to), and the graph's recorded `struct` and `status`.
+
+**Predictions (before the check).**
+- P1: pushing against the boulder makes NDT and the EKF disagree. In the 0.15 s before an
+  operation, NDT's pose (or, unrecorded, the EKF's pose as NDT pulls it) jumps by more than the
+  EKF's gate allows, while the fused wheel speed is 0 m/s. In the quiet stretches the two agree.
+- P2: NDT itself is worse in those frames: more iterations (toward the limit) or a lower NVTL
+  than in the quiet stretches. The boulder in front of the car hides part of the scan, or the
+  car's body moves on its suspension while the wheels are held.
+- P3: `/autoware/localization/accuracy` (or `/localization/state`) goes to ERROR just before each
+  operation. Through `/autoware/modes/autonomous`'s links, the graph makes the autonomous mode
+  unavailable, and the MRM handler operates EMERGENCY_STOP; it cancels when the next pose passes
+  and the node returns to OK. So the loop is: push, disagreement, accuracy ERROR, stop, cancel,
+  push again.
+- If P1 fails (no disagreement before the operations), H3 is not the cause, and the WARN is a
+  result of the stop, not its source; the order of the WARN and the operation in time is then
+  read again at the record's resolution.
