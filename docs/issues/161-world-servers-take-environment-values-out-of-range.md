@@ -64,6 +64,17 @@ shell (`scensim_core::world_server`, which the CARLA world server runs on) and t
    of 200. If (a) is ever stale and (b) then reads the new value, the cause is the unordered
    send. If (b) stays stale until (c), CARLA applies weather only at a tick. Either way the fix
    below reads after a step. The probe decides only what the doc says about the cause.
+   *Amended 2026-11-25 (243, with 133's OK, before the first run):* the probe is a Python script
+   on CARLA's own Python client, not a Rust test binary: the `carla` wheel 0.9.16 (`pip show
+   carla`), whose `client.get_client_version()` and `get_server_version()` it prints and requires
+   to be 0.9.16 both. Its `world.set_weather` and `get_weather` go through LibCarla 0.9.16's
+   `Client.cpp`, as the CARLA world server's do: its carla-sys build is
+   `libcarla_client.0.9.16`, where `Client::SetWeatherParameters` is `AsyncCall` and
+   `Client::GetWeatherParameters` `CallAndWait`. My CARLA alone on RPC 2100 (Epic, Town01), the
+   card checked first; the probe sets synchronous mode with a fixed step, and restores the
+   asynchronous mode and the original weather on exit, on error too (`try/finally`); CARLA is
+   killed by pid after. The two values are 20 and 50 deg, alternating, so every send changes
+   it. The predictions above are unchanged.
 1. **Refuse out-of-range values in the shells.** `SetEnvironment`'s weather fields are checked
    against the ranges scensim's knobs use (`knobs.FIELD_RANGES`: `sun_elevation` [-pi/2, pi/2]
    rad, `sun_azimuth` [0, 2 pi) rad, `fog_visual_range` above 0 m, `precipitation_intensity` 0
