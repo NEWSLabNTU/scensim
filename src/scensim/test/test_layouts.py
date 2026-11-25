@@ -167,3 +167,16 @@ def test_one_prop_in_two_bound_layouts_is_two_writers(tmp_path):
     with pytest.raises(L.LayoutError, match="in layout west_street_closed and layout "
                                             "west_street_closed: two writers"):
         L.for_run(d, d / "scenarios" / "cs3.xosc", {"closure": "closed"}, world, "Town01")
+
+
+def test_the_runs_copy_is_kept_at_every_level(tmp_path):
+    # what SSv2 ran: a passed run kept at `result` keeps it with resolved.yaml, which names it
+    from scensim import runs
+    assert L.COPY in runs.kept_names("result")
+    rd = tmp_path / "run"
+    rd.mkdir()
+    for n in (L.COPY, "resolved.yaml", "result.json"):
+        (rd / n).write_text("x")
+    (rd / "logs").mkdir()
+    assert runs.apply_keep(rd, "passed", {"passed": "result"}) == "result"
+    assert sorted(p.name for p in rd.iterdir()) == ["resolved.yaml", "result.json", L.COPY]

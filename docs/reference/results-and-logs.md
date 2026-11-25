@@ -32,6 +32,7 @@ every stack pilot is). A run refuses a stack whose fingerprint is not the testbe
 | `result.json` | result | the verdict and its first cause, the scenario, events, metrics, pilots, provenance (below) |
 | `resolved.yaml` | result | everything the run was given, after defaults |
 | `junit.xml` | result | SSv2's verdict as JUnit |
+| `scenario.xosc` | result | with a layout knob bound: the run's copy of the scenario with the layout's props, the file SSv2 ran (`resolved.yaml`'s `scenario.copy` names it and its sha256) |
 | `timeline.jsonl` | result | one event per line, by wall time (below) |
 | `judges/<name>.json` | result | each judge's record |
 | `attachments/<name>/` | standard | each attachment's console and what it wrote ([attachments](project-file.md#attachments)) |
