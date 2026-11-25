@@ -2622,6 +2622,38 @@ the anchor's polyline, less the car length 4.7 m.
 If 1 (the |r| part) and 2 hold, the late-onset corner is the point-mass ego's artefact (its fixed
 heading against the lane's shape), not the model's, and the search's result stands as recorded.
 
+**The onset sweep's result (2026-11-25, at 3e9b3a5d's prediction; `k13v_onset_sweep.py`, from
+the worktree at 4eb87377).** Closest gap, lateral offset and longitudinal gap at the closest
+approach, and M's arc position there:
+
+| onset (s) | gap (m) | lateral (m) | longitudinal (m) | M at (m) |
+|---|---|---|---|---|
+| 1.00 to 2.75 (8 slots) | 0.42450 to 0.42457 | 0.3797 to 0.3814 | 0.42455 to 0.42464 | 173.8 to 213.4 |
+| 3.00 | 0.42564 | 0.3816 | 0.42576 | 218.9 |
+| 3.25 | 0.40246 | 0.3819 | 0.40247 | 224.4 |
+| 3.50 | 0.37442 | 0.3821 | 0.40343 | 229.9 |
+| 3.75 | 0.37361 | 0.3824 | 0.37361 | 235.4 |
+| 4.00 | 1.47345 | 0.3825 | 1.47358 | 240.9 |
+
+0. **Reproduction: held.** 842ce095 unchanged gave 0.3737147 m.
+1. **The gap tracks the offset: FAILED.** The gap spans 1.100 m, but the lateral offset barely
+   moves (0.3797 to 0.3825 m), and the Pearson correlation is +0.397 (bar |r| >= 0.8); the sign
+   is positive, not the predicted negative.
+2. **The longitudinal gap is about flat: FAILED.** Its range is 1.100 m (bar 0.02 m): it is the
+   closest gap itself, to within 3e-3 m in every slot but onset 3.50 (0.029 m).
+
+So the hypothesis fails: the corner is not shown to be the fixed heading's artefact, and the
+late onsets change the gap along the lane, not across it. The gap is flat at 0.4245 m for onsets
+1 to 3 s, drops to 0.374 m between 3.25 and 3.75 s, and jumps to 1.47 m at 4.0 s; a step
+pattern, not a trend. A second hypothesis, not a claim: the drop's slots have the platoon
+braking over one of issue 166's reversed stretches (s 226.73 to 226.78; M at the closest
+approach at 224.4 to 235.4 m), and M measures its gap to L on the anchor's polyline (166's open
+fix: the gap in s), so a stretch between M and L changes M's braking and with it the ego's
+closest approach. Against it: the stretch at s 175.95, under the platoon at onsets 1 to 1.5 s,
+shows no such drop. The
+search's result stands as recorded; the question stays open and goes to 166's follow-up, whose
+plan can test it (the same sweep with M's gap measured in s).
+
 **Check 4: held.** The search ran end to end in the batch and reported its estimate and interval;
 the prediction was written before it (0e6f4e4b). Batch numbers, not seats numbers; no CARLA
 claim.
