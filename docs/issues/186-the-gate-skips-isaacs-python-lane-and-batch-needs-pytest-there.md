@@ -81,7 +81,8 @@ Order: this plan; point 4's prediction; the code and tests; the first real run a
 here; a full gate with the lane run; a landing request to 133.
 
 **Point 4's prediction (2026-11-25, before the code and the run).** Both of this host's GPUs
-are fully used by other work (19 and 22 GB, 100 %), so the first run hides them
+are busy with other work (19 and 22 GB, 100 %, per nvidia-smi at about 22:05; not sampled during
+the run), so the first run hides them
 (`CUDA_VISIBLE_DEVICES=` empty) instead of picking one: the GPU cases skip, and that is said in
 the result. With the fix, the lane's command in Isaac's Python on the gated tree:
 
