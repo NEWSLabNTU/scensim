@@ -184,3 +184,21 @@ So on the network vehicles drive, a stretch is at most 3.2 cm: a vehicle at 8 m/
 frame) lands a frame in one with a chance of at most about 8 % per stretch it passes, and then
 for that one frame. The long loops lie on lanelets no vehicle is routed over; a pedestrian placed
 by LanePosition on a walkway lanelet could meet one; none in the runs measured above does.
+
+## The lint (133, 2026-11-25)
+
+`scensim check` refuses a LanePosition whose lanelet and s are both written into the scenario
+and whose s lies in a reversed stretch, naming the stretch; `scensim run` (and a replay) warns
+when a run's values (a parameter's, a suite's, the sampler's, an anchor's) put one there
+(`scensim.lane_positions`). The stretches come from the map's centre points and the spline,
+which `scensim_batch.catmull` now holds without torch: `world_lanelet` imports it from there,
+unchanged, so the batch, the resolver and the check read one spline. Tests: an uneven centreline
+has its stretches and an even one none; a written s in a stretch is refused and one outside is
+not; a parameter's value is warned of where it falls in one.
+
+**Over every scenario in the repository** (2026-11-25, the 112 `.xosc` files git tracks here, the
+maps at dataset v2026.11f): 21 files hold LanePositions, 152 in all. The 122 on the dataset's maps
+(Town01, 02, 03, 05, 10, town05_ring_110kmh; 100 written, 22 from a parameter at its declared
+value) put none in a stretch: 0 refused, 0 warned. The 30 in 12 files on the sampler's test maps
+(`maps/town_street`, `maps/highway_3lane`, `straight400`), which are not dataset maps, are not
+checked. A suite or sampler that sets other values is checked by the run's warning.

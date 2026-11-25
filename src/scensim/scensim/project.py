@@ -804,6 +804,14 @@ def check_scenario(project: Path, sc: Scenario, settings: dict, managed: bool = 
         if not (project / "assets" / "maps" / name).is_dir():
             out.append(Finding(rel, f"map {name} is not fetched (assets/maps/{name})",
                                _map_fix(name, settings), refused=True, host=True))
+    # issue 166: a LanePosition written into the scenario inside a reversed stretch of SSv2's
+    # spline (an entity placed there faces backward)
+    if lf and lf.startswith(MAPS_PREFIX) and "LanePosition" in _text(sc.path):
+        md = project / "assets" / "maps" / lf[len(MAPS_PREFIX):].strip("/")
+        if md.is_dir() and sc.path.suffix == ".xosc":
+            from scensim import lane_positions as lanepos   # noqa: PLC0415
+            out += [Finding(rel, msg, "move s outside the stretch", refused=True)
+                    for msg in lanepos.fixed_problems(sc.path, md)]
     # roadmap 092 K9d: a scenario's anchor bindings against the world's anchors (its map's
     # resolved file and world.anchors), checked as far as they can be without a sample
     if lf and lf.startswith(MAPS_PREFIX) and "scensim.anchor." in _text(sc.path):

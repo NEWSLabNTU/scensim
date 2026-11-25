@@ -53,6 +53,7 @@ from pathlib import Path
 import yaml
 
 from . import map_export
+from .catmull import reversed_ts
 
 FORMAT = "scensim-anchors"
 VERSION = 1
@@ -78,29 +79,6 @@ def _wrap(a):
     return math.atan2(math.sin(a), math.cos(a))
 
 
-def _reversed_ts(curve):
-    """The parameter ranges in [0, 1] where a spline curve's tangent points against its chord
-    (issue 166): tangent . chord is a quadratic in t, so its roots bound them exactly."""
-    (ax, bx, cx, _), (ay, by, cy, _), _ = curve.c
-    ex, ey = ax + bx + cx, ay + by + cy          # the chord, point(1) - point(0)
-    qa, qb, qc = 3 * (ax * ex + ay * ey), 2 * (bx * ex + by * ey), cx * ex + cy * ey
-    cuts = [0.0, 1.0]
-    if abs(qa) > 1e-15:
-        disc = qb * qb - 4 * qa * qc
-        if disc > 0:
-            r = math.sqrt(disc)
-            cuts += [t for t in ((-qb - r) / (2 * qa), (-qb + r) / (2 * qa)) if 0 < t < 1]
-    elif abs(qb) > 1e-15 and 0 < -qc / qb < 1:
-        cuts.append(-qc / qb)
-    cuts.sort()
-    out = []
-    for a, b in zip(cuts, cuts[1:]):
-        m = (a + b) / 2
-        if b > a and qa * m * m + qb * m + qc < 0:
-            out.append((a, b))
-    return out
-
-
 def _reversed_stretches(world, spans):
     """A lane's stretches, [{from_s, to_s}] in lane s, where SSv2's spline runs against its
     own centre points (issue 166), merged where they touch."""
@@ -109,7 +87,7 @@ def _reversed_stretches(world, spans):
         spl = world.spline(sp["id"])
         c0 = sp["from_s"]
         for curve, ln in zip(spl.curves, spl.lengths):
-            for a, b in _reversed_ts(curve):
+            for a, b in reversed_ts(curve):
                 lo, hi = c0 + a * ln, c0 + b * ln
                 if out and lo <= out[-1]["to_s"] + 1e-9:
                     out[-1]["to_s"] = max(out[-1]["to_s"], hi)

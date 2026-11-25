@@ -190,7 +190,29 @@ def expand(target: Path, project: Path, repeat: int = None, params: dict = None,
         bind_anchors(s, project)
         check_commands(s, project)
         check_pilot_map(s, project)
+        warn_lane_positions(s, project)
     return specs, suite
+
+
+def warn_lane_positions(spec, project: Path, out=None):
+    """Issue 166: warn when a run's parameters put a LanePosition inside a reversed stretch of
+    SSv2's spline (an entity placed there faces backward); a written-in one `scensim check`
+    refuses."""
+    path = Path(spec.scenario)
+    name = scenario_map(path)
+    md = Path(project) / "assets" / "maps" / name if name else None
+    if path.suffix != ".xosc" or md is None or not md.is_dir() \
+            or "LanePosition" not in path.read_text(errors="replace"):
+        return
+    from scensim import lane_positions as lanepos   # noqa: PLC0415
+    from scensim_sampler.xosc import Scenario   # noqa: PLC0415
+    try:
+        values = {k: v for k, (_t, v) in Scenario(path).parameters.items()}
+    except Exception:    # noqa: BLE001 - a scenario that does not parse is refused elsewhere
+        return
+    values.update(spec.parameters or {})
+    for msg in lanepos.run_warnings(path, md, values):
+        (out or sys.stderr).write(f"warning  {path.name}: {msg}\n")
 
 
 def command_check(traces, claimers) -> tuple:
@@ -469,6 +491,7 @@ def replay_specs(target: str, index, project: Path) -> list:
     spec = sample_spec(record, scenario, replay_of=of_run or "")
     bind_anchors(spec, project)     # the record's bound values, checked against the world
     check_commands(spec, project)
+    warn_lane_positions(spec, project)
     return [spec]
 
 
