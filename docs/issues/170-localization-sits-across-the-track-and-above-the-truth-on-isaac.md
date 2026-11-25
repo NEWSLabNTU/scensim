@@ -249,7 +249,7 @@ vector plus a car-fixed along and across part:
   `map_origin`. Part (2), car-fixed, is neither: it is to be looked for in the truth's origin
   across the car or in the lidar's lateral place, the latter ruled out by issue 167's probe.
 
-## Step 3's result: the point cloud map against the world (2026-11-25, offline)
+## Step 3's result: the point cloud map against the world (2026-11-25, offline) (WITHDRAWN: see the CORRECTION below)
 
 `isaac-ex/i170/register170.py`: a translation-only point-to-plane fit of Haruna's
 `pointcloud_map.pcd` (the map C6e2 and 168 ran on, `c6b-haruna/none/haruna`), using its points
@@ -262,9 +262,9 @@ are read with that bias in mind.
 
 | region | points used | the map off the world (x, y, z) | plane residual rms |
 |---|---|---|---|
-| straights | 73,108 of 200,000 | +0.104, +0.042, -0.037 m | 0.050 m |
-| right hairpins | 72,604 | +0.033, +0.030, -0.023 m | 0.078 m |
-| left hairpins | 75,969 | +0.071, +0.048, -0.027 m | 0.079 m |
+| straights | 73,108 of 200,000 | ~~+0.104, +0.042, -0.037 m~~ | 0.050 m |
+| right hairpins | 72,604 | ~~+0.033, +0.030, -0.023 m~~ | 0.078 m |
+| left hairpins | 75,969 | ~~+0.071, +0.048, -0.027 m~~ | 0.079 m |
 
 - *Against the predictions.* The map is off the world (the "not the cause" prediction, within
   0.01 of 0, **FAILED**). On the straights it is off in the same direction as the runs' fixed map
@@ -284,7 +284,7 @@ are read with that bias in mind.
   USD's props exported too), against the full map. (3) Whether the region-dependent offset
   explains the hairpin part of the across error.
 
-## The hairpin prediction from the registration (written 2026-11-25, before comparing)
+## The hairpin prediction from the registration (written 2026-11-25, before comparing) (VOID: see the CORRECTION below)
 
 *Labelled:* the hairpin residuals are already measured (the bend split). This prediction comes
 only from the registration's per-region vectors and the straights' fit, made before the two are
@@ -304,9 +304,9 @@ set side by side.
 
   | region | predicted (0.46 x map . n - 0.037) | measured | difference |
   |---|---|---|---|
-  | straights (3391 samples) | -0.072 m | -0.079 m | 0.007 m |
-  | left hairpins (1090) | -0.036 m | -0.053 m | 0.017 m |
-  | right hairpins (1187) | -0.031 m | +0.055 m | 0.086 m |
+  | straights (3391 samples) | ~~-0.072 m~~ | -0.079 m | ~~0.007 m~~ |
+  | left hairpins (1090) | ~~-0.036 m~~ | -0.053 m | ~~0.017 m~~ |
+  | right hairpins (1187) | ~~-0.031 m~~ | +0.055 m | ~~0.086 m~~ |
 
   The regional map offset reproduces the straights and roughly the left hairpins. It does **not**
   explain the right hairpins: it predicts -0.03 m where +0.055 m is measured. The right hairpins'
@@ -342,3 +342,35 @@ and their conclusion, that the map sits 5 to 10 cm off the world, is **withdrawn
   ground is not their cause. Left: the props in the map against the world's (the cloud includes
   them; they were not exported), and a frame offset between the map and the truth (the
   projector, `map_origin`).
+
+### The correction, settled (2026-11-25, offline; 133 asked for the self-test with props)
+
+- *Why the first self-test missed it:* it had no props. It sampled points only on the ground
+  faces, so nothing off the surface could pull the fit.
+- *A self-test with props* (`selftest_props170.py`): the synthetic ground map (a true shift of 0)
+  plus the real map's off-surface points near the ground (225,573 points within 1 m of a face and
+  more than 0.05 m off its plane). The old fit (keep within 1 m) reads the map off by (+0.152,
+  +0.004, -0.046) m, the artifact reproduced. The 0.05 m cut still reads (+0.061, +0.019, -0.002):
+  with props two to one against the synthetic ground, points near the cut's edge let it drift.
+  So a plane-residual cut is not a sound guard either, and no fit of this kind is used again
+  without a props self-test at the real map's mix.
+- *The decisive check, with no fit at all* (`rebuild170.py`): the course builder's own
+  `maps.point_cloud` (its seed, 58), run on the map directory's `meshes.npz`, centreline and
+  `props_points.npy`, reproduces Haruna's `pointcloud_map.pcd` bit for bit: 15,788,823 points,
+  all identical, none on either side only. The map's ground is exactly the course's meshes, and
+  the USD is built from the same meshes (the same vertex counts; `usd_meshes.py`). **The map
+  matches the world by construction**, ground and props alike, so far as the props in
+  `props_points.npy` are the USD's props, which is still to be checked.
+- *The map-to-truth frame (133's next check), on paper.* `world.yaml`'s `map_origin` is
+  (0, 0, 0). The map's points are the meshes' coordinates unchanged (above), and the truth
+  stream's poses are the world server's (`scenario_world_bridge` `truth_topic.rs`: the run's
+  gap-trace poses as they arrive). The projector (`map_projector_info.yaml`, a transverse
+  Mercator at 36.494, 138.903) places the lanelets, and every lanelet point also carries
+  `local_x` and `local_y`. It does not move the point cloud, which NDT uses. So there is no
+  frame offset between the map NDT uses and the truth. Still to confirm by numbers: a vehicle
+  pose the world server logs against the same instant's truth row.
+- *What stays open, then:* the runs' fixed map-frame vector of about 5 cm, the car-fixed
+  -0.037 m, and the right hairpins' +0.13 m. Neither the map nor the frames explain them. The
+  "fixed vector plus car-fixed" model left 0.035 m rms unexplained, so it may be the wrong
+  model. The next candidate is NDT's own estimate (its convergence on this map's geometry), to be
+  planned with 133.
