@@ -1,6 +1,6 @@
 # 167: aib's lidar points sit 36 mm below where the rig puts the lidar
 
-**Status:** open; doc and predictions first (133, 2026-11-25), no fix yet. **Severity:** to be
+**Status:** open; cause confirmed by step 1's probe (2026-11-25), fix next. **Severity:** to be
 shown. It is a constant height offset of every Isaac lidar cloud in its own frame; the judged
 pose error is horizontal. **Found:** 2026-11-25, scensim 118, 086 C6e1 (numbered by 133).
 
@@ -49,9 +49,33 @@ hypothesis by itself.
    - *Prediction:* a transform of +0.036 m in z between `root` and the point origin, either in
      the created prim tree or in the sensor's own model. If there is none, the hypothesis
      fails and the probe looks for the origin of the 36.22 mm and of the 6 % at 30.2 mm.
-2. **The fix, aib's.** Put the point origin where the rig says the lidar is. Either the mount
-   compensates for the offset (the root lowered by it), or the points are shifted by it before
-   they go out, whichever step 1 shows is the true geometry.
+   - **Result (2026-11-25, 09:21, GPU0, `i167_probe.py`, siw 7af1b0c, aib 4e8d684): the
+     prediction held.** `RtxLidar.create` makes an Xform `lidar` at the root, with the OS1's
+     mesh and an `OmniLidar` prim, `lidar/sensor`, whose local translate is (0, 0, 0.03622) m.
+     The annotator's own `transform` puts the sensor at z 2.03622 for a root at 2.0. Over a flat
+     plane, all 1,565,840 returns sit at -2.03622 m in the sensor's frame, a single value, so
+     the plane is 36.22 mm further below the sensor than aib's mount says. The emitter offsets
+     (`horOffsetM`, `vertOffsetM`) are all 0, and the OmniLidar's x and y offsets are 0.
+     - So the cause is the OS1 asset's sensor prim, 36.22 mm above the prim aib places. aib
+       labels points measured from 2.036 m as being from 2.0 m.
+     - C6e1's 6 % at -30.2 mm does not appear over a flat plane, so it came from the road's
+       geometry there, not from the lidar (an open detail of C6e1, not of 167).
+     - **The -0.066 m across-track bias (C6e2) is not 167's.** The lidar has no lateral offset,
+       and the rig's mount matches the sensor kit's extrinsics (`sensors_calibration.yaml`:
+       sensor_kit_base_link at x 0.9, y 0, z 2.0, roll -0.001, pitch 0.015, yaw -0.0364;
+       `velodyne_top_base_link` yaw 1.575 in it, which is the rig's quaternion, 1.5386 rad in
+       all). It gets its own number if it stays (133).
+     - **NDT's z bias (+0.022 to +0.026 m) against the 36.22 mm.** This is not forced to fit.
+       11 to 14 mm is not explained by the offset. Candidates, none measured: the map cloud's
+       own z against the road (the course builder's sampling); the truth trace's z being the
+       body's base_link with the suspension's sag against Autoware's static one; and NDT's
+       roll and pitch taking part of a z offset on a crowned road. The fix will show how much
+       of the bias goes with the offset.
+2. **The fix, aib's.** Put the point origin where the rig says the lidar is. At the lidar's
+   creation, aib reads the OmniLidar prim's transform under its root, and the mount becomes the
+   rig's mount composed with that transform's inverse. The emitter then sits at the rig's
+   mount, and the points are measured from where the TF says the lidar is. Any OmniLidar asset
+   with an offset is covered, not only the OS1.
    - *Prediction:* C6e1's stops then read a median dz of 0 within 0.5 mm, with the 30.2 mm group
      explained or still there.
    - The lidar's height above the road is the spec's (`sim_vehicle_spec`), so CARLA's lidar is
