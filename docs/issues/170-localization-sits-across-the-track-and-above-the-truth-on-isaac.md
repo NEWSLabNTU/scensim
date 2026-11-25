@@ -98,3 +98,43 @@ adds nothing across. If either is not, its size from the formulas above is compa
 4. Only if 1 to 3 find nothing: a fixture run on a straight, level, uncrowned course
    (fixture_c5's shape with no crown), predicting the across bias there. Its spec comes to 133
    first.
+
+## Step 2's result, the frames (2026-11-25, offline)
+
+- *The TF against the rig.* The kit's chain, base_link to sensor_kit_base_link (rpy -0.001,
+  0.015, -0.0364) to `top_base_link` (yaw 1.575) to `top` (identity), from
+  `tesla_model3_sensor_kit_description`'s calibration (the same in `individual_params`), equals
+  aib's rig mount (`quat` 0.718374885, 0.005063522, 0.005555147, 0.695615573) to under 1e-6
+  rad: rpy (0.015004, 0.000937, 1.538615) both. δ and ρ are 0. The levers give 0.000 m across.
+  **Held** (predicted under 1e-4 rad).
+- *The render against aib's mount* (169's probe): the walls' returns sit where aib's
+  `sensor_mount` puts them, D - D_true 0.000 m, the lateral median within 0.06 m at 40 m. A
+  yaw difference under about 0.1 deg, so under 1.5 mm across.
+- *The truth's origin.* `ego.csv` is the world's truth stream (`scensim/truth`, the entity's
+  pose) as it comes. A body-fixed point offset along the car makes an along error, not an
+  across one. A constant across bias from the origin would need a body-lateral offset, which
+  step 1's split below speaks against: the bias changes with the bend.
+
+So the frame is not 170's cause. The 1.84 deg seen in the probe is the kit's own mount (yaw
+1.5386 rad, 90 deg less 1.84 deg), in both the TF and the render.
+
+## Step 1's result, attitude, heading and the bends (2026-11-25, offline)
+
+`isaac-ex/i170/attitude170.py` on C6e2's six runs and 168's twelve (above 1 m/s; across +
+left of the truth's heading; the bends by the truth's yaw rate, over 1 deg/s either way).
+
+| | across, all | straight | left bends | right bends | roll err | pitch err | yaw err |
+|---|---|---|---|---|---|---|---|
+| range over 18 runs | -0.065 to -0.075 m | -0.078 to -0.086 m | -0.060 to -0.104 m | -0.027 to -0.039 m | -0.006 to -0.012 deg | 0.001 to 0.007 deg | -0.007 to +0.089 deg |
+
+- (a) |roll error| under 0.2 deg: **held** (about 0.01 deg).
+- (b) |yaw error| under 0.1 deg: **held** (smooth maps under 0.01 deg; the rough maps 0.079 to
+  0.089 deg, noted).
+- (c) The across error does not depend on the bend's sign within 5 mm: **FAILED**. The straight
+  sections sit at about -0.08 m. The left bends are at about -0.06 m in the level runs and -0.09
+  to -0.10 m in the runs that are off along the track (C6e2's BVH-on runs and 172's behind
+  mode). The right bends are at about -0.035 m in every run. Both bends move the error toward
+  the bend's outside relative to the straights' level, the left ones more. So 170 is not a
+  constant offset. *Hypothesis, untested:* a part of it follows the body's roll in the bends
+  (the lidar 2.0 m up) or the along error turned by the bend. It is to be split per bend
+  radius and speed before step 3.
