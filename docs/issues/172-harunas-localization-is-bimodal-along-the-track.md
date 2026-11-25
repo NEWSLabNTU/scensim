@@ -277,3 +277,66 @@ record as amended in step 2. No edits during a run.
   run, the stamp of the scan published now against the sim time of the frame it was rendered in
   (the `latency` frames before) differs from a level run's by the same offset as `to_sim`, if
   the phase is the cause.
+
+## Step 3's result (2026-11-25 to 26, 118, GPU0, 22:54:58 to 00:15:53; the quiet rule, codec told)
+
+Nine smooth haruna_down runs at scensim main 1ed265d7 (scensim_isaac_world 3a948eea) with aib
+86a9207, all accepted. Each had rc 0, its provenance checked, the aib source sidecar's head at
+86a9207, and 839 to 845 timing lines in the world server's console. gpu_log.txt shows no foreign
+process on GPU0 during any run, so none is void. Readings: `step3.py`, `startup172.py` (the mode),
+`tick3.py`.
+
+| run | start | NDT along (moving, after 30 s) | standing still | mode |
+|---|---|---|---|---|
+| r1 | 23:05 | -0.0013 | -0.0066 | level |
+| r2 | 23:13 | -0.0005 | +0.0016 | level |
+| r3 | 23:21 | -0.0008 | -0.0063 | level |
+| r4 | 23:30 | -0.0015 | +0.0010 | level |
+| r5 | 23:38 | -0.0008 | -0.0045 | level |
+| r6 | 23:46 | -0.0010 | -0.0033 | level |
+| r7 | 23:53 | -0.0008 | -0.0007 | level |
+| r8 | 00:01 | -0.0013 | +0.0017 | level |
+| r9 | 00:08 | -0.0020 | -0.0004 | level |
+
+The timing was the same in all nine runs, to the microsecond:
+- `to_sim` was 0.000000 s in every logged publish of every run, including start-up.
+- There were 3 substeps a frame after the first publish. The first had 7, with `frame_dt` 0.100 s:
+  the warm-up frame.
+- Each frame's stamp was its sim time plus the 1000 s base, exactly.
+- The scan published at a frame carried the stamp from 0.100 s before it (the two frames' latency),
+  in every publish.
+- `/clock` stepped by 0.050 s. NDT's `pose_with_covariance` stamps sat on that grid (phase 0.000 ms,
+  spread 0.000 ms). Every aib scan stamp in the log matched an NDT stamp within 1 us (735 to 742 a
+  run; the log is thinned to every 10th publish after the first 100).
+
+Against the predictions:
+- *Within a run, `to_sim` and the substeps are constant after start-up:* **held**, exactly (0 s,
+  3 substeps).
+- *The hypothesis (the behind runs' `to_sim` one physics step from the level runs'):* **not
+  tested.** No run was behind: 0 in 9, against 3 in 9 in step 2. The plan put the chance of that
+  at about 3 % if the rate were unchanged. So the rate has changed. `to_sim` is the same in all
+  nine (0), so nothing in these runs separates a phase.
+- *The stamps downstream:* NDT matched each scan at aib's own stamp (to 1 us), and on the `/clock`
+  grid. In these runs no offset is added between aib's stamp and NDT's.
+- *Found, not predicted:* the level runs' along error moving is -0.0005 to -0.0020 m. Step 2's
+  level runs were +0.004 to +0.005 m, so the level has moved by about 5 mm too.
+
+**What differs from step 2 (both hypotheses, untested).**
+- *The build.* Step 2 ran at main 0291abb3 (siw 4706ff9). Step 3 ran at 1ed265d7 (siw 3a948eea),
+  which brings issue 161's read-back: the bridge reads the world back after the step
+  (scensim a512514d; siw c6de0f0 declares it), so the order of a tick's read and step changed.
+  **Hypothesis H-a:** the behind mode came from the read before the step, and 161 removed it. The
+  aib commits since step 2 add only log lines behind a switch.
+- *The load.* Step 2 ran non-timing with the host loaded (load averages 44 to 48 at r8 and r9).
+  Step 3 ran under the quiet rule. **Hypothesis H-b:** the mode needs load at start-up (step 2's
+  proxies did not support it, but they were proxies). Step 3 did not record the load average at
+  each start, an omission.
+
+The bridge's tick, from the gap trace's frame wall times, was p50 51.9 to 53.9 ms, p95 62.3 to 94.4
+ms and max 2.2 to 4.8 s, over the 50 ms budget in 5484 to 6444 frames. This is a different source
+from step 2's tick figures, so the two are not compared here.
+
+**Next (to plan with 133):** separate H-a from H-b with the same nine-run design. Either main
+0291abb3 under the quiet rule (H-a predicts behind runs return; H-b predicts none), or 1ed265d7
+under step 2's load (H-b predicts behind runs return; H-a predicts none). Record the load average
+at each start.
