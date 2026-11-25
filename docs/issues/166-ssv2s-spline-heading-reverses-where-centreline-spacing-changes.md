@@ -297,3 +297,12 @@ used by those runs.
 **Order.** This plan; check 3 and 4's predictions; the code and tests; the results here;
 local checks and a full gate; a landing request to 133.
 
+**Checks 3 and 4's predictions (2026-11-25, before the code and the runs).**
+
+- **3.** Without the 0.025868 correction, M's acceleration at t = 0 is within 1e-6 m/s^2 in all
+  36 dry-run slots (with the old gap and no correction it was -2.5e-4 to -9.5e-5).
+- **4.** The closest gap's range over onsets 1.00 to 3.75 s is at most 0.005 m (today 0.052 m,
+  in steps of 2 to 3 cm, the order of the loop shortfalls between M and L: one line, not a
+  claim). Onset 4.00's jump to 1.47 m is about forty times the largest of those shortfalls
+  (0.026 m); no prediction is made for it, and it is recorded as it comes out.
+
