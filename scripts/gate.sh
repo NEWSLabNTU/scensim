@@ -63,11 +63,10 @@ lane="Isaac lane: not on this host (ISAAC_ROOT unset)"
 for step in $STEPS; do
     echo "== $step $(date -Is)" >> "$log"
     out="$dir/gate-$step.out"
-    if ! "${clean[@]}" "$JUST" "$step" > "$out" 2>&1; then
-        cat "$out" >> "$log"
+    # streamed into gate.log as it runs, so a long build can be watched (tail -f)
+    if ! "${clean[@]}" "$JUST" "$step" 2>&1 | tee -a "$log" > "$out"; then
         fail "$step" "\`just $step\` exited non-zero (last line: $(tail -1 "$out"))"
     fi
-    cat "$out" >> "$log"
     status_clean "$step"
     if [ "$step" = test ]; then
         last=$(grep -E '^just test: done;' "$out" | tail -1 || true)
