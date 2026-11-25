@@ -1,6 +1,6 @@
 # 168: on road-layer worlds the lidar cannot see road detail below the base road
 
-**Status:** fix coded (siw 4706ff9, branch issue-168, local), checked static, and its NDT A/B passed (option 2 stands); landing next, on current main and gated. **Severity:** high
+**Status:** fixed: siw 4706ff9 (siw main), checked static, its NDT A/B passed (option 2 stands); landed in scensim main 0291abb3 (2026-11-25, gated at that commit). **Severity:** high
 for any sensor result on a road-detail world: the lidar (and the camera) see no pothole, no rut
 and only the upper half of the roughness. **Found:** 2026-11-25, scensim 118, 086 C6e1
 (predicted from the code before the run; numbered by 133).

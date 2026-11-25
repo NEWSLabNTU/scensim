@@ -2223,7 +2223,8 @@ runs. A step's own details (scripts, packages) are added to its section before i
   - **Judged (proposed):** R7's "false obstacles over washboard and ruts" as no stop and no
     object over the washboard and the pothole in both runs. Everything else is reported.
   - **Amended before any run (118, 2026-11-25, after issue 168 landed at main 0291abb3; no C6e3
-    result exists).** One prediction changes (the pothole), and the step's details are added.
+    result exists; 133 approved it the same day).** One prediction changes (the pothole), and the
+    step's details are added.
     - *The pothole is now seen.* Since 168 the world's road render sits under the detail
       (fixture_c6a's `base_drop` 0.080 m, drawn 0.090 m), so the lidar meets the pothole's floor.
       The line above ("C6e3's pothole tests nothing", from C6e1) no longer holds, and C6e3's
@@ -2245,18 +2246,22 @@ runs. A step's own details (scripts, packages) are added to its section before i
       `road_detail.yaml` and `section.npz` at the top. fixture_c6b gets its `base_drop` from the
       CLI (`python -m scensim_isaac_world.base_drop <map> --write`) before the runs. Each run
       must log the world server's road line (the corridor's features, and the 168 line naming
-      `/World/env/Road` and the drop), and the runner refuses a run without it.
-    - *The chassis contacts.* 133's amendment asks for the skid plate's and the body's contacts
-      from the world server's log. The world server logs none. C6b's plate strikes came from
-      `fixture_drive`'s own contact report, which the world server does not have. For C6e3 a
-      rock's contact is therefore inferred, and labelled as inferred, from the truth trace:
-      where the rock passed (between the wheels or under one, from the trace and the rock's
-      place) and the body's height and pitch at the rock against the 10 m before it. A rock
-      between the wheels taller than the clearance is recorded as "a strike likely, not
-      measured". A contact report in the world server would be a code item, for 133's decision.
+      `/World/env/Road` and the drop), and the runner refuses a run without it. The file's place
+      is issue 177 (the fix planned later).
+    - *The chassis contacts (133's decision, 2026-11-25, before any run).* 133's amendment asks
+      for the skid plate's and the body's contacts from the world server's log. The world server
+      logs none (issue 176). C6b's plate strikes came from `fixture_drive`'s own contact report,
+      which a scenario run does not use. No code comes before C6e3. A rock's contact is inferred
+      from the truth trace: where the rock passed (between the wheels or under one, from the
+      trace and the rock's place) and the body's height and pitch at the rock against the 10 m
+      before it. Every such row and the verdict say "inferred, not measured", and no judged check
+      rests on one; they are context only. A rock between the wheels taller than the clearance is
+      recorded as "a strike likely, not measured". The world server's contact report is issue 176,
+      planned after C6e3.
     - *Recording.* Each run records, beside C6d's topics,
       `/perception/obstacle_segmentation/pointcloud` (the non-ground points; about 1 to 2 GB a
-      run, on the NVMe log root, 224 GB free when written).
+      run expected, on the NVMe log root, 224 GB free when written). The size of each run's
+      record is written into its result.
     - *Workspace.* scensim main 0291abb3 built in its own worktree (`/mnt/renegade/aeon/ws-c6e3`,
       `env -i just build`), the testbench `/var/tmp/aeon/tb-c6e3` built over its install with
       `--symlink-install`, two packages (`isaac_c6e3_c6a`, `isaac_c6e3_c6b`). Each run is
