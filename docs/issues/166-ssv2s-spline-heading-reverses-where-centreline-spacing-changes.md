@@ -1,6 +1,6 @@
 # 166: SSv2's spline heading reverses where a centreline's point spacing changes
 
-**Status:** open (241; numbered by 133, 2026-11-25); the gap-in-s fix's plan approved (2026-11-25). **Severity:** to judge: a lane position's
+**Status:** open (241; numbered by 133, 2026-11-25); the gap-in-s fix in code and tests (2026-11-25; checks 2b and 4 FAILED as worded). **Severity:** to judge: a lane position's
 heading 180 degrees off over a few centimetres, on many lanelets of Town05 and some of Town01.
 **Found:** 2026-11-25, scensim 241, resolving a Town05 lane anchor for 092 K13's first search
 (`west_avenue`: lanelets 105401 to 3337, maps dataset v2026.11f): the resolve reported a heading
