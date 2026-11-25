@@ -2509,3 +2509,29 @@ to 17.7 at 8, the smallest at T 0.6 whatever the onset; minimum TTC 1.14 to 5.55
 0.62 m (a 0.2, b 3.2, T 0.6), 1.12 (a 0.6, b 3.2, T 0.6), 5.62 and 6.08 (b 1.2, T 0.6), 16.8 to
 18.4 at T 1.8; 2 under 1 s of TTC, 0 failed, 0 invalid. A large b (a later, harder IDM brake) and
 a short T bring the failure nearest.
+
+**The search's prediction (2026-11-25, 133 chose to run the box as planned; written before the
+search).** The method is the search's own (`scensim_sampler.search`): the cross-entropy method,
+generations of N 1000 (elite rho 0.1, alpha 0.7, the defensive mixture beta 0.1), stopped when
+the level reaches the threshold or at the cap of 20 generations, then a fresh stage of 1000 draws
+from the last mixture; the rate is the plain likelihood-ratio estimate with a **normal 95 %
+interval** (p plus or minus 1.96 SE), Kish's n_eff beside it. With 0 failures that interval is
+[0, 0]: the estimator has no spread to show. For reference only, not the tool's output: 0 of 1000
+unweighted draws give a Clopper-Pearson 95 % upper bound of 3.7e-3. Every run is the batch's,
+the ego the invented `aeb_ttc` (TTC = gap / its own speed, braking latched at 6 m/s^2 under 1.5 s),
+on the invented base.
+
+1. **The stop:** the level falls toward the box's corner but never reaches 0; the search runs to
+   the generation cap (20), then the fresh stage.
+2. **Failures:** 0 over the whole run, the generations and the fresh stage.
+3. **The estimate:** the tool prints p = 0, interval [0, 0]; the caveat: N 1000 cannot resolve a
+   rate under about 4e-3, and the normal interval says nothing at 0 failures.
+4. **The smallest closest gap** over the whole run: between 0.5 and 0.7 m (the dry run's corner
+   at decel 8, onset 1, T 0.6, a 0.2, b 3.2 gave 0.62 m), at T under 0.7 s, b over 3.0 m/s^2,
+   decel over 7.5 m/s^2, onset under 1.5 s and a under 0.3 m/s^2.
+5. **Minimum TTC under 1 s:** at least 300 of the fresh stage's 1000, its draws gathered near
+   that corner.
+6. **Invalid samples** (the corridor guard): 0 in every generation and in the fresh stage.
+
+Check 4's bar is unchanged: the search runs end to end and reports its estimate and interval.
+These predictions are judged held or FAILED apart from it.

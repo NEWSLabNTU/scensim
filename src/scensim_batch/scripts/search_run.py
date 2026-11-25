@@ -108,6 +108,11 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
             summary["invalid"] = sum(1 for x in rows if x["outcome"].get("invalid"))
             summary["failed"] = sum(1 for x in rows if x["outcome"].get("failed"))
             summary["errors"] = sum(1 for x in rows if x["outcome"].get("error"))
+            valid = [x for x in rows if not x["outcome"].get("error")]
+            if valid:   # 092 K13 step v: the smallest closest gap, a secondary output
+                low = min(valid, key=lambda x: x["outcome"]["score"])
+                summary["min_closest_gap"] = {"gap": low["outcome"]["score"],
+                                              "record": low.get("record")}
             (out / "outcomes.jsonl").write_text("".join(json.dumps(x, sort_keys=True) + "\n"
                                                         for x in rows))
     (out / "run.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
