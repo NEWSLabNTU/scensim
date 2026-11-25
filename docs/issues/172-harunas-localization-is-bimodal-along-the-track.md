@@ -77,3 +77,19 @@ remaining case of it.
 3. If 1 or 2 shows the age varying: aib measures the render's age at start-up (the annotator's
    time against the frame), not assuming `latency_frames`, and stamps from it. Checked by six
    haruna_down runs that all land in one mode. Its spec comes to 133 first.
+
+## Step 1's result (2026-11-25, 118, GPU0, 18:48:53 to 18:52:21; non-timing, codec 118 told)
+
+`isaac-ex/i172/run20.sh`: 169's probe, case A (`xyzircaedt`, motion BVH off, aib's distortion
+off), at 4.5 m/s, 20 processes in a row, aib bb2283f. Each process's render age comes from the
+walls (the root's x less the sensor's x at the ahead wall's hit, over v), over 56 revolutions.
+
+- All 20 start-ups: **0.100 s** in every revolution (min and max equal), two frames.
+- The prediction (two values about 19 ms apart across start-ups, at about 2:1): **FAILED**. The
+  probe's start-up does not show the mode. As the plan says, this does not refute the
+  hypothesis for the world server, which steps differently (its substeps, its frame pacing,
+  the bridge's lockstep). Step 2 measures the render's age there.
+- *Noted, from issue 170's step 1 (offline):* the behind runs (and C6e2's BVH-on runs, which are
+  ahead) also sit 0.03 to 0.04 m further across in left bends than the level runs (-0.09 to
+  -0.10 m against about -0.06 m), while the right bends and the straights are the same. An
+  along error seen through a bend may be part of 170's split.
