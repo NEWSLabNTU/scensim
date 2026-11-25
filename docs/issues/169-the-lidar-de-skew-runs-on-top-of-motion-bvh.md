@@ -4,7 +4,7 @@
 first title was "aib's lidar de-skew runs on top of motion BVH's own sensor motion". Its premise
 FAILED, as the next section says. The file keeps its first name, so links stay valid.
 
-**Status:** open; after 167 and 168 (133, 2026-11-25). **Severity:** none today, since motion
+**Status:** open; step 1 done (2026-11-25): the candidate supported by the cloud's geometry, and a latent aib defect found; step 2 to plan. **Severity:** none today, since motion
 BVH is off in every run (issue 138), but it blocks turning motion BVH on. With it on,
 localization runs about 0.108 m ahead of the car at 4.5 m/s. **Found:** 2026-11-25, scensim
 118, 086 C6e2 (numbered by 133).
@@ -160,3 +160,56 @@ magnitudes; k is signed by the measured dt.
 skipped when Kit's `/renderer/raytracingMotion/enabled` is set, read from the settings at
 start-up, with a log line saying which. If C is about 0, there is no fix in aib for this. The
 issue is re-opened on the measurement.
+
+## Step 1's result (2026-11-25, 118, GPU0, 18:37 to 18:41; non-timing, codec 118 told)
+
+`isaac-ex/i169/probe169.py` (`run.sh`), aib bb2283f and siw 4706ff9 (scensim main 0291abb3's
+pins, worktree `ws-c6e3`). Each case is one process: a 2 s settle, then 3 s moving, 56
+revolutions judged per moving case (past the render's latency after the start).
+
+- *The controls (v = 0), rerun with the fixed probe:* |D - D_true| is 0.000 m in all six (A0 to
+  F0), so the probe's geometry holds. In A0 the wall behind is hit 24.98 ms after the wall
+  ahead, so the spin's sign is + and dt_nominal is +25 ms. **Held.**
+- *The moving cases* (D - D_true is the median of 56 revolutions, with p10 to p90; k is its median):
+
+  | case | format | motion BVH | aib's distortion | v | D - D_true | k | predicted k | |
+  |---|---|---|---|---|---|---|---|---|
+  | A | xyzircaedt | off | off | 4.5 m/s | 0.000 m | 0.000 | 0 | **held** |
+  | B | xyzircaedt | off | on | 4.5 m/s | 0.000 m | 0.000 | 1 | **FAILED** |
+  | C | xyzircaedt | on | off | 4.5 m/s | +0.1121 m (0.1119 to 0.1123) | 0.996 | 1 (the hypothesis) | **held** |
+  | D | xyzircaedt | on | on | 4.5 m/s | +0.1121 m | 0.996 | 2 (the hypothesis) | **FAILED** |
+  | B | xyzircaedt | off | on | 9 m/s | 0.000 m | 0.000 | 1 | **FAILED** |
+  | C | xyzircaedt | on | off | 9 m/s | +0.2241 m (0.2233 to 0.2251) | 0.996 | 1 | **held** |
+  | E | xyzirc | off | (none) | 4.5 m/s | 0.000 m | | 0 within 0.01 m | **held** |
+  | F | xyzirc | on | (none) | 4.5 m/s | +0.1121 m | | about 0.1125 m (v x dt_nominal) | **held** |
+  | E | xyzirc | off | (none) | 9 m/s | 0.000 m | | 0 within 0.01 m | **held** |
+  | F | xyzirc | on | (none) | 9 m/s | +0.2241 m | | about 0.225 m | **held** |
+
+  k does not depend on v: C gives 0.996 at both speeds, and B 0.000 at both. **Held.**
+- *What it shows.* With motion BVH on, the renderer traces each point from the sensor's pose at
+  its firing time (C, F: k 0.996), as a real spinning lidar measures. Production's cloud (F,
+  `xyzirc`) carries that motion with no point times, so Autoware's distortion corrector cannot
+  take it out. Its size, v x half a turn, is C6e2's +0.108 m at 4.5 m/s. That is the candidate
+  of the amended "why", supported by the cloud's geometry. The link to localization itself
+  (NDT run on such clouds) is not measured here. With motion BVH off, the cloud carries no
+  motion (E: 0.000).
+- *Why B and D failed: a second finding, aib's latent defect (from instrumenting the probe, after
+  the result; labelled).* With `xyzircaedt`, aib's `motion_distort` gets the annotator's point
+  times 5.000 to 5.050 s when the lidar's track ends at 5.000 s and the render was 0.1 s earlier
+  (t_ref 4.900; the walls confirm the data is two frames old). Every point's time lies past the
+  track's end, so `_pose_at` takes the last pose for all of them. aib adds no motion within the
+  revolution (k 0); it shifts the whole cloud by v x 0.1 s instead (B's walls 0.450 m nearer
+  than A's at 4.5 m/s, and D's 0.450 m nearer than C's). The annotator's timestamps are
+  therefore those of the frame the data is read in, not the one it was rendered in. No run uses
+  `xyzircaedt` today, so the defect is latent, but it bears on step 2: a scan stamped from these
+  times would also be 0.1 s late.
+
+## Step 2 (to plan, for 133)
+
+Production with motion BVH on needs the cloud's motion to be removable. Two ways:
+(1) aib publishes `xyzircaedt` with each point's firing time taken as render time plus its
+offset (the latency taken out of the annotator's times), its own distortion off when Kit's
+`/renderer/raytracingMotion/enabled` is set, and the header stamped at the render, so that
+Autoware's corrector undoes the renderer's motion as on a vehicle; or (2) aib removes the
+renderer's motion itself before publishing `xyzirc`. Either way, aib's `motion_distort` time
+base is fixed first (the latent defect above). Then C6e2's pairing again, on the fix.
