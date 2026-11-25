@@ -325,8 +325,11 @@ local checks and a full gate; a landing request to 133.
      316.8 m); beyond 2 m of every stretch the largest is 8.6e-4 m (3332 points). The error is
      along the lane (up to 0.0122 m), not across it (at most 5.3e-4 m): near a loop the
      anchor's samples, linearly interpolated, run ahead of or behind the world's spline at the
-     same s. So a car within about 2 m of a reversed stretch reads its s off by up to 1.2 cm;
-     the bar's "outside loops" was too narrow by that margin.
+     same s. The check stays FAILED as worded (133: the bar is not amended).
+     **Observation, beside it:** within 2 m of a reversed stretch the linear interpolation of
+     the anchor's samples runs up to 1.2 cm along the lane from the spline; beyond 2 m, at most
+     8.6e-4 m. **Known limit:** evaluating the port's spline in place of linear interpolation
+     would remove it; not done.
 3. **K13 step v's dry-run check 1 without the correction: held.** M's acceleration at t = 0
    is at most 7.4e-8 m/s^2 over the 36 slots (bar 1e-6).
 4. **The onset sweep rerun: FAILED.** Without the correction, the closest gap over onsets 1.00

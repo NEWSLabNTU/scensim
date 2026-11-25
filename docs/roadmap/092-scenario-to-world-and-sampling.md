@@ -2664,6 +2664,14 @@ of about 0.05 m between onsets 3.25 and 3.50 s is still there, and the 1.100 m j
 4.00 to 2.75 s. 1.100 m is 22 m/s times one 0.05 s step; that the jumps are the ego's `aeb_ttc`
 latching a frame earlier is 166's hypothesis, not tested. The question stays open.
 
+**The step-size sweep's prediction (2026-11-25, 133; before it runs; not a landing condition).**
+The same sweep under the fix (record 842ce095, `lead_s` without the correction, onsets 1.00 to
+4.00 by 0.25) at step 0.025 s (1200 steps, the same 30 s), every other setting as before. If
+the 1.100 m jump is the ego latching a frame earlier, it scales with the step: the jump between
+onsets 2.50 and 2.75 s moves, or halves to about 0.55 m (22 m/s times 0.025 s). Held if no
+jump of 1.10 +- 0.05 m remains between 2.50 and 2.75 s and every jump between consecutive
+onsets is under 0.60 m; FAILED otherwise.
+
 **The commits named above, before and after the landing's rebase (133, 2026-11-25).** K13 step
 v was written, run and judged on a branch based on d7a25ff5; it landed rebased onto
 77fcc1a3. The SHAs named in this section are the pre-rebase ones, the commits the dry runs, the
