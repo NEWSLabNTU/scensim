@@ -122,3 +122,78 @@ H1 to H3 still explain why SSv2's own `CollisionCondition` stayed false.
 4. The runs' judges (their report or JUnit file) and `<run dir>/contacts/`, for H4.
 5. Record the results against H1 to H4 here. Then a plan for the remedy and for past Isaac
    verdicts that rested on `CollisionCondition` alone.
+
+## Step 1: the results (241, 2026-11-26; CPU only)
+
+The data: 243's two run directories at `~/nas/home/2026-11-26 189 runs (243)/` (checksums
+verified). The script and its output are at `~/nas/home/2026-11-26 189 step 1 (241)/`
+(`i189_raw.py`, `i189_step1.out`). The traces are schema 4 (243's branch at 13acc454, not on
+main), and main's `gap_trace` reads 1 to 3, so the script reads the JSONL directly. It uses main's
+`gap_geometry` for the boxes (`ssv2_box`, `signed_distance`) and SSv2's z test as
+`checkCollision2D` has it.
+
+The trace headers: the ego's declared box is centre (1.416, 0, 0.744), dimensions
+4.792 x 2.163 x 1.488, `origin_offset` 0, so `sim_pose` is base_link. `ped`'s is centre
+(0, 0, 0.9), 0.6 x 0.6 x 1.8, `origin_offset` 0, asset `isaac:box`.
+
+| | asphalt (contact frame 516) | ice (contact frame 482) |
+|---|---|---|
+| ego `sim_pose` x at contact | 116.116 | 116.125 |
+| box gap on `sim_pose`, contact frame | -0.0004 m | +0.0013 m |
+| smallest gap on `sim_pose`, whole run | -0.0004 m (frame 516) | +0.0013 m (frame 482) |
+| box gap on `ssv2`, contact frame | +0.1010 m (one frame behind) | +0.0040 m |
+| smallest gap on `ssv2`, whole run | -0.0001 m (frame 517) | +0.0023 m (frame 483) |
+| z separation / SSv2's gate | 0.15 to 0.17 / 1.644 m | 0.14 to 0.16 / 1.644 m |
+| speed before / at contact | 3.27 / 0.42 m/s | 4.22 / 0.50 m/s |
+| contact report | `ped`, first frame 516, 134 frames, 5470.5 N s, complete | `ped`, 482, 8 frames, 7595.5 N s, complete |
+| `csbExpectedContacts` | none | none |
+| `result.json` | `passed`, no `judges` key | `passed`, no `judges` key |
+
+After the contact the asphalt ego rests 1 to 2 mm from the box for the rest of the run. The ice
+ego bounces back to 5 cm.
+
+**Verdicts.**
+
+- **H1 holds.** No 1.5 m gap exists. The record placed a 4.7 m box centred on `sim_pose`, which
+  is base_link, so it measured from about the box's centre. On the declared boxes the gap at
+  the contact frame is -0.4 mm (asphalt) and +1.3 mm (ice).
+- **H2 holds.** The colliders are the declared boxes. Box-to-box at the contact is within 2 mm,
+  inside PhysX's contact offset. Nothing larger hit the car. 243 checked on its host: the walker
+  USDs carry no `CollisionAPI` or `RigidBodyAPI`, and the trace names `ped`'s asset
+  `isaac:box`.
+- **H3 holds for ice; asphalt needs a closer look.** On ice SSv2's boxes stay 2.3 mm apart at
+  their closest, so `checkCollision2D` was false throughout, as predicted. On asphalt SSv2's view
+  shows -0.1 mm, an overlap, at frame 517 (+0.2 mm at 518, then growing to 2 mm). Touching
+  counts in SSv2's test, so on these numbers it should have fired at 517. Yet it did not:
+  `failures` 0, no exitFailure. A tenth of a millimetre is below what the trace's float32 poses
+  resolve, and this alone does not show what SSv2 computed: its own pose, its condition timing
+  or its polygon arithmetic.
+  - H3b, the lag: SSv2's ego pose is the world server's from one frame earlier (`ssv2` at frame
+    n equals `sim_pose` at n-1, 0.17 to 0.23 m at these speeds). It equals it once the car stops.
+  - H3c, the z gate: far from tripping (0.15 m against 1.644 m).
+- **H4 holds.** The judge that sees physics did not run. Both runs have a complete contact
+  report naming `ped`. The scenario declares no expected contact. `result.json` has no judges,
+  and k9f_zones' testbench declares none, so `physical_verdict` never read the reports. Had it
+  run, both would have failed (`carla_contact`: an undeclared contact with `ped`).
+
+**What this means.** Isaac is not wrong here: the car really struck the pedestrian's declared
+box at 3.3 to 4.2 m/s. Neither run's `passed` saw it, for two reasons:
+
+- SSv2's `CollisionCondition` needs zero distance between its own poses, one frame late. A
+  physics contact with a kinematic box leaves the boxes millimetres apart: the condition stays
+  false on ice, and on asphalt it misses even at -0.1 mm.
+- The testbench ran no judge to read the contact report.
+
+The same holds wherever a run's verdict rests on `CollisionCondition` without
+`physical_verdict`, CARLA included (not checked here). 190, the gentle braking, is what made the
+contact happen. 189 is why the run still passed.
+
+**Next (a plan, for 133).**
+
+1. Which testbenches and past Isaac runs had no `physical_verdict` judge (static, over the
+   repository's testbenches and the runs' `result.json`).
+2. The remedy. Either `physical_verdict` (or an equivalent contact judge) runs by default in
+   scensim whenever the bridge writes contact reports, so a testbench opts out rather than in;
+   or `CollisionCondition` is complemented by a judge on the truth's contacts. Plan first.
+3. Optionally, why SSv2 missed asphalt's -0.1 mm at frame 517: its logged ego pose, if it logs
+   one. It does not change the remedy.
