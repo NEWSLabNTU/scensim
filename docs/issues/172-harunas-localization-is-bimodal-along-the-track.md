@@ -257,3 +257,23 @@ record as amended in step 2. No edits during a run.
   frame) and with the EKF's `kinematic_state` stamps. Then the judgement can tell the stamp's phase
   (aib's stamp against the physics) apart from the alignment downstream (NDT's or the EKF's use of
   that stamp) with the same runs.
+
+**Amended before the runs (2026-11-25, 133's OK of the diff; not after a result).**
+- *The code:* aib **86a9207** (local branch `issue-172-age`, on 3b69851, not pushed). Behind the
+  same switch as the render age (`AIB_LOG_RENDER_AGE=1` for these runs), one line a publish:
+  `sim_time`, `clock`, `to_sim`, this frame's stamp, the stamp of the scan published now
+  (rendered `latency` frames ago), the substeps since the last publish and `frame_dt`. It logs
+  every publish for the first 100, then every 10th, instead of the plan's "the first five and
+  once a second", so that start-up is covered publish by publish. A unit test fixes the format
+  and the thinning.
+- *No internal `/clock` value in aib:* `sim_time` is the host's value that drives `/clock`, so
+  `/clock` itself is added to the record (133's OK), with
+  `/localization/pose_estimator/pose_with_covariance` for NDT's stamps. The names are checked on a
+  live stack between runs, before the first run, and not changed during one.
+- *The runs* are under the full quiet rule (133), on GPU0, codec 118 told first. Provenance is
+  accepted only with aib 86a9207 running (the source sidecar's head, and the timing lines in the
+  world server's console); result.json's aib field records the build's commit, as in step 2.
+- *The predictions above stand unchanged.* One reading is added for the judgement: in a behind
+  run, the stamp of the scan published now against the sim time of the frame it was rendered in
+  (the `latency` frames before) differs from a level run's by the same offset as `to_sim`, if
+  the phase is the cause.
