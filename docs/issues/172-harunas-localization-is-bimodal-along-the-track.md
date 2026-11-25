@@ -210,3 +210,42 @@ mid-r7, not at its start.
   lidar's 20 Hz publish and `/clock`), and what NDT and the EKF use to time-align a scan (the
   twist's and pose's interpolation at the stamp). The record to settle it is each scan's header
   stamp against the frame it was rendered in, logged by the same branch, in a few runs.
+
+## Step 3's plan, the stamp's phase (written 2026-11-25, before any change or run; for 133)
+
+**The physics rate, read before writing the number.** The world server's launch defaults
+`physics_hz` to 60 (`scensim_isaac_world/launch/world_server.launch.py`), and step 2's stacks
+ran with `physics-hz 60` (their launch logs). So a physics step is 16.67 ms, three to a 50 ms
+frame (the rig's own `physx_substeps: 8` are inside each vehicle step).
+
+**The hypothesis (133's; untested).** A scan is stamped one physics step off its render, and
+which way is set by the phase at start-up. That would give a constant per-run time offset, as
+step 2 found. *A tension, written now:* one step is 16.67 ms, which at the runs' speed
+(about 4.5 m/s) is about 0.075 m behind. Step 2's behind runs sit at 0.086 to 0.089 m, about
+19 ms at 4.5 m/s, and the level runs at +0.004 to +0.005. The offset between the modes, about
+0.09 m, is closer to 20 ms than to 16.7. So the hypothesis must also account for the rest, or it
+explains the mode only in part.
+
+**The observable.** aib's `Lidar.publish(state, sim_time, stamp)` already computes
+`to_sim = sim_time - self.clock`, the host's sim time less the lidar's own clock (the sum of its
+substeps' dt). A per-run phase between the host's frames and the physics steps shows there as a
+per-run constant. On the same branch (`issue-172-age`, local), logged beside the render age, once
+a second and for the first five scans: the header stamp the scan goes out with (`stamps[0]`),
+`sim_time`, the lidar's `clock`, `to_sim`, the number of substeps aib saw since the last frame
+and their dt, and the frame count. A unit test fixes the line's format.
+
+**The runs.** `ws-c6e3` rebuilt at the main of the day first (161 moved pins; 133), then the
+branch's aib in it again, with the source sidecar, and the same checks as step 2. Nine smooth
+haruna_down runs as in step 2 (the chance of no behind run in nine at 3 in 9 is about 3 %), the
+record as amended in step 2. No edits during a run.
+
+**Predictions (before any run).**
+- Within a run, `to_sim` and the substeps per frame are constant after start-up (to_sim within
+  1 ms; three substeps of 16.67 ms a frame).
+- *The hypothesis:* the behind runs' `to_sim` differs from the level runs' by one physics step,
+  16.67 ms (within 1 ms), and the level runs share one value.
+- *If the modes' `to_sim` are the same,* the stamp's phase against the physics is not the cause,
+  and the next candidate is downstream: how NDT and the EKF time-align a scan, read from the same
+  runs' `pose_with_covariance` and `kinematic_state` stamps against the scans'.
+- *If they differ by about 19 to 20 ms rather than 16.67,* the phase is the cause but not a
+  whole physics step, and the record says what it is.
