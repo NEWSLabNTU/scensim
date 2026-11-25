@@ -1,6 +1,6 @@
 # 187: a gate's cargo build rewrites submodule Cargo.lock files ([[patch.unused]] entries) and dirties the tree
 
-**Status:** open; root cause found (241, 2026-11-26); the scensim-side cleanup held pending a fix in colcon-cargo-ros2 (133).
+**Status:** open; root cause found (241, 2026-11-26); fix (d) approved by the user (colcon-cargo-ros2 0.5.5), its plan approved by 133, no code yet.
 **Severity:** low. Nothing that lands is changed, but every gate checkout ends with two dirty
 submodules, so a pre-push "clean tree" check fails on files the gate itself wrote.
 **Found:** 2026-11-25, scensim 118, landing 1ed265d7; scensim 139 before it (wt-178, wt-179).
@@ -107,4 +107,42 @@ built on its own with no config, stay clean.
 
 Meanwhile a landing's clean-tree guard uses `--ignore-submodules=dirty`, which still catches a
 moved pin.
+
+## The fix's plan (approved by 133, 2026-11-26, before any code)
+
+The user approved design (d): colcon-cargo-ros2 v0.5.5 (tag v0.5.5 = 83ce805, on PyPI) adds
+`[workspace.metadata.ros2] patches-in-manifest = true`. With it at the outer workspace's root the
+build writes that workspace's patches into its own Cargo.toml, between markers, as
+`<crate> = { path = ".cargo/ros2-bindings/<crate>" }` (links under `.cargo/`, git-ignored, which
+each build points at the generated crates), and its `.cargo/config.toml` keeps `[build]` and
+`[env]` but no patches, so a nested workspace inherits none (its CHANGELOG, [0.5.5]).
+
+1. `just setup` pins `colcon-cargo-ros2==0.5.5` (was 0.5.4).
+2. **A host on 0.5.4 must not build this tree:** 0.5.4 ignores the option, keeps writing the
+   patches into the root config, and never makes the links the committed block names. `just
+   build` checks the installed version first, as it checks setuptools, and refuses below 0.5.5,
+   naming `just setup` (or `pip install --user colcon-cargo-ros2==0.5.5`). Every host upgrades
+   before its next build after this lands; 133 tells the team.
+3. The root `Cargo.toml` gets the option; a build writes the block, which is committed. It must
+   be sorted and the same bytes on a rebuild in the same worktree and on a build in a second
+   fresh worktree at another path. A second host is not tested here (none available to 241); the
+   first build after landing on 118 or 139 shows it.
+4. `just build`'s step that restores `src/autoware_carla_bridge/Cargo.lock` when its diff is
+   only `[[patch.unused]]` is removed: its reason goes with the root config's patches. acb keeps
+   its own message patches in its own config.
+5. **The gate:** a fresh worktree, CLAUDE.md's `clean=` with `ISAAC_ROOT` (the Isaac lane run);
+   after `just build && just test`, `git status --porcelain --untracked-files=no` with no
+   `--ignore-submodules` is empty: this record's own check. The landing's push guard then drops
+   `--ignore-submodules=dirty`.
+6. 241's colcon-cargo-ros2 is upgraded to 0.5.5 (`pip install --user`) only with the user's own
+   approval, which 133 asked for; it changes every build on 241, including other worktrees and
+   sessions there (the option is opt-in, so trees without it build as under 0.5.4).
+
+**Predictions (before the code and the gate).**
+
+- The generated block is the same bytes on a rebuild and in a second worktree at another path.
+- The gate passes, its last line "Isaac-Python lane: ran ...".
+- `git status --porcelain --untracked-files=no` after it is empty, with no `--ignore-submodules`.
+- `src/autoware_carla_bridge/Cargo.lock` is unchanged by the build, with the restore step gone.
+- `just build` under 0.5.4 refuses before colcon starts, naming 0.5.5.
 
