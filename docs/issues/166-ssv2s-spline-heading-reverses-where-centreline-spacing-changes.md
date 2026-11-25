@@ -202,3 +202,18 @@ maps at dataset v2026.11f): 21 files hold LanePositions, 152 in all. The 122 on 
 value) put none in a stretch: 0 refused, 0 warned. The 30 in 12 files on the sampler's test maps
 (`maps/town_street`, `maps/highway_3lane`, `straight400`), which are not dataset maps, are not
 checked. A suite or sampler that sets other values is checked by the run's warning.
+
+## The gate's find (2026-11-25): an unloadable map stopped a run in its warning
+
+The full gate on main 8f583597 failed `test_knobs.py::test_k9e_cs3_binds_the_same_on_carla_and_isaac`:
+its project map is a stand-in (`<osm town01/>`), and `scensim run`'s new warning, reading the
+map's centre points, raised the loader's `ParseError` out of `run.expand`. A warning's check
+must never stop a run. `lane_positions.stretches` now raises `MapUnreadable` (naming the map and
+the loader's error) for any failure to load the map's lanelets; `scensim run` writes it as a
+warning and goes on, and `scensim check` reports it as a host finding (fix: fetch the map), not
+refused. Test: `test_a_map_that_does_not_load_is_said_and_neither_refused_nor_fatal`. The same
+gate's `test_simulator.py::test_a_carla_deaf_to_sigterm_is_killed_after_its_keeper` failed too
+(`AssertionError: a CARLA that ignores SIGTERM outlived its SIGKILLed keeper`), seen once,
+under load (the gate at nice 10 beside other work), and passing on its own re-run. Issue 166
+does not touch `scensim.simulator`. A kill-timing flake under load is the class of issues 148
+and 150: a second sighting is not waived, it stops the landing and gets its own number.

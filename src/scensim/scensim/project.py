@@ -810,8 +810,11 @@ def check_scenario(project: Path, sc: Scenario, settings: dict, managed: bool = 
         md = project / "assets" / "maps" / lf[len(MAPS_PREFIX):].strip("/")
         if md.is_dir() and sc.path.suffix == ".xosc":
             from scensim import lane_positions as lanepos   # noqa: PLC0415
-            out += [Finding(rel, msg, "move s outside the stretch", refused=True)
-                    for msg in lanepos.fixed_problems(sc.path, md)]
+            try:
+                out += [Finding(rel, msg, "move s outside the stretch", refused=True)
+                        for msg in lanepos.fixed_problems(sc.path, md)]
+            except lanepos.MapUnreadable as e:   # not checked: said, not refused
+                out.append(Finding(rel, str(e), f"run `{FETCH}` in the project", host=True))
     # roadmap 092 K9d: a scenario's anchor bindings against the world's anchors (its map's
     # resolved file and world.anchors), checked as far as they can be without a sample
     if lf and lf.startswith(MAPS_PREFIX) and "scensim.anchor." in _text(sc.path):

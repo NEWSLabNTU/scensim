@@ -211,7 +211,11 @@ def warn_lane_positions(spec, project: Path, out=None):
     except Exception:    # noqa: BLE001 - a scenario that does not parse is refused elsewhere
         return
     values.update(spec.parameters or {})
-    for msg in lanepos.run_warnings(path, md, values):
+    try:
+        msgs = lanepos.run_warnings(path, md, values)
+    except lanepos.MapUnreadable as e:   # a warning's check never stops a run
+        msgs = [str(e)]
+    for msg in msgs:
         (out or sys.stderr).write(f"warning  {path.name}: {msg}\n")
 
 

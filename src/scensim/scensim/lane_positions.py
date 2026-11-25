@@ -42,11 +42,22 @@ def _stretches_of(map_dir: str, digest: str, lane: int) -> tuple:
     return tuple(lanelet_stretches(pts)) if pts else ()
 
 
+class MapUnreadable(Exception):
+    """The map's lanelets do not load, so its stretches are unknown: a check that cannot be
+    made, which the caller reports, never a refusal or a failed run of its own."""
+
+
 def stretches(map_dir: Path, lane: int) -> tuple:
-    """Lanelet `lane`'s reversed stretches on the map at `map_dir`, ((from_s, to_s), ...)."""
+    """Lanelet `lane`'s reversed stretches on the map at `map_dir`, ((from_s, to_s), ...).
+    Raises MapUnreadable when the map's lanelets do not load."""
     from scensim_batch import map_export   # noqa: PLC0415
     md = str(Path(map_dir))
-    return _stretches_of(md, map_export.map_digest(md), int(lane))
+    try:
+        return _stretches_of(md, map_export.map_digest(md), int(lane))
+    except Exception as e:   # noqa: BLE001 - any loader error: the map, not this check
+        raise MapUnreadable(f"map {Path(md).name} does not load ({type(e).__name__}: {e}), "
+                            "so its LanePositions are not checked against SSv2's spline "
+                            "(issue 166)") from e
 
 
 def inside(map_dir: Path, lane, s):
