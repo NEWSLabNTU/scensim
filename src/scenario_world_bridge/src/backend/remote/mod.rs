@@ -343,6 +343,48 @@ fn to_map(pose: &wire::Pose, origin: [f64; 3]) -> Pose {
 }
 
 /// `[x, y, z, roll, pitch, yaw]` of an SSv2 pose, for the gap trace.
+/// A `RoadConditionReply` as the gap trace's `road_condition.applied` (092 K9f-a).
+fn road_applied(r: &wire::RoadConditionReply) -> gap_trace::RoadConditionApplied {
+    gap_trace::RoadConditionApplied {
+        friction_scale_factor: r.friction_scale_factor,
+        wetness: r.wetness.clone(),
+        zones: r
+            .zones
+            .iter()
+            .map(|(id, z)| {
+                (
+                    id.clone(),
+                    gap_trace::ZoneApplied {
+                        surface_class: z.surface_class.clone(),
+                        wetness: z.wetness.clone(),
+                        water_depth: z.depth.map(|wire::zone_applied::Depth::WaterDepth(d)| d),
+                        mu: z.mu,
+                    },
+                )
+            })
+            .collect(),
+    }
+}
+
+/// A read-back for the log: the scale and wetness, then each zone's class, wetness and mu.
+fn describe_road(a: &gap_trace::RoadConditionApplied) -> String {
+    let zones: Vec<String> = a
+        .zones
+        .iter()
+        .map(|(id, z)| format!("{id}: {} {} mu {:.4}", z.surface_class, z.wetness, z.mu))
+        .collect();
+    format!(
+        "friction scale {}, {}{}",
+        a.friction_scale_factor,
+        a.wetness,
+        if zones.is_empty() {
+            String::new()
+        } else {
+            format!(", {}", zones.join(", "))
+        }
+    )
+}
+
 fn pose6(pose: &Pose) -> gap_trace::Pose6 {
     let p = pose.position.unwrap_or_default();
     let (roll, pitch, yaw) = pose
@@ -739,7 +781,8 @@ pub struct RemoteBackend {
     /// must carry their read-back.
     environment_sent: bool,
     profiles_sent: bool,
-    road_condition_sent: bool,
+    /// The road condition sent since the last step, as the trace records it (092 K9f-a).
+    road_condition_sent: Option<gap_trace::RoadConditionSent>,
     /// The drives the last `Apply` carried, by handle, for the tests.
     #[cfg(test)]
     sent: BTreeMap<u32, wire::EntityPose>,
@@ -787,7 +830,7 @@ impl RemoteBackend {
             profiles: Vec::new(),
             environment_sent: false,
             profiles_sent: false,
-            road_condition_sent: false,
+            road_condition_sent: None,
             #[cfg(test)]
             sent: BTreeMap::new(),
         }
@@ -882,7 +925,7 @@ impl RemoteBackend {
     fn read_back_after_step(&mut self, step: &wire::StepReply) -> Result<(), BackendError> {
         let env = std::mem::take(&mut self.environment_sent);
         let profiles = std::mem::take(&mut self.profiles_sent);
-        let road = std::mem::take(&mut self.road_condition_sent);
+        let road = self.road_condition_sent.take();
         if !self.offers(wire::Capability::ReadbackAfterStep) {
             return Ok(());
         }
@@ -909,11 +952,27 @@ impl RemoteBackend {
                 }
             }
         }
-        if road
-            && self.offers(wire::Capability::RoadConditionApplied)
-            && step.road_condition_applied.is_none()
-        {
-            return Err(missing("road_condition_applied"));
+        if let Some(sent) = road {
+            if self.offers(wire::Capability::RoadConditionApplied) {
+                let applied = step
+                    .road_condition_applied
+                    .as_ref()
+                    .ok_or_else(|| missing("road_condition_applied"))?;
+                let applied = road_applied(applied);
+                tracing::info!(
+                    "RoadCondition read back after the step: {}",
+                    describe_road(&applied)
+                );
+                if self.gap_trace.recording() {
+                    let ns = if step.sim_time_ns != 0 {
+                        step.sim_time_ns
+                    } else {
+                        (step.sim_time * 1e9).round() as i64
+                    };
+                    self.gap_trace
+                        .road_condition(self.frame, ns, sent, Some(applied), true);
+                }
+            }
         }
         Ok(())
     }
@@ -2794,7 +2853,15 @@ impl SimBackend for RemoteBackend {
                 rc.wetness,
                 properties
             );
-            self.call(
+            let sent = gap_trace::RoadConditionSent {
+                friction_scale_factor: rc.friction_scale_factor,
+                wetness: rc.wetness.clone(),
+                properties: rc
+                    .scensim_properties()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
+            };
+            let reply = self.call(
                 "SetRoadCondition",
                 wire::request::Request::SetRoadCondition(wire::SetRoadCondition {
                     road_condition: Some(wire::RoadCondition {
@@ -2805,8 +2872,23 @@ impl SimBackend for RemoteBackend {
                 }),
                 self.request_timeout,
             )?;
+            // 092 K9f-a: the world's read-back (ROAD_CONDITION_APPLIED), logged and recorded
+            if self.offers(wire::Capability::RoadConditionApplied) {
+                let applied = match reply.reply {
+                    Some(wire::reply::Reply::RoadCondition(r)) => Some(road_applied(&r)),
+                    _ => None,
+                };
+                if let Some(a) = &applied {
+                    tracing::info!("RoadCondition read back: {}", describe_road(a));
+                }
+                if self.gap_trace.recording() {
+                    let ns = (self.sim_time * 1e9).round() as i64;
+                    self.gap_trace
+                        .road_condition(self.frame, ns, sent.clone(), applied, false);
+                }
+            }
             // sent and taken: the next step's reply owes its read-back (issue 161)
-            self.road_condition_sent = true;
+            self.road_condition_sent = Some(sent);
         }
         if sky {
             tracing::info!(

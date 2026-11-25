@@ -10,6 +10,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
@@ -275,8 +276,9 @@ class MalformedTrace(unittest.TestCase):
         self.assertTraceError(lines(SAMPLE[1:]), 1, "type")
 
     def test_unsupported_schema(self):
-        err = self.assertTraceError(mutate(0, lambda r: r.update(schema=4)), 1, "schema")
-        self.assertIn("4", str(err))
+        # the first schema this reader does not read (4 is K9f-a's)
+        err = self.assertTraceError(mutate(0, lambda r: r.update(schema=5)), 1, "schema")
+        self.assertIn("5", str(err))
 
     def test_second_episode(self):
         text = lines(SAMPLE)
@@ -684,3 +686,73 @@ class SchemaThree(unittest.TestCase):
         with self.assertRaisesRegex(gt.TraceError, "entities.truck.cmd_frame"):
             gt.load_trace(lines(bad))
 
+
+# --- schema 4 (roadmap 092 K9f-a): the road_condition record -------------------------------
+
+ROAD = {"type": "road_condition", "frame": 1, "sim_time_ns": 1_000_050_000_000,
+        "sent": {"friction_scale_factor": 1.0, "wetness": "dry",
+                 "properties": {"scensim.zone.ice_at_goal.class": "ice"}},
+        "applied": {"friction_scale_factor": 1.0, "wetness": "dry",
+                    "zones": {"ice_at_goal": {"surface_class": "ice", "wetness": "dry",
+                                              "water_depth": None, "mu": 0.265}}}}
+
+
+def to_v4(records, extra=()):
+    """SAMPLE3 at schema 4, with `extra` records before the end."""
+    out = copy.deepcopy(records)
+    for r in out:
+        if r["type"] == "episode":
+            r["schema"] = 4
+    return out[:-1] + [copy.deepcopy(x) for x in extra] + out[-1:]
+
+
+class Schema4Test(unittest.TestCase):
+    """092 K9f-a: the road_condition record comes with schema 4; the record types are a closed
+    set per schema, so a reader from before refuses a schema 4 file by its number."""
+
+    def test_the_record_reads_with_its_zones_and_after_step(self):
+        marked = dict(ROAD, frame=2, sim_time_ns=1_000_100_000_000, after_step=True)
+        trace = gt.load_trace(lines(to_v4(SAMPLE3, [ROAD, marked])))
+        self.assertEqual(trace.episode.schema, 4)
+        a, b = trace.road_conditions
+        self.assertFalse(a.after_step)
+        self.assertTrue(b.after_step)
+        self.assertEqual(a.sent["properties"], {"scensim.zone.ice_at_goal.class": "ice"})
+        z = a.applied["zones"]["ice_at_goal"]
+        self.assertEqual((z.surface_class, z.wetness, z.water_depth, z.mu),
+                         ("ice", "dry", None, 0.265))
+        # round trip, the mark absent when false
+        self.assertEqual(gt.load_trace(gt.dumps(trace).splitlines()), trace)
+        dumped = [json.loads(x) for x in gt.dumps(trace).splitlines() if '"road_condition"' in x]
+        self.assertEqual(dumped, [ROAD, marked])
+        # no read-back (a server without one): applied null
+        none = gt.load_trace(lines(to_v4(SAMPLE3, [dict(ROAD, applied=None)])))
+        self.assertIsNone(none.road_conditions[0].applied)
+
+    def test_a_reader_of_schemas_1_to_3_refuses_a_schema_4_file_by_its_number(self):
+        old = (1, 2, 3)
+        with mock.patch.object(gt, "SCHEMAS", old):
+            with self.assertRaises(gt.TraceError) as e:
+                gt.load_trace(lines(to_v4(SAMPLE3)))
+        self.assertEqual(e.exception.field, "schema")
+        self.assertIn("unsupported schema 4", str(e.exception))
+        self.assertEqual(e.exception.line, 1)        # at the first line
+
+    def test_the_reader_reads_schemas_1_to_4(self):
+        self.assertEqual(gt.SCHEMAS, (1, 2, 3, 4))
+        for records, schema in ((SAMPLE, 1), (SAMPLE2, 2), (SAMPLE3, 3), (to_v4(SAMPLE3), 4)):
+            self.assertEqual(gt.load_trace(lines(records)).episode.schema, schema)
+
+    def test_road_condition_in_a_schema_3_file_is_unknown(self):
+        bad = SAMPLE3[:-1] + [ROAD] + SAMPLE3[-1:]
+        with self.assertRaises(gt.TraceError) as e:
+            gt.load_trace(lines(bad))
+        self.assertEqual(e.exception.field, "type")
+        self.assertIn("unknown record type 'road_condition'", str(e.exception))
+
+    def test_a_malformed_road_condition_is_refused_by_field(self):
+        bad = copy.deepcopy(ROAD)
+        bad["applied"]["zones"]["ice_at_goal"]["mu"] = "low"
+        with self.assertRaises(gt.TraceError) as e:
+            gt.load_trace(lines(to_v4(SAMPLE3, [bad])))
+        self.assertEqual(e.exception.field, "applied.zones.ice_at_goal.mu")

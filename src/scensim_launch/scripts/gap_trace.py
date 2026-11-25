@@ -26,8 +26,8 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SCHEMA = 3
-SCHEMAS = (1, 2, 3)
+SCHEMA = 4
+SCHEMAS = (1, 2, 3, 4)
 # The file's key for each value, per schema.
 KEYS = {
     1: {"sim_pose": "carla", "sim_frame": "carla_frame", "sim_id": "actor_id",
@@ -35,7 +35,7 @@ KEYS = {
     2: {"sim_pose": "sim_pose", "sim_frame": "sim_frame", "sim_id": "sim_id",
         "asset": "asset", "asset_box": "asset_box"},
 }
-KEYS[3] = KEYS[2]
+KEYS[3] = KEYS[4] = KEYS[2]
 ROLES = ("ego", "scenario", "autopilot", "agent", "model")
 ROLES_2 = ROLES[:4]  # `model` is schema 3's
 VELOCITY_SOURCES = ("measured", "derived")
@@ -261,6 +261,31 @@ class Knob:
 
 
 @dataclass(frozen=True)
+class ZoneApplied:
+    """Schema 4: one zone's applied road state (the world protocol's `ZoneApplied`)."""
+
+    surface_class: str
+    wetness: str
+    water_depth: object  # float, or None: none of its own
+    mu: float
+
+
+@dataclass(frozen=True)
+class RoadCondition:
+    """Schema 4 (scensim roadmap 092 K9f-a): a road condition the bridge sent (`sent`: its
+    `friction_scale_factor`, `wetness` and `properties`, the `scensim.*` ones), and the world's
+    read-back (`applied`: `friction_scale_factor`, `wetness` and `zones` {id: ZoneApplied}; None
+    from a server without one), `after_step` when that read-back was taken after a step's tick
+    (READBACK_AFTER_STEP)."""
+
+    frame: int
+    sim_time_ns: int
+    sent: dict
+    applied: object  # dict, or None
+    after_step: bool = False
+
+
+@dataclass(frozen=True)
 class Signal:
     """Schema 2: a signal's colour changed (the bridge set it). Events, not repeated per
     frame: a reader keeps the last colour per signal."""
@@ -290,6 +315,7 @@ class Trace:
     headers: list = field(default_factory=list)  # every EntityHeader, in order
     signals: list = field(default_factory=list)  # Signal, in order (schema 2)
     knobs: list = field(default_factory=list)  # Knob, in order (schema 2, 092 K9)
+    road_conditions: list = field(default_factory=list)  # RoadCondition, in order (schema 4)
 
     def records(self):
         """All records in an order that reads back to the same trace."""
@@ -298,6 +324,7 @@ class Trace:
         contacts = list(self.contacts)
         signals = list(self.signals)
         knobs = list(self.knobs)
+        roads = list(self.road_conditions)
         for frame in self.frames:
             while headers and headers[0].frame <= frame.frame:
                 yield headers.pop(0)
@@ -307,11 +334,14 @@ class Trace:
                 yield signals.pop(0)
             while knobs and knobs[0].frame < frame.frame:
                 yield knobs.pop(0)
+            while roads and roads[0].frame < frame.frame:
+                yield roads.pop(0)
             yield frame
         yield from headers
         yield from contacts
         yield from signals
         yield from knobs
+        yield from roads
         if self.end is not None:
             yield self.end
 
@@ -585,6 +615,46 @@ def _signal(ln):
     )
 
 
+def _road_condition(ln):
+    o = ln.obj
+    s = ln.get(o, "sent", "sent")
+    if not isinstance(s, dict):
+        raise ln.error("sent", "an object")
+    props = ln.get(s, "properties", "sent.properties")
+    if not isinstance(props, dict) or not all(isinstance(v, str) for v in props.values()):
+        raise ln.error("sent.properties", "an object of strings")
+    sent = {"friction_scale_factor": ln.num(s, "friction_scale_factor",
+                                            "sent.friction_scale_factor"),
+            "wetness": ln.str_(s, "wetness", "sent.wetness"), "properties": dict(props)}
+    a = ln.get(o, "applied", "applied")
+    applied = None
+    if a is not None:
+        if not isinstance(a, dict):
+            raise ln.error("applied", "an object or null")
+        zones_in = ln.get(a, "zones", "applied.zones")
+        if not isinstance(zones_in, dict):
+            raise ln.error("applied.zones", "an object")
+        zones = {}
+        for zid, z in zones_in.items():
+            p = f"applied.zones.{zid}"
+            if not isinstance(z, dict):
+                raise ln.error(p, "an object")
+            depth = ln.get(z, "water_depth", f"{p}.water_depth")
+            zones[zid] = ZoneApplied(
+                surface_class=ln.str_(z, "surface_class", f"{p}.surface_class"),
+                wetness=ln.str_(z, "wetness", f"{p}.wetness"),
+                water_depth=None if depth is None else ln.number_(depth, f"{p}.water_depth"),
+                mu=ln.num(z, "mu", f"{p}.mu"))
+        applied = {"friction_scale_factor": ln.num(a, "friction_scale_factor",
+                                                   "applied.friction_scale_factor"),
+                   "wetness": ln.str_(a, "wetness", "applied.wetness"), "zones": zones}
+    return RoadCondition(
+        frame=ln.int_(o, "frame", minimum=0),
+        sim_time_ns=ln.int_(o, "sim_time_ns", minimum=0),
+        sent=sent, applied=applied,
+        after_step=("after_step" in o and ln.boolean(o["after_step"], "after_step")))
+
+
 def _knob(ln):
     o = ln.obj
     applied = ln.get(o, "applied", "applied")
@@ -666,13 +736,16 @@ def iter_records(source, require_end=True):
             yield _signal(ln)
         elif kind == "knob" and schema >= 2:
             yield _knob(ln)
+        elif kind == "road_condition" and schema >= 4:
+            yield _road_condition(ln)
         elif kind == "end":
             seen_end = True
             yield _end(ln)
         else:
             raise ln.error(
                 "type", f"unknown record type {kind!r} (episode, entity, frame, contact, "
-                        f"{'signal, knob, ' if schema >= 2 else ''}end)"
+                        f"{'signal, knob, ' if schema >= 2 else ''}"
+                        f"{'road_condition, ' if schema >= 4 else ''}end)"
             )
     if not seen_episode:
         raise TraceError(name, number + 1, "type", "no episode record: the trace is empty")
@@ -697,6 +770,8 @@ def load_trace(source, require_end=True):
             trace.signals.append(r)
         elif isinstance(r, Knob):
             trace.knobs.append(r)
+        elif isinstance(r, RoadCondition):
+            trace.road_conditions.append(r)
         elif isinstance(r, End):
             trace.end = r
     return trace
@@ -818,6 +893,20 @@ def to_json(record, schema=SCHEMA):
             "commanded": record.commanded,
             "applied": record.applied,
             "sent": record.sent,
+            **({"after_step": True} if record.after_step else {}),
+        }
+    if isinstance(record, RoadCondition):
+        a = record.applied
+        return {
+            "type": "road_condition",
+            "frame": record.frame,
+            "sim_time_ns": record.sim_time_ns,
+            "sent": dict(record.sent),
+            "applied": None if a is None else {
+                "friction_scale_factor": a["friction_scale_factor"], "wetness": a["wetness"],
+                "zones": {zid: {"surface_class": z.surface_class, "wetness": z.wetness,
+                                "water_depth": z.water_depth, "mu": z.mu}
+                          for zid, z in a["zones"].items()}},
             **({"after_step": True} if record.after_step else {}),
         }
     if isinstance(record, End):

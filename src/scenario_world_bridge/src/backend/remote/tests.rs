@@ -1658,7 +1658,7 @@ fn a_model_pedestrian_is_commanded_and_its_cmd_frame_is_in_the_truth() {
         .collect();
     let _ = std::fs::remove_dir_all(&dir);
     let of = |t: &str| lines.iter().filter(|l| l["type"] == t).collect::<Vec<_>>();
-    assert_eq!(of("episode")[0]["schema"], 3);
+    assert_eq!(of("episode")[0]["schema"], 4);
     // the server's boot and tick stamps ride the truth (issue 135 step 3)
     assert_eq!(of("episode")[0]["world_boot_id"], "stand-in-boot");
     let frames = of("frame");
@@ -1691,9 +1691,10 @@ fn a_model_pedestrian_is_commanded_and_its_cmd_frame_is_in_the_truth() {
 }
 
 /// Roadmap 092 S4: the run's truth file at schema 2, as the bridge writes it from a world
-/// server's replies (docs/design/truth-stream.md); schema 3 since 092 K12 (cmd_frame).
+/// server's replies (docs/design/truth-stream.md); schema 3 since 092 K12 (cmd_frame), 4 since
+/// 092 K9f-a (the road_condition record).
 #[test]
-fn the_truth_file_is_schema_3_from_the_servers_replies() {
+fn the_truth_file_is_schema_4_from_the_servers_replies() {
     let dir = std::env::temp_dir().join(format!("scensim-truth-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut config = BridgeConfig {
@@ -1731,7 +1732,7 @@ fn the_truth_file_is_schema_3_from_the_servers_replies() {
     let _ = std::fs::remove_dir_all(&dir);
     let of = |t: &str| lines.iter().filter(|l| l["type"] == t).collect::<Vec<_>>();
     let ep = of("episode")[0];
-    assert_eq!(ep["schema"], 3);
+    assert_eq!(ep["schema"], 4);
     assert_eq!(ep["map"], "Town01");
     assert_eq!(ep["step_time"], 0.05);
     let ents = of("entity");
@@ -1921,4 +1922,100 @@ fn issue_161_a_scenarios_own_environment_is_not_recorded() {
         Some(500.0),
         "the step's read-back moved the knob"
     );
+}
+
+/// 092 K9f-a: a road condition sent to a server with ROAD_CONDITION_APPLIED and
+/// READBACK_AFTER_STEP is recorded twice in the truth (schema 4): with the send's own reply
+/// (here stale, the world before it) and, marked after_step, with the read-back after the tick.
+#[test]
+fn k9f_a_a_road_condition_and_its_read_backs_are_recorded() {
+    let dir = std::env::temp_dir().join(format!("scensim-truth-k9fa-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let held = std::sync::Arc::new(std::sync::Mutex::new((1.0_f64, "dry".to_string())));
+    let pending = std::sync::Arc::new(std::sync::Mutex::new(None::<(f64, String)>));
+    let mut inner = honest_with(AFTER_STEP, "k9f-a");
+    let (h, p) = (held.clone(), pending.clone());
+    let reply = |scale: f64, wetness: &str, class: &str| wire::RoadConditionReply {
+        friction_scale_factor: scale,
+        wetness: wetness.to_string(),
+        zones: [(
+            "goal".to_string(),
+            wire::ZoneApplied {
+                surface_class: class.to_string(),
+                wetness: wetness.to_string(),
+                depth: None,
+                mu: 0.265 * scale,
+            },
+        )]
+        .into(),
+    };
+    let behaviour: Behaviour = Box::new(move |req| {
+        if let Some(wire::request::Request::SetRoadCondition(r)) = &req.request {
+            let rc = r.road_condition.clone().unwrap_or_default();
+            *p.lock().unwrap() = Some((rc.friction_scale_factor, rc.wetness));
+            let (s, w) = h.lock().unwrap().clone();
+            return Some(ok(Some(wire::reply::Reply::RoadCondition(reply(
+                s, &w, "asphalt",
+            )))));
+        }
+        let mut out = inner(req)?;
+        if let Some(wire::reply::Reply::Step(st)) = out.reply.as_mut() {
+            if let Some(now) = p.lock().unwrap().take() {
+                *h.lock().unwrap() = now.clone();
+                st.road_condition_applied = Some(reply(now.0, &now.1, "ice"));
+            }
+        }
+        Some(out)
+    });
+    let mut config = BridgeConfig {
+        npc_motion: NpcMotion::Kinematic,
+        gap_trace_dir: dir.display().to_string(),
+        ..Default::default()
+    };
+    config.world.endpoint = server(behaviour);
+    config.world.request_timeout_seconds = 1;
+    config.contact_report_dir = Some(contact_report::OFF.to_string());
+    config.agent_relay = "tcp://127.0.0.1:9".into();
+    let shutdown = AtomicBool::new(false);
+    let mut b = connect(config, &shutdown).unwrap().expect("connected");
+    b.initialize(&episode()).unwrap();
+    b.update_frame(0.05).unwrap();
+    b.update_environment(&road(0.8, "moist", &[("scensim.zone.goal.class", "ice")]))
+        .unwrap();
+    b.update_frame(0.10).unwrap();
+    b.update_frame(0.15).unwrap();
+    drop(b);
+    let path = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.extension().is_some_and(|x| x == "jsonl"))
+        .expect("a trace file");
+    let lines: Vec<serde_json::Value> = std::fs::read_to_string(&path)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let _ = std::fs::remove_dir_all(&dir);
+    let roads: Vec<&serde_json::Value> = lines
+        .iter()
+        .filter(|l| l["type"] == "road_condition")
+        .collect();
+    assert_eq!(roads.len(), 2, "{roads:?}");
+    let sent = serde_json::json!({"friction_scale_factor": 0.8, "wetness": "moist",
+                                  "properties": {"scensim.zone.goal.class": "ice"}});
+    // the send's own reply, before the tick: the world as it was; unmarked
+    assert_eq!(roads[0]["sent"], sent);
+    assert_eq!(roads[0]["applied"]["wetness"], "dry");
+    assert_eq!(
+        roads[0]["applied"]["zones"]["goal"]["surface_class"],
+        "asphalt"
+    );
+    assert!(roads[0].get("after_step").is_none(), "{}", roads[0]);
+    // the step after: the condition applied, marked
+    assert_eq!(roads[1]["sent"], sent);
+    assert_eq!(roads[1]["after_step"], true);
+    assert_eq!(roads[1]["applied"]["friction_scale_factor"], 0.8);
+    assert_eq!(roads[1]["applied"]["zones"]["goal"]["surface_class"], "ice");
+    assert!(roads[1]["applied"]["zones"]["goal"]["water_depth"].is_null());
+    assert!(roads[1]["frame"].as_u64() > roads[0]["frame"].as_u64());
 }
