@@ -1,6 +1,6 @@
 # 187: a gate's cargo build rewrites submodule Cargo.lock files ([[patch.unused]] entries) and dirties the tree
 
-**Status:** open; root cause found (241, 2026-11-26); fix (d) approved by the user (colcon-cargo-ros2 0.5.5), its plan approved by 133, no code yet.
+**Status:** fixed in code and tests (2026-11-26): the root workspace's patches in its Cargo.toml (colcon-cargo-ros2 0.5.5, design (d), approved by the user).
 **Severity:** low. Nothing that lands is changed, but every gate checkout ends with two dirty
 submodules, so a pre-push "clean tree" check fails on files the gate itself wrote.
 **Found:** 2026-11-25, scensim 118, landing 1ed265d7; scensim 139 before it (wt-178, wt-179).
@@ -152,4 +152,35 @@ lands (133 tells them).
 - `git status --porcelain --untracked-files=no` after it is empty, with no `--ignore-submodules`.
 - `src/autoware_carla_bridge/Cargo.lock` is unchanged by the build, with the restore step gone.
 - `just build` under 0.5.4 refuses before colcon starts, naming 0.5.5.
+
+## The outcome (2026-11-26)
+
+**The first build** (b82fa372, a fresh worktree `/var/tmp/aeon/scensim-i187b1`, 03:31 to 03:42)
+changed one file, the root `Cargo.toml`: the generated block, sorted, eight crates as
+`.cargo/ros2-bindings/<crate>`, links into that worktree's `build/`; the root
+`.cargo/config.toml`'s patch block came out empty; no submodule was dirty, acb's included,
+with the restore step gone. The block was committed as 0bcfad0e.
+
+**The gate** (0bcfad0e, a second fresh worktree at another path, `/var/tmp/aeon/scensim-i187gate`,
+CLAUDE.md's `clean=` with `ISAAC_ROOT`, colcon-cargo-ros2 0.5.5; 03:44 to 04:17): `just build`,
+`just test`, then `just build` again, `git status --porcelain --untracked-files=no` with no
+`--ignore-submodules` after each:
+
+    status after build: []
+    status after test: []
+    status after rebuild: []
+
+`just test`: rc 0, "just test: done; Isaac-Python lane: ran (937 tests in 3 suites, OK)", torch
+threads 4 in all three lines, pins 0 mismatches, docs ok, no failure in any suite;
+`src/autoware_carla_bridge`'s `Cargo.lock` diff 0 lines.
+
+The predictions: **the block the same bytes on a rebuild and at another path: held** (the
+gate's tree, built at another path and rebuilt, matched the committed block); **the gate passes,
+the lane run: held**; **`git status` empty with no `--ignore-submodules`: held**; **acb's lock
+unchanged: held**; **`just build` under 0.5.4 refuses before colcon: held**, shown with a 0.5.4
+dist-info first on `PYTHONPATH` (the host's 0.5.5 untouched): `ERROR: colcon-cargo-ros2 0.5.4:
+this workspace needs 0.5.5 or later ... Fix: just setup`, exit 1. Not tested: a second host's
+build (none available to 241); the first build on 118 or 139 after this lands shows it.
+
+A landing's clean-tree guard no longer needs `--ignore-submodules=dirty` (133 tells the team).
 
