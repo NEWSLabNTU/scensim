@@ -884,7 +884,7 @@ with offsets -1.3, 0 and 1.3 and h pi/2 relative, as CS3 had them. CS3 itself st
   `result` (08a772d0).
 - **Found, not K9f-b's: CARLA shows the barriers at yaw 0.** SSv2 commands -1.5712 rad (h pi/2
   on the westbound lane); the CARLA world server's truth shows -0.0004 for every barrier, in
-  K9e's CS3 runs as here. Isaac's shows -1.5712. Reported to 133 for an issue. The positions
+  K9e's CS3 runs as here. Isaac's shows -1.5712. Issue 173 (243, after K9f-b). The positions
   are right and the closed runs' verdicts are K9e's on both simulators, so K9f-b's exit does not
   depend on it, but CARLA's barriers stand turned a quarter from what the scenario says.
 
