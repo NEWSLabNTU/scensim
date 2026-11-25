@@ -1,6 +1,6 @@
 # 168: on road-layer worlds the lidar cannot see road detail below the base road
 
-**Status:** fix coded (siw 4706ff9, branch issue-168, local) and checked static; the NDT A/B next. **Severity:** high
+**Status:** fix coded (siw 4706ff9, branch issue-168, local), checked static, and its NDT A/B passed (option 2 stands); landing next, on current main and gated. **Severity:** high
 for any sensor result on a road-detail world: the lidar (and the camera) see no pothole, no rut
 and only the upper half of the roughness. **Found:** 2026-11-25, scensim 118, 086 C6e1
 (predicted from the code before the run; numbered by 133).
@@ -271,6 +271,56 @@ into the fixture's local `course/road_detail.yaml`, stored and current; `c6e1_li
   error p95 within a mode where both sides have runs in it. The rule's s, from the "off"
   side's own sd, carries the bimodality into the threshold as written.
   - Run 2's log shows the road lowered 0.114 m from the stored depth, with no fallback WARN.
+
+## The NDT A/B's result (2026-11-25, 118, GPU0, 10:34 to 12:18)
+
+Twelve runs, all passed haruna_down, all from ws168's install (main 1f4fb340, siw 4706ff9), in
+the order rough_off, rough_on, smooth_off, smooth_on, three rounds. The "on" logs show the road
+lowered 0.114 m (rough, from the stored depth) and 0.010 m (smooth), with no fallback WARN. The
+"off" logs show nothing lowered. `i168/measure.jsonl`, `i168/judge.txt`.
+
+- **Load:** the 15 s log shows no foreign process on GPU0 during any run (codec's job had ended
+  at 10:28), so all six pairs count under the load rule. The host's 1-min load varied (11 to 53
+  on 48 cores, other users' CPU work) and is reported, not ruled on.
+
+  | run | pose p95, m | NVTL p05 | z, m | pitch, deg | along / across, m | mode (172) | tick p50 / p95, ms |
+  |---|---|---|---|---|---|---|---|
+  | rough_off_1 | 0.1884 | 3.118 | -0.0076 | +0.0038 | -0.0862 / -0.0746 | behind | 52.39 / 72.18 |
+  | rough_on_1 | 0.12 | 3.118 | -0.0109 | +0.0019 | +0.0023 / -0.0656 | level | 57.77 / 102.05 |
+  | smooth_off_1 | 0.1198 | 3.119 | -0.0105 | +0.0059 | +0.0047 / -0.0661 | level | 68.45 / 104.66 |
+  | smooth_on_1 | 0.1859 | 3.119 | -0.0037 | +0.0072 | -0.0854 / -0.0722 | behind | 57.68 / 101.38 |
+  | rough_off_2 | 0.121 | 3.118 | -0.0139 | +0.0027 | +0.0026 / -0.0694 | level | 49.34 / 94.29 |
+  | rough_on_2 | 0.1206 | 3.118 | -0.0110 | +0.0007 | +0.0035 / -0.0664 | level | 50.03 / 69.34 |
+  | smooth_off_2 | 0.1834 | 3.119 | -0.0039 | +0.0073 | -0.0865 / -0.0704 | behind | 51.92 / 124.59 |
+  | smooth_on_2 | 0.1854 | 3.119 | -0.0037 | +0.0068 | -0.0856 / -0.0705 | behind | 52.86 / 107.35 |
+  | rough_off_3 | 0.1228 | 3.118 | -0.0140 | +0.0029 | +0.0027 / -0.0710 | level | 53.52 / 129.72 |
+  | rough_on_3 | 0.1217 | 3.118 | -0.0112 | +0.0020 | +0.0029 / -0.0677 | level | 52.94 / 94.04 |
+  | smooth_off_3 | 0.1194 | 3.119 | -0.0105 | +0.0064 | +0.0025 / -0.0677 | level | 50.03 / 71.68 |
+  | smooth_on_3 | 0.1196 | 3.119 | -0.0103 | +0.0062 | +0.0047 / -0.0664 | level | 49.57 / 92.23 |
+
+- **The rule** (written before the runs): per map and quantity, |mean(on) - mean(off)| against
+  2 s sqrt(2/3).
+
+  | quantity | rough: difference / threshold | smooth: difference / threshold |
+  |---|---|---|
+  | pitch | -0.0016 / 0.0163 deg (floor) | +0.0002 / 0.0163 deg (floor) |
+  | z | +0.0008 / 0.0082 m (floor) | +0.0024 / 0.0082 m (floor) |
+  | NVTL p05 | 0.000 / 0.033 (floor) | 0.000 / 0.033 (floor) |
+  | pose error p95 | -0.0233 / 0.0627 m (sd 0.0384) | +0.0228 / 0.0602 m (sd 0.0368) |
+
+  **No quantity exceeds its threshold on either map: option 2 stands.** The eight-comparison
+  rule needs no reruns.
+- **The reading by mode** (133; not a judgement): on rough, off is behind, level, level and on is
+  level, level, level; on smooth, off is level, behind, level and on is behind, behind, level.
+  The pose p95's differences come from the modes. Within a mode: rough level -0.0011 m; smooth
+  level 0.0000 m and behind +0.0023 m. NDT's z follows the mode too: a "behind" run's z is 6 to 7
+  mm higher than a level one's on the same map (issue 172).
+- **118's predictions against it:**
+  - pitch less than 0.03 deg on rough_none and 0.01 on smooth: **held** (-0.0016, +0.0002);
+  - z less than 0.01 m: **held** (+0.0008, +0.0024);
+  - NVTL p05 less than 0.05: **held** (0.000 on both);
+  - pose error p95 less than 0.049 m: **held** (-0.023 and +0.023 by the means, both from the
+    modes; within 0.003 within a mode).
 
 ## Reach
 
