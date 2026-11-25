@@ -147,3 +147,10 @@ and with its log for the age.
   bb2283f and then accepted by hand, the render-age lines being the proof. The check was widened
   at 19:14:04 to accept bb2283f when the console has render-age lines. r2 to r9 ran under the
   widened check. `times.txt` has the record.
+- *A further hypothesis, written before looking at the load (133, 2026-11-25).* The host's
+  load from other work (another user's cargo builds were running at about 99 load on 48 CPUs at
+  20:03) differs at each run's start-up, and a loaded start-up puts NDT's or the EKF's first
+  estimate, or the stack's pacing, into the behind mode. *Prediction if it holds:* the behind
+  runs' host CPU use and load average in the first 30 s after the stack's start are higher than
+  every level run's, with no overlap. *If they overlap,* load at start-up is not the cause. Read
+  offline from each run's `play_launch` `system_stats.csv`.
