@@ -453,3 +453,57 @@ calibrated count. Each run's clock lag p50 and worker count are recorded.
   133 first.
 - *The timing* (`to_sim`, the substeps, NDT's stamps against aib's) in any behind run is read
   against the level runs' for the first difference.
+
+## Step 5's result (2026-11-26, 118, GPU0, 03:29:55 to 06:11:27; the quiet rule on GPU0, codec told)
+
+The calibration run c1 at 24 workers had a clock lag p50 of 88.4 s, inside 65 to 110 s, so there
+was no adjustment. Then r1 to r9 at 24 workers. All ten runs were accepted (rc 0, provenance at
+0291abb3 with siw 4706ff9, the aib sidecar at 86a9207, the timing lines). The GPU log shows no
+foreign process on GPU0 during any run (the last sighting was 03:49:48, codec's last fit, before
+c1). No other user's job was over 4 cores at any start, so no run waited or was skipped. After
+each run the burner's recorded pids were gone and its group was empty.
+
+| run | start | load at the start (1 min) | clock lag p50 | NDT along (moving) | mode |
+|---|---|---|---|---|---|
+| c1 | 03:59 | 41.2 | 88.4 s | -0.0004 | level |
+| r1 | 04:12 | 57.4 | 107.8 s | -0.0906 | **behind** |
+| r2 | 04:24 | 44.2 | 85.4 s | -0.0009 | level |
+| r3 | 04:34 | 59.4 | 72.9 s | -0.0004 | level |
+| r4 | 04:45 | 69.6 | 83.2 s | -0.0017 | level |
+| r5 | 04:56 | 54.8 | 277.9 s | -0.0951 | **behind** |
+| r6 | 05:21 | 88.1 | 210.5 s | -0.0950 | **behind** |
+| r7 | 05:37 | 36.0 | 138.6 s | -0.0920 | **behind** |
+| r8 | 05:48 | 58.1 | 92.3 s | -0.0917 | **behind** |
+| r9 | 05:59 | 51.8 | 91.7 s | -0.0919 | **behind** |
+
+(The loads are host.json's at the stack's start, which include the burner's 24 workers.)
+
+The timing was as in steps 3 and 4 in every run, behind or level: `to_sim` 0, 3 substeps a frame,
+NDT's stamps equal to aib's to 1 us, on `/clock`'s grid. In r5 and r6 fewer of aib's logged stamps
+had an NDT pose (545 and 690 against 737 to 744): NDT dropped scans under the load.
+
+Against the predictions:
+- *H-b as contention:* **held.** Behind runs returned, 6 of the 9 (step 2: 3 in 9; steps 3 and 4,
+  quiet: 0 in 18), at along -0.090 to -0.095 m.
+- *The behind runs have a clock lag p50 of 65 s or more:* **held** (91.7 to 277.9 s). But it does
+  not separate the modes in this set: the level runs were at 72.9 to 88.4 s, and r8 and r9 were
+  behind at 92.3 and 91.7 s. Contention brings the mode within reach. The run's lag does not
+  decide it.
+- *The timing (`to_sim`, the substeps, NDT's stamps against aib's):* no difference between the
+  behind and the level runs. **The offset is downstream of the scan's stamp.** aib and the stamps
+  NDT sees are the same in both modes.
+
+**Found, not predicted (labelled; a pattern in this set only).** As in step 2, every run's NDT
+along error standing still was within 1 cm of 0. The behind offset appeared from the first moving
+NDT output (first_along -0.084 to -0.087 in the six behind runs, against -0.001 to +0.003 in the
+four level ones) and stayed. In this set the initial pose's along error went with the mode: the
+behind runs' initial pose was off by +0.008 to +0.043 m and the level runs' by -0.074 to +0.003 m.
+Step 2 does not show the same (behind r7 +0.136, level r8 -0.128, behind r9 -0.018), so this is
+not claimed.
+
+**Hypothesis H-d (untested; for the next plan).** The mode is set downstream of the scan's stamp,
+where NDT and the EKF meet at the first motion. Under contention, NDT's initial guess (the EKF's
+pose for the scan's stamp) is late or extrapolated when the car starts. NDT then settles in a
+neighbouring minimum about 0.09 m behind, and the EKF, fed by it, holds it. The test reads NDT's
+initial guess and its result at the first moving scans, against the truth, in this set's records
+(`pose_with_covariance`, the EKF's pose, `/initialpose3d`, all recorded), before any new run.
