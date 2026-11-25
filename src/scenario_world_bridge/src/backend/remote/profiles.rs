@@ -521,10 +521,17 @@ mod tests {
             for i in -20..=220 {
                 let v = p.value_at(f64::from(i) * 0.05);
                 let r = v.round();
-                assert!((0.0..=8.0).contains(&r), "{points} at {i}: {v} rounds to {r}");
+                assert!(
+                    (0.0..=8.0).contains(&r),
+                    "{points} at {i}: {v} rounds to {r}"
+                );
                 let mut w = ScenarioWeather::default();
                 Field::CloudCoverOktas.write(v, &mut w);
-                assert_eq!(w.cloud_cover_oktas, Some(r as u8), "{points} at {i}: clamped");
+                assert_eq!(
+                    w.cloud_cover_oktas,
+                    Some(r as u8),
+                    "{points} at {i}: clamped"
+                );
             }
         }
     }
