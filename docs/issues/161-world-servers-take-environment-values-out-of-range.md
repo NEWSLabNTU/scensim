@@ -229,3 +229,32 @@ The check, after the landing, written before it:
   is sent at frames 1 and 2 (issue 171), so its lines carry `after_step: true` from frame 3 on.
   A `weather:` knob on CARLA is judged from the read after the run: ok, with the read labelled
   "after the run".
+
+**The live check's two runs, predicted before either (2026-11-25, 243; (b) added with 133's
+OK).** scensim main 8ad9f151 built from a clean environment (acb, then scensim) in its own
+worktree; my CARLA 0.9.16 alone on RPC 2100 (Epic, booted on Town01), the card checked first;
+each run on its own fresh stack. For each, the bridge's and the CARLA world server's install
+binaries are newer than the build's start, and the live processes' `/proc/<pid>/exe` are those
+files.
+
+- **(a) k9_cs3, `cs3_stale_map.xosc`, pm=current** (K9e step 2a again; its `illumination` knob is
+  the static `environment: {sun_elevation: 1.0472 rad}`). SSv2: the ego stops before the
+  barriers and the run fails, exitFailure at 240 s, as step 2a had it. `knobs` ok; no protocol
+  error. The gap trace's `illumination.sun_elevation` knob lines: sent at frames 1 and 2,
+  `after_step: true` from frame 3 on, on every line after, and every marked read-back 1.0472 rad
+  within the knob's tolerance (0.0011047 rad).
+- **(b) the same run on a scratch copy outside the repository whose `illumination` knob is a
+  `weather:` value** (the only live path to the read after the run; no project in the repository
+  has a `weather:` knob). The copy is `/var/tmp/aeon/k161-live/k9_cs3_w/`, k9_cs3 at 8ad9f151
+  with one line changed in `testbench.yaml`:
+
+      -    illumination: {values: {day: {environment: {sun_elevation: 1.0471975511965976}}}, default: day}
+      +    illumination: {values: {day: {weather: {sun_altitude_angle: 60}}}, default: day}
+
+  (the copy's `testbench.yaml` sha256 0c7d70cb1ae2e95c33dfd8496d20fab7e41275ba28d896d6a656b218dc641e42;
+  the sha256 of the sorted list of its files' sha256s
+  73bde034447ecc1c2c54c0b352ec447e9ca7b785c9ad1219c47a2244b1e168f5). SSv2 as in (a).
+  `result.json`'s `knobs`: `weather_read` "after the run"; `weather_after_run.read.sun_altitude_angle`
+  60 deg (`set_weather`'s unit, CARLA's own) within 1e-3, `off` empty; the knob ok; no
+  `knob_mismatch`. The read right after the send may be stale (about one time in six, by the
+  probe), and then it is listed under `weather_read_off`, which fails nothing.
