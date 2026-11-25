@@ -699,7 +699,10 @@ on CARLA 0.9.16 at all. *Amended again the same day (118, before either side lan
 `water_depth` is `oneof depth { double water_depth = 3; }` instead of `optional double`, since
 Jammy's protoc 3.12.4 refuses proto3 `optional` without `--experimental_allow_proto3_optional`
 in scensim_core's prost build and the Python shell's descriptor script; the wire format and the
-presence are the same. The bridge records the reply in the gap trace (a `road` line per
+presence are the same. *Landed with 086 C7 (2026-11-25):* 118 added it first, as amended, in scensim_world_protocol
+f2d9103 (main c8ca43e0), checked against this text (capabilities 13 and 14, `ZoneApplied` with
+`surface_class`, the `depth` oneof and `mu`, `RoadConditionReply` at Reply's 12); K9f-a cites it
+and adds none. The bridge records the reply in the gap trace (a `road` line per
 `SetRoadCondition`), and `scensim run` judges each knob-set zone against it: `result.json`
 `knobs.<knob>.zones.<id>` with the fields sent and read back, a mismatch an error run.
 
