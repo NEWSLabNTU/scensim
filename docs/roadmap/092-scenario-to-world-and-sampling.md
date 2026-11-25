@@ -862,6 +862,45 @@ with offsets -1.3, 0 and 1.3 and h pi/2 relative, as CS3 had them. CS3 itself st
   on lanelet 6583 at s 20; `resolved.yaml` names the copy and both digests.
 - Two runs of the same case make byte-identical copies (the same sha256).
 
+**The first CARLA suite (2026-11-25, on main ec592085 with K9f-b's commits; before issue 171).**
+`suites/layout.yaml` on k9_cs3, my CARLA 0.9.16 on RPC 2100 (Epic, booted on Town01), one stack,
+09:50-10:01:
+
+| case | verdict | as predicted |
+|---|---|---|
+| closure=closed, pm=current | failed: exitFailure at 240 s | yes |
+| closure=closed, pm=works | passed | yes |
+| closure=none, pm=current | error: `knob_profile` (`illumination.sun_elevation` read back 0.3491 against 1.0472) | no: a false error run, issue 171 |
+
+- The none-case drove as predicted: no barrier in the run (no copy), the stale route through
+  6583 from 29.85 s, the goal at 101.1 s, no contact. Its error was the knob's single
+  read-back, taken before CARLA ticked, which showed Town01's boot sun (issue 171; fixed on main
+  47b59256).
+- Both closed runs' copies have sha256 5fd2feb1... (as offline, in both projects); the
+  barriers' truth positions equal CS3's within 0.001 m (x 305.641; y -128.206, -129.506,
+  -130.806), placed on lanelet 6583 at s 20.
+- **Found: the passed run had lost its copy.** The works/closed run, kept at `full`, had no
+  `scenario.xosc`, though `resolved.yaml` named it: no keep level listed it. It is now kept at
+  `result` (08a772d0).
+- **Found, not K9f-b's: CARLA shows the barriers at yaw 0.** SSv2 commands -1.5712 rad (h pi/2
+  on the westbound lane); the CARLA world server's truth shows -0.0004 for every barrier, in
+  K9e's CS3 runs as here. Isaac's shows -1.5712. Reported to 133 for an issue. The positions
+  are right and the closed runs' verdicts are K9e's on both simulators, so K9f-b's exit does not
+  depend on it, but CARLA's barriers stand turned a quarter from what the scenario says.
+
+**Predicted for the rerun on issue 171 (main 47b59256 plus K9f-b; before any run).** The same
+suite, CARLA and setup, the none-case first:
+
+- closure=none, pm=current: exitSuccess as before, and now no error: `knobs` ok, the knob
+  profile `illumination.sun_elevation` judged from its second send, every frame from it read
+  back 1.0472 within 0.001105; its first read-back recorded, whatever it shows.
+- closure=closed: as the first suite (exitFailure at 240 s with pm=current; exitSuccess with
+  pm=works), the knob judged as above, the copies 5fd2feb1... again, and each run directory
+  keeping its `scenario.xosc`.
+- Isaac Sim 6.2, aib at main's pin bb2283f (after issue 167), the two closed cases on
+  k9_cs3_isaac: K9e step 2b's results (pm=current exitFailure at 240 s, pm=works exitSuccess), the
+  same copy sha256, the barriers' truth at CS3's positions and yaw -1.5712.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
