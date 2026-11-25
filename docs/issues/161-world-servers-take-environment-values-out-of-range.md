@@ -1,7 +1,8 @@
 # 161: the world servers take environment values out of range, and read back what they stored
 
-**Status:** fixed in code and tests, 2026-11-25; live check pending (118's C7 conformance on
-CARLA 2010, 092 K9e's knob runs on CARLA; the probe, step 0) (243; numbered by 133 on 2026-11-25;
+**Status:** fixed in code and tests, 2026-11-25; the probe (step 0) done the same day (the cause:
+the unordered send); live check pending (118's C7 conformance on CARLA 2010, 092 K9e's knob runs
+on CARLA) (243; numbered by 133 on 2026-11-25;
 after 092 K9f). **Severity:** medium. A world server's read-back is the check behind every knob
 and every road condition. On CARLA it can echo an impossible value, or show the value before a
 send.
@@ -42,7 +43,7 @@ In the world servers, CARLA's first and then Isaac's where it applies:
 The check: 086 C7's `scensim_world_check conformance` on CARLA, rerun by 118, and 092 K9e's
 knob runs on CARLA.
 
-## Why CARLA's read-back can predate the send (read, not yet measured)
+## Why CARLA's read-back can predate the send (measured: the unordered send)
 
 LibCarla 0.9.16 sends `set_weather_parameters` without waiting for it
 (`Client::SetWeatherParameters` is `AsyncCall`, its future discarded) and `get_weather_parameters`
@@ -50,6 +51,32 @@ waiting (`CallAndWait`). A read right after the set can be served before the set
 would explain issue 171's stale first reply with no tick involved; that CARLA applies the
 weather only at a tick would explain it too. Step 0 tells the two apart before anything is
 built on either.
+
+**Step 0's result (2026-11-25, 20:01-20:04, my CARLA 0.9.16 alone on RPC 2100, Epic, Town01;
+the `carla` wheel 0.9.16, client and server both reporting 0.9.16; synchronous, 0.05 s steps).**
+200 sends of `sun_altitude_angle`, alternating 20 and 50 deg (the first equal to the boot sun, 20,
+so 199 changed it):
+
+| read | shows the value sent |
+|---|---|
+| (a) at once | 168 of 200 |
+| (b) once more at once, no tick between | 200 of 200 |
+| (c) after one tick | 200 of 200, as predicted |
+
+All 32 stale reads in (a) showed exactly the weather before the send, and every one of them read
+the new value in (b), with no tick between; none stayed stale until (c). So the cause is the
+unordered send: LibCarla's `AsyncCall` for the set lets a `CallAndWait` get right after it be
+served first, about one time in six here. CARLA does not wait for a tick to apply the weather.
+On exit the probe put CARLA back to asynchronous mode and the boot sun (20 deg); CARLA was
+killed by its process group, and its ports were free after. The script and its rows:
+`/var/tmp/aeon/k161-probe/` (`probe.py`, `probe.json`).
+
+What it means for the fix: the read after the step (3.) stays sound: after a tick, 200 of 200
+showed the send (the set has no reply to wait for; a tick, or here a second round trip, came
+after it). Option (i) of the amendment to 3. is now
+open: the CARLA world server's `set_weather` could read back until `get_weather` shows the
+request (bounded), with no tick, and then a `weather:` knob could be judged at once instead of
+after the run. Not done here; a follow-up, if wanted.
 
 ## The plan, before any code
 
