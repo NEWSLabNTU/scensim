@@ -1,11 +1,12 @@
-# written by `ros2 run scensim assets fetch`; commit it
+# written by `scensim assets fetch`; commit it
 version: 1
 datasets:
   carla-town-autoware-maps:
     repo: jerry73204/carla-town-autoware-maps
-    commit: 19d52699f007d53f1e2fb0a42eea7181640d202b
+    commit: eb93b387f96eccc3c83eacbc32628d66ac199b15
     take:
     - Town01
+    - Town05
     files:
       Town01/LICENSE.md: sha256:15b6eb7fe321599944ac6e278babdab10d30971f523b740517acf921bb9dcf1a
       Town01/anchors.resolved.json: sha256:428462cca6b68349a476325cbf911365b82e65241098038f396f3eb306cb8d01
@@ -18,4 +19,13 @@ datasets:
       Town01/map_projector_info.yaml: sha256:913ed177fb84fd4139b43017224a4a47148477e911049aa9beb377cb9911442a
       Town01/pointcloud_map.pcd: sha256:30211d2500c076b8ef176d510609c6be2e0df5342448dc8f2d285f9fa69fe305
       Town01/pointcloud_map_metadata.yaml: sha256:776dcc9add24494b1f5261063999252d811462bb2f0aeebd8be5a4ff89a2f527
+      Town05/LICENSE.md: sha256:15b6eb7fe321599944ac6e278babdab10d30971f523b740517acf921bb9dcf1a
+      Town05/anchors.resolved.json: sha256:5b7b9959557f3da3e3933aabe224fe3c8a9d29c552e8d2e260221f02cd5ec78d
+      Town05/anchors.yaml: sha256:0560a26bc42dd3ae312d44dc57033c9df8368ad5243e6bd95910b34ed631b57e
+      Town05/isaac/world.yaml: sha256:8813b147e80b49a9b4d337cf5bc541affbab0c11556dec75d72131ca0f7e500e
+      Town05/lanelet2_map.osm: sha256:6e3bf9fa3dc3645c306bfa99b5478d5bd21165bfdd100d46904af24f021b7535
+      Town05/lanelet2_map.osm.orig: sha256:4abf35b41b10c565b9072fd39f0001485ad3e64aababfbbce95bfdba30aa4957
+      Town05/map_config.yaml: sha256:cad4fb298dd9f0f30dafc3fcbeb1b9cb36fd21d83aad396e5d6dd6f032a26169
+      Town05/map_projector_info.yaml: sha256:913ed177fb84fd4139b43017224a4a47148477e911049aa9beb377cb9911442a
+      Town05/pointcloud_map.pcd: sha256:bfbf13b92ccd29382a96d30c23f893d62048d9fb8ec229f1f1f85d9c521648d9
 paths: {}
