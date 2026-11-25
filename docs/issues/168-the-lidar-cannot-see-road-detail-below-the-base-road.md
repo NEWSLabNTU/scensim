@@ -106,6 +106,39 @@ worlds. Option 1 remains if 133 prefers no step and accepts the view's end.
   road return out to the lidar's 170 m comes from the lowered road. NDT matches the whole scan
   to the map's cloud, so a far field sitting low can tilt its pitch or lift its z.
 
+## How the depth is found (133, 2026-11-25, before any code)
+
+Measured offline first (`/mnt/renegade/aeon/isaac-ex/c6e/depth168.py`, every road sample of
+every tile the corridor touches):
+
+| map | deepest detail below the base | tiles, samples | time | features' bound |
+|---|---|---|---|---|
+| C6d's *rough_none* Haruna | -0.104 m | 249, 4.9 million | 40 s | 0.11 m (potholes 0.08 + ruts 0.03) |
+| fixture_c6a | -0.080 m | 88, 2.1 million | 11 s | 0.08 m |
+
+Decided (option (c), 133):
+
+- A small CLI samples a corridor's deepest detail below the base once, and writes it into the
+  corridor's entry in `road_detail.yaml` as `base_drop: {depth: <m>, sha256: <hex>}`. The hash
+  covers the corridor's own entry in the file (every key but `base_drop`, canonical JSON) and
+  the bytes of its stations file, the record.
+- The world server drops the world's road render by the deepest corridor's depth plus 0.01 m.
+- **Staleness (133).** The world server recomputes the hash at load. On a mismatch, or with no
+  `base_drop`, it falls back to the features' bound: the deepest pothole, plus the ruts'
+  depth, plus 3 sd of the roughness from its PSD over the band. It logs a WARN naming the CLI
+  to rerun. A stale exact value is worse than a safe bound.
+- **Where the files live (133).** A `road_detail.yaml` in a published dataset gets `base_drop`
+  only as a dataset revision, with the user's OK through 133. Checked 2026-11-25:
+  - the published `haruna-tsukuba-courses` (revisions fff4cb0b and b12857ee in this host's
+    cache) has **no** `road_detail.yaml`, so it builds no road layer, has no detail mesh and is
+    not affected;
+  - every road-detail Haruna in use is a local copy under `/mnt/renegade/aeon/isaac-ex/`: C5d's
+    rebuild (`c5d/haruna`, which itself has no `road_detail.yaml`), and C6b's and C6d's
+    `c6b-haruna/{none,rocks,rough_none,rough_rocks}/haruna`;
+  - the fixture courses (`c6a/fixture_c6a`, `c6c/fixture_c6c` and the rest) are local builds;
+  - so every map 168's check uses carries `base_drop` directly, and nothing goes near a public
+    dataset.
+
 ## Predictions for option 2's check (before any code)
 
 The check: NDT's pitch, z and NVTL with the road lowered against not lowered, on fixture_c6a,
