@@ -134,7 +134,36 @@ left of the truth's heading; the bends by the truth's yaw rate, over 1 deg/s eit
   sections sit at about -0.08 m. The left bends are at about -0.06 m in the level runs and -0.09
   to -0.10 m in the runs that are off along the track (C6e2's BVH-on runs and 172's behind
   mode). The right bends are at about -0.035 m in every run. Both bends move the error toward
-  the bend's outside relative to the straights' level, the left ones more. So 170 is not a
-  constant offset. *Hypothesis, untested:* a part of it follows the body's roll in the bends
+  the bend's outside relative to the straights' level, the left ones more. *(Corrected the same
+  day, before the bend split, from the same table: in the level runs both bends move the error
+  toward the left, the left bends by about +0.02 m and the right bends by about +0.045 m, so
+  not toward each bend's outside. Only the off-along runs' left bends move right.)* So 170 is
+  not a constant offset. *Hypothesis, untested:* a part of it follows the body's roll in the bends
   (the lidar 2.0 m up) or the along error turned by the bend. It is to be split per bend
   radius and speed before step 3.
+
+## The bend split (written 2026-11-25, before looking; 133's two hypotheses)
+
+Offline, on the same 18 runs: per sample, the across error less the run's straight-section
+median (the residual), against the truth's curvature (yaw rate over speed, signed: + left),
+speed, the truth's body roll, and NDT's roll error.
+
+- *Hypothesis R, body roll.* In a bend the body rolls outward. If NDT follows the roll, nothing
+  moves across; a roll error ε (NDT less truth, + left side up) moves base_link by -H sin ε
+  across, with H = 2.0 m. *Predictions if R holds:* the residual follows -2.0 x ε sample by sample
+  (a slope within 30 % of -2.0 m/rad); left and right bends give residuals of opposite sign
+  about the straights' level; and |ε| in the bends reaches about 0.6 to 1.3 deg, since the
+  residuals are 0.02 to 0.045 m.
+- *Hypothesis A, the along error seen through the bend.* A run that sits a (m) along the track
+  behind or ahead, by a lag τ = a / v, has its heading lagging by Δψ = κ v τ = κ a. Its across
+  error is then about a x Δψ = κ a². *Predictions if A holds:* the residual scales with κ a², the
+  same sign as a for left bends and opposite for right. At a = 0.086 m and κ = 1/30 m, that is
+  0.25 mm. So A predicts no visible mode-dependent across split (under 1 mm), and **A cannot
+  explain** the 0.03 to 0.04 m extra the off-along runs show in left bends. That holds unless
+  the along error itself grows in the bends, which the split also reports (the along residual
+  by bend).
+- *What neither predicts.* Both give residuals of opposite sign in left and right bends. The
+  level runs' residuals are both toward the left (+0.02 and +0.045 m; the correction above). A
+  component of one sign in both bends would point to something that follows the bend's
+  presence (speed, yaw rate's size, steering) rather than its direction. The split reports the
+  residual against |κ| and speed for that.
