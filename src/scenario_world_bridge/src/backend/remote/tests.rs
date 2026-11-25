@@ -703,11 +703,11 @@ fn knob_profiles_are_sent_when_they_move_and_read_back() {
         b.update_frame(f64::from(k) * 0.05).unwrap();
     }
     let sent = seen.lock().unwrap().clone();
-    // the first frame, then every >= 50 m of the ramp (25 m a frame), and the ramp's end (a
-    // breakpoint crossed) though within a step of the last send
-    assert_eq!(sent[0], 1000.0);
+    // the first frame and again the next (issue 171), then every >= 50 m of the ramp (25 m a
+    // frame), and the ramp's end (a breakpoint crossed) though within a step of the last send
+    assert_eq!(sent[..2], [1000.0, 1000.0]);
     assert!(
-        sent[..sent.len() - 1]
+        sent[1..sent.len() - 1]
             .windows(2)
             .all(|w| (w[0] - w[1]).abs() >= 50.0 - 1e-9),
         "{sent:?}"

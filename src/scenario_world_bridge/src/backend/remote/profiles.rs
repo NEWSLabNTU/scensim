@@ -414,17 +414,18 @@ mod tests {
                 sent.push((t, v));
             }
         }
-        // the first frame, then whenever the 920 m ramp over 10 s (4.6 m a frame) has moved
-        // the 10 m step: each send at least the step and at most the step and a frame's change
-        // after the last, the last at the ramp's end
+        // the first frame and again the next (issue 171), then whenever the 920 m ramp over
+        // 10 s (4.6 m a frame) has moved the 10 m step: each send at least the step and at most
+        // the step and a frame's change after the last, the last at the ramp's end
         assert_eq!(sent[0], (0.0, 1000.0));
-        for w in sent[..sent.len() - 1].windows(2) {
+        assert_eq!(sent[1].0, 0.05);
+        for w in sent[1..sent.len() - 1].windows(2) {
             let d = (w[1].1 - w[0].1).abs();
             assert!((10.0 - 1e-9..10.0 + 4.6 + 1e-9).contains(&d), "{w:?}");
         }
         // the ramp's end (a breakpoint) is sent exactly, though within a step of the last send
         assert_eq!(sent.last().unwrap().1, 80.0);
-        assert_eq!(sent.len(), 68);
+        assert_eq!(sent.len(), 69);
     }
 
     #[test]
