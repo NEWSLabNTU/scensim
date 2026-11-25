@@ -1013,8 +1013,36 @@ friction can only show where the stop asks for more than the surface gives. So t
 - (c) a fixed-brake test outside scensim run (aib's vehicle check); not a knob test, so no.
 
 CARLA 0.9.16: the same scenario and knob refused by `testbench check` and the run, before any
-run, naming the measured limit. Exit runs are predicted again, with numbers, once the choice is
-made and before any run.
+run, naming the measured limit.
+
+**133's choice (2026-11-25): (b), with a precondition; the predictions, before any run.**
+
+- **The measure.** The ego's longitudinal deceleration from the truth (its `sim_pose` speed
+  along its heading, read through `scensim.truth`), averaged over 0.25 s (5 frames at 0.05 s),
+  from the pedestrian's dart-in trigger until the ego stops or touches it; the *peak* is the
+  largest of those averages. Also recorded: the ego's speed at the trigger, where it stops (or
+  touches), and whether it touches the pedestrian (the run's contact report).
+- **Asphalt first, and the precondition.** The `asphalt` case runs first. Autoware's own limits
+  (its planner's and its MRM's deceleration) may cap even a hard stop near 2.5 m/s^2; then
+  asphalt and ice would read the same and say nothing about the zone. **The ice comparison
+  counts only if asphalt's peak is at least 1.5 x 2.6 = 3.9 m/s^2.** If it is not, that is
+  recorded as a finding about Autoware's limits, the exit falls back to (a), and 133 is told;
+  the ice run is then still run for its read-back, and its deceleration is recorded, not judged.
+- **Predicted, if the precondition holds:** ice's peak 2.6 m/s^2 within 25 % (1.95 to
+  3.25 m/s^2), and below asphalt's. Speed at the trigger about the lane's limit, 11.2 m/s:
+  stopping from it on ice takes at least 11.2^2 / (2 x 2.6) = 24 m, more than the 20 m the dart
+  leaves, so **the ego is expected to touch the pedestrian on ice.** That contact is an expected
+  outcome of the zone, not a failure of the knob test: the knob test is the read-back and the
+  deceleration, and the scenario's verdict is recorded beside them. On asphalt, a peak of
+  3.9 m/s^2 or more stops it within 11.2^2 / (2 x 3.9) = 16 m plus its reaction: no contact
+  predicted.
+- **The read-back, in both runs and whatever the precondition gives:** `knobs.goal_surface.zones`
+  names `ice_at_goal` with class `asphalt` (mu 1.12) or `ice` (mu 0.265), wetness dry, within
+  1e-6 of the class table; a mismatch is an error run.
+- **The scenario** (`k9f_zones`, a new Isaac testbench on Town01 with `isaac_soil`'s
+  `town01_route` map, written when K9f-a's code starts): town01_route's drive, the pedestrian
+  entering the ego's lane inside `ice_at_goal` when the ego is 20 m short; the numbers above are
+  checked against its first version before it runs, and amended here if it differs.
 
 **Not in K9f-a:** a zone's geometry from anchors (K9c's regions name zones, never redraw them);
 zones on CARLA (CARLA 1.0, after 083 step 5); hydroplaning in the read-back's mu.
