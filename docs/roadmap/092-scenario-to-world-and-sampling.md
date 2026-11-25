@@ -2405,11 +2405,16 @@ note's "A first search", on the lane 133 chose: base Town05's anchor `west_avenu
 105401 78805 117337 219 114959 1412 109453 2471 106424 3337, 372.518 m, 88.5 km/h; maps dataset
 v2026.11g, issue 166's 18 reversed stretches listed).
 
-**The scenario.** `scenarios/projects/k13_platoon/scenarios/platoon_town05.xosc` on Town05
-(the project takes Town05 too, its lock at v2026.11g). L, a scripted lead at 22 m/s from s 110 m,
-brakes to rest at `$decel` after `$onset` s. M, `scensim.behaviour:idm_follower` with L as its
-leader and v0 the lane's 24.58 m/s, starts at its equilibrium gap (s0 + vT). The ego follows M
-at 30 m, at 22 m/s. onset in [1, 4] s and decel in [2, 8] m/s^2 keep L's stop at or before
+**The scenario.** `src/scensim_sampler/examples/cases/k13_platoon_town05.xosc` on Town05, a
+batch case (seats refuse it: issue 175); `k13_platoon` takes Town05 too for the search's map, its
+lock at v2026.11g. L, a scripted lead at 22 m/s from s 110 m, brakes to rest at `$decel` after
+`$onset` s. M, `scensim.behaviour:idm_follower` with L as its leader and v0 the lane's
+24.58 m/s, starts at 22 m/s (Init's step `AbsoluteTargetSpeed`, issue 175's batch-only
+exception) at IDM's exact equilibrium gap s_e = (s0 + vT) / sqrt(1 - (v/v0)^4) from each
+sample's T (133: about 1.67 times s0 + vT at the set's T); the dry run checks |a| < 1e-6 m/s^2
+for M at t = 0 in every slot before judging anything. The ego follows M at 30 m, at 22 m/s. A
+scenario with issue 175's exception is a known divergence between the batch and seats: no
+agreement check may use it. onset in [1, 4] s and decel in [2, 8] m/s^2 keep L's stop at or before
 s 319 m, inside the anchor. No start s lies in a reversed stretch (`scensim check` refuses one
 that does).
 
