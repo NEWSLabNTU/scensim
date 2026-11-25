@@ -61,3 +61,36 @@ def test_the_lanes_suites_import_no_pytest_at_the_top_level():
                 if not guarded:
                     bad.append(str(f.relative_to(ROOT)))
     assert bad == []
+
+
+def stub_install(root, record):
+    """An install isaac_env.sh accepts (a venv/bin/activate, Isaac Sim's package directory)
+    whose activate puts a fake python3 first: it records OMP_NUM_THREADS and MKL_NUM_THREADS to
+    `record` and passes every suite with one test."""
+    (root / "venv" / "lib" / "python3.12" / "site-packages" / "isaacsim").mkdir(parents=True)
+    bin_ = root / "stubbin"
+    bin_.mkdir()
+    py = bin_ / "python3"
+    py.write_text("#!/bin/bash\n"
+                  f'echo "${{OMP_NUM_THREADS-unset}} ${{MKL_NUM_THREADS-unset}}" >> "{record}"\n'
+                  'case "$*" in *unittest*) printf "Ran 1 test in 0.001s\\n\\nOK\\n" >&2 ;; esac\n')
+    py.chmod(0o755)
+    (root / "venv" / "bin").mkdir(parents=True)
+    (root / "venv" / "bin" / "activate").write_text(f'export PATH="{bin_}:$PATH"\n')
+
+
+def test_the_lane_passes_the_thread_cap_through_its_clean_environment(tmp_path):
+    """Issue 188: `just test` caps OMP_NUM_THREADS and MKL_NUM_THREADS; the lane's env -i must
+    keep them, or Isaac's Python runs one thread per core again."""
+    record = tmp_path / "threads"
+    stub_install(tmp_path / "isaac", record)
+    env = {"HOME": os.environ.get("HOME", "/tmp"), "USER": os.environ.get("USER", "u"),
+           "PATH": "/usr/bin:/bin", "ISAAC_ROOT": str(tmp_path / "isaac"),
+           "OMP_NUM_THREADS": "3", "MKL_NUM_THREADS": "2"}
+    status = tmp_path / "status"
+    p = subprocess.run(["bash", str(LANE), str(status)], cwd=ROOT, env=env,
+                       capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert status.read_text().startswith("Isaac-Python lane: ran (3 tests in 3 suites, OK)")
+    lines = record.read_text().split("\n")
+    assert [x for x in lines if x] == ["3 2"] * 4    # the numpy line and the three suites

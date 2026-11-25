@@ -35,10 +35,14 @@ trap 'rm -f "$log"' EXIT
 # the caller's CUDA_VISIBLE_DEVICES, when set (even empty: no GPU), passes through
 pass=(HOME="$HOME" USER="$USER" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT")
 [ -z "${CUDA_VISIBLE_DEVICES+set}" ] || pass+=(CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES")
+# torch's and BLAS's threads, which `just test` caps (issue 188), when set
+for v in OMP_NUM_THREADS MKL_NUM_THREADS; do
+    [ -z "${!v+set}" ] || pass+=("$v=${!v}")
+done
 env -i "${pass[@]}" bash -c '
     set -e
     source src/scensim_isaac_world/scripts/isaac_env.sh
-    PYTHONNOUSERSITE=1 python3 -c "import numpy; print(\"numpy (Isaac):\", numpy.__version__, numpy.__file__)"
+    PYTHONNOUSERSITE=1 python3 -c "import numpy, torch; print(\"numpy (Isaac):\", numpy.__version__, numpy.__file__ + \"; torch threads\", torch.get_num_threads())"
     PYTHONNOUSERSITE=1 python3 -m unittest discover -s src/scensim_isaac_world/test
     PYTHONNOUSERSITE=1 PYTHONPATH=src/scensim_sampler python3 -m unittest discover -s src/scensim_sampler/test
     PYTHONNOUSERSITE=1 python3 -m unittest discover -s src/scensim_batch/test

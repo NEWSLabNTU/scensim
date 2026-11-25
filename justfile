@@ -350,12 +350,21 @@ test:
     #!/usr/bin/env bash
     set -e
     source install/setup.bash
-    # numpy per Python lane, so a host-dependent import failure shows its cause at once
+    # torch's and BLAS's threads per test process: min(4, nproc), unless the caller set them (a
+    # host setting). Their default, one per core, oversubscribed a shared host: scensim_batch's
+    # suite took 974 s at 24 threads and 61 s at 4 (issue 188). Every Python lane inherits it.
+    _threads=$(( $(nproc) < 4 ? $(nproc) : 4 ))
+    export OMP_NUM_THREADS="${OMP_NUM_THREADS:-$_threads}" MKL_NUM_THREADS="${MKL_NUM_THREADS:-$_threads}"
+    # numpy per Python lane, so a host-dependent import failure shows its cause at once, and
+    # torch's thread count, so the log shows the cap
     for lane in "" PYTHONNOUSERSITE=1; do env $lane python3 -c 'import sys; v = "no numpy"
     try:
         import numpy; v = f"{numpy.__version__} {numpy.__file__}"
     except Exception as e: v = f"numpy fails: {e}"
-    print("numpy (python3" + (", no user site" if sys.flags.no_user_site else "") + "):", v)'; done
+    try:
+        import torch; t = torch.get_num_threads()
+    except Exception: t = "no torch"
+    print("numpy (python3" + (", no user site" if sys.flags.no_user_site else "") + "):", v + f"; torch threads {t}")'; done
     # carla-sys compiles against libclang 14 on Jazzy, as in `just build` (092 K6)
     if [ "${ROS_DISTRO:-humble}" != humble ]; then source scripts/sim_side.bash; export LIBCLANG_PATH=$(scensim_libclang_path); fi
     # CARLA_DIR (a host setting, .env) is CARLA's install; carla-sys would take it for a
