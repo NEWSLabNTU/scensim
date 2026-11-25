@@ -1,7 +1,7 @@
 # 188: the Isaac-Python lane's scensim_batch suite runs 1.2 to 49 times the system lane's time, depending on the host
 
-**Status:** open (241; numbered by 133 on 2026-11-25); the cause found by the per-test timing
-(torch's threads oversubscribing a shared host; 2026-11-26), the fix to be planned.
+**Status:** fixed in code and tests (241; numbered by 133 on 2026-11-25; the cause found by the
+per-test timing, torch's threads oversubscribing a shared host; capped at min(4, nproc)).
 **Severity:** low. Nothing fails, but since issue 186 a full gate on a host with an Isaac
 install runs the lane, and on a loaded host this one suite adds up to about 45 minutes to it.
 **Found:** 2026-11-25, scensim 241, issue 186's first real run of the lane.
@@ -161,4 +161,15 @@ would be an import in each of its 21 modules and would miss the other suites.
 both lanes' `scensim_batch` suites finish in under 120 s, whatever the host's load (each
 lane's 1-minute load at its start recorded from the log or `/proc/loadavg`); both lanes print
 torch threads 4; and the gate passes. Held if all three; otherwise FAILED, as it comes out.
+
+**The gate's result (2026-11-26, 34e0c374; 01:33 to 02:12, fresh worktree, CLAUDE.md's `clean=`
+with `ISAAC_ROOT`): held.** `just test` began at a 1-minute load of 14.37 (sampled every 10 s
+through it: 9.7 to 22.7, median 13.3, 158 samples).
+
+- Torch threads: "torch threads 4" in both system-Python lines and in Isaac's.
+- `scensim_batch` in Isaac's Python: `Ran 259 tests in 76.160s`, `OK (skipped=2)` (was 1029 s in
+  186's gate on this host); in the system pytest lane: `247 passed, 12 skipped in 49.15s`. Both
+  under 120 s.
+- The gate: rc 0, "just test: done; Isaac-Python lane: ran (937 tests in 3 suites, OK)", pins 0
+  mismatches, docs ok, no failure in any suite.
 
