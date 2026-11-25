@@ -824,3 +824,26 @@ def test_k9e_a_weather_knob_writing_the_wet_look_and_a_road_condition_are_two_wr
     assert [f.file for f in found] == ["scenarios/road.xosc"]
     assert "knob surface" in found[0].what and "two writers" in found[0].what
     assert found[0].refused
+
+
+def test_issue_161_no_knob_can_ask_for_9_oktas_or_judge_isaac_clouds():
+    """Issue 161 (133, 2026-11-25): why no cloud read-back of 9 oktas reaches judging, pinned.
+    The protocol takes 9 (the sky cannot be seen) and CARLA shows it as 8; Isaac reads no clouds
+    back. A knob cannot send 9, cannot share cloud cover with the scenario's Weather element,
+    and is refused on Isaac. Changing any of these reopens the knobs follow-up in 161's doc:
+    judge CARLA's 9 as shown 8, and keep Isaac's clouds unjudged."""
+    # (b) 9 is refused, as a static value and as a profile's range
+    static = {"sky": {"values": {"blind": {"environment": {"cloud_cover_oktas": 9}}}}}
+    (_, m), = K.problems(static)
+    assert "[0, 8] oktas" in m
+    prof = {"overcast": {"profile": True, "sets": "cloud_cover_oktas", "range": [0, 9]}}
+    assert any("[0, 8] oktas" in m for _, m in K.problems(prof))
+    # (b) and the scenario's own Weather element: two writers of cloud cover are refused
+    with pytest.raises(K.KnobError, match="two writers"):
+        K.static_profiles({"sky": {"cloud_cover_oktas": 6}}, ("Weather",))
+    # (c) no cloud knob on Isaac, in either form
+    assert K.PROFILE_FIELDS["cloud_cover_oktas"] == ("carla",)
+    grey = {"sky": {"values": {"grey": {"environment": {"cloud_cover_oktas": 6}}}}}
+    assert K.problems(grey, simulator="carla") == []
+    (_, m), = K.problems(grey, simulator="isaac")
+    assert "cloud_cover_oktas" in m and "carla" in m

@@ -146,6 +146,15 @@ server does with 9 today, read from the code (nothing run):
   Isaac draws no clouds). Its read-back (`sky.read_back`) has no cloud cover: Isaac keeps no
   cloud state of its own, so none is read back, whatever was sent.
 
+No read-back of 9 reaches scensim's judging today, nor after 161 (133, 2026-11-25, on the code):
+a scenario's own `EnvironmentAction` is never judged (the bridge's `update_environment` drops its
+reply; only the knobs' sends are recorded and, with 161, marked `after_step`); a knob cannot send
+9 (`FIELD_RANGES`) nor share cloud cover with the scenario's Weather element (two writers are
+refused); and a cloud knob is refused on Isaac. 161 pins each with a test: (a) in the bridge, a
+scenario's own `SetEnvironment` read-back, the reply's and the step's, is not recorded; (b) and
+(c) in `test_knobs.py`. **Widening the knobs to 9 needs:** CARLA's 9 judged as shown, 8, and
+labelled so; Isaac's clouds left unjudged, as now.
+
 The check, after the landing, written before it:
 
 - 086 C7's `scensim_world_check conformance` on CARLA (118's rerun, on the 2010 testbed)
