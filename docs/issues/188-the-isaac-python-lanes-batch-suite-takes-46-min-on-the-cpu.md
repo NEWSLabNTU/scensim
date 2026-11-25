@@ -136,3 +136,29 @@ process on 24 CPUs already busy with other work), not Isaac's Python and not the
 lanes (`OMP_NUM_THREADS` or `torch.set_num_threads` in `scripts/isaac_lane.sh` and the system
 lane's batch step, or in the batch tests' setup).
 
+## The fix's plan (approved by 133, 2026-11-26, before any code)
+
+No test reads or asserts a thread count (`num_threads`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`,
+`get_num_threads`, interop: none in `scensim_batch`'s, `scensim_sampler`'s, `scensim_isaac_world`'s
+or roboracer's tests), and no runtime code sets one (only `scensim_batch/scripts/train_drift.py`
+and `train_leadbrake.py`, opt-in by their `threads=`), so a cap in the test lanes' environment
+reaches test processes only. It goes in the lanes, not the test package: `scensim_batch/test`
+has no `conftest.py` or `__init__.py` and runs under pytest and unittest, so a shared setup
+would be an import in each of its 21 modules and would miss the other suites.
+
+1. `just test` exports `OMP_NUM_THREADS` and `MKL_NUM_THREADS` at its top, min(4, nproc) (run
+   B's 4, never more than the host has); a value the caller set is kept (a host setting; no new
+   variable). Every Python lane gets it.
+2. `scripts/isaac_lane.sh` passes both through its `env -i` when set, as it does
+   `CUDA_VISIBLE_DEVICES`.
+3. Both lanes print torch's thread count: the lane's numpy line in Isaac's Python, and the
+   recipe's per-Python numpy lines for the system Python, so a gate log shows the cap.
+4. A test in `scripts/test_isaac_lane.py` that the lane passes `OMP_NUM_THREADS` through, with a
+   stub install if that stays light; otherwise the gate's printed "torch threads 4" in both
+   lanes is the evidence, and this record says so (133).
+
+**The prediction (before the code and the gate).** In the full gate on 241 with the Isaac lane:
+both lanes' `scensim_batch` suites finish in under 120 s, whatever the host's load (each
+lane's 1-minute load at its start recorded from the log or `/proc/loadavg`); both lanes print
+torch threads 4; and the gate passes. Held if all three; otherwise FAILED, as it comes out.
+
