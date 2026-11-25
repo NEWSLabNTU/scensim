@@ -42,6 +42,9 @@ A value may instead set the scenario environment by field, `environment: {sun_el
 read back. The run sends it as a profile held constant from time 0 (`<knob>.<field>`), which the
 bridge sends twice (frames 1 and 2), judged from the second send's read-back on (issue 171). One value sets a quantity in one form (SAME_QUANTITY).
 
+A value may name a prop layout, `layout: <name>` (092 K9f-b; scensim.layouts): the run adds its
+props to its own copy of the scenario.
+
 On Isaac there is no weather service: a value with weather parameters is refused there by name
 (its scenario's EnvironmentAction sets the sky). On CARLA a surface map cannot be applied, and weather (wetness) is visual only: a value that
 names a surface map or a friction (`mu`) is refused there by name, unless it says
@@ -50,7 +53,7 @@ names a surface map or a friction (`mu`) is refused there by name, unless it say
 import math
 from pathlib import Path
 
-KINDS = ("weather", "environment", "surface_map", "mu", "physics")
+KINDS = ("weather", "environment", "surface_map", "mu", "physics", "layout")
 TOLERANCE = 1e-3   # a read-back may round (the world server stores floats)
 
 
@@ -416,6 +419,8 @@ def problems(world_knobs: dict, where="world.knobs", simulator: str = None) -> l
             if wp is not None and (not isinstance(wp, dict) or not all(
                     isinstance(x, (int, float)) and not isinstance(x, bool) for x in wp.values())):
                 out.append((f"{w}.values.{v}.weather", "is {parameter: number}"))
+            if m.get("layout") is not None and not (isinstance(m["layout"], str) and m["layout"]):
+                out.append((f"{w}.values.{v}.layout", "a layout's name (092 K9f-b), or null"))
             if m.get("environment") is not None:
                 env = environment_problems(m["environment"], f"{w}.values.{v}.environment")
                 if env:
@@ -519,7 +524,7 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
     name}, notes: {knob: text}}. KnobError names a knob the world lacks, a value it does not
     declare, or one this simulator cannot honour."""
     weather = dict(baseline or {})
-    maps, notes, environment = {}, {}, {}
+    maps, notes, environment, layouts = {}, {}, {}, {}
     for knob, value in knobs.items():
         decl = (world_knobs or {}).get(knob)
         if decl is None:
@@ -538,6 +543,8 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
         why = form_problem(knob, value, m) or simulator_problem(knob, value, m, simulator)
         if why:
             raise KnobError(why)
+        if m.get("layout"):
+            layouts[knob] = str(m["layout"])
         if m.get("environment"):
             for f, x in m["environment"].items():
                 off = field_range_problem(f, x)
@@ -550,7 +557,7 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
         if m.get("surface_map"):
             maps[knob] = str(m["surface_map"])
     return {"weather": weather, "surface_maps": maps, "notes": notes,
-            "environment": environment}
+            "environment": environment, "layouts": layouts}
 
 
 # issue 171: CARLA 0.9.16's get_weather right after set_weather can show the weather before it

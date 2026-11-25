@@ -172,7 +172,8 @@ lead brakes hard, at a heading angle to the lane, for a cause the ego cannot see
 **Logical.**
 
 - A parameter `world.zone_layout` selects a prop set in the world (the cones and a closed
-  lane).
+  lane). *Built, K9f-b (roadmap 092):* as a knob value naming a prop layout, `layout: <name>`,
+  which the run adds to its own copy of the scenario (projects-and-pilots.md).
 - A parameter `pilot.map_variant` selects the map the pilot loads: `current` or
   `before_works`.
 - The two are independent, so the cell (current map, works present) is the stale-map case.

@@ -191,6 +191,7 @@ def expand(target: Path, project: Path, repeat: int = None, params: dict = None,
         check_commands(s, project)
         check_pilot_map(s, project)
         warn_lane_positions(s, project)
+        check_layouts(s, project)
     return specs, suite
 
 
@@ -217,6 +218,32 @@ def warn_lane_positions(spec, project: Path, out=None):
         msgs = [str(e)]
     for msg in msgs:
         (out or sys.stderr).write(f"warning  {path.name}: {msg}\n")
+
+
+def run_layouts(spec, project: Path) -> list:
+    """The prop layouts a spec's knobs name (092 K9f-b; scensim.layouts.for_run)."""
+    from scensim import layouts as layoutsmod   # noqa: PLC0415
+    if Path(spec.scenario).suffix != ".xosc" or "scensim.knob." not in \
+            Path(spec.scenario).read_text(errors="replace"):
+        return []
+    try:
+        world = (config.project_settings(project).get("world") or {})
+    except config.ConfigError:
+        return []
+    return layoutsmod.for_run(project, Path(spec.scenario), spec.parameters,
+                              world.get("knobs") or {}, scenario_map(Path(spec.scenario)),
+                              distribution=bool(spec.distribution))
+
+
+def check_layouts(spec, project: Path):
+    """Refuse, before any run, a spec whose knobs name a layout that cannot be added."""
+    from scensim import layouts as layoutsmod   # noqa: PLC0415
+    try:
+        lays = run_layouts(spec, project)
+        if lays:
+            layoutsmod.inject(Path(spec.scenario), [p for x in lays for p in x["props"]])
+    except (layoutsmod.LayoutError, ValueError) as e:
+        raise Refused(f"{Path(spec.scenario).name}: {e}") from None
 
 
 def command_check(traces, claimers) -> tuple:
@@ -1535,6 +1562,13 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
         run_pilots.append((p, entry))
 
     scenario_file = spec.scenario
+    # 092 K9f-b: a knob naming a prop layout runs the run's own copy, saved beside the record
+    lays = run_layouts(spec, project)
+    copy = None
+    if lays:
+        from scensim import layouts as layoutsmod   # noqa: PLC0415
+        copy = layoutsmod.write_copy(Path(spec.scenario), lays, run_dir)
+        scenario_file = Path(copy["path"])
     ssv2_argv = (ctx.scenario_command or scenario_argv)(rec, spec, run_dir, scenario_file)
     resolved = {
         "run_id": run_id,
@@ -1546,7 +1580,8 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                      "seed": spec.seed, "distribution": spec.distribution,
                      "expect": spec.expect,
                      **({"sample": spec.sample["id"]} if spec.sample else {}),
-                     **({"replay_of": spec.replay_of} if spec.replay_of is not None else {})},
+                     **({"replay_of": spec.replay_of} if spec.replay_of is not None else {}),
+                     **({"copy": copy} if copy else {})},
         "stack": {k: rec.get(k) for k in ("stack_id", "simulator", "map", "seat", "domains",
                                            "ports", "fingerprint")},
         "pilots": {p["entity"]: {"kind": p["kind"], "lifetime": p.get("lifetime", "stack"),
@@ -1659,6 +1694,11 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
             knob_block, why_not = ((ctx.apply_knobs or apply_knobs)(rec, spec, psettings)
                                    if ctx.apply_knobs else
                                    apply_knobs(rec, spec, psettings, project=project))
+            for lay in lays if knob_block is not None else []:   # 092 K9f-b
+                entry = (knob_block.get("knobs") or {}).get(lay["knob"])
+                if entry is not None:
+                    entry["layout"] = {"name": lay["layout"], "file_sha256": lay["sha256"],
+                                       "props": lay["props"]}
             if knob_block is not None:
                 run_events.append({"t_wall": time.time(), "event": "knobs.applied",
                                    "ok": knob_block["ok"]})

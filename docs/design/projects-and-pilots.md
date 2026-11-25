@@ -339,6 +339,22 @@ pi/2] rad, `sun_azimuth` [0, 2 pi) rad, `fog_visual_range` above 0 m, `precipita
 0 or more mm/h, `cloud_cover_oktas` [0, 8]), naming the unit: 60 for `sun_elevation` is refused
 as "60 deg is 1.0472 rad". A profile knob's `range` is held to the same.
 
+A value may also name a prop layout, `layout: <name>` (roadmap 092 K9f-b): props (OpenSCENARIO
+`MiscObject`s, category `obstacle`, the one SSv2 implements) posed on the world's anchors, a lane
+position or a point. A testbench keeps its own props in `layouts/<map>/<name>.yaml`; a layout
+meant to ship with a map goes in the map's directory, `<map>/layouts/<name>.yaml`, published
+with the map's dataset; a name in both is refused. The run adds the props to **its own copy of
+the scenario**, `<run dir>/scenario.xosc`, which is what SSv2 then runs: the source with a
+`ScenarioObject` and an Init `TeleportAction` per prop (on the lane's literal lanelet and s),
+the same bytes for the same source, layouts and anchors. `resolved.yaml` names the source and
+the copy with both digests (`scenario.copy`), and `result.json` `knobs.<knob>.layout` each prop's
+placement. The copy makes the source's relative paths absolute, so a run record holds this
+host's paths and is not portable as it is: the source scenario and `resolved.yaml` are what
+reproduce it. `testbench check` and the run refuse, by one rule, a layout neither place has (or
+both have), a lane or point the world lacks, an s off its lane, another category, a prop that is
+already one of the scenario's entities or in two bound layouts, and a layout knob on SSv2's own
+distribution.
+
 ```yaml
 world:
   knobs:

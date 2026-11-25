@@ -832,7 +832,10 @@ As K9f's plan (above), with what building it decides:
   anchors give a byte-identical copy (a test). SSv2 is handed the copy; `override_parameters`
   as before. `resolved.yaml` `scenario` gains `copy: {path, sha256, layouts: [...]}` beside the
   source's `path` and `sha256`; `result.json` `knobs.<knob>.layout` names the layout, its
-  file's sha256 and each prop's placed lanelet, s, offset and the map-frame x, y it resolves to.
+  file's sha256 and each prop's placed lanelet, s, offset and the map-frame x, y it resolves to
+  (*amended in building:* the x, y only on a lane resolved with its centreline; Town01's
+  `anchors.resolved.json` at v2026.11f has none, so CS3's record has the lanelet, s and offset
+  and the truth file shows where each prop stands).
   projects-and-pilots.md says that what a run executes is the copy.
 - **Refused, by name, in `testbench check` and in the run (one rule):** a layout neither place
   has; a lane or point anchor the world lacks; an s off its lane; a category SSv2 does not

@@ -599,6 +599,47 @@ def unmanaged_scenarios(project: Path, settings: dict) -> set:
     return out
 
 
+def layout_problems(project: Path, settings: dict) -> list:
+    """Each scenario binding a knob whose values name a prop layout (092 K9f-b) the run could
+    not add: a layout no place has (or both have), one wrong for the scenario map's anchors, or
+    a prop that is already a scenario entity. One rule with the run (scensim.layouts)."""
+    from scensim import anchors as anchorsmod, knobs as knobsmod, layouts as layoutsmod  # noqa: PLC0415
+    world = settings.get("world") if isinstance(settings.get("world"), dict) else {}
+    wknobs = world.get("knobs") if isinstance(world.get("knobs"), dict) else {}
+    named = {k: sorted({str(m["layout"]) for m in ((d or {}).get("values") or {}).values()
+                        if isinstance(m, dict) and m.get("layout")})
+             for k, d in wknobs.items() if isinstance(d, dict)}
+    if not any(named.values()):
+        return []
+    files, _ = collect_scenarios(project)
+    out = []
+    for f in files:
+        if "scensim.knob." not in _text(Path(f)):
+            continue
+        try:
+            bound = knobsmod.bound(Path(f), {})
+            sc = read_scenario(f)
+        except Exception:   # noqa: BLE001 -- check_scenario reports an unreadable scenario
+            continue
+        lf = sc.logic_file or ""
+        map_name = lf[len(MAPS_PREFIX):].strip("/") if lf.startswith(MAPS_PREFIX) else None
+        rel = _rel(project, f)
+        for k in bound:
+            for name in named.get(k) or []:
+                try:
+                    if not map_name:
+                        raise layoutsmod.LayoutError("a layout needs the scenario's project map")
+                    path = layoutsmod.find(project, map_name, name)
+                    props = layoutsmod.place(layoutsmod.read(path),
+                                             anchorsmod.for_map(project, map_name),
+                                             where=f"layout {name}")
+                    layoutsmod.inject(Path(f), props)
+                except (layoutsmod.LayoutError, ValueError) as e:
+                    out.append(Finding(rel, f"knob {k}: {e}", "fix the layout or the scenario",
+                                       refused=True))
+    return out
+
+
 def wet_look_problems(project: Path, settings: dict) -> list:
     """Each scenario that binds a knob whose weather: names the road's wet look (wetness,
     precipitation_deposits) and sets a RoadCondition: two writers, refused (086 C7 owns the
@@ -1159,6 +1200,7 @@ def check_project(path, scenarios: bool = True) -> list:
                                refused="not fetched" in msg, host="not fetched" in msg))
     out += profile_problems(project, settings)
     out += wet_look_problems(project, settings)
+    out += layout_problems(project, settings)
     try:
         host = config.host_settings(project)
     except config.ConfigError:
