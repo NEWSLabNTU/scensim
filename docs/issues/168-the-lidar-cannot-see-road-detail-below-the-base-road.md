@@ -141,8 +141,13 @@ judge; on fixture_c6a, the static C6e1 method plus one Autoware drive a side.
   - pose error p95: 0.030 m, the 12 smooth Haruna runs' sd (C6d's rule), which gives C6d's
     0.049 m bar.
 
-  The rule is applied per map (rough_none, smooth), and one quantity beyond it on either map
-  switches the fix to option 1.
+  The rule is applied per map (rough_none, smooth).
+- **Eight comparisons (133, 2026-11-25, before any run).** Four quantities on two maps at about
+  2 sd each give a single exceed about a one-in-four chance of being noise. So:
+  - exactly one quantity exceeds, by less than 1.5 times its threshold: three more runs a side
+    on that map, and the rule is applied again on the six a side before any switch;
+  - two or more exceed, or one by 1.5 times its threshold or more: the fix switches to option
+    1 directly.
 
 ## Predictions for the fix (before any code)
 
