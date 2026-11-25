@@ -221,10 +221,15 @@ only a threshold notices -- so nothing announces it.
 
 ```bash
 git submodule update --init --recursive
-clean='env -i HOME=$HOME USER=$USER PATH=$HOME/.cargo/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin TERM=dumb'
+clean="env -i HOME=$HOME USER=$USER PATH=$HOME/.cargo/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin TERM=dumb ISAAC_ROOT=${ISAAC_ROOT:-}"
 (cd src/autoware_carla_bridge && $clean bash -c 'just build')   # acb's own workspace
 $clean bash -c 'just build'                                      # this repo
 ```
+
+The double quotes expand the variables when `clean` is set; with single quotes `env` would
+receive the literal text `$HOME`. `ISAAC_ROOT` (a host setting) passes through so that `just
+test`'s Isaac-Python lane runs in a clean environment too (issue 186); empty on a host without
+Isaac.
 
 Check the binary against the source when a measurement surprises you -- both copies, and
 the one the live process actually loaded:
