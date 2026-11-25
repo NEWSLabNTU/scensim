@@ -255,6 +255,9 @@ class Knob:
     commanded: float
     applied: object  # float or None
     sent: bool
+    # scensim issue 161 (additive, schema 3): `applied` was read back after a step's tick
+    # (READBACK_AFTER_STEP); the line has the key only when true
+    after_step: bool = False
 
 
 @dataclass(frozen=True)
@@ -592,6 +595,7 @@ def _knob(ln):
         commanded=ln.num(o, "commanded"),
         applied=None if applied is None else ln.number_(applied, "applied"),
         sent=ln.boolean(ln.get(o, "sent", "sent"), "sent"),
+        after_step=("after_step" in o and ln.boolean(o["after_step"], "after_step")),
     )
 
 
@@ -814,6 +818,7 @@ def to_json(record, schema=SCHEMA):
             "commanded": record.commanded,
             "applied": record.applied,
             "sent": record.sent,
+            **({"after_step": True} if record.after_step else {}),
         }
     if isinstance(record, End):
         return {

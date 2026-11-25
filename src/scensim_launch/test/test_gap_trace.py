@@ -499,6 +499,29 @@ class SchemaTwo(unittest.TestCase):
         with self.assertRaises(gt.TraceError):        # schema 1 has none
             gt.load_trace(lines(SAMPLE[:-1] + [k0, SAMPLE[-1]]))
 
+    def test_issue_161_a_knob_line_read_after_the_step_is_marked(self):
+        """Issue 161: `after_step` is read when present and false when absent; a line written
+        without it is the line as before; an unknown key is ignored, which is how a reader that
+        predates `after_step` reads a marked line."""
+        k0 = {"type": "knob", "frame": 1, "sim_time_ns": 1_000_050_000_000, "knob": "visibility",
+              "commanded": 500.0, "applied": None, "sent": True}
+        k1 = dict(k0, frame=2, sim_time_ns=1_000_100_000_000, applied=500.0, sent=False,
+                  after_step=True)
+        trace = gt.load_trace(lines(SAMPLE2[:-1] + [k0, k1, SAMPLE2[-1]]))
+        self.assertEqual([k.after_step for k in trace.knobs], [False, True])
+        self.assertEqual(trace.knobs[1].applied, 500.0)
+        dumped = [json.loads(x) for x in gt.dumps(trace).splitlines() if '"knob"' in x]
+        self.assertEqual(dumped, [k0, k1])          # absent when false, as before
+        self.assertEqual(gt.load_trace(gt.dumps(trace).splitlines()), trace)
+        bad = dict(k1, after_step="yes")
+        with self.assertRaises(gt.TraceError) as e:
+            gt.load_trace(lines(SAMPLE2[:-1] + [bad, SAMPLE2[-1]]))
+        self.assertEqual(e.exception.field, "after_step")
+        # a key the reader does not know is ignored: an older reader reads k1 as it read k0
+        later = gt.load_trace(lines(SAMPLE2[:-1] + [dict(k0, some_later_key=1), SAMPLE2[-1]]))
+        self.assertEqual(later.knobs, [gt.Knob(1, 1_000_050_000_000, "visibility", 500.0, None,
+                                               True)])
+
     def test_a_signal_in_schema_1_is_unknown(self):
         with self.assertRaises(gt.TraceError) as e:
             gt.load_trace(lines(SAMPLE[:-1] + [SIGNAL, SAMPLE[-1]]))

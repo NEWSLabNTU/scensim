@@ -287,6 +287,9 @@ pub struct Active {
     /// The scenario time of the last send.
     pub last_sent_at: Option<f64>,
     pub applied: Option<f64>,
+    /// Whether `applied` was read back after a step's tick (`READBACK_AFTER_STEP`, scensim
+    /// issue 161), not only right after the send.
+    pub applied_after_step: bool,
     pub last_s: Option<f64>,
     /// The coordinate at the last frame: a breakpoint crossed since is sent at once.
     pub last_x: Option<f64>,
@@ -303,6 +306,7 @@ impl Active {
             last_sent: None,
             last_sent_at: None,
             applied: None,
+            applied_after_step: false,
             last_s: None,
             last_x: None,
             sends: 0,

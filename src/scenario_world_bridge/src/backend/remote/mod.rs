@@ -734,6 +734,12 @@ pub struct RemoteBackend {
     state_dir: Option<PathBuf>,
     /// The run's knob profiles (roadmap 092 K9), applied each frame.
     profiles: Vec<profiles::Active>,
+    /// Sends since the last step (scensim issue 161): a `SetEnvironment` (any), one from the
+    /// knob profiles, a `SetRoadCondition`. With `READBACK_AFTER_STEP` the next step's reply
+    /// must carry their read-back.
+    environment_sent: bool,
+    profiles_sent: bool,
+    road_condition_sent: bool,
     /// The drives the last `Apply` carried, by handle, for the tests.
     #[cfg(test)]
     sent: BTreeMap<u32, wire::EntityPose>,
@@ -779,6 +785,9 @@ impl RemoteBackend {
             catalog_hashes: None,
             state_dir: None,
             profiles: Vec::new(),
+            environment_sent: false,
+            profiles_sent: false,
+            road_condition_sent: false,
             #[cfg(test)]
             sent: BTreeMap::new(),
         }
@@ -835,6 +844,8 @@ impl RemoteBackend {
                 }),
                 self.request_timeout,
             )?;
+            self.environment_sent = true;
+            self.profiles_sent = true;
             let applied = match reply.reply {
                 Some(wire::reply::Reply::Environment(e)) => e.applied.as_ref().map(core_weather),
                 _ => None,
@@ -843,14 +854,66 @@ impl RemoteBackend {
                 if *s {
                     a.mark_sent(*v, scenario_time);
                     a.applied = applied.as_ref().and_then(|w| a.profile.field.read(w));
+                    a.applied_after_step = false;
                 }
             }
         }
         if self.gap_trace.recording() {
             for ((a, v), s) in self.profiles.iter().zip(&commanded).zip(&sent) {
-                self.gap_trace
-                    .knob(self.frame, sim_time_ns, &a.profile.knob, *v, a.applied, *s);
+                self.gap_trace.knob(
+                    self.frame,
+                    sim_time_ns,
+                    &a.profile.knob,
+                    *v,
+                    a.applied,
+                    *s,
+                    a.applied_after_step,
+                );
             }
+        }
+        Ok(())
+    }
+
+    /// `READBACK_AFTER_STEP` (scensim issue 161): the read-back a step's reply carries after a
+    /// send since the last step. The knob profiles' values take the environment's, marked as
+    /// read after the tick, when they sent; a scenario's own `SetEnvironment` is not recorded.
+    /// A server that declares the capability and leaves the field empty after a send breaks
+    /// the protocol: named, never a silent fallback to the send's own reply.
+    fn read_back_after_step(&mut self, step: &wire::StepReply) -> Result<(), BackendError> {
+        let env = std::mem::take(&mut self.environment_sent);
+        let profiles = std::mem::take(&mut self.profiles_sent);
+        let road = std::mem::take(&mut self.road_condition_sent);
+        if !self.offers(wire::Capability::ReadbackAfterStep) {
+            return Ok(());
+        }
+        let sim = self.sim().to_string();
+        let missing = |field: &str| {
+            BackendError::Failed(format!(
+                "Protocol error: {sim} declares READBACK_AFTER_STEP, but its step (server frame {}) \
+                 carries no {field} after a send",
+                step.frame
+            ))
+        };
+        if env && self.offers(wire::Capability::EnvironmentApplied) {
+            let w = step
+                .environment_applied
+                .as_ref()
+                .ok_or_else(|| missing("environment_applied"))?;
+            if profiles {
+                let w = core_weather(w);
+                for a in &mut self.profiles {
+                    if a.last_sent.is_some() {
+                        a.applied = a.profile.field.read(&w);
+                        a.applied_after_step = true;
+                    }
+                }
+            }
+        }
+        if road
+            && self.offers(wire::Capability::RoadConditionApplied)
+            && step.road_condition_applied.is_none()
+        {
+            return Err(missing("road_condition_applied"));
         }
         Ok(())
     }
@@ -1820,6 +1883,7 @@ impl SimBackend for RemoteBackend {
         } else {
             round_trip
         };
+        self.read_back_after_step(&step)?;
         let dt = step.sim_time - self.sim_time;
         self.sim_time = step.sim_time;
         self.server_frame = step.frame;
@@ -2741,6 +2805,8 @@ impl SimBackend for RemoteBackend {
                 }),
                 self.request_timeout,
             )?;
+            // sent and taken: the next step's reply owes its read-back (issue 161)
+            self.road_condition_sent = true;
         }
         if sky {
             tracing::info!(
@@ -2761,6 +2827,7 @@ impl SimBackend for RemoteBackend {
                 }),
                 self.request_timeout,
             )?;
+            self.environment_sent = true;
         }
         Ok(())
     }

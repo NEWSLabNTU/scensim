@@ -242,6 +242,9 @@ fn honest_with(caps: &'static [wire::Capability], instance: &'static str) -> Beh
                     // CLOCK_MONOTONIC around the tick, ns (issue 135 step 3): 1 us a tick
                     tick_start_mono_ns: 5_000_000_000 + frame as i64 * 1_000_000,
                     tick_return_mono_ns: 5_000_001_000 + frame as i64 * 1_000_000,
+                    // the read-backs after the step (issue 161): `lagging` fills them
+                    environment_applied: None,
+                    road_condition_applied: None,
                 })))
             }
             R::SetGoal(_)
@@ -1776,4 +1779,146 @@ fn the_truth_file_is_schema_3_from_the_servers_replies() {
             }
         }
     }
+}
+
+const AFTER_STEP: &[wire::Capability] = &[
+    wire::Capability::TrackedMotion,
+    wire::Capability::Environment,
+    wire::Capability::EnvironmentApplied,
+    wire::Capability::RoadCondition,
+    wire::Capability::RoadConditionApplied,
+    wire::Capability::ReadbackAfterStep,
+];
+
+/// A server that shows a sent fog only after its next tick (CARLA 0.9.16's weather): the send's
+/// own reply is stale; the next step carries the fog after the tick when `fill`, else nothing.
+fn lagging(fill: bool, sends: std::sync::Arc<std::sync::Mutex<Vec<f64>>>) -> Behaviour {
+    let shown = std::sync::Arc::new(std::sync::Mutex::new(None::<f64>));
+    let pending = std::sync::Arc::new(std::sync::Mutex::new(false));
+    let mut inner = honest_with(AFTER_STEP, "after-step");
+    Box::new(move |req| {
+        let fog = |v: Option<f64>| wire::ScenarioWeather {
+            fog: v.map(|v| wire::scenario_weather::Fog { visual_range: v }),
+            ..Default::default()
+        };
+        match &req.request {
+            Some(wire::request::Request::SetEnvironment(e)) => {
+                let before = *shown.lock().unwrap();
+                if let Some(f) = e.weather.as_ref().and_then(|w| w.fog) {
+                    sends.lock().unwrap().push(f.visual_range);
+                    *shown.lock().unwrap() = Some(f.visual_range);
+                }
+                *pending.lock().unwrap() = true;
+                return Some(ok(Some(wire::reply::Reply::Environment(
+                    wire::EnvironmentReply {
+                        applied: Some(fog(before)),
+                    },
+                ))));
+            }
+            Some(wire::request::Request::SetRoadCondition(_)) => {
+                *pending.lock().unwrap() = true;
+                return Some(ok(None));
+            }
+            _ => {}
+        }
+        let mut reply = inner(req)?;
+        if let Some(wire::reply::Reply::Step(st)) = reply.reply.as_mut() {
+            if std::mem::take(&mut *pending.lock().unwrap()) && fill {
+                st.environment_applied = Some(fog(*shown.lock().unwrap()));
+            }
+        }
+        Some(reply)
+    })
+}
+
+const FOG_500: &str = r#"{"profiles": [{"knob": "visibility", "field": "fog_visual_range",
+    "step": 1, "coordinate": "time", "points": [[0, 500]]}]}"#;
+
+/// Issue 161: with READBACK_AFTER_STEP a knob's value is the one read back after the next
+/// step's tick, marked so; the send's own reply, read before it, is replaced.
+#[test]
+fn issue_161_a_knob_takes_the_read_back_after_the_step_and_is_marked() {
+    let sends = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut b = backend(&server(lagging(true, sends.clone())));
+    b.initialize(&episode()).unwrap();
+    b.set_knob_profiles(FOG_500).unwrap();
+    b.update_frame(0.05).unwrap();
+    // sent this frame: its reply predates the tick, so no fog yet, and not marked
+    assert_eq!(sends.lock().unwrap().len(), 1);
+    assert_eq!(b.profiles[0].applied, None);
+    assert!(!b.profiles[0].applied_after_step);
+    b.update_frame(0.10).unwrap();
+    // the step read back the first send after its tick; the repeat (issue 171) was sent after
+    // it, and the next step reads that back too
+    b.update_frame(0.15).unwrap();
+    assert_eq!(b.profiles[0].applied, Some(500.0));
+    assert!(b.profiles[0].applied_after_step);
+}
+
+/// Issue 161 (133): a server declaring READBACK_AFTER_STEP that leaves the field empty after a
+/// send breaks the protocol, named, never a fallback to the send's own reply.
+#[test]
+fn issue_161_an_empty_read_back_after_a_send_is_a_protocol_error_by_name() {
+    let sends = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut b = backend(&server(lagging(false, sends)));
+    b.initialize(&episode()).unwrap();
+    b.set_knob_profiles(FOG_500).unwrap();
+    b.update_frame(0.05).unwrap();
+    let e = b.update_frame(0.10).unwrap_err().to_string();
+    assert!(
+        e.contains("Protocol error")
+            && e.contains("READBACK_AFTER_STEP")
+            && e.contains("environment_applied"),
+        "{e}"
+    );
+    // the road condition's the same way
+    let sends = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut b = backend(&server(lagging(true, sends)));
+    b.initialize(&episode()).unwrap();
+    b.update_environment(&road(0.8, "moist", &[])).unwrap();
+    let e = b.update_frame(0.05).unwrap_err().to_string();
+    assert!(e.contains("road_condition_applied"), "{e}");
+    // a step with no send owes nothing
+    let sends = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut b = backend(&server(lagging(false, sends)));
+    b.initialize(&episode()).unwrap();
+    b.update_frame(0.05).unwrap();
+    b.update_frame(0.10).unwrap();
+}
+
+/// Issue 161, test (a) (133): a scenario's own SetEnvironment is never recorded as a knob's
+/// read-back: neither its reply nor the step's read-back after it moves a knob's value.
+#[test]
+fn issue_161_a_scenarios_own_environment_is_not_recorded() {
+    use crate::environment::ScenarioWeather;
+    let sends = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut b = backend(&server(lagging(true, sends.clone())));
+    b.initialize(&episode()).unwrap();
+    b.set_knob_profiles(FOG_500).unwrap();
+    for k in 1..=4 {
+        b.update_frame(f64::from(k) * 0.05).unwrap();
+    }
+    let n = sends.lock().unwrap().len();
+    assert_eq!(b.profiles[0].applied, Some(500.0));
+    // the scenario's own fog (a test's: scensim refuses two writers of a part)
+    let own = Environment {
+        weather: Some(ScenarioWeather {
+            fog_visual_range: Some(80.0),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    b.update_environment(&own).unwrap();
+    assert_eq!(
+        b.profiles[0].applied,
+        Some(500.0),
+        "the reply moved the knob"
+    );
+    b.update_frame(0.25).unwrap();
+    assert_eq!(sends.lock().unwrap().len(), n + 1);
+    assert_eq!(
+        b.profiles[0].applied,
+        Some(500.0),
+        "the step's read-back moved the knob"
+    );
 }
