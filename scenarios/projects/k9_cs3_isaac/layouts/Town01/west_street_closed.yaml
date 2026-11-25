@@ -1,0 +1,26 @@
+# 092 K9f-b: CS3's three street barriers across west_street (lanelet 6583) at s 20, as a prop
+# layout: the knob works = closed adds them to a run's copy of cs3_layout.xosc. The testbench's
+# own props (beside the map, they would need a maps dataset revision).
+layout: 1
+props:
+  barrier_a:
+    category: obstacle
+    model: static.prop.streetbarrier
+    mass: 50
+    box: {center: [0, 0, 0.55], dimensions: [0.4, 1.2, 1.1]}
+    at: {lane: west_street, s: 20, offset: -1.3}
+    h: 1.5708
+  barrier_b:
+    category: obstacle
+    model: static.prop.streetbarrier
+    mass: 50
+    box: {center: [0, 0, 0.55], dimensions: [0.4, 1.2, 1.1]}
+    at: {lane: west_street, s: 20, offset: 0.0}
+    h: 1.5708
+  barrier_c:
+    category: obstacle
+    model: static.prop.streetbarrier
+    mass: 50
+    box: {center: [0, 0, 0.55], dimensions: [0.4, 1.2, 1.1]}
+    at: {lane: west_street, s: 20, offset: 1.3}
+    h: 1.5708

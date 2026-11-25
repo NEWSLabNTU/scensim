@@ -13,6 +13,8 @@ world:
     # portable form, which CARLA and Isaac both apply and read back (092 K9e); angles in
     # radians: pi/3, 60 deg
     illumination: {values: {day: {environment: {sun_elevation: 1.0471975511965976}}}, default: day}
+    # 092 K9f-b: the works on west_street as a prop layout (layouts/Town01/), or none
+    works: {values: {none: null, closed: {layout: west_street_closed}}, default: none}
   pilot_maps:
     Town01: {current: Town01, works: Town01_west_street_closed}
 pilots:

@@ -1,0 +1,4 @@
+# 092 K9f-b: CS3 with its barriers as a prop layout; closed on the stale map and the updated
+# one, and none on the stale map (nothing added: the ego drives through)
+scenarios: [scenarios/cs3_layout.xosc]
+cases: [{pm: current, closure: closed}, {pm: works, closure: closed}, {pm: current, closure: none}]
