@@ -224,3 +224,27 @@ make the error between them. So:
   error on the straights varies with the truth's heading as a sine of that vector's size. If it
   is constant whatever the heading, the offset follows the road (a ribbon built off its
   centreline) or the car, not a fixed shift.
+
+## Step 3's first result: the heading check (2026-11-25, offline, from the records)
+
+On the straight sections (yaw rate under 1 deg/s) of the 18 runs, the across error is not
+constant with the truth's heading: about +0.05 to +0.08 m on headings -135 to -45 deg, and
+-0.07 to -0.11 m on 0 to 180 deg (two runs binned by 45 deg). The prediction "constant whatever
+the heading" **FAILED**. Fitting each run's error (x and y in the map frame) as one fixed map
+vector plus a car-fixed along and across part:
+
+| | fixed map vector (x, y) | its size | car-fixed across | car-fixed along | rms residual |
+|---|---|---|---|---|---|
+| all 18 runs | +0.042 to +0.050, +0.022 to +0.029 m | 0.051 to 0.056 m | -0.035 to -0.040 m | level runs -0.010 to -0.014; behind -0.103 to -0.105; C6e2 BVH-on +0.098 to +0.099 | 0.035 to 0.037 m |
+
+- The straights' error is two parts, the same in every run. (1) A fixed shift of about 5 cm in
+  the map frame (toward +x, +y), which is what a point cloud map off the world, or a frame offset
+  between the map and the truth, would give. (2) A car-fixed -0.037 m across. 172's modes sit in
+  the car-fixed along part alone. The residual is still 0.035 m rms, so the model leaves some of it
+  unexplained.
+- *The sharper prediction for the registration (written before it, labelled as after this
+  result):* if the point cloud map is the cause of part (1), the fit of the map to the world's
+  meshes gives a shift of about (+0.045, +0.026) m, within 0.01. If it gives 0, part (1) is a
+  frame offset between the map frame and the truth's, to be found in the course's projector and
+  `map_origin`. Part (2), car-fixed, is neither: it is to be looked for in the truth's origin
+  across the car or in the lidar's lateral place, the latter ruled out by issue 167's probe.
