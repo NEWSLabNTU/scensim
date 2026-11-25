@@ -2602,6 +2602,26 @@ with onset swept from 1 to 4 s, the others held, logging the stop s, the lateral
 closest approach and the closest gap; if the gap follows the offset, the hypothesis holds and the
 corner is a point-mass artefact, not the model's.
 
+**The onset sweep's prediction (2026-11-25, 133 asked for the sweep; written before it runs).**
+The batch on the CPU, the search's own path (`search_run.run`, `--walker follower`, the anchors,
+`--ttc-length 4.7`, `--corridor 1.9`, 600 steps of 0.05 s), from the pinned worktree at
+4eb87377: record 842ce095's values with onset set to 1.00, 1.25, ..., 4.00 (13 slots), every
+other value held, plus record 842ce095 itself unchanged. At each slot's closest approach (the
+outcome's frame): the box-to-box closest gap (the search's score); the lateral offset, the
+difference of the ego's and M's signed offsets from `west_avenue`'s centreline (the guard's
+measure); and the longitudinal gap, the difference of the two cars' arc positions projected on
+the anchor's polyline, less the car length 4.7 m.
+
+0. **Reproduction** (a stop if it fails, nothing else judged): record 842ce095 unchanged gives
+   0.373715 m to within 1e-6 m.
+1. **The gap tracks the offset.** The closest gap spans at least 0.05 m across the 13 onsets,
+   and its Pearson correlation with the absolute lateral offset at the closest approach has
+   |r| >= 0.8. The sign, judged separately: negative (more offset, a smaller gap).
+2. **The longitudinal gap is about flat.** Its range across the 13 onsets is at most 0.02 m.
+
+If 1 (the |r| part) and 2 hold, the late-onset corner is the point-mass ego's artefact (its fixed
+heading against the lane's shape), not the model's, and the search's result stands as recorded.
+
 **Check 4: held.** The search ran end to end in the batch and reported its estimate and interval;
 the prediction was written before it (0e6f4e4b). Batch numbers, not seats numbers; no CARLA
 claim.
