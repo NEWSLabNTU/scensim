@@ -198,7 +198,7 @@ Order (133, 2026-11-25): 092 K9f-b lands first, then this issue, then K9f-a's co
 `road_condition` record then carries `after_step` from its start (K9f-a's plan amended to say
 so, labelled and dated).
 
-**Open follow-up, not in 161 (133, 2026-11-25): the knobs refuse 9 oktas while the protocol
+**Follow-up, not in 161 (133, 2026-11-25; decided 2026-11-26, below: by design): the knobs refuse 9 oktas while the protocol
 takes it.** scensim's `knobs.FIELD_RANGES` gives `cloud_cover_oktas` [0, 8], so a knob cannot ask
 for the sky that cannot be seen, which a scenario's own `EnvironmentAction` can. What each world
 server does with 9 today, read from the code (nothing run):
@@ -287,3 +287,43 @@ CARLA's process group was gone and its ports free.
   its description above) the sha256 of `sha256sum`'s lines over the copy's files in sorted order,
   names included, taken without `assets/` (fetched after) and without
   `state/Town01/traffic_lights.yaml`, which the run itself wrote.
+
+## The follow-up decided: knobs stay at [0, 8] oktas, by design (241; approved by 133, 2026-11-26)
+
+**WMO.** Code table 2700 (total cloud cover N) gives 0 to 8 oktas, eighths of the sky covered;
+9 is "sky obscured by fog and/or other meteorological phenomena", and "/" is not observed
+(NOAA's copy of WMO 2700, https://www.nodc.noaa.gov/archive/arc0021/0000907/1.1/data/0-data/HTML/WMO-CODE/WMO2700.HTM;
+the World Ocean Database's table agrees). So 9 is not a cloud amount, nor "more than 8": it says
+the amount could not be seen. OpenSCENARIO's `nineOktas` follows it.
+
+**Which side is right: both, for what each is.** The protocol and the shells carry what a
+scenario may say, the WMO code, 0 to 9 (161's amendment): a scenario's `nineOktas` is taken. A
+knob is a quantity a search draws from a range or a profile ramps along one; on those 9 has no
+place (a ramp from 8 to 9, or a draw over [0, 9], would treat "obscured" as one okta more), and
+CARLA shows 9 as 8 and reads it back as 8. So `knobs.FIELD_RANGES` keeps `cloud_cover_oktas` at
+[0, 8], and 9 stays reachable only through the scenario's own Weather element, which is not
+judged. Not widened; no new issue.
+
+**The bridge's clamp is a backstop** (`remote/profiles.rs`, `Field::CloudCoverOktas`:
+`round().clamp(0.0, 8.0)`): `knobs.profile_plan` refuses a profile breakpoint outside the
+knob's range, itself refused outside [0, 8], and `Profile::value_at` is linear between
+breakpoints and held beyond them, so every commanded value lies between two breakpoints in
+[0, 8] and rounds into it; the clamp should never change a validated value (133: if a test shows
+it can, that is a finding, reported, not papered over).
+
+**The change** (comments, a message, docs and tests; no behaviour): `knobs.py`, the reason at the
+range and in the refusal ("9, sky obscured, is not an amount: a scenario's Weather may set it");
+`profiles.rs`, the field's doc says the clamp is a backstop behind `knobs.py`'s refusal;
+`docs/design/projects-and-pilots.md` and 092's K9e list, a clause each.
+
+**Predictions (before the code and the gate).**
+
+- A Rust test (`profiles.rs`): for cloud-cover profiles whose breakpoints lie in [0, 8] (the ends,
+  steps of 0.5 and an uneven set), `value_at` over the coordinate, rounded, stays in [0, 8], so
+  the clamp changes nothing: held, or reported as a finding.
+- `test_knobs.py`: a static 9 and a profile range [0, 9] are refused with the new message; a
+  profile breakpoint of 8.5 under a [0, 8] knob is refused by `profile_plan`; a scenario Weather
+  of `nineOktas` with no cloud knob passes the knob checks.
+- The full gate passes with the Isaac lane run, and `git status --porcelain --untracked-files=no`
+  is empty with no `--ignore-submodules`.
+
