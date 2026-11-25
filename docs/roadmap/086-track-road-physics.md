@@ -874,6 +874,9 @@ into its section before its runs, and its rule set before them:
   **Result (2026-11-24): the rocks pass** (+0.0003 m), on a test with little leverage: the
   rough road without rocks equals the smooth one, so the roughness never reached localization
   (C6d's result, below; issue 152 beside it).
+- **C6e. R7's remainder** (planned 2026-11-25, for 133's review): R3's 5 mm lidar check,
+  motion BVH's cost (issue 138), the ground filter and detection on the fixtures, and a
+  proposal for NDT at speed (C6e's spec, below).
 
 C6's exit is 066's acceptance as these four steps hold it, plus aib's slope matrix and
 haruna_down unchanged on smooth road, paired as C5's were. C6a's own spec (the fixture course's
@@ -1983,6 +1986,141 @@ judged numbers; the cause is issue 152's.
 Record: NAS "2026-11-24 086 C6d Haruna rough (118)": the six run directories, the runner
 (`run_one.sh`, `run_all.sh`, `times.txt`), the GPU log over the runs, `c6d_extras.py` and its
 output (`extras.jsonl`), and issue 152's `where.py`.
+
+#### C6e's spec: R7's remainder (written 2026-11-25, before any run; a plan for 133's review)
+
+066 R7 asks for four things. The first is motion BVH on for rough-road runs, with its render
+cost measured. The second is the lidar mount following the chassis. The third is
+`scan_ground_filter` on the fixtures: no false obstacles over washboard and ruts, and rocks
+passed as ground. The fourth is NDT on rough tiles. It measures the false-stop rate, the rock
+and pothole detection range, and NDT's iterations. R3 left R7 one check more: whether Isaac's
+RTX lidar reads the detail's render mesh within 5 mm.
+
+C6d covered three of these on Haruna: the lidar following the body, the ground filter being in
+the pipeline, and NDT and the false stops on rough tiles. Its pass had little leverage. These
+are not covered yet:
+
+- motion BVH (issue 138);
+- the ground filter on the fixtures;
+- a detection range: none was measurable in C6d, because no rock or pothole was in the path;
+- R3's 5 mm check.
+
+**Two findings from C6d's records, made offline while writing this.** They are amendments to
+C6d's result, made after it (`/mnt/renegade/aeon/isaac-ex/c6e/attitude.py`, on the runs' truth
+traces, `ego.csv` at 20 Hz, above 2 m/s).
+
+- **haruna_down drives at 16 km/h, not 45-50.** n1's truth trace has a speed p50 of 4.46 m/s
+  and a maximum of 4.88. The spec's figure of 45-50 km/h for the washboard's place was wrong.
+  At 4.5 m/s the washboard's 0.7 m pitch is met at 6.4 Hz, under the corner's 10-15 Hz hop
+  (C6c1), and the class C roughness's wavelengths of 0.35 to 90 m are met at 0.05 to 13 Hz.
+- **The body's motion did reach the lidar's pose.** Here is *rough_none* (n1, n2) against C6b's
+  smooth *none* (its last two runs):
+
+  | | roll's deviation from its 1 s mean, rms | pitch's, rms | roll rate rms / p99 | pitch rate rms / p99 |
+  |---|---|---|---|---|
+  | rough_none | 0.203 deg | 0.131 deg | 1.35 / 3.70 deg/s | 1.77 / 5.19 to 5.33 deg/s |
+  | smooth none | 0.011 to 0.012 deg | 0.049 deg | 0.17 / 0.51 deg/s | 0.15 / 0.52 to 0.55 deg/s |
+
+  C6d's line "the body's pitch and roll on the washboard and potholes did not reach the scan's
+  pose" is wrong as written. The rough road moved the body 10 to 18 times as much, the lidar
+  follows the body (C6d's sensor check), and NDT's pose error stayed the same. *Hypothesis:*
+  NDT tracks a 0.2 deg roll at 16 km/h scan by scan, so roughness at this speed costs
+  localization nothing. The trace is at 20 Hz, so it shows nothing above 10 Hz.
+
+Four steps follow, C6e1 to C6e3 for R7 and C6e4 as a proposal. Every run is on 118's GPU0. The
+runs are not timing runs, so they may share GPU0 under codec 118's standing OK, except C6e2,
+which is a timing run under the full quiet rule. Each step's predictions are below, before its
+runs. A step's own details (scripts, packages) are added to its section before it runs.
+
+- **C6e1. The lidar reads the road (R3's check; no Autoware).**
+  - **Setup.** fixture_c6a (R0's cleats of 5, 10 and 15 cm, the 8 cm pothole, 30 m of
+    washboard, on a 640 m straight with no roughness), with its `road_detail.yaml` in the map
+    directory so the world server builds the layer (C5d2's lesson). aib's car stands still, 10 m
+    before each fixture and once on flat road. One second of the lidar's cloud is taken at each
+    stop.
+  - **Measure.** Each return on the road surface is put into the map frame by the truth pose
+    and the mount, and compared with the road layer's height function at its (x, y): the
+    function the render mesh is built from. The output is the height error's median and p95 in
+    the range bands 5-10, 10-20, 20-40 and 40-80 m, and the cleats' faces and the pothole's far
+    edge as they appear in the cloud.
+  - **Predictions (before any run):**
+    - The median |dz| is 5 mm or less at 5-20 m, and the p95 is 10 mm or less. *Hypothesis:* the
+      RTX lidar has no range noise of its own; if aib's lidar profile adds noise, its sd is
+      reported and the bound applies to the median only.
+    - At 40-80 m the returns are the world's own ground, not the detail: the render mesh exists
+      only within `MeshStream`'s 40 m reach. On washboard beyond 40 m, |dz| is then about the
+      washboard's own amplitude (up to 20 mm), not under 5 mm.
+    - Each cleat shows as a step at its station within 0.1 m, with returns on its near face. The
+      pothole's floor is seen only within about 10 m. *Hypothesis, from the geometry:* the lidar
+      at about 1.9 m looks into a 0.5 m long hole at a grazing angle.
+- **C6e2. Motion BVH's cost (issue 138; a timing run).**
+  - **Setup.** smooth Haruna, haruna_down with Autoware: the C6b budget's package, because the
+    RTX lidar's render is what the setting changes. Motion BVH off against on, by issue 138's
+    no-code route: `ISAAC_KIT_ARGS` with `--/renderer/raytracingMotion/enabled=true` and the
+    masking settings, read back from Kit's log in each "on" run. Three runs a side, interleaved,
+    under the full quiet rule.
+  - **Measure.** The world server's tick p50 and p95, and the pose error p95 and NVTL p05 as
+    reported values.
+  - **Predictions (before any run):**
+    - Tick p50 is 0.5 to 3 ms higher with it on. *Hypothesis:* one BVH refit a frame for the
+      moving prims; the scene has few, the ego and the rocks.
+    - The pose error and NVTL are unchanged within C6b's run-to-run spread (C6d's sd of the
+      difference, 0.0245 m, for p95). The ego's own motion is already de-skewed, and nothing
+      else moves.
+  - **Decision proposed.** Motion BVH is on for C6e3 if the tick p50 rises by 5 ms or less (R4's
+    budget per feature); otherwise it stays off, and the C6e3 runs state it. The bar is 133's
+    to set.
+- **C6e3. The ground filter and detection on the fixtures (R7's fixtures).**
+  - **Setup.** Autoware on two fixture courses, built with their Autoware maps as C5d's fixture
+    was. fixture_c6a has the cleats, the pothole and the washboard. fixture_c6b has rocks on the
+    carriageway: 15 cm static at s 100 m, 15 cm loose at 200, 8 cm loose at 300 (the 8 and 15 cm
+    in the left wheel track), and a 35 cm boulder in the lane's middle at 400. Each is driven
+    down the course by one scenario, twice. The speed driven is read from the truth trace.
+  - **Measure, per fixture:**
+    - the perception objects (`/perception/object_recognition/objects`) within 1 m of it: the
+      frames and the range at which one is first seen;
+    - the non-ground points (`/perception/obstacle_segmentation/pointcloud`) within 1 m of it,
+      the largest count a frame;
+    - the ego's stops within 30 m before it (under 1 m/s for over 2 s), which counts a stop
+      Autoware makes on points without any object;
+    - whether the ego drove over the fixture or around it.
+  - **The ground filter's thresholds**, from Autoware 1.5.0's `ground_segmentation.param.yaml`:
+    `non_ground_height_threshold` 0.20 m, `split_height_distance` 0.20 m, a global slope of 10
+    deg, a local slope of 13 deg, a 0.1 m grid, and elevation grid mode. The profile's
+    perception launch passes `autoware_launch`'s
+    `config/perception/obstacle_segmentation/ground_segmentation/ground_segmentation.param.yaml`
+    (`obstacle_segmentation_ground_segmentation_param_path`), which has the same values,
+    checked while writing this.
+  - **Predictions (before any run):**
+    - Washboard, pothole and the 5 cm cleat give no non-ground points, no object and no stop.
+    - The 10 and 15 cm cleats are ground: no object and no stop. This is my least sure
+      prediction. *Hypothesis:* both are under the 0.20 m thresholds, but a vertical face fails
+      the 13 deg local slope, and the filter may still mark the face's points non-ground.
+    - The 8 and 15 cm rocks are passed as ground (under 0.20 m): no object, and the ego drives
+      over them. This is 066 R7's "rocks passed as ground". Whether driving over a 15 cm rock
+      is right is the car's clearance's question, reported, not judged here.
+    - The 35 cm boulder is non-ground and an object, and the ego stops before it. It is first
+      seen at 32 m at most, issue 143's rock reach, not the lidar's own range. If its first
+      range equals the reach, the reach is the limit; rocks the sensors see beyond it are 066
+      R4's leftover for R7 and a code item for 133's decision.
+    - False stops: 0 over the cleats, the pothole and the washboard.
+  - **Judged (proposed):** R7's "false obstacles over washboard and ruts" as no stop and no
+    object over the washboard and the pothole in both runs. Everything else is reported.
+- **C6e4. NDT with leverage (a proposal, after C6e1 to C6e3).** haruna_down's 16 km/h is why
+  C6d's roughness cost localization nothing (the hypothesis above). A pairing with leverage
+  needs speed. The plan is a copy of *rough_none* and of smooth Haruna with the lanelets' speed
+  limit raised, so that the ego cruises at about 40 km/h where the road allows, three runs a
+  side, under C6d's rule.
+  - *Prediction (before any run, a hypothesis):* the pose error p95 still rises by less than
+    0.05 m.
+  - If C6e1 finds that the lidar does not see the detail, C6e4 measures the body's motion
+    alone, and its spec says so.
+
+**Blockers found while writing this:** none that stop C6e1 to C6e3. Both fixture courses have
+Autoware maps: C5d's fixture ran with Autoware (`isaac_c5d_fixture`). C6e1 needs a new script,
+the cloud against the height function. C6e2 waits for a quiet GPU0. C6e4 needs a Haruna copy
+with its speed limit raised, and whether haruna_down's 16 km/h comes from the speed limit or
+from the planner is checked first.
 
 
 Order: C1, C2 and C3 make the shared data; C4 and C5 are its first consumers, C5 after C3.
