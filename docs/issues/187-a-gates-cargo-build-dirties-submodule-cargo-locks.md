@@ -1,6 +1,6 @@
 # 187: a gate's cargo build rewrites submodule Cargo.lock files ([[patch.unused]] entries) and dirties the tree
 
-**Status:** open (recorded; numbered by 133 on 2026-11-25; the fix to be planned before any code).
+**Status:** open; root cause found (241, 2026-11-26); the scensim-side cleanup held pending a fix in colcon-cargo-ros2 (133).
 **Severity:** low. Nothing that lands is changed, but every gate checkout ends with two dirty
 submodules, so a pre-push "clean tree" check fails on files the gate itself wrote.
 **Found:** 2026-11-25, scensim 118, landing 1ed265d7; scensim 139 before it (wt-178, wt-179).
@@ -59,3 +59,52 @@ workspace's own cargo calls); or have the submodules commit lock files that alre
 entries (fragile: they follow the generated crate list); or restore the lock files after the
 build. Then the check: a full gate leaves `git status --porcelain` empty with no
 `--ignore-submodules`.
+
+## Root cause (241, 2026-11-26)
+
+colcon-cargo-ros2 0.5.4 (`jerry73204/colcon-cargo-ros2`, pinned by `just setup`) writes one
+`.cargo/config.toml` per Cargo workspace it finds (`_write_cargo_configs`,
+`_detect_cargo_workspace_root`): the superproject's, for its root `[workspace]`, with the eight
+message patches, and one in each of `src/scensim_carla_world` and `src/scensim_world_protocol`
+with an empty patch block. Cargo merges every `.cargo/config.toml` from the build's directory up
+to the filesystem root, so every cargo command inside those two (colcon's build of them, which
+is when the locks were written: their mtimes fall inside the gate's `just build`; and `just
+test`'s nextest calls) also gets the root's patches. Neither depends on a message crate, so
+cargo records each as `[[patch.unused]]`. The tool's per-workspace configs assume each
+workspace sees only its own; cargo's hierarchical config breaks that for a nested one.
+
+**Evidence** (the finished 186 gate worktree, d780baf7's build; every file restored after):
+
+| component | `cargo metadata --offline`, root config present | root config moved aside |
+|---|---|---|
+| `src/scensim_world_protocol` | `Cargo.lock` +32 -0, 8 `[[patch.unused]]` | no change |
+| `src/scensim_carla_world` | `Cargo.lock` +32 -0, 8 `[[patch.unused]]` | no change |
+
+`src/autoware_carla_bridge`, which uses the message crates, and `third_party/cuda_ndt_matcher`,
+built on its own with no config, stay clean.
+
+## The options, weighed (133 decided, 2026-11-26)
+
+- **(a) `--locked` or `--frozen`:** rejected. `cargo metadata --locked` in a component with the
+  root config exits 101 ("patch `action_msgs ...` was not used in the crate graph"): the build
+  would fail instead of writing the lock.
+- **(b) The components commit the `[[patch.unused]]` blocks:** rejected. Each component's own
+  `just build`, with no root config, would strip them again, and the list follows the
+  superproject's generated crate set, so each new message package would need a component
+  commit and a pin move.
+- **(c) A scensim-side cleanup** (strip the unused-patch blocks after each cargo call, only when
+  they are the lock's whole change and only for the root's patch names): **held pending (d).**
+  It would rewrite tracked submodule files after every build to remove dirt that harms nothing:
+  pins are commits, the dirt never reaches one, and the push guard's
+  `git status --porcelain --untracked-files=no --ignore-submodules=dirty` already passes it.
+  Revisited if the user declines (d).
+- **(d) Fix it in colcon-cargo-ros2:** a nested workspace must not inherit an outer workspace's
+  patches; for instance the outer patches passed as `--config` on the tool's own cargo calls (a
+  bare cargo command and IDEs then lose them), or a manifest-level `[patch.crates-io]` for the
+  outer workspace (which does not leak, but is a tracked file). The user's own repository: a
+  draft issue (cause, the repro above, the two designs and their costs) went to 133 for the
+  user, `~/nas/home/2026-11-26 colcon-cargo-ros2 issue draft (241)/`; nothing posted there.
+
+Meanwhile a landing's clean-tree guard uses `--ignore-submodules=dirty`, which still catches a
+moved pin.
+
