@@ -14,12 +14,13 @@ freedom from collisions rests on its deceleration being unbounded, so a frame wh
 binds is reported (`capped`): a collision of the model's own can only follow one.
 
 **The lane.** `anchors` give each slot its lane, a resolved K9 lane anchor (`x`, `y`: the
-centreline; `length`, `speed_limit`). On the host it is resampled every `DS` m of arc length
-(extended straight past its end, so the arrays of every slot have one length); a point is
-placed on the lane by its nearest segment, searched in a window around the last one (the whole
-lane the first time). The command's heading is the segment's, corrected toward the centreline
-by -e / `LOOKAHEAD` (e the signed lateral offset, clamped to +-`MAX_CORRECTION` rad): the world
-moves the vehicle along it, so it keeps to the lane.
+centreline; `length`, `speed_limit`). On the host it is resampled every `DS` m of the spline's
+s (its `heading_s`, the s the world places by; issue 166), extended straight past its end so the
+arrays of every slot have one length; a point is placed on the lane by its nearest segment,
+searched in a window around the last one (the whole lane the first time). The command's
+heading is the segment's, corrected toward the centreline by -e / `LOOKAHEAD` (e the signed
+lateral offset, clamped to +-`MAX_CORRECTION` rad): the world moves the vehicle along it, so it
+keeps to the lane.
 
 **The leader** is another entity's truth (`leader_*` in `obs`), placed on the same lane: it
 leads when it is ahead and within `half_width` m of the centreline. Positions are entity
@@ -113,20 +114,41 @@ def centreline_of(lane: dict) -> dict:
 
 
 def resample(lane: dict, ds: float = DS, extend: float = EXTEND):
-    """The lane's centreline every `ds` m of arc length, extended straight `extend` m past its
-    end: (xs, ys), on the host. A lane anchor resolved before its centreline was recorded (K9
-    before cd65e4ce: `heading_s`, `heading`, `start_x`, `start_y` only) has it rebuilt from
-    its headings, each interval along the mean of its two."""
+    """The lane's centreline every `ds` m of the spline's s, extended straight `extend` m past
+    its end: (xs, ys), on the host. The anchor's `x`/`y` are its spline sampled at `heading_s`,
+    and point k is placed at s = k ds between the two samples around it, so a position read as
+    (k + t) ds is in the spline's s, the s the world places by: across a reversed loop the
+    polyline's own arc runs short of it (issue 166, "A placement s and a model's gap").
+    Repeated `heading_s` values (the joins between lanelets) are zero-length steps and are
+    dropped. An anchor without `heading_s` matching its points is resampled in polyline arc;
+    one resolved before its centreline was recorded (K9 before cd65e4ce: `heading_s`,
+    `heading`, `start_x`, `start_y` only) has it rebuilt from its headings, each interval along
+    the mean of its two, and its `heading_s` then gives the s."""
     if "x" not in lane and "heading_s" in lane:
         lane = dict(lane, **centreline_of(lane))
     x, y = [float(v) for v in lane["x"]], [float(v) for v in lane["y"]]
     if len(x) < 2 or len(x) != len(y):
         raise ValueError("idm_follower: the lane anchor has no centreline (x, y)")
-    cum = [0.0]
+    hs = lane.get("heading_s")
+    if hs is not None and len(hs) == len(x):
+        u = [float(v) for v in hs]
+    else:
+        u = [0.0]
+        for i in range(1, len(x)):
+            u.append(u[-1] + math.hypot(x[i] - x[i - 1], y[i] - y[i - 1]))
+    kx, ky, cum = [x[0]], [y[0]], [u[0]]
     for i in range(1, len(x)):
-        cum.append(cum[-1] + math.hypot(x[i] - x[i - 1], y[i] - y[i - 1]))
+        if u[i] < cum[-1] - 1e-6:
+            raise ValueError(f"idm_follower: the lane anchor's heading_s goes back at point {i} "
+                             f"({u[i]} after {cum[-1]})")
+        if u[i] - cum[-1] > 1e-9:
+            kx.append(x[i])
+            ky.append(y[i])
+            cum.append(u[i])
+    x, y = kx, ky
+    cum = [c - cum[0] for c in cum]
     total = cum[-1]
-    if total <= 0.0:
+    if len(x) < 2 or total <= 0.0:
         raise ValueError("idm_follower: the lane anchor's centreline has no length")
     hx, hy = x[-1] - x[-2], y[-1] - y[-2]
     hn = math.hypot(hx, hy)

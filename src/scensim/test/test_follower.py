@@ -249,3 +249,64 @@ def test_a_lane_resolved_without_its_centreline_has_it_rebuilt_from_its_headings
     assert math.hypot(c["x"][-1] - lane["x"][-1], c["y"][-1] - lane["y"][-1]) < 2e-3
     m = f.IdmFollower([{"lane": "l"}], [0], [{"lane": old}], xpmod.namespace("numpy"))
     assert m.K > 0
+
+
+def loop_lane(overshoot=0.02, at=50.0, length=100.0, step=0.25):
+    """A straight lane along +x sampled every `step` m of the spline's s (`heading_s`), with one
+    reversed loop between two samples at `at`: the spline runs `overshoot` m farther than the
+    chord there (issue 166), so x = s up to `at` and x = s - overshoot past it."""
+    hs, xs = [], []
+    s = 0.0
+    while s <= length + 1e-9:
+        hs.append(s)
+        xs.append(s if s <= at + 1e-9 else s - overshoot)
+        s = s + step if abs(s - at) > 1e-9 else s + step + overshoot
+    return {"kind": "lane", "length": hs[-1], "speed_limit": 25.0, "heading_s": hs,
+            "heading": [0.0] * len(hs), "start_x": 0.0, "start_y": 0.0,
+            "x": xs, "y": [0.0] * len(xs)}
+
+
+def lane_s(lane, px, py):
+    """The follower's s for one point on `lane` (the whole-lane search)."""
+    xp = xpmod.namespace("numpy")
+    m = f.IdmFollower([{"lane": "l"}], [0], [{"lane": lane}], xp)
+    _k, s, _e, _ux, _uy = m._place(xp.asarray([px]), xp.asarray([py]),
+                                   xp.zeros(1, xp.int64), xp.zeros(1, xp.bool), False)
+    return float(xp.to_host(s)[0])
+
+
+def test_the_lanes_s_is_the_splines_across_a_reversed_loop():
+    """Issue 166: placed by the spline's s, a car reads that s (within 1e-3 m) past the loop,
+    and inside the loop's own segment within its overshoot; resampled in polyline arc (no
+    heading_s) it read the overshoot short."""
+    lane = loop_lane()
+    for s in (10.0, 49.9, 50.6, 60.0, 99.0):    # outside the resampled segment [50, 50.5]
+        x = s if s <= 50.0 else s - 0.02
+        assert abs(lane_s(lane, x, 0.0) - s) < 1e-3, s
+    for x in (50.05, 50.15, 50.25, 50.35, 50.45):  # inside it: s from x to x + the overshoot
+        assert x - 1e-9 <= lane_s(lane, x, 0.0) <= x + 0.02 + 1e-9, x
+    arc = {k: v for k, v in lane.items() if k != "heading_s"}
+    assert abs(lane_s(arc, 59.98, 0.0) - (60.0 - 0.02)) < 1e-3
+
+
+def test_a_lane_whose_heading_s_is_its_chord_arc_resamples_as_before():
+    lane = arc_lane()
+    cum = [0.0]
+    for i in range(1, len(lane["x"])):
+        cum.append(cum[-1] + math.hypot(lane["x"][i] - lane["x"][i - 1],
+                                        lane["y"][i] - lane["y"][i - 1]))
+    xs0, ys0 = f.resample(lane)
+    xs1, ys1 = f.resample(dict(lane, heading_s=cum))
+    assert len(xs0) == len(xs1)
+    assert max(abs(a - b) for a, b in zip(xs0 + ys0, xs1 + ys1)) < 1e-12
+
+
+def test_repeated_heading_s_at_a_join_is_dropped_and_going_back_is_refused():
+    lane = straight_lane(length=20.0)
+    hs = [float(x) for x in lane["x"]]
+    joined = dict(lane, x=lane["x"][:3] + [lane["x"][2]] + lane["x"][3:],
+                  y=[0.0] * (len(hs) + 1), heading_s=hs[:3] + [hs[2]] + hs[3:])
+    assert f.resample(joined) == f.resample(dict(lane, heading_s=hs))
+    back = dict(lane, heading_s=hs[:3] + [hs[2] - 0.5] + hs[4:])
+    with pytest.raises(ValueError, match="heading_s goes back"):
+        f.resample(back)

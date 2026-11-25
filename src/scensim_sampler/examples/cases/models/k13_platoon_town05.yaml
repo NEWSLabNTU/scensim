@@ -8,11 +8,10 @@
 # (4.7 m) plus IDM's exact equilibrium gap at 22 m/s behind a leader at 22 m/s,
 # s_e = (s0 + v T) / sqrt(1 - (v / v0)^4), v0 the lane's limit (133: s0 + vT alone is the
 # equilibrium only when v << v0; here the free-road term makes it about 1.67 times longer).
-# 0.025868 m: the follower measures its gap along the anchor's sampled polyline, which runs
-# short of the spline's s across issue 166's reversed loops; between M (68.43) and L (on lanelet
-# 219, past the loops) the polyline's arc is 0.025868 m shorter (computed from the anchor's
-# x/y against heading_s, within 5e-6 m over L's range; issue 166, "A placement s and a model's
-# gap"), so L starts that much farther for M to measure s_e.
+# Until issue 166's gap-in-s fix, the follower measured its gap along the anchor's sampled
+# polyline, 0.025868 m short of the spline's s between M and L, and lead_s carried that much
+# more (092 K13 step v's search ran so). It now measures in s, the s it is placed by, and the
+# term is gone (issue 166, "The open fix's plan").
 model: 1
 header:
   name: k13_platoon_town05
@@ -26,4 +25,4 @@ variables:
   - {name: accel, uniform: {low: 0.2, high: 0.6}}
   - {name: comfort_decel, uniform: {low: 1.2, high: 3.2}}
 derived:
-  lead_s: "73.13 + 0.025868 + (2.833 + 22 * time_gap) / sqrt(1 - (22 / anchor.west_avenue.speed_limit) ** 4)"
+  lead_s: "73.13 + (2.833 + 22 * time_gap) / sqrt(1 - (22 / anchor.west_avenue.speed_limit) ** 4)"
