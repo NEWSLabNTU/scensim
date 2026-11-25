@@ -111,9 +111,11 @@ setup:
         echo "Removing conflicting colcon-cargo/colcon-ros-cargo..."
         pip uninstall -y colcon-cargo colcon-ros-cargo
     fi
-    # 0.5.4: the first to declare tomli (Python 3.10), without which 0.5.3 took every crate for a
-    # standalone one and acb's two tools failed to build (077, swb 241)
-    pip install --quiet "colcon-cargo-ros2==0.5.4"
+    # 0.5.5: the root workspace's message patches in its Cargo.toml (`patches-in-manifest`), so
+    # the nested workspaces (the world protocol, the CARLA world server) no longer inherit them
+    # and write them into their Cargo.lock (issue 187). 0.5.4 was the first to declare tomli
+    # (Python 3.10), without which 0.5.3 took every crate for a standalone one (077, swb 241).
+    pip install --quiet "colcon-cargo-ros2==0.5.5"
 
     # Initialise missing submodules only: a plain `update` would move a submodule you are
     # working in back to its pinned commit.
@@ -200,13 +202,29 @@ _check-setuptools:
             ;;
     esac
 
+# Fail fast on a colcon-cargo-ros2 older than 0.5.5 (issue 187): the root Cargo.toml asks for
+# its patches in the manifest (`[workspace.metadata.ros2] patches-in-manifest`), which 0.5.4
+# ignores; it would write them into .cargo/config.toml again and never make the
+# .cargo/ros2-bindings links the committed block names.
+_check-colcon-cargo-ros2:
+    #!/usr/bin/env bash
+    set -e
+    PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/\.venv/bin$' | paste -sd:)
+    v=$(python3 -c 'from importlib.metadata import version; print(version("colcon-cargo-ros2"))' 2>/dev/null) || v=none
+    if ! python3 -c 'import sys; v = sys.argv[1]; sys.exit(0 if v != "none" and tuple(int(x) for x in v.split(".")[:3]) >= (0, 5, 5) else 1)' "$v"; then
+        echo "ERROR: colcon-cargo-ros2 $v: this workspace needs 0.5.5 or later (issue 187: the root" >&2
+        echo "  Cargo.toml keeps its message patches in the manifest, which older versions ignore)." >&2
+        echo "  Fix: just setup (or pip install --user colcon-cargo-ros2==0.5.5)" >&2
+        exit 1
+    fi
+
 # The user guide's `colcon build`, plus developer flags: --symlink-install (edit Python
 # and launch files without rebuilding), the dev-release cargo profile, no tests. The CARLA
 # version comes from the `carla-0916` feature in Cargo.toml, as for users; an exported
 # CARLA_VERSION overrides it.
 #
 # Build all packages (developer flags on the user's colcon build)
-build: _check-setuptools
+build: _check-setuptools _check-colcon-cargo-ros2
     #!/usr/bin/env bash
     set -e
     PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/\.venv/bin$' | paste -sd:)
@@ -240,19 +258,6 @@ build: _check-setuptools
         --cmake-args -DBUILD_TESTING=OFF
     # what this install was built from, for every run's result.json (roadmap 077, G29)
     PYTHONPATH=src/scensim python3 -m scensim.results stamp . install >/dev/null
-
-    # colcon-cargo-ros2 writes this workspace's message patches into acb's Cargo.lock too,
-    # as `[[patch.unused]]` entries (scensim_interfaces is not an acb dependency). Undo that, and
-    # only that, so the acb submodule does not show a modified lock after every build here.
-    lock=src/autoware_carla_bridge/Cargo.lock
-    if ! git -C src/autoware_carla_bridge diff --quiet -- Cargo.lock; then
-        if git -C src/autoware_carla_bridge diff -U0 -- Cargo.lock | grep -E '^[+-][^+-]' \
-            | grep -vqE '^[+-](\[\[patch\.unused\]\]|name = "[a-z0-9_]+"|version = "0\.0\.0")$'; then
-            echo "note: $lock changed beyond [[patch.unused]]; left as is" >&2
-        else
-            git -C src/autoware_carla_bridge checkout -- Cargo.lock
-        fi
-    fi
 
 # Fetch the Autoware fixes 1.5.0 lacks (the fork commits pinned in
 # scripts/autoware_overlay.bash, only the packages listed there) and build them into

@@ -7,6 +7,12 @@ members = [
 # here, built and tested in their own workspace.
 exclude = ["src/scensim_world_protocol", "src/scensim_carla_world"]
 
+# colcon-cargo-ros2 (0.5.5) writes this workspace's message patches into this file, between its
+# markers, as links under .cargo/ros2-bindings (git-ignored, made by each build), not into
+# .cargo/config.toml, which cargo would merge into the nested workspaces above (issue 187)
+[workspace.metadata.ros2]
+patches-in-manifest = true
+
 [profile.dev-release]
 inherits = "release"
 debug = true
