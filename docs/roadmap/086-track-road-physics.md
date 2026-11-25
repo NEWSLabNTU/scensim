@@ -2053,6 +2053,17 @@ runs. A step's own details (scripts, packages) are added to its section before i
     - Each cleat shows as a step at its station within 0.1 m, with returns on its near face. The
       pothole's floor is seen only within about 10 m. *Hypothesis, from the geometry:* the lidar
       at about 1.9 m looks into a 0.5 m long hole at a grazing angle.
+    - *Amended before any run (118, 2026-11-25, from reading the code while writing C6e1's
+      script):* the pothole's floor is not seen at all. `MeshStream` draws the detail as its own
+      mesh, base plus detail (`Detail.surface_tile`), and the world's own road mesh under it stays
+      visible. Only the collision copy of the detail is hidden (`rock_layer`). So wherever the
+      detail is below the base road, the lidar meets the base road first: the pothole, the ruts
+      and the lower half of the zero-mean roughness. It sees max(base, base + detail). The
+      washboard (0 to +20 mm) and the cleats are above the base and are seen. Predicted: over the
+      pothole, returns at the base road's height (|dz to base| at most 5 mm, dz to the detail
+      about +80 mm). If this holds, it is a finding for 133: on C6d's Haruna the lidar saw no
+      rut, no pothole and half the roughness. C6e3's pothole would then test nothing about the
+      ground filter.
 - **C6e2. Motion BVH's cost (issue 138; a timing run).**
   - **Setup.** smooth Haruna, haruna_down with Autoware: the C6b budget's package, because the
     RTX lidar's render is what the setting changes. Motion BVH off against on, by issue 138's
