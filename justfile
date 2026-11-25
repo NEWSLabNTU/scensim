@@ -337,6 +337,27 @@ format:
     source install/setup.bash
     cargo +nightly fmt
 
+# `dir` defaults to $SCENSIM_GATE_ROOT/gate-<sha8> (a host setting, default /var/tmp/$USER).
+# The landing gate (issue 191): build, test, check one commit in a fresh worktree, clean env
+gate commit="HEAD" dir="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    scripts/gate.sh "{{commit}}" {{ if dir == "" { "" } else { quote(dir) } }}
+
+# Remove a gate's worktree once its commit is on origin and nothing tracked changed in it.
+gate-clean commit:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    sha=$(git rev-parse --verify "{{commit}}^{commit}")
+    dir="${SCENSIM_GATE_ROOT:-/var/tmp/$USER}/gate-${sha:0:8}"
+    [ -d "$dir" ] || { echo "no gate worktree at $dir"; exit 1; }
+    git fetch -q origin
+    [ -n "$(git branch -r --contains "$sha")" ] || { echo "$sha is on no origin branch: kept"; exit 1; }
+    [ -z "$(git -C "$dir" status --porcelain --untracked-files=no)" ] || { echo "$dir has tracked changes: kept"; exit 1; }
+    git worktree remove --force "$dir"
+    git worktree prune
+    echo "removed $dir"
+
 # Run format check and clippy
 check:
     #!/usr/bin/env bash
@@ -395,7 +416,7 @@ test:
     # SSv2's protos in scensim_world_protocol are the fork's (roadmap 051)
     # no pytest plugins: ROS's launch_testing hook would import scripts/test_phase1.py, a
     # live ZMQ client (pyzmq, the runtime's protobuf), and fail where those differ (swb 139)
-    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q scripts/test_ssv2_protos.py scripts/test_sim_time.py scripts/test_t3.py scripts/test_ego_used.py scripts/test_coop_pilots_dir.py scripts/test_land_pin.py scripts/test_pre_push.py scripts/test_czp_rows_check.py scripts/test_crossing_aw_score.py scripts/test_world_keys.py scripts/test_build_jobs.py scripts/test_check_release_rosdep.py scripts/test_isaac_lane.py scripts/sim_compare/test_scene.py
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q scripts/test_ssv2_protos.py scripts/test_sim_time.py scripts/test_t3.py scripts/test_ego_used.py scripts/test_coop_pilots_dir.py scripts/test_land_pin.py scripts/test_pre_push.py scripts/test_czp_rows_check.py scripts/test_crossing_aw_score.py scripts/test_world_keys.py scripts/test_build_jobs.py scripts/test_check_release_rosdep.py scripts/test_isaac_lane.py scripts/test_gate.py scripts/sim_compare/test_scene.py
     # T1, world-server conformance (077 item 56): skipped unless SCENSIM_WORLD_CHECK=carla|isaac
     # names a running world server (SCENSIM_WORLD_ENDPOINT, SCENSIM_WORLD_MAP; scripts/test_world_conformance.py)
     PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q -rs scripts/test_world_conformance.py

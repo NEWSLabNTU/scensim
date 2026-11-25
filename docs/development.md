@@ -221,6 +221,22 @@ sides need no shared domain. Details: [architecture](design/architecture.md),
 - Before trusting a surprising measurement, check the running binaries against the source
   (`ls -l install/.../acb_bridge`, `/proc/<pid>/cmdline`) and the host's load (`uptime`):
   stale builds and other users' jobs have both looked like regressions here.
+- **The landing gate** (`just gate [commit:=HEAD]`, issue 191). Every change that lands is
+  gated by it, whoever lands it. It makes a fresh worktree of the commit
+  (`$SCENSIM_GATE_ROOT/gate-<sha8>`, a host setting, default `/var/tmp/$USER`) and runs
+  `just build`, `just test` and `just check` there from a clean environment, with `ISAAC_ROOT`
+  passed when the host sets it. After each step `git status --porcelain --untracked-files=no`
+  must be empty. Where `ISAAC_ROOT` is set, the Isaac-Python lane must run. It ends with one
+  line to quote when asking to land, for example:
+
+  ```
+  gate ok <sha> tree <tree8> on <host> <time>: build test check clean;
+      Isaac lane ran (937 tests); colcon-cargo-ros2 0.5.5; rustfmt <nightly>
+  ```
+
+  The full log is `<worktree>/gate.log`. `just gate-clean <commit>` removes the worktree once
+  the commit is on origin. A docs-only change needs only `scripts/check_docs.py` and
+  `scripts/check_pins.py`.
 
 ## Design documents
 
