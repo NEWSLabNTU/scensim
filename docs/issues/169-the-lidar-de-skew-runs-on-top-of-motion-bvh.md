@@ -1,4 +1,8 @@
-# 169: aib's lidar de-skew runs on top of motion BVH's own sensor motion
+# 169: with motion BVH on, Isaac's lidar cloud may carry the sensor's motion with no point times to undo it
+
+*Retitled before any valid run (118, 2026-11-25, from the code and C6e2's logs; 133's OK).* The
+first title was "aib's lidar de-skew runs on top of motion BVH's own sensor motion". Its premise
+FAILED, as the next section says. The file keeps its first name, so links stay valid.
 
 **Status:** open; after 167 and 168 (133, 2026-11-25). **Severity:** none today, since motion
 BVH is off in every run (issue 138), but it blocks turning motion BVH on. With it on,
@@ -19,7 +23,25 @@ against the truth, median above 1 m/s (`c6e2/along.py`):
 NVTL p05 is the same on both sides (3.119 to 3.120). Record: NAS "2026-11-25 086 C6e2 motion BVH
 cost (118)".
 
-## Why (a hypothesis)
+## The first premise: FAILED (from the code and the logs, before any valid run)
+
+The first "why" below assumed that aib adds a spinning lidar's motion to every cloud. It does
+not, in any run so far. aib's per-point times and its `motion_distortion` are on only when the
+rig's lidar has `point_format: xyzircaedt` (`aib/isaac/sensors.py`, `point_format` defaults to
+`xyzirc`; `point_times` and `distort` need `xyzircaedt`). Nothing in the stack sets it:
+`tesla_model3.rig.yaml` names no `point_format`. At scensim main 0291abb3's pins, `git grep`
+finds `xyzircaedt` only in aib's `sensors.py` and `sensing.py`. C6e2's logs agree. aib logs "N
+points a revolution over X ms" only when point times are on, and the line is absent from C6e2's
+runs, both arms. So the cloud went out as `xyzirc`, with no time field and no motion from aib.
+
+**The candidate in its place (a hypothesis, untested).** With motion BVH on, the renderer
+itself puts the sensor's motion within a revolution into the points. The cloud carries no
+per-point times, so Autoware's distortion corrector cannot remove it, and localization runs
+ahead by about half a revolution's motion (0.108 m at 4.5 m/s is about 24 ms, half a 50 ms
+turn). Without motion BVH the cloud carries no motion at all: it is self-consistent, but it is
+not what a real lidar gives.
+
+## Why (the first hypothesis, kept as written; its premise FAILED above)
 
 aib's `Lidar._msg` de-skews each point along the sensor's own track (`motion_distort`, by the
 point's firing time). It assumes the render saw the whole revolution from the one pose it was
@@ -113,6 +135,26 @@ magnitudes; k is signed by the measured dt.
   revolution.
 - If C gives k = 0, the hypothesis fails. C6e2's 0.108 m then has another cause, and step 2
   changes to finding it.
+
+**Amended before any valid run (118 and 133, 2026-11-25), after the premise above failed.**
+
+- *The probe's defects, recorded.* The four v = 0 controls first ran 18:33 to 18:35 and gave no
+  valid result, through defects in the probe, not failures of the controls. The walls were not
+  seen: first a one-sided quad, then a `UsdGeom.Cube`; they are now double-sided meshes, which
+  are seen. The published frame is turned 90 deg (the walls at y +-40), so the probe now
+  projects each point on the track's axis and across it, from aib's `sensor_mount` and
+  `q_emit`. The controls are rerun first with the fixed probe, and the probe stops if they fail.
+- *Cases A to D* run with `point_format: xyzircaedt`, so the cloud carries point times, and with
+  `motion_distortion` toggled on its own. Their predicted k are unchanged. C, motion BVH with
+  aib adding nothing, is the case that explains production.
+- *Cases E and F measure production as it runs*: `xyzirc` (no point times, so aib adds nothing),
+  E with motion BVH off and F with it on, each at 4.5 and 9 m/s. They carry no point times, so
+  they are judged on D - D_true in metres against a nominal dt. dt_nominal is half a turn
+  (the walls lie at azimuths 0 and 180 deg; 20 Hz): 25 ms, with its sign the measured dt's sign
+  in case A (the spin's direction). Predicted: E is 0 within 0.01 m. If the candidate holds, F
+  is about v x dt_nominal (0.1125 m at 4.5 m/s, 0.225 m at 9 m/s), within 0.15 of it in k
+  (0.017 m and 0.034 m), the same sign and size as C at the same v. E and F are what
+  production does; A to D explain why.
 
 **What decides step 2.** If C is about 1 (within 0.15), the fix is aib's `motion_distortion`
 skipped when Kit's `/renderer/raytracingMotion/enabled` is set, read from the settings at
