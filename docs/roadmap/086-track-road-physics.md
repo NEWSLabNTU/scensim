@@ -2117,6 +2117,15 @@ runs. A step's own details (scripts, packages) are added to its section before i
     - The pose error and NVTL are unchanged within C6b's run-to-run spread (C6d's sd of the
       difference, 0.0245 m, for p95). The ego's own motion is already de-skewed, and nothing
       else moves.
+  - **As built (before any run).** C6b's budget package `isaac_c6b_haruna_none` in its testbench
+    workspace (`/var/tmp/aeon/tb-c6b`), over `gate-c5c`'s install at scensim main c8ca43e0.
+    The runner is C6d's `run_one.sh` with its quiet rule, provenance and process checks
+    (`/mnt/renegade/aeon/isaac-ex/c6e/c6e2/`), interleaved off, on, three of each, with its own
+    15 s GPU log. "On" sets `ISAAC_KIT_ARGS` to SimulationApp's `enable_motion_bvh` settings in
+    Isaac 6.2 (`--/renderer/raytracingMotion/enabled=true`, `enableHydraEngineMasking=true`,
+    `enabledForHydraEngines='0'`). Each run is refused unless the live world server's
+    environment carries them ("on") or lacks them ("off"). The world server appends
+    `ISAAC_KIT_ARGS` to its Kit arguments (`world_server.py`).
   - **Decision (133, 2026-11-25, before any run).** Motion BVH is on for C6e3 if the tick p50
     rises by 5 ms or less (R4's budget per feature), measured under the full quiet rule;
     otherwise it stays off, and the C6e3 runs state it.
