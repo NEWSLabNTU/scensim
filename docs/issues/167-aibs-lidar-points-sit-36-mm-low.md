@@ -140,5 +140,27 @@ earlier three:
 A quantity outside its bound is a finding against this doc's reach list: the results it lists
 get a note, as 158's did. These runs are not a timing pair: the tick is reported only.
 
+**The reach's result (2026-11-25; C6d and C6e2 quiet, these shared: 168's "off" sides, whose
+log shows GPU0 free of foreign work).** Means of three against three, judged as written above:
+
+| quantity | rough: C6d rough_none n1-n3 to rough_off | smooth: C6e2 f1-f3 to smooth_off | bound |
+|---|---|---|---|
+| pose error p95 | +0.0206 m: **FAILED** | +0.0221 m: **FAILED** | 0.005 m |
+| NVTL p05 | -0.0007: held | -0.0003: held | 0.02 |
+| NDT z | -0.0341 m: held | -0.0340 m: held | 0 to -0.036 m |
+| NDT pitch | +0.0005 deg: held | +0.0006 deg: held | 0.01 deg |
+| along the track | -0.0327 m: **FAILED** | -0.0334 m: **FAILED** | 0.005 m |
+| across the track | -0.0029 m: held | -0.0019 m: held | 0.005 m |
+
+- **Why the two failures (a reading, not a re-judgement):** each "off" side has one run in
+  issue 172's "behind" mode (along -0.086 m, pose p95 0.18 to 0.19 m), and all six earlier
+  runs were level. Within the level mode the reach holds: rough pose p95 0.121 and 0.123
+  against 0.122 to 0.124, along +0.003 against +0.005 to +0.006; smooth pose p95 0.120 and 0.119
+  against 0.118 to 0.120, along +0.002 to +0.005 against +0.007. The failures are 172's, and
+  they stay recorded as failures of this bound.
+- **NDT's z moved down 0.034 m on both maps,** within the predicted 0 to 0.036 m, and close to
+  the offset's own 36.22 mm. What is left is -0.004 to -0.014 m below the truth (it was +0.022
+  to +0.026 m above), and issue 170's second quantity now reads this way.
+
 If step 2's fix moves any judged number by more than these predictions, the result's doc gets
 a note, as 158's did.

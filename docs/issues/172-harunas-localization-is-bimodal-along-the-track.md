@@ -21,6 +21,9 @@ in one of two places per run:
 - It is not issue 169's motion BVH: that is off in every run above (169's own shift is
   +0.108 m, ahead).
 - Across the track every run sits at -0.065 to -0.075 m (issue 170).
+- **168's whole A/B (12 runs, 2026-11-25):** 4 of 12 runs behind (rough_off_1, smooth_off_2,
+  smooth_on_1, smooth_on_2) and 8 level. A behind run's NDT z is 6 to 7 mm higher than a level
+  run's on the same map. 167's reach check failed its pose and along bounds on that alone.
 - The earlier high mode (C5's clean pairing: 0.18 m in five of six runs) was recorded without
   this split. Its runs can be read again for along-track with `measure.py`.
 
