@@ -1,6 +1,6 @@
 # 175: a model entity starts at rest; an initial speed is batch-only
 
-**Status:** open; plan approved by 133 (2026-11-25), no code yet. **Severity:** medium. A
+**Status:** fixed in code and tests (092 K13 step v; plan approved by 133, 2026-11-25). **Severity:** medium. A
 scenario that gives a model entity an initial speed gets a run that silently ignores it, and no
 scenario can start a model car moving, which a platoon at speed needs.
 **Found:** 2026-11-25, scensim 241, planning 092 K13 step v (the platoon search on Town05's

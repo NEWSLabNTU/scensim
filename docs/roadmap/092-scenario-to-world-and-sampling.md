@@ -49,7 +49,7 @@ From the design's section 10.
 | K10 | 093 D3's behaviour models (scenario-description.md section 4): the model interface (a parameter schema, `reset`, `step`, one array API code for numpy on seats and `step_batch` in torch; truth in, a kinematic command out, decisions into the truth), the starter model (a gap-acceptance walker for CS1, from a published model named before any coefficient), batched in scensim_batch, on seats as a K4 attachment that commands its entity through K12; the agreement check in K2.4's style (the same records on both forms: decisions and their frames, the walker's trajectory error, trigger times, verdict); the latency from a truth frame to the command taking effect measured free-running and in lockstep (093's open question 1) | component | K2, K4, K12 | swb 241 | done 2026-11-24; its open recheck (issue 130) closed the same day, the decisions at the same frames on new seats runs ("K10's open recheck" below) (the close-out below: the engines' map-frame velocity, D3's section 4 out of draft; not covered: a vehicle model, parked with the user, and an agreement with an engine in the loop, until both targets share an ego). Before: planned 2026-11-22 (133 approved), the section 4 draft corrected (SSv2 takes a world-owned pose for any entity; pilots do not see truth, attachments do); (i)-(ii) landed ce760b69: `scensim.behaviour`, the walker on numpy and torch bit for bit (0 of 2800 arrays differ on an RTX 5090), its coefficients the cited set `khaki2021_restricted` (Khaki and Mohammadnazar 2021, CC0; the gap's 2.021 against the 2021 meta-analysis's pooled 1.98); (iii) in the batch: a model entity (role `model`) compiled from its ObjectController (its properties per slot, `anchor.*` for the crossing, its seed from `seeds.pilots.<entity>`), stepped after the ego's physics on its truth and moved kinematically within its acceleration limit; CS1's start trigger is the model's `start_gap` (`$ttc_entry`), as the subset keeps ActivateControllerAction seats-only; the walker decides where it can still stop at the kerb; `cs1_walker_gap_acceptance.xosc` the batch example (the description's CS1 stays refused: a storyboard SpeedAction on a model entity); (iv) the agreement with seats passed 2026-11-24 on K12's exit set 3 ("K10's agreement" below: the seats ego played back, no engine; the batch now takes a model entity as world-owned with the channel's lag 1), (v) the latency is K12's (set 3: lag 1 in lockstep and free-running); not covered: an engine in the loop, the engines' map-frame velocity |
 | K12 | Truth-fed pilots: a command channel from a K4 attachment to the world server (`entity_command`: an entity's kinematic command, carried with the tick gate's acknowledgement, integrated and applied by the world, read back to SSv2, whose fork adopts it for a simulator-driven pedestrian), under lockstep held to one frame; for K10's behaviour models and learned background agents | component | K4 | swb 243 | landed 2026-11-23 (scensim 0cc054d8; the SSv2 fork's model pedestrian, COMMANDED on the world protocol, the CARLA world server's integrator, the bridge, truth schema 3, attachments' `commands:`, `scensim.behaviour.seats`); pedestrians first, CARLA only; exit passed 2026-11-23 on set 3, by the rule fixed before the runs ("K12's exit runs" below) |
 | K11 | 093 D4's search (purpose B): an adaptive search over cells that writes the record's reserved `search` | component | K1, K7 | swb 241 | in progress: K11a done 2026-11-24 (`scensim-sample search`; "K11a's result" below, check 1's fourth part failed, its cause named); K11b, K11c open |
-| K13 | A vehicle behaviour model ([vehicle-behaviour-model.md](../design/vehicle-behaviour-model.md)): the Intelligent Driver Model as a car-follower on a lane anchor, its coefficients a cited set (`zhang2024_highd_car`), commanded through K12's channel as it is (speed, heading, acceleration limit); K12's vehicle side in the fork and `scensim run`; numpy and torch bit for bit; seats against the batch; a first K11 search on a platoon | component | K10, K12, K11 | swb 241 | landed 2026-11-25 (scensim 73575ba9; issues 160, 163, 164, 165 after it); exit (corrected 2026-11-25 (133): exit check 4 had been misread as step (ii)'s check 4): exit checks 1 and 2 held (2 on its rerun after issue 163); check 3 held except one threshold event, failed with its cause ("K13's exit check 3" below); check 4 (step v, the search) open ("K13 step v's plan" below). The step (ii) runs' own check 4 (the trail, amended wording) held. Before: planned 2026-11-25 (user approved the model through 133); plan below, approved by 133 the same day |
+| K13 | A vehicle behaviour model ([vehicle-behaviour-model.md](../design/vehicle-behaviour-model.md)): the Intelligent Driver Model as a car-follower on a lane anchor, its coefficients a cited set (`zhang2024_highd_car`), commanded through K12's channel as it is (speed, heading, acceleration limit); K12's vehicle side in the fork and `scensim run`; numpy and torch bit for bit; seats against the batch; a first K11 search on a platoon | component | K10, K12, K11 | swb 241 | landed 2026-11-25 (scensim 73575ba9; issues 160, 163, 164, 165 after it); exit (corrected 2026-11-25 (133): exit check 4 had been misread as step (ii)'s check 4): exit checks 1 and 2 held (2 on its rerun after issue 163); check 3 held except one threshold event, failed with its cause ("K13's exit check 3" below); check 4 (step v, the search) held, 0 failures in 21000 runs, the tool's [0, 0] interval not an answer (issue 183), prediction 4 FAILED and 5 FAILED in part ("K13 step v's plan" below). The step (ii) runs' own check 4 (the trail, amended wording) held. Before: planned 2026-11-25 (user approved the model through 133); plan below, approved by 133 the same day |
 | E1 | Examples | examples | the above | | open |
 
 ## K6: Jazzy for the whole set (plan, 2026-11-24, 243; approved by 133, before any build)
@@ -2370,7 +2370,8 @@ rule). Rows and the decel 6 pose dump: `~/nas/autoveh/logs/k13-check3/run3/`.
 
 **K13's exit (133; corrected 2026-11-25 (133): exit check 4 had been misread as step (ii)'s
 check 4).** Exit checks 1 and 2 held (2 on its rerun after issue 163); check 3 held except one
-threshold event, failed with its cause; check 4 (step v, the search) open. The step (ii) runs'
+threshold event, failed with its cause; check 4 (step v, the search) held ("The search's
+result" below). The step (ii) runs'
 own check 4 (the trail, amended wording) held.
 
 **Amended for future agreement checks, set after K13 check 3 run 3 (133).** A threshold event
@@ -2535,3 +2536,59 @@ on the invented base.
 
 Check 4's bar is unchanged: the search runs end to end and reports its estimate and interval.
 These predictions are judged held or FAILED apart from it.
+
+**The search's result (2026-11-25, 14:38 to 18:17 +08:00).** Run from a worktree pinned at
+4eb87377 (`k13v_search.sh`: `search init`, then each generation through `search_run.py
+--walker follower --anchors ... --ttc-length 4.7 --corridor 1.9` and `search next`, then
+`search report`), output `/var/tmp/aeon/k13v-search` (13 GB; to the NAS when it answers, it gave
+I/O errors all day). 21 stages of 1000 draws, 21000 runs, 420 to 1074 s a stage on a loaded host.
+
+| stage | level | failures | invalid | min TTC under 1 s | smallest closest gap (m) |
+|---|---|---|---|---|---|
+| g0 | 7.199 | 0 | 0 | 8 | 1.650 |
+| g2 | 3.320 | 0 | 0 | 56 | 1.158 |
+| g4 | 1.844 | 0 | 0 | 621 | 0.959 |
+| g6 | 1.259 | 0 | 0 | 914 | 0.613 |
+| g9 | 0.918 | 0 | 0 | 890 | 0.472 |
+| g14 | 0.563 | 0 | 0 | 903 | 0.426 |
+| g19 | 0.440 | 0 | 0 | 896 | 0.389 |
+| fresh (from g20's mixture) | | 0 | 0 | 892 | 0.374 |
+
+The other stages fall between their neighbours (the full table is the run's log); errors 0 in
+every stage, normaliser 1 (no constraints), largest weight 10 (1 / beta) from g1 on. The report:
+stopped at the generation cap (20); the fresh stage's rate 0, se 0, "plain likelihood ratio,
+normal 95 % [0, 0]", n 1000, n_eff 108.0; the generations' own (biased) estimate 0; failures
+found 0. Largest lateral offset between the two cars' centreline offsets over all 21000 runs:
+0.385 m (the guard's bar 1.9 m).
+
+**The tool's interval at 0 failures is not an answer; see issue 183.** [0, 0] is what the normal
+interval prints when there is no failure to estimate a spread from. What the run supports is an
+upper bound, and the fresh stage's draws from the defensive mixture give one without any
+assumption about where failures lie: every weight is at most 1 / beta = 10, so the rate is at
+most 10 times the mixture's own failure probability, whose exact one-sided 95 % bound at 0 of
+1000 is 3.68e-3: the rate on this invented base is under 3.7e-2 at 95 %. That is loose, and it
+is what 0 of 1000 can say (issue 183's fix; not in K13).
+
+The predictions:
+
+1. **The stop: held.** The level fell from 7.20 to 0.44 m by g19, by 0.012 to 0.037 m a generation
+   from g15 on, and the search ran to the cap, then the fresh stage.
+2. **Failures: held.** 0 in all 21000 runs, the generations and the fresh stage.
+3. **The estimate: held.** The tool printed p 0, [0, 0]; the caveat stands, and the interval is
+   not an answer (issue 183).
+4. **The smallest closest gap: FAILED.** 0.374 m, below the predicted 0.5 to 0.7 m, in the fresh
+   stage (record 842ce095153ce27c21eccd0f4d55358334dba48ca628a226468f95a2a2807f97, at 11.30 s):
+   decel 7.991, onset 3.628, T 0.600, a 0.308, b 3.182. T, b and decel are where predicted;
+   onset (predicted under 1.5 s) and a (under 0.3) are not. The search went to the late onsets,
+   which the dry run's corners never sampled (they held onset at 1 s); why a late onset brings
+   the ego closer is not explained here.
+5. **Minimum TTC under 1 s: held on the count, FAILED on the place.** 892 of the fresh stage's
+   1000 (bar: at least 300), smallest 0.335 s. Its draws gathered at T, b and decel's corner
+   (901, 904 and 902 of 1000 past the predicted bounds; medians T 0.601, b 3.175, decel 7.975)
+   but not at onset's or a's: 41 of 1000 have onset under 1.5 s (median 2.975) and 347 have a
+   under 0.3 (median 0.305).
+6. **Invalid samples: held.** 0 in every stage.
+
+**Check 4: held.** The search ran end to end in the batch and reported its estimate and interval;
+the prediction was written before it (0e6f4e4b). Batch numbers, not seats numbers; no CARLA
+claim.

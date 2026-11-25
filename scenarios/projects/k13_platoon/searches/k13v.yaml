@@ -2,8 +2,8 @@
 # Town05's anchor west_avenue, the model car M (idm_follower) between a scripted lead L and the
 # ego, five variables searched on an invented base (L's decel and onset, M's T, a and b), the
 # ego aeb_ttc on a CPU point mass (scensim_batch/scripts/search_run.py --walker follower
-# --margin-k 1.0, K11e's sloped score). The failure is the ego's closest gap to M at 0 m or
-# less. A batch case: seats refuse its scenario (issue 175). Fixed before the run: N 1000,
+# --anchors --ttc-length 4.7 --corridor 1.9; the score is the closest gap itself, no margin
+# term). The failure is the ego's closest gap to M at 0 m or less. A batch case: seats refuse its scenario (issue 175). Fixed before the run: N 1000,
 # seed 13.
 search: 1
 id: k13v_platoon_town05
