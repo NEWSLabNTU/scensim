@@ -602,7 +602,9 @@ def unmanaged_scenarios(project: Path, settings: dict) -> set:
 def layout_problems(project: Path, settings: dict) -> list:
     """Each scenario binding a knob whose values name a prop layout (092 K9f-b) the run could
     not add: a layout no place has (or both have), one wrong for the scenario map's anchors, or
-    a prop that is already a scenario entity. One rule with the run (scensim.layouts)."""
+    a prop that is already a scenario entity; and a prop the layout places on a lane inside a
+    reversed stretch of SSv2's spline (issue 174; a map whose lanelets do not load is said, as
+    a host finding). One rule with the run (scensim.layouts, scensim.lane_positions)."""
     from scensim import anchors as anchorsmod, knobs as knobsmod, layouts as layoutsmod  # noqa: PLC0415
     world = settings.get("world") if isinstance(settings.get("world"), dict) else {}
     wknobs = world.get("knobs") if isinstance(world.get("knobs"), dict) else {}
@@ -637,7 +639,24 @@ def layout_problems(project: Path, settings: dict) -> list:
                 except (layoutsmod.LayoutError, ValueError) as e:
                     out.append(Finding(rel, f"knob {k}: {e}", "fix the layout or the scenario",
                                        refused=True))
+                    continue
+                out += _layout_stretch_findings(project, rel, k, map_name, name, props)
     return out
+
+
+def _layout_stretch_findings(project: Path, rel: str, knob, map_name, name, props) -> list:
+    """Issue 174: a layout's lane props inside a reversed stretch of SSv2's spline, refused as a
+    written-in LanePosition is (issue 166); a map that does not load, a host finding."""
+    from scensim import lane_positions as lanepos   # noqa: PLC0415
+    md = project / "assets" / "maps" / map_name
+    if not md.is_dir() or not any("lanelet" in p for p in props):
+        return []
+    try:
+        return [Finding(rel, f"knob {knob}: {msg}", "move s outside the stretch", refused=True)
+                for msg in lanepos.placed_problems(md, name, props)]
+    except lanepos.MapUnreadable as e:   # not checked: said, not refused
+        return [Finding(rel, f"knob {knob}: layout {name}: {e}", f"run `{FETCH}` in the project",
+                        host=True)]
 
 
 def wet_look_problems(project: Path, settings: dict) -> list:

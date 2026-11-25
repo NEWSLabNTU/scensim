@@ -6,6 +6,9 @@ On the lanelets vehicles are routed over the stretches are a few centimetres; on
 (walkways, kerb lines) they reach metres. `scensim check` refuses a LanePosition whose lanelet
 and s are both written in the scenario and whose s lies in a stretch; `scensim run` warns when
 the values a run binds (a parameter, a suite's or sampler's value, an anchor) put one there.
+A prop layout's props (092 K9f-b) become LanePositions only in the run's copy, so they are
+checked as the layout places them (`placed_problems`, issue 174): refused by `testbench check`,
+warned of by the run; a prop at a point anchor is a WorldPosition, off the spline, and is not.
 
 The stretches come from the map's lanelets as `scensim_batch.map_export` takes them (SSv2's
 centre points) and `scensim_batch.catmull`'s spline, SSv2's ported; no torch.
@@ -88,6 +91,21 @@ def fixed_problems(path: Path, map_dir: Path) -> list:
         st = inside(map_dir, lane, s)
         if st:
             out.append(message(lane, s, st))
+    return out
+
+
+def placed_problems(map_dir: Path, layout: str, props: list) -> list:
+    """[message] for each prop of layout `layout` (scensim.layouts.place's placements) that it
+    places on a lane inside a stretch, at its lanelet and lanelet-local s (issue 174). A prop at
+    a point anchor is not on the spline and is not checked. Raises MapUnreadable."""
+    out = []
+    for p in props:
+        if "lanelet" not in p:
+            continue
+        st = inside(map_dir, p["lanelet"], p["s"])
+        if st:
+            out.append(f"layout {layout}: prop {p['name']} (lane {p['lane']} s "
+                       f"{float(p['lane_s']):g}): {message(p['lanelet'], p['s'], st)}")
     return out
 
 

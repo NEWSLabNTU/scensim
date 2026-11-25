@@ -235,8 +235,9 @@ def run_layouts(spec, project: Path) -> list:
                               distribution=bool(spec.distribution))
 
 
-def check_layouts(spec, project: Path):
-    """Refuse, before any run, a spec whose knobs name a layout that cannot be added."""
+def check_layouts(spec, project: Path, out=None):
+    """Refuse, before any run, a spec whose knobs name a layout that cannot be added; warn of a
+    lane prop the run's layout places inside a reversed stretch of SSv2's spline (issue 174)."""
     from scensim import layouts as layoutsmod   # noqa: PLC0415
     try:
         lays = run_layouts(spec, project)
@@ -244,6 +245,23 @@ def check_layouts(spec, project: Path):
             layoutsmod.inject(Path(spec.scenario), [p for x in lays for p in x["props"]])
     except (layoutsmod.LayoutError, ValueError) as e:
         raise Refused(f"{Path(spec.scenario).name}: {e}") from None
+    warn_layout_stretches(spec, project, lays, out)
+
+
+def warn_layout_stretches(spec, project: Path, lays: list, out=None):
+    """Issue 174: a warning for each lane prop of the run's layouts inside a reversed stretch;
+    a map that does not load is said, never a stopped run (as warn_lane_positions)."""
+    name = scenario_map(Path(spec.scenario))
+    md = Path(project) / "assets" / "maps" / name if name else None
+    if md is None or not md.is_dir() or not any("lanelet" in p for x in lays for p in x["props"]):
+        return
+    from scensim import lane_positions as lanepos   # noqa: PLC0415
+    try:
+        msgs = [m for x in lays for m in lanepos.placed_problems(md, x["layout"], x["props"])]
+    except lanepos.MapUnreadable as e:   # a warning's check never stops a run
+        msgs = [str(e)]
+    for msg in msgs:
+        (out or sys.stderr).write(f"warning  {Path(spec.scenario).name}: {msg}\n")
 
 
 def command_check(traces, claimers) -> tuple:

@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scensim_sampler"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scensim_batch"))
 
 from scensim import knobs as K, layouts as L, project, run  # noqa: E402
 
@@ -143,7 +144,10 @@ def test_the_knob_names_a_layout_and_the_run_refuses_what_the_check_refuses(tmp_
     assert copy["sha256"] == L.sha256((tmp_path / "scenario.xosc").read_bytes())
     assert copy["layouts"][0]["sha256"] == L.sha256(
         (d / "layouts/Town01/west_street_closed.yaml").read_bytes())
-    assert project.layout_problems(d, yaml.safe_load((d / "testbench.yaml").read_text())) == []
+    # nothing refused; the stand-in map does not load, so its stretches are a host finding
+    # (issue 174)
+    found = project.layout_problems(d, yaml.safe_load((d / "testbench.yaml").read_text()))
+    assert [f for f in found if f.refused] == [] and all(f.host for f in found)
     # a category SSv2 does not take: refused before any run, and by the check, in one rule
     bad = _project(tmp_path / "b", layout={"layout": 1,
                                            "props": {"x": dict(PROP, category="barrier")}})
@@ -180,3 +184,63 @@ def test_the_runs_copy_is_kept_at_every_level(tmp_path):
     (rd / "logs").mkdir()
     assert runs.apply_keep(rd, "passed", {"passed": "result"}) == "result"
     assert sorted(p.name for p in rd.iterdir()) == ["resolved.yaml", "result.json", L.COPY]
+
+
+# --- issue 174: 166's reversed-stretch rule on the props a layout places ---------------------
+
+def _stretches(monkeypatch, table):
+    from scensim import lane_positions as LP
+    monkeypatch.setattr(LP, "stretches", lambda md, lane: table.get(int(lane), ()))
+
+
+def test_a_layout_prop_in_a_reversed_stretch_is_refused_by_the_check_and_warned_by_the_run(
+        tmp_path, monkeypatch):
+    import io
+    d = _project(tmp_path)
+    sc = d / "scenarios" / "cs3.xosc"
+    settings = yaml.safe_load((d / "testbench.yaml").read_text())
+    _stretches(monkeypatch, {6583: ((19.9, 20.1),)})   # both props stand at lanelet-local s 20
+    found = project.layout_problems(d, settings)
+    assert len(found) == 2 and all(f.refused and not f.host for f in found)
+    assert found[0].fix == "move s outside the stretch"
+    assert ("knob works: layout west_street_closed: prop barrier_a (lane west_street s 20): "
+            "LanePosition laneId 6583 s 20: inside a reversed stretch [19.900, 20.100] m"
+            ) in found[0].what and "issue 166" in found[0].what
+    assert "prop barrier_b" in found[1].what
+    # the run warns of the same props and goes on: a warning, not a refusal
+    spec = run.expand(sc, d, params={"closure": ["closed"]})[0][0]
+    out = io.StringIO()
+    run.check_layouts(spec, d, out)
+    lines = out.getvalue().splitlines()
+    assert len(lines) == 2 and lines[0].startswith("warning  cs3.xosc: layout west_street_closed: "
+                                                   "prop barrier_a")
+    # a stretch the props are not in: neither
+    _stretches(monkeypatch, {6583: ((50.0, 60.0),)})
+    assert project.layout_problems(d, settings) == []
+    out = io.StringIO()
+    run.check_layouts(spec, d, out)
+    assert out.getvalue() == ""
+
+
+def test_a_prop_at_a_point_anchor_is_not_checked(tmp_path, monkeypatch):
+    from scensim import lane_positions as LP
+
+    def boom(md, lane):
+        raise AssertionError("a point prop reached the spline")
+    monkeypatch.setattr(LP, "stretches", boom)
+    point = {"name": "cone", "category": "obstacle", "model": "m", "mass": 1.0,
+             "box": {"center": [0, 0, 0], "dimensions": [1, 1, 1]}, "h": 0.0,
+             "point": "crossing_mid", "x": 1.0, "y": 2.0}
+    assert LP.placed_problems(tmp_path, "l", [point]) == []
+
+
+def test_a_map_that_does_not_load_is_a_host_finding_and_a_warning_never_a_refusal(tmp_path):
+    import io
+    d = _project(tmp_path)   # its lanelet2_map.osm is a stand-in that does not load
+    found = project.layout_problems(d, yaml.safe_load((d / "testbench.yaml").read_text()))
+    assert len(found) == 1 and found[0].host and not found[0].refused
+    assert "layout west_street_closed: map Town01 does not load" in found[0].what
+    spec = run.expand(d / "scenarios" / "cs3.xosc", d, params={"closure": ["closed"]})[0][0]
+    out = io.StringIO()
+    run.check_layouts(spec, d, out)
+    assert "map Town01 does not load" in out.getvalue()
