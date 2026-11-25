@@ -138,6 +138,13 @@ each build points at the generated crates), and its `.cargo/config.toml` keeps `
    approval, which 133 asked for; it changes every build on 241, including other worktrees and
    sessions there (the option is opt-in, so trees without it build as under 0.5.4).
 
+**241's install (the user's approval through 133, 2026-11-26).** `pip install --user
+colcon-cargo-ros2==0.5.5`, 2026-11-26 02:53:00 to 02:53:05 +08:00, after 188's landing gate had
+exited and with no colcon build on the host; `pip show colcon-cargo-ros2` then gave `Version:
+0.5.5` (it was 0.5.4). Nothing else changed in `~/.local` (only `colcon_cargo_ros2` and its
+dist-info are new), and setuptools is still the system's 59.6.0. Other hosts upgrade after this
+lands (133 tells them).
+
 **Predictions (before the code and the gate).**
 
 - The generated block is the same bytes on a rebuild and in a second worktree at another path.
