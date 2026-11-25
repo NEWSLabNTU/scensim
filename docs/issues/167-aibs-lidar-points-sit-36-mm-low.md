@@ -1,6 +1,6 @@
 # 167: aib's lidar points sit 36 mm below where the rig puts the lidar
 
-**Status:** fixed locally (aib bb2283f, branch issue-167, not pushed), checked on C6e1's stops; landing waits for 133. **Severity:** to be
+**Status:** fixed: aib bb2283f (aib main), checked on C6e1's stops; landing in scensim by land_pin. **Severity:** to be
 shown. It is a constant height offset of every Isaac lidar cloud in its own frame; the judged
 pose error is horizontal. **Found:** 2026-11-25, scensim 118, 086 C6e1 (numbered by 133).
 
@@ -121,6 +121,24 @@ can move is listed per consumer.
 - **Obstacles' heights** are measured from the ground in the same cloud, so they do not move.
   The crop box that removes the car's own body uses heights in base_link: a box edge 36 mm off
   matters only for points within 36 mm of it.
+
+**The reach's judgement (133, 2026-11-25, before the runs).** Issue 168's "not lowered"
+side gives the post-fix numbers: three runs each of haruna_down on *rough_none* (C6d's package)
+and on smooth Haruna (C6b's), on the fixed aib, before 168's code is on. They are compared with
+C6d's *rough_none* three (n1 to n3) and with C6e2's smooth "off" three (f1 to f3, the same
+package and build but for the fix). Per quantity, the mean of the three against the mean of the
+earlier three:
+
+- the horizontal pose error p95 moves by 0.005 m or less;
+- NVTL p05 moves by 0.02 or less;
+- NDT's z against the truth (median a run) moves down by between 0 and 0.036 m. *Hypothesis:*
+  the fix takes out the part of the +0.022 to +0.026 m bias that the offset made, and the rest
+  stays (issue 170);
+- NDT's pitch against the truth moves by 0.01 deg or less;
+- along and across the track (C6e2's `along.py`): each moves by 0.005 m or less.
+
+A quantity outside its bound is a finding against this doc's reach list: the results it lists
+get a note, as 158's did. These runs are not a timing pair: the tick is reported only.
 
 If step 2's fix moves any judged number by more than these predictions, the result's doc gets
 a note, as 158's did.
