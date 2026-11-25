@@ -88,6 +88,48 @@ step at the reach is a known artefact, to be measured (the ground filter's split
 NVTL). Option 3 (bake the detail in) removes the step and stays the target for published
 worlds. Option 1 remains if 133 prefers no step and accepts the view's end.
 
+## The fix as decided (133, 2026-11-25, before any code): option 2, per corridor
+
+- **How far down.** At the road's load, the world's road render is lowered under each corridor
+  by that corridor's own deepest detail below the base, plus a margin of 0.01 m. The depth is
+  the deepest pothole, the ruts' depth, and the roughness's lowest point along the corridor,
+  computed from the corridor's own features, not a flat 0.15 m. A corridor with nothing below
+  the base is lowered by the margin alone. Smooth Haruna's corridor (C6b's map) has no ruts, no
+  potholes and a negligible roughness, so it would drop 0.01 m. C6d's *rough_none* has 8 cm
+  potholes, 3 cm ruts and class C roughness, so about 0.09 m or more.
+- **How.** The world's road prims under a corridor's reach move down as one transform at load.
+  Where the world's road is one mesh for several corridors, it moves by the deepest of them.
+  This is a design choice to check against the worlds in use. Collision does not move: only the
+  render does, as a second, render-only copy (to be settled in the code: PhysX's road must stay
+  where it is).
+- **The risk is NDT, not the ground filter (133).** Beyond the detail mesh's 40 m reach, every
+  road return out to the lidar's 170 m comes from the lowered road. NDT matches the whole scan
+  to the map's cloud, so a far field sitting low can tilt its pitch or lift its z.
+
+## Predictions for option 2's check (before any code)
+
+The check: NDT's pitch, z and NVTL with the road lowered against not lowered, on fixture_c6a,
+smooth haruna_down (C6b's package) and *rough_none* (C6d's). Smooth Haruna's drop is the margin
+only, so *rough_none* is where the step is largest. Three runs a side each on the Haruna maps,
+measured from `/localization/kinematic_state` against the truth trace (pitch and z) and the NVTL
+judge; on fixture_c6a, the static C6e1 method plus one Autoware drive a side.
+
+- **The geometry.** A return at range r from a road lowered by d sits at an angle d / r below
+  where the map has it: 0.05 deg at 100 m for d = 0.09 m, 0.006 deg for d = 0.01 m. Most of the
+  road's returns are within 40 m (C6e1: about 95 % of them within 20 m), where the detail mesh
+  is exact.
+- *Predictions:*
+  - NDT's pitch, median against the truth, moves by less than 0.03 deg on *rough_none* and less
+    than 0.01 deg on smooth;
+  - NDT's z, median against the truth, moves by less than 0.01 m on both;
+  - NVTL p05 moves by less than 0.05;
+  - the judged horizontal pose error p95 moves by less than C6d's 2 sd of a difference
+    (0.049 m).
+- **The switch rule (133).** If NDT moves beyond C6d's noise on any of these, the fix becomes
+  option 1, with the detail mesh's reach at the lidar's range and its cost measured. C6d's noise
+  for pitch and z is not on record yet, so the "not lowered" side's three runs give it (the sd of
+  the three), and the rule is applied against it.
+
 ## Predictions for the fix (before any code)
 
 - C6e1 rerun: over the pothole, dz to the floor within 0.5 mm of issue 167's offset, out to the
