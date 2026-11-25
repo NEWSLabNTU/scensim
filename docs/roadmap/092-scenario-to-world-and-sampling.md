@@ -2654,6 +2654,39 @@ shows no such drop. The
 search's result stands as recorded; the question stays open and goes to 166's follow-up, whose
 plan can test it (the same sweep with M's gap measured in s).
 
+**The commits named above, before and after the landing's rebase (133, 2026-11-25).** K13 step
+v was written, run and judged on a branch based on d7a25ff5; it landed rebased onto
+77fcc1a3. The SHAs named in this section are the pre-rebase ones, the commits the dry runs, the
+search and the sweep actually ran at (the search at 4eb87377). They are not on main; the
+whole pre-rebase branch is kept as a verified git bundle,
+`/var/tmp/aeon/k13v-search/k13-step-v.bundle` (sha256
+`88ed5d406f3a16de4075764bce3b8b8171568310fede14d6d0f0256873b9e8df`; tip b6d6d4e3cf6e380c0c64878d83b46c3a7a506721, requires d7a25ff5e89e9e4cbef4120cbda375aae232a841), beside the search's output, and goes to the NAS with
+it. `git range-diff 77fcc1a3..72b99255 d7a25ff5..k13-step-v` pairs every commit: "=" is the
+same change; the two "!" differ only in `docs/issues/README.md`'s context rows (the issues that
+landed on main in between), their own 175 and 183 rows the same.
+
+| pre-rebase | | landed | commit |
+|---|---|---|---|
+| f53547d0 | = | 6dcac7c0 | 092 K13 step v: the platoon search's plan (before any code); the exit's check 4 corrected |
+| 0c329362 | ! | 86860521 | issue 175: a model entity starts at rest; an initial speed is batch-only (record and plan) |
+| dbfe1859 | = | 9a50cfba | issue 175: a model entity's Init step speed is its speed at reset in the batch; seats refuse it |
+| 9df3322e | = | fe21a921 | 092 K13 step v: the Town05 platoon case, its invented base and the search spec (N 1000, seed 13) |
+| 133b8e41 | = | 949833a6 | k13_platoon: lock Town05 too, at v2026.11g (092 K13 step v's map) |
+| ffc197b0 | = | b6418a80 | search_run: a car-follower's lane anchors, the walker's decision file only for a walker, min TTC (092 K13 step v) |
+| 7223aa53 | = | f8c38c45 | k13_platoon_town05: a FileHeader binding names its parameter as param:lead_s (issue 131) |
+| e3ca36ec | = | 41c8cbf6 | 092 K13 step v: dry-run check 1 FAILED, its cause (issue 166's loops against the follower's gap) and the computed correction |
+| 4d697ad5 | = | 8490695b | 092 K13 step v: check 1 holds; step 2's 0 of 36 as it came out; the ego 45 m behind (amendment) |
+| ed90ff22 | = | 88f91e44 | 092 K13 step v: the redone step 2 as it came out (0 of 36; the ego drifts off the lane) |
+| 05fc96f8 | = | 1e4ddfbe | 092 K13 step v: the ego's absolute heading and the corridor guard (second amendment) |
+| 62e7e826 | = | 58fc50b5 | 092 K13 step v: the corridor guard measures against the lane's centreline, not M's heading |
+| 1bfad7b4 | = | b7110bc5 | 092 K13 step v: step 2 with the centreline guard as it came out (0 of 36 failed, 0 invalid) and the a, b corners |
+| 0e6f4e4b | = | 54d5b595 | 092 K13 step v: the search's prediction (before the search); search_run reports the smallest closest gap |
+| 4eb87377 | = | 59cbd0b5 | k13_platoon_town05: its category, R1.lead_brake.platoon_idm (the search reads it) |
+| 1eb18ab8 | ! | 50a33f67 | 092 K13 step v: the search's result; issue 183 (the [0, 0] interval at 0 failures); 175 fixed |
+| 820e9331 | = | 2de722b3 | 092 K13 step v result: n_eff beside the bound; the late onsets as an open question (133) |
+| 3e9b3a5d | = | e3f2be53 | 092 K13 step v: the onset sweep's prediction (before the run) |
+| b6d6d4e3 | = | 72b99255 | 092 K13 step v: the onset sweep's result (the fixed-heading hypothesis FAILED) |
+
 **Check 4: held.** The search ran end to end in the batch and reported its estimate and interval;
 the prediction was written before it (0e6f4e4b). Batch numbers, not seats numbers; no CARLA
 claim.
