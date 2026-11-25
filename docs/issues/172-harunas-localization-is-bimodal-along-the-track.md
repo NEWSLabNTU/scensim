@@ -126,3 +126,11 @@ and with its log for the age.
 - If every run's age is the same (within 2 ms) while the modes still split, the hypothesis
   **fails**. The stamp is then not the cause, and the next candidate is NDT's or the EKF's
   start-up (their first pose and its time), from the same runs' logs.
+- *Amended before the runs (118, 2026-11-25; the mechanism only).* The rig is generated from
+  the car's spec (`do not edit`), and a key added there changes the spec hash, which the bridge
+  checks. So the branch also reads `AIB_LOG_RENDER_AGE=1` from the environment, and the runs set
+  it. Check (a) passed before this: the probe logged 100.0 ms against the walls' 0.100 s (19:03).
+  Check (b): aib's `just test` passed on the branch, 174 tests. The branch is aib 3b69851, local
+  only, in `ws-c6e3`'s aib submodule. The runs use scensim main 0291abb3, so issue 168's
+  lowering is in (smooth haruna: the bound's WARN, since no `base_drop` is stored), unlike C6e2.
+  The runner refuses a run whose console has no render-age line.
