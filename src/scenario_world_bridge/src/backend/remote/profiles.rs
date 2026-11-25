@@ -30,7 +30,10 @@ pub enum Field {
     SunAzimuth,
     /// mm/h of rain (0: dry)
     PrecipitationIntensity,
-    /// oktas, 0 to 8 (rounded)
+    /// oktas, 0 to 8 (rounded): WMO's 9 (sky obscured) is no amount to ramp to (issue 161).
+    /// The clamp in `write` is a backstop behind scensim's `knobs.py`, which refuses a profile
+    /// breakpoint outside the knob's range and that range outside [0, 8]; on validated input
+    /// it never changes a value (pinned by a test below).
     CloudCoverOktas,
 }
 
@@ -498,6 +501,32 @@ mod tests {
         Field::CloudCoverOktas.write(11.0, &mut w);
         assert_eq!(w.cloud_cover_oktas, Some(8));
         assert_eq!(Field::FogVisualRange.read(&w), None);
+    }
+
+    #[test]
+    fn a_cloud_cover_profile_within_0_to_8_never_reaches_the_clamp() {
+        // issue 161: breakpoints in [0, 8] (as knobs.py admits them) give values that round
+        // into [0, 8] anywhere along the coordinate, so the write's clamp changes nothing
+        for points in [
+            "[[0, 0], [10, 8]]",
+            "[[0, 8], [5, 0], [10, 8]]",
+            "[[0, 0.5], [3, 7.5], [4, 8], [9, 0], [9.01, 8]]",
+            "[[0, 7.9999999999], [1, 8], [2, 0.0000001]]",
+        ] {
+            let json = format!(
+                r#"{{"profiles": [{{"knob": "sky", "field": "cloud_cover_oktas", "step": 1,
+                    "coordinate": "time", "points": {points}}}]}}"#
+            );
+            let p = parse(&json).unwrap().remove(0);
+            for i in -20..=220 {
+                let v = p.value_at(f64::from(i) * 0.05);
+                let r = v.round();
+                assert!((0.0..=8.0).contains(&r), "{points} at {i}: {v} rounds to {r}");
+                let mut w = ScenarioWeather::default();
+                Field::CloudCoverOktas.write(v, &mut w);
+                assert_eq!(w.cloud_cover_oktas, Some(r as u8), "{points} at {i}: clamped");
+            }
+        }
     }
 
     #[test]

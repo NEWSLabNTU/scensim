@@ -86,7 +86,12 @@ FIELD_RANGES = {
     "sun_azimuth": (lambda v: 0.0 <= v < 2 * math.pi, "[0, 6.2832) rad", True),
     "fog_visual_range": (lambda v: v > 0.0, "above 0 m", False),
     "precipitation_intensity": (lambda v: v >= 0.0, "0 or more mm/h", False),
-    "cloud_cover_oktas": (lambda v: 0.0 <= v <= 8.0, "[0, 8] oktas", False),
+    # 0 to 8 eighths of the sky; WMO's code 9 (table 2700) is "sky obscured", not an amount, so
+    # no search draws it and no profile ramps to it (a scenario's own Weather may still set
+    # nineOktas, unjudged; issue 161's follow-up, decided 2026-11-26)
+    "cloud_cover_oktas": (lambda v: 0.0 <= v <= 8.0,
+                          "[0, 8] oktas (9, sky obscured, is not an amount: a scenario's "
+                          "Weather may set it)", False),
 }
 
 

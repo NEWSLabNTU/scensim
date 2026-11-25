@@ -890,3 +890,26 @@ def test_issue_161_no_knob_can_ask_for_9_oktas_or_judge_isaac_clouds():
     assert K.problems(grey, simulator="carla") == []
     (_, m), = K.problems(grey, simulator="isaac")
     assert "cloud_cover_oktas" in m and "carla" in m
+
+
+def test_issue_161_knobs_stay_at_8_oktas_by_design():
+    """Issue 161's follow-up, decided 2026-11-26 (133): 9 oktas is WMO's "sky obscured" (code
+    table 2700), not a cloud amount, so knobs keep [0, 8]; the refusal says why, and a
+    scenario's own Weather may still set nineOktas (unjudged). The bridge's clamp to [0, 8] is a
+    backstop behind these refusals (profiles.rs pins that it never fires on what passes)."""
+    static = {"sky": {"values": {"blind": {"environment": {"cloud_cover_oktas": 9}}}}}
+    (_, m), = K.problems(static)
+    assert m == ("9 is outside cloud_cover_oktas's range [0, 8] oktas (9, sky obscured, is "
+                 "not an amount: a scenario's Weather may set it)")
+    # a profile's breakpoint past its knob's [0, 8] range is refused before the bridge sees it
+    world = {"overcast": {"profile": True, "sets": "cloud_cover_oktas", "range": [0, 8]}}
+    assert K.problems(world) == []
+    ok = K.profile_plan(world, {"overcast": ("time", None, [(0, 0), (10, 8)])}, "carla")
+    assert ok[0]["points"] == [[0, 0], [10, 8]]
+    with pytest.raises(K.KnobError, match=r"value 8\.5 is outside its range \[0, 8\]"):
+        K.profile_plan(world, {"overcast": ("time", None, [(0, 0), (10, 8.5)])}, "carla")
+    # a scenario whose Weather sets nineOktas, with no cloud knob: nothing refuses it
+    fog = {"visibility": {"profile": True, "sets": "fog_visual_range", "range": [50, 1000]}}
+    assert K.profile_plan(fog, {"visibility": ("time", None, [(0, 1000), (20, 80)])}, "carla",
+                          environment=("Weather",))
+    assert K.static_profiles({"haze": {"fog_visual_range": 200}}, ("Weather",))

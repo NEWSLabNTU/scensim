@@ -343,7 +343,9 @@ quantity in both forms, or a field that the scenario's EnvironmentAction or a pr
 sets, is refused by name. So is a value outside its field's range (`sun_elevation` [-pi/2,
 pi/2] rad, `sun_azimuth` [0, 2 pi) rad, `fog_visual_range` above 0 m, `precipitation_intensity`
 0 or more mm/h, `cloud_cover_oktas` [0, 8]), naming the unit: 60 for `sun_elevation` is refused
-as "60 deg is 1.0472 rad". A profile knob's `range` is held to the same.
+as "60 deg is 1.0472 rad". A profile knob's `range` is held to the same. Clouds stop at 8
+by design: WMO's 9 oktas is "sky obscured", not an amount, so only a scenario's own
+`Weather` sets `nineOktas` (issue 161).
 
 A value may also name a prop layout, `layout: <name>` (roadmap 092 K9f-b): props (OpenSCENARIO
 `MiscObject`s, category `obstacle`, the one SSv2 implements) posed on the world's anchors, a lane

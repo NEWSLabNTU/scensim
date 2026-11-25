@@ -505,7 +505,8 @@ that this be recorded too). The unit was assumed, not read; the bridge's doc com
    `sun_elevation` [-pi/2, pi/2] rad, `sun_azimuth` [0, 2 pi) rad, `fog_visual_range` above 0 m,
    `precipitation_intensity` 0 or more mm/h, `cloud_cover_oktas` [0, 8]. A static value, or a
    profile knob's declared range, outside it is refused by name, naming the unit and, for an
-   angle, the conversion ("60 deg is 1.0472 rad"). The bridge's JSON is unchanged.
+   angle, the conversion ("60 deg is 1.0472 rad"). The bridge's JSON is unchanged. Oktas
+   stop at 8 by design: WMO's 9 is "sky obscured", not an amount (issue 161's follow-up).
 2. Both testbenches declare illumination day as `environment: {sun_elevation: 1.0471975511965976}`
    (pi/3, 60 deg); the docs' examples say rad and use pi/3; the tests use radians, and one shows
    60 refused.
