@@ -132,3 +132,32 @@ In scensim_isaac_world, on a branch from its main, then a scensim pin move:
    push with 133's OK. Not touched: K9f-a's own siw commit (76ba145), which rebases onto the
    fixed siw main in its own cascade.
 
+## The fix, against the predictions (2026-11-26, 243; 133's OK)
+
+scensim_isaac_world `055b628e` (branch issue-184 on main 3a948eea), as planned:
+
+- **The host quirk the recipe now shields.** This host's user site carries numpy **2.2.6**
+  (`~/.local/lib/python3.10/site-packages`, `pip --user`), ahead of the system's **1.21.5**
+  (`/usr/lib/python3/dist-packages`), against which the system's scipy and the other packages
+  were built: hence `numpy.dtype size changed` and `_ARRAY_API not found`. The test recipe sets
+  `PYTHONNOUSERSITE=1`, as scensim's lane does, so a user's `pip --user` packages never reach
+  the system lane.
+- The recipe puts `deps/scensim_world_protocol/scensim_world_server` on `PYTHONPATH`, and says
+  the checkout needs `--recursive` (aib's own deps carry `sim_vehicle_ecu`). No new submodule.
+- `test_world_server_launch.HAVE_LAUNCH` is `importlib.util.find_spec("launch.actions") is not
+  None`, any exception counting as no (find_spec imports the parent, and Isaac's bundled
+  `launch` raises without `lark`); `test_course_closed`'s pyproj guard is a find_spec;
+  `test_loop`'s unused `os` is gone.
+
+Measured in the same fresh recursive clone and clean environment (logs
+`/var/tmp/aeon/siw-184-after/`), every prediction held:
+
+- the system Python, `just check`: `Ran 524 tests`, `OK (skipped=47)`, then pyflakes silent;
+  exit 0;
+- Isaac's Python: `Ran 525 tests`, `OK (skipped=19)`, unchanged;
+- `LaunchRefusals` run verbosely from siw's own checkout: with `/opt/ros/humble` sourced,
+  `Ran 8 tests`, `OK`, each test `ok`; without it, each skipped "no ROS 2 launch".
+
+Still to come: scensim's full gate with the pin moved to the fix (`ISAAC_ROOT` passed), the
+Isaac lane `ran`, and the 7 `LaunchRefusals` shown running in the gate tree.
+
