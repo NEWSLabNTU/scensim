@@ -2129,6 +2129,56 @@ runs. A step's own details (scripts, packages) are added to its section before i
   - **Decision (133, 2026-11-25, before any run).** Motion BVH is on for C6e3 if the tick p50
     rises by 5 ms or less (R4's budget per feature), measured under the full quiet rule;
     otherwise it stays off, and the C6e3 runs state it.
+- **C6e2's result (2026-11-25, 118, GPU0, 08:31 to 09:20; a timing run under the full quiet
+  rule).** Six runs, interleaved f1, o1, f2, o2, f3, o3. Every run passed haruna_down, exit 0,
+  and passed the runner's checks: the bridge from `gate-c5c`'s install, provenance
+  `c8ca43e0...+dirty` (Cargo.lock only), and the world server's `ISAAC_KIT_ARGS` with or
+  without the motion settings as its side required. Kit's own log of o1 shows them on its
+  command line. The 15 s GPU log shows no foreign process on GPU0 during the series.
+  - **A false start, recorded:** the first f1 and o1 (08:31:08 and 08:31:19) were refused by
+    `scensim run`, because the testbench had been built over an older scensim install
+    (ee643c0b). It was rebuilt over c8ca43e0 and the series restarted at 08:31:40.
+
+  | run | motion BVH | tick p50 / p95 / max, ms | pose error p95, m | NVTL p05 | along / across, m |
+  |---|---|---|---|---|---|
+  | f1 | off | 47.95 / 65.52 / 179.9 | 0.1189 | 3.119 | +0.007 / -0.066 |
+  | o1 | on | 49.02 / 135.83 / 270.6 | 0.1877 | 3.119 | +0.109 / -0.071 |
+  | f2 | off | 48.82 / 66.42 / 156.1 | 0.1177 | 3.119 | +0.007 / -0.065 |
+  | o2 | on | 48.57 / 64.93 / 162.3 | 0.1888 | 3.120 | +0.108 / -0.071 |
+  | f3 | off | 48.51 / 66.75 / 145.6 | 0.1196 | 3.120 | +0.007 / -0.067 |
+  | o3 | on | 48.70 / 66.19 / 159.0 | 0.1907 | 3.119 | +0.107 / -0.070 |
+
+  "Along / across": the median of localization's position less the truth's, along and across
+  the truth's heading, above 1 m/s (`c6e2/along.py`, offline; positive along means
+  localization ahead of the car).
+  - **The cost.** The tick p50 is 0.33 ms higher with motion BVH on (48.76 against 48.43 mean).
+    The p95 is the same but for o1's 135.8 ms, the series' first "on" run.
+  - **Localization is not unchanged.** Every "on" run puts localization 0.107 to 0.109 m
+    ahead of the car, against 0.007 m with it off, and the pose error p95 rises from 0.118-0.120
+    to 0.188-0.191 m (+0.070 m mean, beyond C6d's 0.049 m bar). Across the track it is the same
+    on both sides (-0.066 to -0.071 m). NVTL p05 is unchanged.
+    - *Hypothesis:* 0.108 m at 4.5 m/s is 24 ms, about half of a 50 ms revolution. aib de-skews
+      each point along the sensor's own track on the assumption that the render saw the whole
+      revolution from one pose (`Lidar._msg`, `motion_distort`). With motion BVH on, the RTX
+      lidar may already render each point from the moving sensor, so the de-skew moves the
+      points a second time, by the motion since the revolution's reference. NDT then puts the
+      car ahead by about half a revolution's travel.
+  - **118's predictions against it:**
+    - Tick p50 0.5 to 3 ms higher: **failed**, 0.33 ms (lower than predicted).
+    - The pose error and NVTL unchanged within C6b's spread: **failed** for the pose error
+      (+0.070 m, every "on" run in the high group and every "off" run in the low group). It
+      **held** for NVTL.
+  - **The decision's rule** (motion BVH on for C6e3 if the tick p50 rises by 5 ms or less) is
+    met on cost, but the rule did not foresee a change in localization. Motion BVH stays
+    **off** for C6e3 until 133 decides, since aib's de-skew and motion BVH together move
+    localization by 0.1 m.
+  - **Beside it, not new:** a -0.066 m across-track bias in every run, both sides. It is about
+    half of the off side's pose error p95. Its cause is not known (the lidar's lateral mount,
+    the map, or the truth trace's origin).
+  - **Note on the earlier modes:** Haruna's pose error p95 has been bimodal, about 0.12 or about
+    0.18 m (C6d's rule). Here the split follows motion BVH exactly. Earlier runs were all
+    without it (issue 138), so their high mode had another cause; this series does not explain
+    it.
 - **C6e3. The ground filter and detection on the fixtures (R7's fixtures).**
   - **Setup.** Autoware on two fixture courses, built with their Autoware maps as C5d's fixture
     was. fixture_c6a has the cleats, the pothole and the washboard. fixture_c6b has rocks on the
