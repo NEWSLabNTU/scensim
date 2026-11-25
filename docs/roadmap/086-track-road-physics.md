@@ -2613,6 +2613,13 @@ server from that tree on port 5594, conformance with Town01's map (`isaac-ex/c7a
   weather and `physics_control` straight after `update_environment`). 243's probe on CARLA
   0.9.16 found `get_weather` straight after `set_weather` returning the previous value in 2 of
   6 reads. So the 30/30 is to be rechecked under issue 161, whose fix reads back after a tick.
+- *Rechecked under issue 161 (2026-11-25, 21:08, 118, after 161 landed at scensim main 3d334cf7):*
+  conformance **33 passed, 0 failed** (2 skipped, as before: no `--slope`, and the autopilot),
+  on 118's CARLA 0.9.16 (port 2010, GPU0, Epic), built clean in the gate checkout. That includes
+  161's new checks, among them "the step after a road condition carries its read-back
+  (READBACK_AFTER_STEP): read back 1 dry". Every wetness level read back as before (1.000000 at
+  each level, 0.800000 at 0.8, 0.6999999 at 0.7). NAS: "2026-11-25 086 C7 conformance rerun after
+  issue 161 (118)".
 - `ROAD_ZONES` is not declared; a zone is refused, in the reply, naming the limit.
 - **Who writes the wet look** (133's question; agreed with 243, 2026-11-25): CARLA's `wetness` and
   `precipitation_deposits` are the road condition's alone during a scenario, a dry one included

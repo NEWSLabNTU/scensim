@@ -1,9 +1,12 @@
 # 161: the world servers take environment values out of range, and read back what they stored
 
-**Status:** fixed in code and tests, 2026-11-25; the probe (step 0) done the same day (the cause:
-the unordered send); the live check's two knob runs on CARLA done the same day, as predicted
-(below); 118's C7 conformance on CARLA 2010 pending (243; numbered by 133 on 2026-11-25;
-after 092 K9f). **Severity:** medium. A world server's read-back is the check behind every knob
+**Status:** fixed, 2026-11-25: in code and tests; the probe (step 0) done the same day (the
+cause: the unordered send); the live check done the same day, both halves as predicted: the
+K9e knob runs on CARLA (243, below), and 086 C7's conformance on CARLA 2010, 33 passed, 0 failed,
+2 skipped, every check of this issue's passing (118; NAS "2026-11-25 086 C7 conformance rerun
+after issue 161 (118)"). Open follow-up: option (i), the CARLA world server's `set_weather`
+reading back until `get_weather` shows the request, so a `weather:` knob could be judged at once
+(below). (243; numbered by 133 on 2026-11-25; after 092 K9f.) **Severity:** medium. A world server's read-back is the check behind every knob
 and every road condition. On CARLA it can echo an impossible value, or show the value before a
 send.
 **Found:** 2026-11-25, scensim 243, in 092 K9e. A knob sent `sun_elevation` 60 (meant as
