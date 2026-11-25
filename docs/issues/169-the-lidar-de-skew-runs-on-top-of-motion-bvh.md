@@ -82,6 +82,26 @@ v = 0 (a control). Motion BVH uses the Kit arguments C6e2 used (`ISAAC_KIT_ARGS`
 | C | on | off | 1 if the hypothesis holds; 0 if motion BVH moves only the scene's objects, not the sensor |
 | D | on | on | 2 if the hypothesis holds; 1 otherwise |
 
+**Added before any run (133, 2026-11-25).** Cases B and C run again at 9 m/s, with the same k
+predicted within 0.15: k must not depend on v, or the measure is wrong. The size of the bar in
+metres: the rig's OS1 (`OS1_REV7_128ch20hz1024res`, `rate_hz` 20) turns once in 50 ms, and the
+two walls are half a turn apart, so |dt| is about 25 ms. Then v * dt is about 0.1125 m at
+4.5 m/s and about 0.225 m at 9 m/s, and 0.15 in k is about 0.017 m and 0.034 m of D. The order
+is the v = 0 controls first; the probe stops if they fail.
+
+| case | v | predicted k (hypothesis) | predicted D - D_true | 0.15 in k |
+|---|---|---|---|---|
+| A, B, C, D | 0 | n/a | 0 (within 0.01 m) | n/a |
+| A | 4.5 m/s | 0 | 0 | 0.017 m |
+| B | 4.5 m/s | 1 | about 0.11 m | 0.017 m |
+| C | 4.5 m/s | 1 | about 0.11 m | 0.017 m |
+| D | 4.5 m/s | 2 | about 0.23 m | 0.017 m |
+| B | 9 m/s | 1 | about 0.23 m | 0.034 m |
+| C | 9 m/s | 1 | about 0.23 m | 0.034 m |
+
+The sign of D - D_true follows the spin's direction relative to the travel. The table gives
+magnitudes; k is signed by the measured dt.
+
 **Predictions (before any run).**
 
 - At v = 0, every case: |D - D_true| at most 0.01 m (the walls' returns' spread). If not, the
