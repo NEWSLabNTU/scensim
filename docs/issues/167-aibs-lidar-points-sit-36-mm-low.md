@@ -1,6 +1,6 @@
 # 167: aib's lidar points sit 36 mm below where the rig puts the lidar
 
-**Status:** open; cause confirmed by step 1's probe (2026-11-25), fix next. **Severity:** to be
+**Status:** fixed locally (aib bb2283f, branch issue-167, not pushed), checked on C6e1's stops; landing waits for 133. **Severity:** to be
 shown. It is a constant height offset of every Isaac lidar cloud in its own frame; the judged
 pose error is horizontal. **Found:** 2026-11-25, scensim 118, 086 C6e1 (numbered by 133).
 
@@ -80,6 +80,20 @@ hypothesis by itself.
      explained or still there.
    - The lidar's height above the road is the spec's (`sim_vehicle_spec`), so CARLA's lidar is
      at the height the fix gives Isaac's.
+
+## The fix's check (2026-11-25, 09:24 to 09:28, GPU0; aib bb2283f, local)
+
+C6e1's six static stops on fixture_c6a again, with the fixed aib (`run_c6e1_fix.sh`, output
+`c6e1-fix167/`). The script places the root by `lidar.mount` and puts the points into the map by
+`lidar.sensor_mount`, the rig's mount, which is what the vehicle's TF says.
+
+- The root is now at (0.89946, -0.00002, 1.96378) in base_link: 36.22 mm lower along the
+  mount's own up axis, which the mount's pitch of 0.015 rad turns 0.5 mm back.
+- **The prediction held:** the median dz to the road is 0.0 mm at every stop and in every band
+  (it was -36.22). Over the cleats and the washboard both the median and the p95 are 0.0 mm.
+- C6e1's 6 % group, now at about +6 mm, gives a p95 of about 5 mm over the flat road. It is
+  the road's geometry, as step 1 found.
+- The pothole still reads +80 mm to its floor. That is issue 168's, unchanged.
 
 ## Reach (written before any fix, for 133)
 
