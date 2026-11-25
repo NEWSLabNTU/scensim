@@ -248,3 +248,38 @@ vector plus a car-fixed along and across part:
   frame offset between the map frame and the truth's, to be found in the course's projector and
   `map_origin`. Part (2), car-fixed, is neither: it is to be looked for in the truth's origin
   across the car or in the lidar's lateral place, the latter ruled out by issue 167's probe.
+
+## Step 3's result: the point cloud map against the world (2026-11-25, offline)
+
+`isaac-ex/i170/register170.py`: a translation-only point-to-plane fit of Haruna's
+`pointcloud_map.pcd` (the map C6e2 and 168 ran on, `c6b-haruna/none/haruna`), using its points
+within 15 m of a run's driven path, to the world's ground meshes. The meshes are the USD's own
+`/Course/Terrain`, `/Course/Road` and `/Course/Lines`, exported by `usd_meshes.py` with Isaac's
+pxr. The course's `meshes.npz` gives the same within 1.4 cm. *The method's own bias, from
+`selftest170.py` (a synthetic map sampled on the same faces):* a true 0 reads as (+0.015, -0.005,
+-0.004) m, and a planted (+0.10, +0.04, -0.035) reads as (+0.115, +0.035, -0.039). The shifts below
+are read with that bias in mind.
+
+| region | points used | the map off the world (x, y, z) | plane residual rms |
+|---|---|---|---|
+| straights | 73,108 of 200,000 | +0.104, +0.042, -0.037 m | 0.050 m |
+| right hairpins | 72,604 | +0.033, +0.030, -0.023 m | 0.078 m |
+| left hairpins | 75,969 | +0.071, +0.048, -0.027 m | 0.079 m |
+
+- *Against the predictions.* The map is off the world (the "not the cause" prediction, within
+  0.01 of 0, **FAILED**). On the straights it is off in the same direction as the runs' fixed map
+  vector, (+0.045, +0.026) m at 30 deg against the map's 22 deg, but about twice its size. The
+  "within 0.01 m of (+0.045, +0.026)" prediction **FAILED** on size. The map also sits 3.7 cm low
+  (3.3 cm net of the bias). The offset is not one vector: it differs by region by up to 7 cm in x.
+- *Caveats, stated before anything is built on this.* Only 36 to 38 % of the map's points lie
+  within 1 m of a ground face. The rest are props (guardrails, the course's other objects), not
+  in the export, and they are left out of the fit. NDT matches those too. The world rendered in a
+  run is not the bare USD: the road layer draws its detail mesh on the road (issue 168), and
+  NDT's z after 167 (-0.004 to -0.014 m) does not show the map's -3.3 cm in full. So NDT follows
+  the map's offset only in part, and this fit is of the ground alone.
+- *What follows (a plan item for 133, not done).* (1) How the course builder samples the map's
+  cloud (its map step) and where a 5 to 10 cm horizontal and 3 to 4 cm vertical offset from the
+  USD's meshes can come from: a different sampling of the same surfaces, the projector's origin,
+  or a step that moves one and not the other. (2) The same fit with the props included (the
+  USD's props exported too), against the full map. (3) Whether the region-dependent offset
+  explains the hairpin part of the across error.
