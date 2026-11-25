@@ -362,3 +362,67 @@ load (around 45) cannot be.
   and if there is none the offset is downstream of aib's stamp.
 - *If none come back,* the next set is 1ed265d7 under load, with a load recipe agreed with 133
   first.
+
+## Step 4's result (2026-11-26, 118, GPU0, 01:25:59 to 02:45:10; the quiet rule, codec told)
+
+Nine smooth haruna_down runs at scensim main 0291abb3 (scensim_isaac_world 4706ff9, step 2's build)
+with aib 86a9207, all accepted (rc 0, provenance, the aib sidecar's head, the timing lines). The
+GPU log shows no foreign process on GPU0 during any run; codec 118's job ran on GPU1 from about
+01:50 (the first-minute load at r3's start, 35.57, is its start).
+
+| run | start | 1-min load at the start | NDT along (moving) | mode |
+|---|---|---|---|---|
+| r1 | 01:36 | 0.04 | -0.0018 | level |
+| r2 | 01:43 | 3.89 | -0.0013 | level |
+| r3 | 01:51 | 35.57 | -0.0007 | level |
+| r4 | 01:58 | 4.21 | -0.0019 | level |
+| r5 | 02:06 | 7.25 | -0.0011 | level |
+| r6 | 02:13 | 9.83 | -0.0007 | level |
+| r7 | 02:21 | 8.15 | -0.0016 | level |
+| r8 | 02:29 | 8.38 | -0.0020 | level |
+| r9 | 02:36 | 9.53 | -0.0009 | level |
+
+The timing was as in step 3 in every run: `to_sim` 0, 3 substeps a frame, NDT's stamps equal to
+aib's to 1 us, on `/clock`'s grid.
+
+Against the predictions:
+- *H-a (issue 161's read-back removed the behind mode):* **FAILED.** No run was behind at step 2's
+  own build: 0 in 9, against step 2's 3 in 9 at the same build.
+- *H-b (step 2's load made the mode):* its prediction for this set, none behind, held. That is
+  consistent with H-b, not a test of it. r3, level at a start load of 35.6, is one run against a
+  load-at-start version of H-b, not a refutation.
+
+**Every difference between step 2 and steps 3 and 4 (written before proposing a set; 133).**
+Read from the runs' own records (`host.json`, `result.json`), the runners, and the host.
+
+*The same in step 2 and step 4:* the build (0291abb3, siw 4706ff9). The host (118, up since
+2026-10-15, so no reboot and the same NVIDIA driver, 615.71.09). GPU0 (RTX 4090, bus 01:00.0).
+The testbench's environment file (`tb-i172/env.bash`, unchanged since 2026-11-25 19:04, before
+step 2's r1), so the same Isaac Sim install. The scenario file (`haruna_down.xosc`, unchanged
+since 19:04). The map (the same link to `c6b-haruna/none/haruna`). No CARLA is involved: these are
+Isaac runs, and no CARLA instance ran. GPU0 held no process at any run's start in either step
+(step 2's "gpu at start" lines are empty).
+
+*Different:*
+1. **aib:** step 2 ran 3b69851 (the render age only). Steps 3 and 4 ran 86a9207, which adds the
+   per-publish timing line (about 840 INFO lines a run into the world server's console).
+2. **The record:** step 2's r1 to r3 had C6e2's topics, and r4 to r9 added the start-up topics.
+   Steps 3 and 4 also record `/clock`, so the recorder subscribes to it in the ego domain.
+3. **The testbench install** was rebuilt for each step. Its content is otherwise the same.
+4. **The host's CPU contention during the run.** From `result.json`'s clock lag (the sim behind
+   the wall, p50): step 2 18 to 108 s, steps 3 and 4 15 to 37 s. The 1-min load at the start
+   (`host.json`): step 2 14 to 53, step 4 0.6 to 23, step 3 3 to 28. The bridge's tick p95:
+   step 2 70 to 156 ms, step 4 63 to 277 ms.
+5. **Who else was on the host:** another user's cargo builds (`/home/runner`) at step 2's
+   start loads of about 45 to 50. codec 118's GPU1 job in step 4 (r3 to r9).
+6. **My own activity:** a 25 s build of mine ran in the middle of step 2's r7, which was behind.
+   Nothing of mine ran during steps 3 and 4.
+7. **The quiet rule's own effects:** a 10-minute wait before r1, then runs back to back (about
+   7.5 min apart, against step 2's 8 to 10). No change to GPU0's occupancy, which was empty at
+   every start in both steps.
+
+*Found, not predicted (from 2 to 4 above; a correlation, not a test):* every behind run had a
+clock lag p50 of at least 64.8 s (r2 64.8, r7 107.5, r9 97.0). Of the 24 level runs across the
+three steps, one reached that (step 2's r8, 85.9 s, at a start load of 53). The rest were at
+53.2 s or less. So the behind mode went with a slow run, in-run contention, more than with the
+load at the start.
