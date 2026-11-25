@@ -1057,6 +1057,20 @@ read-back check above is judged from the after-step value. scensim judges a mark
 whatever the simulator; an unmarked one (a server without the bit) is recorded, not judged, as
 part 2 says for CARLA. No prediction above changes.
 
+**Amendment (2026-11-25, 243, at 133's ruling; before part 2's code).** Part 2's premise was
+false: a reader that does not know the `road_condition` record does not skip it. The trace
+reader's record types are a closed set per schema, by design (`scensim_launch`'s
+`gap_trace.py`: `signal` and `knob` only from schema 2; an unknown type is a `TraceError`, an
+unknown schema too, naming the schemas it reads). So the record comes with **schema 4**: the
+writer (scensim_core's `gap_trace`, `SCHEMA = 4`) writes 4 for every trace, `road_condition` is
+known from schema 4 on, and a reader from before refuses a new trace by its schema number, at
+its first line, as for schemas 2 and 3. Part 2's tests, instead of "readers that do not know it
+skip it": a reader of schemas 1 to 3 refuses a schema 4 trace by its number; the new reader
+reads 1 to 4; a `road_condition` record in a schema 3 trace is refused as unknown. The writer
+is in scensim_world_protocol, so part 2 is another protocol commit, with the deps pins of
+scensim_carla_world and scensim_isaac_world moved to it (part 1 lands in that cascade), then
+scensim's pins, as for issue 161. No prediction changes.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
