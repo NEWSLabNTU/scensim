@@ -197,3 +197,30 @@ the run's straight median (-0.078 to -0.086 m), binned by the truth's curvature 
   what a map or frame offset would give and the frames are ruled out. For the hairpins, whether
   the map's road and lanelets in Haruna's tight bends sit where the world's road mesh is, in the
   same check.
+
+## Step 3's predictions, the map (written 2026-11-25, before looking; 133's order)
+
+**Which map can move localization against the truth.** NDT matches the scan, rendered from the
+world's meshes from the true pose, to `pointcloud_map.pcd`. If the map's cloud sits a vector s
+off the world's meshes, NDT's pose sits s off the truth. So the across error is the point cloud
+map's offset from the world, across the road. The lanelets steer the car (where it drives), but
+they do not enter NDT. A lanelet offset moves the truth and localization together and cannot
+make the error between them. So:
+
+- *The point cloud map against the world's meshes* (the course's `meshes.npz`, which the USD
+  is built from; Haruna as C6e2 ran it, `c6b-haruna/none/haruna`). This is a translation-only
+  nearest-neighbour fit of the map's points to the meshes within 15 m of the driven path,
+  separately on the straights, the right hairpins and the left hairpins, each offset projected
+  on the road's left normal. *Predictions if the map explains 170:* the straights' offset is
+  -0.08 m (within 0.02; the map right of the world), the right hairpins' about +0.06 m, and the
+  left hairpins' about -0.05 m (the straights' level plus each residual). *If the map is not the
+  cause:* every offset is within 0.01 m of 0.
+- *The lanelets against the mesh's crown* (133's question): the lanelet centreline of the ego's
+  lane against the road mesh's centre (the crown) on the straights. I predict it says where
+  the car drives, not the error. A lanelet centreline 0.08 m off the crown would show as the
+  truth's own lateral place in the lane, not as localization against the truth. It is reported
+  for completeness.
+- *A check from the records first:* if the map's offset is one fixed world vector, the across
+  error on the straights varies with the truth's heading as a sine of that vector's size. If it
+  is constant whatever the heading, the offset follows the road (a ribbon built off its
+  centreline) or the car, not a fixed shift.
