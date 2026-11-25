@@ -249,3 +249,11 @@ record as amended in step 2. No edits during a run.
   runs' `pose_with_covariance` and `kinematic_state` stamps against the scans'.
 - *If they differ by about 19 to 20 ms rather than 16.67,* the phase is the cause but not a
   whole physics step, and the record says what it is.
+- *Added (133, before any run; to run after C7 and the 169 landing).* NDT's and the EKF's input
+  stamps for the same scan are read offline from the recorded topics, not from aib. NDT stamps
+  its `pose_with_covariance` with the stamp of the cloud it matched, and that pose is the EKF's
+  pose input, so the recorded `pose_with_covariance` stamps are the scans' stamps as NDT saw them.
+  They are compared with aib's logged header stamps for the same scans (the same sim time to the
+  frame) and with the EKF's `kinematic_state` stamps. Then the judgement can tell the stamp's phase
+  (aib's stamp against the physics) apart from the alignment downstream (NDT's or the EKF's use of
+  that stamp) with the same runs.
