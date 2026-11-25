@@ -11,7 +11,7 @@ Two sources, merged by name (a name in both is refused):
 
 An expression reads `anchor.<name>.<attribute>`; a resolved lane's heading is read at an arc
 position, `anchor.<name>.heading(s)`, interpolated from the file's table (its error at most the
-file's `heading_max_error`); a bare `heading` is only a stated anchor's number. A lane position
+file's `heading_max_error`; refused inside one of the lane's `reversed` stretches, issue 166); a bare `heading` is only a stated anchor's number. A lane position
 s along a resolved lane is a LanePosition through `anchor.<name>.lanelet_at(s)` (the lanelet
 holding it, the later one at a join) and `anchor.<name>.local_s(s)` (s in that lanelet). A
 resolved conflict's numbers are `s_<lane>` (where it lies along each of its two lanes), `x`,
@@ -84,14 +84,22 @@ def merge(stated=None, resolved=None):
 class Heading:
     """A resolved lane's heading table, called with an arc position."""
 
-    def __init__(self, name, s, h, length):
+    def __init__(self, name, s, h, length, reversed_=None):
         self.name, self.s, self.h, self.length = name, list(s), list(h), float(length)
+        # SSv2's spline runs against the lane there (issue 166); a file resolved before it
+        # lists none, unchecked
+        self.reversed = [(float(r["from_s"]), float(r["to_s"])) for r in reversed_ or []]
 
     def __call__(self, s):
         s = float(s)
         if not (-1e-9 <= s <= self.length + 1e-9):
             raise AnchorError(f"anchor.{self.name}.heading({s}): s outside the lane's "
                               f"[0, {self.length:.3f}] m")
+        for a, b in self.reversed:
+            if a <= s <= b:
+                raise AnchorError(f"anchor.{self.name}.heading({s}): s in a reversed stretch "
+                                  f"[{a:.3f}, {b:.3f}] m of SSv2's spline, where its heading is "
+                                  f"about 180 degrees off (issue 166): choose another s")
         ss = self.s
         lo, hi = 0, len(ss) - 1
         while hi - lo > 1:
@@ -148,7 +156,7 @@ def env(anchors):
             for k in LANE_NUMBERS:
                 numbers[f"anchor.{name}.{k}"] = float(a[k])
             functions[f"anchor.{name}.heading"] = Heading(name, a["heading_s"], a["heading"],
-                                                          a["length"])
+                                                          a["length"], a.get("reversed"))
             spans = Spans(name, a["lanelets"], a["length"])
             functions[f"anchor.{name}.lanelet_at"] = spans.lanelet_at
             functions[f"anchor.{name}.local_s"] = spans.local_s

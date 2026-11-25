@@ -131,6 +131,40 @@ class Resolve(unittest.TestCase):
             self.assertGreater(len(a["heading_s"]), a["length"] / RES.HEADING_STEP + 2)  # refined
             self.assertEqual(res["heading_tolerance"], RES.HEADING_TOLERANCE)
 
+    def test_reversed_stretches_are_listed_and_heading_refuses_inside_them(self):
+        """Issue 166: a straight centreline whose points step from 0.015 m to 0.3 m apart (as
+        Town05's lanelet 105401's do) makes SSv2's uniform spline run backward for a few
+        centimetres. The lane lists those stretches, its error leaves them out, and the
+        sampler's heading(s) refuses an s inside one; an evenly spaced lane lists none."""
+        with tempfile.TemporaryDirectory() as d:
+            d, export = _map(d)
+            doc = json.loads(export.read_text())
+            xs = [0.0, 0.015, 0.03, 0.045, 0.06] + [0.06 + 0.3 * k for k in range(1, 41)]
+            doc["lanelets"]["3"]["centerline"] = [[x, 50.0, 0.0] for x in xs]
+            doc["map_sha256"] = map_export.map_digest(d)
+            export.write_text(json.dumps(doc))
+            (d / RES.DECLARATION).write_text("anchors: 1\nlanes:\n  u: {lanelets: [3]}\n"
+                                             "  even: {lanelets: [1]}\n")
+            res = RES.resolve(d, export)
+            u, even = res["anchors"]["u"], res["anchors"]["even"]
+            self.assertEqual(even["reversed"], [])
+            self.assertGreaterEqual(len(u["reversed"]), 1)
+            w = LaneletWorld.load(export, map_dir=d)
+            for r in u["reversed"]:
+                self.assertLess(r["to_s"] - r["from_s"], 0.1)
+                mid = (r["from_s"] + r["to_s"]) / 2
+                self.assertGreater(abs(w.spline(3).yaw(mid)), math.pi / 2)   # runs backward
+            self.assertLess(u["heading_max_error"], 1e-2)
+            self.assertGreater(u["heading_max_error_reversed"], math.pi / 2)
+            out = d / RES.RESOLVED
+            out.write_text(json.dumps(res))
+            _, functions = A.env(A.load_resolved(out, map_dir=d))
+            heading = functions["anchor.u.heading"]
+            r = u["reversed"][0]
+            with self.assertRaisesRegex(A.AnchorError, "reversed stretch.*issue 166"):
+                heading((r["from_s"] + r["to_s"]) / 2)
+            self.assertLess(abs(heading(5.0)), 1e-2)                 # elsewhere: along +x
+
     def test_refusals(self):
         for lanes, why in (("x: {lanelets: [1, 3]}", "lanelet 3 does not follow 1"),
                            ("x: {lanelets: [9]}", "lanelet 9 is not in map"),

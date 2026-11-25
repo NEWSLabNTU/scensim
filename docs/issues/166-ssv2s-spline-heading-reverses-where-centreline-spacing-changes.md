@@ -98,3 +98,46 @@ Predictions, before the measure:
 4. K2.4: few frames in a stretch, about the stretches' share of the length those vehicles drive
    times their frames; each such frame flipped, since SSv2 takes a lane entity's yaw from the
    spline's tangent; none flipped outside a stretch.
+
+## The resolver and the impact measure (2026-11-25)
+
+**(d) done** (this commit): `resolve_lane` lists `reversed` stretches, `heading_max_error` leaves
+them out, `heading_max_error_reversed` keeps them, and the sampler's `heading(s)` refuses an s in
+one. Test: a straight lanelet with points 0.015 m, then 0.3 m apart lists its stretches, each
+running backward on the spline, its error outside them under 0.01 rad, and heading(s) refuses
+inside and answers outside; an evenly spaced lanelet lists none.
+
+Against the predictions:
+1. Town01, re-resolved (scratch copy of v2026.11e's Town01): `west_street`, `west_left_turn`
+   and `north_through` list no stretch. Held, but the error stated was the file's, not
+   `west_street`'s: the file's is 0.000989 rad as before (`west_left_turn`'s), `west_street`'s
+   own 0.000143.
+2. Town05's `west_avenue`: 18 stretches, the longest 0.0277 m, 0.321 m in all (held); but on
+   five of its ten lanelets, the short ones (about 25 m), two at each end, and none on the long
+   ones: "at least one on each" FAILED. The error outside them is 0.0213 rad, against "at most
+   0.01": FAILED. Its largest, 0.0265 rad at s 316.89, 5 cm before a join, is a wiggle of the
+   spline that does not reverse; the table's minimum step stops its halving there.
+
+**The impact measure** (`issue166_impact.py`; results in `~/nas/autoveh/logs/issue-166/impact/`).
+A frame is in a stretch when an SSv2-driven entity's pose lies within 0.01 m of the spline's
+points inside one; a vehicle is flipped when its yaw is more than 90 degrees from every Town01
+centreline segment within 0.5 m. The measure finds a stretch's point and not one 5 cm off, and
+flags a reversed yaw on 6583 but not the true one.
+
+| runs | entity frames | vehicle frames judged | in a stretch | flipped |
+|---|---|---|---|---|
+| K13, `k13_platoon` on this host (15) | 27,469 | 27,469 | 0 | 0 |
+| K2.4's seats runs (3) | 2,687 | 2,687 | 0 | 0 |
+| K11c, K11d, K11e batch truths (52,000 slots) | 21,663,858 | 0 (no SSv2 vehicle) | 0 | 0 |
+
+Prediction 3 held. Prediction 4 FAILED on its premise: K2.4's SSv2 vehicles drove only lanelets
+6583, 32582, 41199, 42451 and 42664, none of Town01's 41 with a stretch, so none could show one.
+No existing run reaches a stretch, so the existing runs cannot say whether it matters.
+
+**What the maps hold.** Town01: 145 stretches on 41 of 300 lanelets, 248 m of its 26.5 km of
+lanes (0.94 %); Town05: 1107 on 372 of 1029, 374 m of 64.7 km. Most are a few centimetres (median
+0.028 m and 0.018 m), but 52 on Town01 are over 0.5 m, the longest 11.25 m: on lanelet 38627 (a
+344 m straight on Town01's south road) the centre points run 112 m, 112 m, then 0.0025 m and
+0.33 m apart, and SSv2's spline loops 7.9 m past the point and back over a 16.9 m curve whose
+chord is 2.5 mm. An SSv2 entity driving such a lanelet would, by the spline, run backward, facing
+backward, for about 11 m of its s: some 28 frames at 8 m/s, not one.

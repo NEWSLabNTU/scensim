@@ -37,7 +37,11 @@ Catmull-Rom is a chain of curves whose tangents need not meet); an interval whos
 interpolation is off by more than `HEADING_TOLERANCE` is halved, down to `HEADING_MIN_STEP`.
 `heading_max_error` is the largest difference between that table, interpolated linearly, and
 the spline's heading at four points inside each interval: at most the tolerance unless the
-minimum step stopped a halving.
+minimum step stopped a halving. It leaves out the lane's `reversed` stretches (issue 166):
+where SSv2's uniform Catmull-Rom runs against its own centre points for a few centimetres
+(a centreline whose point spacing jumps), its heading is about 180 degrees off, and no table
+follows it; `reversed` lists them ([{from_s, to_s}] in lane s), `heading_max_error_reversed`
+is the error with them, and `heading(s)` refuses an s inside one.
 """
 import argparse
 import hashlib
@@ -72,6 +76,47 @@ class AnchorError(ValueError):
 
 def _wrap(a):
     return math.atan2(math.sin(a), math.cos(a))
+
+
+def _reversed_ts(curve):
+    """The parameter ranges in [0, 1] where a spline curve's tangent points against its chord
+    (issue 166): tangent . chord is a quadratic in t, so its roots bound them exactly."""
+    (ax, bx, cx, _), (ay, by, cy, _), _ = curve.c
+    ex, ey = ax + bx + cx, ay + by + cy          # the chord, point(1) - point(0)
+    qa, qb, qc = 3 * (ax * ex + ay * ey), 2 * (bx * ex + by * ey), cx * ex + cy * ey
+    cuts = [0.0, 1.0]
+    if abs(qa) > 1e-15:
+        disc = qb * qb - 4 * qa * qc
+        if disc > 0:
+            r = math.sqrt(disc)
+            cuts += [t for t in ((-qb - r) / (2 * qa), (-qb + r) / (2 * qa)) if 0 < t < 1]
+    elif abs(qb) > 1e-15 and 0 < -qc / qb < 1:
+        cuts.append(-qc / qb)
+    cuts.sort()
+    out = []
+    for a, b in zip(cuts, cuts[1:]):
+        m = (a + b) / 2
+        if b > a and qa * m * m + qb * m + qc < 0:
+            out.append((a, b))
+    return out
+
+
+def _reversed_stretches(world, spans):
+    """A lane's stretches, [{from_s, to_s}] in lane s, where SSv2's spline runs against its
+    own centre points (issue 166), merged where they touch."""
+    out = []
+    for sp in spans:
+        spl = world.spline(sp["id"])
+        c0 = sp["from_s"]
+        for curve, ln in zip(spl.curves, spl.lengths):
+            for a, b in _reversed_ts(curve):
+                lo, hi = c0 + a * ln, c0 + b * ln
+                if out and lo <= out[-1]["to_s"] + 1e-9:
+                    out[-1]["to_s"] = max(out[-1]["to_s"], hi)
+                else:
+                    out.append({"from_s": lo, "to_s": hi})
+            c0 += ln
+    return out
 
 
 def _declaration(path):
@@ -138,7 +183,13 @@ def resolve_lane(world, name, spec):
             e = max(e, abs(_wrap(ha + f * _wrap(hb - ha) - yaw_in(sp, sa + f * (sb - sa)))))
         return e
 
+    stretches = _reversed_stretches(world, spans)
+
+    def touches(sa, sb):
+        return any(r["from_s"] < sb and sa < r["to_s"] for r in stretches)
+
     def refine(sp, sa, ha, sb, hb, out, err):
+        """err: (outside the reversed stretches, with them)."""
         e = interval_error(sp, sa, ha, sb, hb)
         if e > HEADING_TOLERANCE and sb - sa > 2 * HEADING_MIN_STEP:
             sm = (sa + sb) / 2
@@ -146,7 +197,7 @@ def resolve_lane(world, name, spec):
             err = refine(sp, sa, ha, sm, hm, out, err)
             out.append((sm, hm))
             return refine(sp, sm, hm, sb, hb, out, err)
-        return max(err, e)
+        return (err[0] if touches(sa, sb) else max(err[0], e), max(err[1], e))
 
     def tangent_yaw(curve, t):
         tx, ty, _ = curve.tangent(t)
@@ -155,7 +206,7 @@ def resolve_lane(world, name, spec):
     # each lanelet's spline is a chain of curves, one between each pair of its points, whose
     # tangents need not meet at the points: each curve is tabled on its own, so a curve's
     # boundary is listed twice too (the end of the one before, the start of the one after)
-    ss, heading, err = [], [], 0.0
+    ss, heading, err = [], [], (0.0, 0.0)
     for sp in spans:
         spl = world.spline(sp["id"])
         c0 = sp["from_s"]
@@ -188,7 +239,8 @@ def resolve_lane(world, name, spec):
     return {"kind": "lane", "lanelets": spans, "length": length,
             "speed_limit": min(float(world.lanelets[i]["speed_limit"]) for i in ids),
             "start_x": x0, "start_y": y0, "end_x": x1, "end_y": y1,
-            "heading_s": ss, "heading": heading, "heading_max_error": err,
+            "heading_s": ss, "heading": heading, "heading_max_error": err[0],
+            "heading_max_error_reversed": err[1], "reversed": stretches,
             "x": [p[0] for p in xy], "y": [p[1] for p in xy]}
 
 
@@ -384,6 +436,10 @@ def resolve(map_dir, export):
             "heading_min_step": HEADING_MIN_STEP,
             "heading_max_error": max([a["heading_max_error"] for a in anchors.values()
                                       if "heading_max_error" in a], default=0.0),
+            "heading_max_error_reversed": max([a["heading_max_error_reversed"]
+                                               for a in anchors.values()
+                                               if "heading_max_error_reversed" in a],
+                                              default=0.0),
             "anchors": anchors}
 
 
@@ -403,8 +459,10 @@ def main(argv=None):
         return 2
     out = Path(a.output) if a.output else Path(a.map_dir) / RESOLVED
     out.write_text(json.dumps(doc, indent=1) + "\n")
+    n_rev = sum(len(x.get("reversed", [])) for x in doc["anchors"].values())
     print(f"{out}: {len(doc['anchors'])} anchor(s), heading error at most "
-          f"{doc['heading_max_error']:.2e} rad")
+          f"{doc['heading_max_error']:.2e} rad outside {n_rev} reversed stretch(es) "
+          f"(issue 166; {doc['heading_max_error_reversed']:.2e} rad with them)")
     return 0
 
 
