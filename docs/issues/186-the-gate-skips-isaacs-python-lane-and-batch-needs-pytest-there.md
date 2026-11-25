@@ -94,3 +94,16 @@ the result. With the fix, the lane's command in Isaac's Python on the gated tree
 Held if all three end OK with 0 errors and 0 failures; any other failure is recorded here and
 gets its own issue.
 
+**Point 4's result (2026-11-25, 22:23 to 23:12 +08:00): held.** `scripts/isaac_lane.sh` on
+365fc9b6 (the dev worktree), `ISAAC_ROOT=/mnt/evo/aeon/isaac-sim-6.2`, `CUDA_VISIBLE_DEVICES`
+empty, numpy 2.3.1 (Isaac's):
+
+- `scensim_isaac_world`: `Ran 525 tests`, `OK (skipped=19)`, as in 243's run;
+- `scensim_sampler`: `Ran 153 tests`, `OK (skipped=2)`;
+- `scensim_batch`: `Ran 259 tests`, `OK (skipped=7)`, 0 errors (243's run: 253, `errors=3`);
+  its CUDA cases skipped (Warp reports "no CUDA-capable device", as intended).
+
+The status line: "Isaac-Python lane: ran (937 tests in 3 suites, OK)". No new failure, so no new
+issue. One cost, observed: `scensim_batch`'s suite took 2763 s on the CPU in Isaac's Python, so
+a full gate on a host with Isaac runs about 50 minutes longer than one that skipped the lane.
+
