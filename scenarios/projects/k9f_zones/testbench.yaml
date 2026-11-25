@@ -24,6 +24,9 @@ world:
         ice: {zones: {ice_at_goal: {class: ice}}}
       default: ice
 pilots:
-  ego: {kind: autoware, autoware_profile: scensim, vehicle: tesla_model3}
+  # max_velocity: autoware_launch's default caps every planner at 4.17 m/s (15 km/h), under which
+  # no stop on the zone asks more than ice gives (092 K9f-a, run 1); 11.11 m/s as demo
+  ego: {kind: autoware, autoware_profile: scensim, vehicle: tesla_model3,
+        args: {max_velocity: 11.11}}
 logging: {capture: standard, gap_trace: true, keep: {passed: full, failed: full, error: full}}
 default: both
