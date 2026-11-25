@@ -100,9 +100,8 @@ walls (the root's x less the sensor's x at the ahead wall's hit, over v), over 5
 revolution was rendered from (issue 167's probe printed it). aib keeps the sensor's track, its
 pose a substep apart with the world's clock (`Lidar.track`). So each scan's render age is the
 lidar's clock at the read less the track time whose pose is `transform`'s: the point on the track
-nearest it, interpolated between substeps. That works when the car moves; above 1 m/s at 4.5 m/s
-the track's substeps are about 4 cm apart, which resolves the age to about 1 ms after
-interpolation.
+nearest it, interpolated between substeps. That works when the car moves (above 1 m/s). The substeps are a few centimetres apart at
+4.5 m/s, and interpolating between them resolves the age to about 1 ms.
 
 **The change (aib, a branch `issue-172-age` from aib main, not landed).** In `Lidar._msg`,
 behind a rig key `isaac.log_render_age` (default off, so nothing changes unless it is set):
