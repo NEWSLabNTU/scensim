@@ -2222,6 +2222,50 @@ runs. A step's own details (scripts, packages) are added to its section before i
     - False stops: 0 over the cleats, the pothole and the washboard.
   - **Judged (proposed):** R7's "false obstacles over washboard and ruts" as no stop and no
     object over the washboard and the pothole in both runs. Everything else is reported.
+  - **Amended before any run (118, 2026-11-25, after issue 168 landed at main 0291abb3; no C6e3
+    result exists).** One prediction changes (the pothole), and the step's details are added.
+    - *The pothole is now seen.* Since 168 the world's road render sits under the detail
+      (fixture_c6a's `base_drop` 0.080 m, drawn 0.090 m), so the lidar meets the pothole's floor.
+      The line above ("C6e3's pothole tests nothing", from C6e1) no longer holds, and C6e3's
+      pothole is a real test. Predicted: the 8 cm pothole is ground, with no non-ground points, no
+      object and no stop. *Hypothesis:* its far rim is a wall about 8 cm high, facing the lidar,
+      and like the cleats' faces it may fail the 13 deg local slope. So this is my second least
+      sure prediction, after the 10 and 15 cm cleats.
+    - *The ruts.* Neither fixture has ruts. R7's "false obstacles over washboard and ruts" is
+      judged on the washboard and the pothole only, as the proposed rule above says. The ruts are
+      left for a later step on a course that has them.
+    - *The car.* The fixtures' scenarios (`fixture_c6a_down.xosc`, `fixture_c6b_down.xosc`) name
+      `drift_mustang`. C6e3 runs copies naming `tesla_model3`, Autoware's car (as C5d's
+      `isaac_c5d_fixture` did). The route is unchanged: from x 20 m to x 610 m (c6a) and to
+      x 490 m (c6b), at y 1.62 m.
+    - *The road detail's place.* Both fixtures keep `road_detail.yaml` in `course/`, which the
+      world server does not read (it reads `<map dir>/road_detail.yaml`). C6a to C6e1 ran
+      through `fixture_drive` or their own scripts, which read it there. C6e3 runs on
+      hard-linked copies of the two maps, under `isaac-ex/c6e/maps/`, each with its own
+      `road_detail.yaml` and `section.npz` at the top. fixture_c6b gets its `base_drop` from the
+      CLI (`python -m scensim_isaac_world.base_drop <map> --write`) before the runs. Each run
+      must log the world server's road line (the corridor's features, and the 168 line naming
+      `/World/env/Road` and the drop), and the runner refuses a run without it.
+    - *The chassis contacts.* 133's amendment asks for the skid plate's and the body's contacts
+      from the world server's log. The world server logs none. C6b's plate strikes came from
+      `fixture_drive`'s own contact report, which the world server does not have. For C6e3 a
+      rock's contact is therefore inferred, and labelled as inferred, from the truth trace:
+      where the rock passed (between the wheels or under one, from the trace and the rock's
+      place) and the body's height and pitch at the rock against the 10 m before it. A rock
+      between the wheels taller than the clearance is recorded as "a strike likely, not
+      measured". A contact report in the world server would be a code item, for 133's decision.
+    - *Recording.* Each run records, beside C6d's topics,
+      `/perception/obstacle_segmentation/pointcloud` (the non-ground points; about 1 to 2 GB a
+      run, on the NVMe log root, 224 GB free when written).
+    - *Workspace.* scensim main 0291abb3 built in its own worktree (`/mnt/renegade/aeon/ws-c6e3`,
+      `env -i just build`), the testbench `/var/tmp/aeon/tb-c6e3` built over its install with
+      `--symlink-install`, two packages (`isaac_c6e3_c6a`, `isaac_c6e3_c6b`). Each run is
+      checked as 168's were: the live bridge's executable and the world server's command line
+      under the worktree's install, and result.json's provenance at 0291abb3's tree.
+    - *Order.* c6a, c6b, c6a, c6b, on GPU0, non-timing (shared GPU0 allowed; codec 118 told of
+      the start and end). Motion BVH is off (issue 169).
+    - *Measure.* `isaac-ex/c6e/c6e3/measure.py`, C6d's `c6d_extras.py` extended to the measures
+      above, per fixture and run.
 - **C6e4. NDT with leverage (a proposal, brought to 133 after C6e3; 133, 2026-11-25).** haruna_down's 16 km/h is why
   C6d's roughness cost localization nothing (the hypothesis above). A pairing with leverage
   needs speed. The plan is a copy of *rough_none* and of smooth Haruna with the lanelets' speed
