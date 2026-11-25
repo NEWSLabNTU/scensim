@@ -57,6 +57,26 @@ distortion off under BVH), from C6e2's pairing rerun that part 3 already include
 **The steps.** The first two are offline, on records that exist; no run until 133 has seen
 their result.
 
+**Step 2 runs first (133, 2026-11-25), with its sizes written before looking.** A difference
+between the published TF (base_link to the lidar) and the lidar's real mount moves the pose NDT
+reports for base_link, since NDT places the lidar and base_link follows through the TF. The
+levers, from the rig (`translation: [0.9, 0.0, 2.0]`):
+
+- *yaw*, δ = the TF's yaw less the real one: base_link moves across by L sin δ, with L = 0.9 m
+  (the lidar's forward lever, not its height). A positive δ (the TF turned left of the real
+  mount) makes NDT turn the car right by δ, and base_link lands +0.9 sin δ to the left. The
+  probe's 1.84 deg (if all of it were a TF error) would give +0.029 m, not 0.066 m. -0.066 m
+  needs δ = -4.2 deg, and NDT's heading would then sit 4.2 deg left of the truth (step 1 would
+  see it).
+- *roll*, ρ = the TF's roll less the real one (positive: left side up): base_link moves across
+  by -H sin ρ, with H = 2.0 m (the lidar's height over base_link). -0.066 m needs ρ = +1.9 deg,
+  and NDT's roll would sit 1.9 deg off (step 1 would see it).
+- *pitch* moves base_link along and up (H sin and L sin of it), not across.
+
+*Prediction (before looking):* δ and ρ are both under 1e-4 rad, since 167's probe found the
+rig's mount equal to the kit's extrinsics (yaw 1.5386 rad), and the TF from those extrinsics
+adds nothing across. If either is not, its size from the formulas above is compared with -0.066 m.
+
 1. *The attitude and heading split* (offline: C6e2's six runs and 168's twelve,
    `/localization/kinematic_state` against `ego.csv`, above 1 m/s). Per run: the median error
    in roll, pitch and yaw, and the across error against the road's curvature and cross slope
