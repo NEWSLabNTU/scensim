@@ -141,3 +141,23 @@ lanes (0.94 %); Town05: 1107 on 372 of 1029, 374 m of 64.7 km. Most are a few ce
 0.33 m apart, and SSv2's spline loops 7.9 m past the point and back over a 16.9 m curve whose
 chord is 2.5 mm. An SSv2 entity driving such a lanelet would, by the spline, run backward, facing
 backward, for about 11 m of its s: some 28 frames at 8 m/s, not one.
+
+## The targeted run (133, 2026-11-25): an SSv2 vehicle through lanelet 38627's loop
+
+On CARLA 0.9.16, Town01 at Low (no town change), this host's seat, scensim at main c8ca43e0 with
+this branch: an SSv2 default vehicle (the catalog's tesla_model3) teleported to lanelet 38627
+at s 200 with a step SpeedAction to 8 m/s, the ego (carla_basic) parked on `west_street`, the run
+ended by `exitSuccess` at 15 s. Lanelet 38627 runs east along y -324.5; its third curve, s 224.40
+to 241.28 of the lanelet, joins two centre points 2.5 mm apart.
+
+**Prediction, before the run** (the port's spline at the vehicle's s, s = 200 + 8 t from its
+first move):
+1. SSv2's pose (the truth's `ssv2`) runs east past x 325.72 to x 334.03 at s 229.97 (about
+   3.7 s after its first move), its yaw about 0; then back west to x 325.73 at s 241.28 (about
+   5.2 s), its yaw about 3.140, some 28 frames facing west; then east again over the same 8.3 m,
+   yaw about 0.
+2. SSv2 reports its speed as 8 m/s throughout (its own state, not the poses' difference), and
+   raises no error.
+3. CARLA's car, tracking SSv2's pose (`npc_motion: tracked`), cannot follow a reversal in place:
+   its tracking error grows over the loop and the tracker snaps it at least once (`contacts`'
+   tracking record), so the body visibly jumps or turns about.
