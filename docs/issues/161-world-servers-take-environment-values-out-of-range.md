@@ -327,3 +327,22 @@ range and in the refusal ("9, sky obscured, is not an amount: a scenario's Weath
 - The full gate passes with the Isaac lane run, and `git status --porcelain --untracked-files=no`
   is empty with no `--ignore-submodules`.
 
+
+**Outcome (2026-11-26): all three held.** The change is 550a8b41: first gated as 62148d96 on
+aae975d5, rebased onto 1757964e (issue 184's siw pin move) and gated again as cc9b5a40,
+then rebased onto 8fef544f, a docs-only move (issues 189 and 190), with check_docs and
+check_pins.
+
+- The Rust test `a_cloud_cover_profile_within_0_to_8_never_reaches_the_clamp` passes: for four
+  profiles with breakpoints in [0, 8], each sampled at 241 coordinates (beyond both ends included),
+  `value_at` rounds into [0, 8] and the written okta equals the rounded value, so the clamp
+  never fires on validated input. No finding.
+- `test_issue_161_knobs_stay_at_8_oktas_by_design` passes: the exact refusal of a static 9,
+  `profile_plan` refusing an 8.5 breakpoint under a [0, 8] knob, and a scenario `Weather` with
+  no cloud knob passing `profile_plan` and `static_profiles`.
+- Full gates on 241, each in a fresh worktree with `env -i` and `ISAAC_ROOT`: 62148d96 (04:44 to
+  05:17) and cc9b5a40 (05:34 to 06:07). Both passed `just build` and `just test` with "Isaac-Python
+  lane: ran (937 tests in 3 suites, OK)", and `git status --porcelain --untracked-files=no` was
+  empty after build and after test, with no `--ignore-submodules`. A first gate at 04:26 died in
+  `just build` when the root volume filled (ENOSPC, nothing about the code); the space was freed
+  and the gate re-run.
