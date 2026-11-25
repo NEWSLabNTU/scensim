@@ -123,3 +123,57 @@ From run r1's record alone, no new run. For each of the 94 operations after the 
 - If P1 fails (no disagreement before the operations), H3 is not the cause, and the WARN is a
   result of the stop, not its source; the order of the WARN and the operation in time is then
   read again at the record's resolution.
+
+### H3's offline check: the result (2026-11-25, after the predictions above)
+
+Read from r1's record (scripts `h3.py`, `g3.py`). There are 94 operations after the strike. A
+quiet stretch is any time more than 1 s from an operation and more than 34 s into the run. NDT's
+own pose (`/localization/pose_estimator/pose_with_covariance`) was not recorded, so its
+disagreement with the EKF is read from the EKF's gate (its diagnostic) and the EKF's outputs.
+
+| measure | the 0.15 s (graph, diagnostics: 0.5 s) before an operation | quiet |
+|---|---|---|
+| `ekf_localizer` diagnostic at WARN, "mahalanobis distance of pose topic is large" | 93 of 94 operations | 0 of 863 messages |
+| graph `/autoware/localization/sensor_fusion_status` at WARN | 93 of 94 | 0 of 432 |
+| graph `/autoware/localization` and `/autoware/modes/autonomous` at WARN | 94 of 94 | 0 of 432 |
+| graph `/autoware/localization/accuracy`, `state`, `scan_matching_status` at ERROR | 0 of 94 | 0 of 432 |
+| `localization_error_monitor` (`ellipse_error_status`) | OK in every message | OK |
+| NDT `iteration_num` of 10 or more | 43 of 94 operations | 86 of 865 messages |
+| NVTL below 3.25 | 1 of 94 (min 2.77) | 0 of 865 (min 3.26) |
+| the wheel speed the EKF fuses, abs, p50 and max | 0.0004, 0.014 m/s | 0.0003, 0.016 m/s |
+| the EKF's pose step per message, p50 and max | 0.47 mm, 9.1 mm | 0.45 mm, 9.5 mm |
+| the EKF's pose variance in x, p50 | 0.0021 m^2 | 0.0020 m^2 |
+
+The graph's configuration is the profile's (`autoware_sim_profile`
+`config/system/diagnostics/autoware-sim.yaml`, its `diagnostic_graph_path` default under NDT).
+`/autoware/modes/autonomous` is the `and` of map, localization, planning, perception, control and
+vehicle. `/autoware/localization` is the `and` of `state`, `scan_matching_status`, `accuracy`
+(`localization_error_monitor: ellipse_error_status`) and `sensor_fusion_status`
+(`localization: ekf_localizer`). The MRM handler reads `/system/operation_mode/availability`
+(Autoware 1.5.0's `mrm_handler.launch.xml`), which the graph's modes give.
+
+Against the predictions:
+- P1, NDT and the EKF disagree while the wheels say 0: **held, as far as the record shows it**.
+  The EKF's gate refused NDT's pose before 93 of the 94 operations and never in the quiet
+  stretches. The fused wheel speed was about 0 m/s in both. The EKF's own output did not jump,
+  as it would not if it refuses the pose. How far NDT's pose was from the EKF's is not measured
+  (NDT's pose not recorded).
+- P2, NDT worse in those frames: **partly held**. NDT took 10 or more iterations before 43 of the
+  94 operations, against 86 of 865 quiet messages. NVTL was not lower: below 3.25 once.
+- P3, `/autoware/localization/accuracy` goes to ERROR: **FAILED**. No localization unit was at
+  ERROR before any operation, and the error monitor was OK throughout. The path in the record
+  is a WARN instead. `sensor_fusion_status` (the EKF's own diagnostic) at WARN made
+  `/autoware/localization` and `/autoware/modes/autonomous` WARN before every one of the 94
+  operations, and never in the quiet stretches. That the graph's WARN takes the autonomous mode
+  out of the availability the MRM handler reads is inferred from this timing, not read in
+  Autoware's code (a binary install).
+
+So the loop the record shows is this: the car pushes against the boulder with the wheels held;
+the EKF refuses NDT's pose as an outlier (its diagnostic WARN); the graph's localization and
+autonomous mode go to WARN; the MRM operates EMERGENCY_STOP; it cancels when the next pose
+passes the gate (the median gap between operations is 0.7 s); the planner, which holds no stop
+for the boulder (H2), asks to move again. The planner's missing stop (issue 181's detection
+late and lost at the car) is what keeps the loop going. The MRM's stop is what ends each push.
+Why NDT's pose leaves the EKF's gate while the car is held (the scan with the boulder at the
+bumper, or the body moving on its suspension) is not settled by this record. Recording NDT's
+pose and the EKF's innovation would settle it.
