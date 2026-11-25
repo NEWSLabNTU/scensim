@@ -197,3 +197,84 @@ contact happen. 189 is why the run still passed.
    or `CollisionCondition` is complemented by a judge on the truth's contacts. Plan first.
 3. Optionally, why SSv2 missed asphalt's -0.1 mm at frame 517: its logged ego pose, if it logs
    one. It does not change the remedy.
+
+## Step 2: the survey and the remedy, a plan (241, 2026-11-26; CPU only, nothing changed)
+
+**The NTU proof pass (2026-11-05), whose numbers are published.** CARLA 116/116, Isaac
+116/116 and Isaac n16 8/8 (NAS `autoveh/dataset/2026-10-30 NTU twin map/proof_2026-11-05/`).
+In all three, the pass is SSv2's JUnit alone. CARLA's `legs.log` records only `junit=[failures="0"
+errors="0"]`, and each Isaac `<leg>_junit.xml` holds one testcase, SSv2's, with no
+`carla_contact`. So `physical_verdict` ran on none of them, and no contact report was kept.
+
+A scan of every leg's 20 Hz state (`~/nas/home/2026-11-26 189 NTU contact scan (241)/`) followed
+thresholds and predictions written before it, and was calibrated on step 1's two contacts:
+- The thresholds: a one-frame speed drop of 1.0 m/s or more, a lateral acceleration of 8 m/s^2
+  or more, and on Isaac a yaw-rate jump of 1.5 rad/s or more.
+- Calibration: they fire at frames 516 (2.85 m/s) and 482 (3.72 m/s) and nowhere else.
+- The scan found 0 hits in 241 leg files. The largest drop was 0.165 m/s and the largest
+  lateral reading 2.62 m/s^2.
+
+That is evidence and not a verdict: a slower touch can't be excluded without the reports. On
+it, the published passes hid no hard contact.
+
+**The repository's testbenches** (`scenarios/projects/*`, `src/scensim_examples/projects/*`,
+`src/scensim/scensim/templates/*`; the colcon test fixtures left out). With `physical_verdict`
+among the judges (12):
+- projects: basic, c2b, demo, dev, e2, gap, isaac_demo, s5, set050, set050_tour, two_av;
+- examples: safety_suite.
+
+Without it (29):
+- projects: bench, courses, drift_lap, gap_campaign, isaac_basic, isaac_road_physics,
+  isaac_rough_road, isaac_soil, isaac_t2 (autoware, command, launch_own, none, simple),
+  isaac_verge, k12_commanded, k12_commanded_free, k13_platoon, k24_agreement, k9_cs3,
+  k9_cs3_isaac, speed_ladder;
+- examples: first_drive, isaac_first_drive, multi_pilot, road_physics, simple_drive;
+- every template: carla-first-drive, isaac, multi-pilot;
+- and 243's k9f_zones, on its branch.
+
+Of those, these judge a collision by `CollisionCondition` alone, as 189's runs did:
+isaac_soil (2 scenarios), k24_agreement (2), and the examples first_drive, isaac_first_drive and
+multi_pilot. Only 2 scenarios in the repository declare `csbExpectedContacts`. A new project
+made from a template runs no contact judge. The gap studies: `gap` runs `physical_verdict`;
+`gap_campaign` does not, though it judges by its own oracle and has no `CollisionCondition`.
+
+**The remedy: two options weighed.**
+
+1. *A contact judge on by default wherever the bridge writes contact reports; a testbench opts
+   out by name.* scensim would add `physical_verdict` to every run that has `<run dir>/contacts/`
+   unless the testbench says otherwise, for example `judges: [{name: physical_verdict, off:
+   true, why: ...}]`, refused without a reason.
+   - It reuses what exists: the reports (CARLA and Isaac alike, through the remote backend),
+     `csbExpectedContacts` for a scenario that means to collide, and `static` for the world.
+   - It covers static contacts (a curb, a pole, a rock), which no SSv2 condition can.
+   - It is one rule for both simulators.
+   - Cost: a run that collides on purpose without saying so starts failing. isaac_soil's and
+     isaac_rough_road's rock and verge drives are the likely ones, the car meeting the static
+     world. They would need `csbExpectedContacts: static`, or a minimum impulse.
+2. *A truth-contact judge beside `CollisionCondition`*: the same entity pairs that SSv2 names,
+   judged on the gap trace's contacts or on a gap tolerance (for example, at most 5 cm).
+   - It closes exactly 189's case: a named pair that touched in physics.
+   - It misses static contacts and unnamed entities.
+   - It duplicates `physical_verdict`'s data path with a second rule.
+
+**Recommendation: 1.** It is the judge the project already built for this (roadmap 021); 189's
+runs fell through only because it is opt-in.
+
+**The effect on past verdicts.** Nothing is re-judged by itself; the change applies to new runs.
+- Past scensim runs that kept `<run dir>/contacts/` can be judged again offline with
+  `physical_verdict --contacts <dir>`. That is a report, not a rewrite of their `result.json`.
+  It would turn 189's two K9f-a runs into failures.
+- Runs without reports (the NTU proof pass) can't be re-judged; the state scan above is what
+  there is.
+
+**On CARLA.** The same reports, so the same rule. CARLA's contacts also catch its bodies being
+larger than their declared boxes (roadmap 022's 0.3 m tolerance notes). Projects that already
+run the judge on CARLA see no change.
+
+**Steps, each with a plan and predictions before code:**
+1. A dry pass. Run `physical_verdict` offline over every kept `<run dir>/contacts/` of the
+   no-judge testbenches on 241 and the NAS, and list which runs would flip. This is CPU only.
+2. The default-on change in `scensim.judges` with its opt-out, plus tests.
+3. The templates and examples: add the judge explicitly, so a reader sees it.
+4. The scenarios that collide on purpose: declare `csbExpectedContacts`.
+5. A full gate (`just check` included, issue 191).
