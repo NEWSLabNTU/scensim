@@ -901,6 +901,25 @@ suite, CARLA and setup, the none-case first:
   k9_cs3_isaac: K9e step 2b's results (pm=current exitFailure at 240 s, pm=works exitSuccess), the
   same copy sha256, the barriers' truth at CS3's positions and yaw -1.5712.
 
+**The CARLA rerun on issue 171 (2026-11-25, 12:00-12:14, at f0acfc70: main 47b59256 plus
+K9f-b, built from a clean environment): as predicted.** My CARLA on RPC 2100 (Epic, booted on
+Town01); the none-case alone on a fresh stack first, then `suites/layout.yaml` on one stack in
+its order, which puts the none-case where the first suite's false error run was:
+
+| case | verdict | knob profile `illumination.sun_elevation` |
+|---|---|---|
+| closure=none, pm=current (alone) | passed | sent 2, judged 2014 frames from the repeat, none off |
+| closure=closed, pm=current | failed: exitFailure at 240 s | sent 2, judged 5014, none off |
+| closure=closed, pm=works | passed | sent 2, judged 2636, none off |
+| closure=none, pm=current (third on the stack) | passed | sent 2, judged 2005, none off |
+
+- No contact in any run. The none-cases had no copy and no barrier; both closed runs' copies
+  have sha256 5fd2feb1... and each run directory kept its `scenario.xosc` (08a772d0). The
+  barriers' truth: x 305.641, y -128.206, -129.506, -130.806, at yaw 0 (issue 173).
+- Every first read-back showed the value sent (1.0472): the stale reply of the first suite
+  did not recur, so this rerun shows the fixed judgement running live (two sends, judged from
+  the repeat, no false error), and issue 171's tests show it judging a stale reply.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
