@@ -2488,6 +2488,11 @@ server from that tree on port 5594, conformance with Town01's map (`isaac-ex/c7a
   reached", never logged). 118's prediction (all equal, within 1e-5 through f32 friction):
   **held** on the rerun. The breaking test (a car's friction at another factor reads back that
   factor) is a unit test, not live.
+- *Annotated 2026-11-25, after the result (133, 243's issue 171):* the 30 were read without a
+  tick between the apply and the read-back (`CarlaBackend::applied_road_condition` reads the
+  weather and `physics_control` straight after `update_environment`). 243's probe on CARLA
+  0.9.16 found `get_weather` straight after `set_weather` returning the previous value in 2 of
+  6 reads. So the 30/30 is to be rechecked under issue 161, whose fix reads back after a tick.
 - `ROAD_ZONES` is not declared; a zone is refused, in the reply, naming the limit.
 - **Who writes the wet look** (133's question; agreed with 243, 2026-11-25): CARLA's `wetness` and
   `precipitation_deposits` are the road condition's alone during a scenario, a dry one included
