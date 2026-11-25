@@ -2064,6 +2064,45 @@ runs. A step's own details (scripts, packages) are added to its section before i
       about +80 mm). If this holds, it is a finding for 133: on C6d's Haruna the lidar saw no
       rut, no pothole and half the roughness. C6e3's pothole would then test nothing about the
       ground filter.
+- **C6e1's result (2026-11-25, 118, GPU0, 08:14 to 08:17; non-timing).** One run, exit 0, siw
+  7af1b0c and aib 4e8d684 (scensim main c8ca43e0's pins), `c6e1_lidar.py` in
+  `/mnt/renegade/aeon/isaac-ex/c6e`. aib's Model 3 lidar (OS1, `OS1_REV7_128ch20hz1024res`) stood
+  at six stops on fixture_c6a, 20 revolutions each, with 70,000 to 310,000 returns a band on the
+  road.
+  - **Deviation from the spec, stated with the result:** the script set `MeshStream`'s reach to
+    100 m, not the world server's 40 m. So the 40-80 m band shows the detail too, and the
+    prediction about it was not tested.
+  - **The returns are 36.2 mm below the road everywhere.** The median dz is -36.22 mm on every
+    stop and in every band, with no spread. This is a constant offset, not noise. 94 % of the
+    returns are at -36.22 mm and 6 % at -30.2 mm (on the carriageway, at any range; not
+    explained).
+    - The render mesh's own heights equal the truth (0.000 mm over three tiles,
+      `meshcheck.py`, offline), so the offset is in the lidar's points, not in the road.
+    - *Hypothesis:* Isaac's OS1 profile reports points from its emitter, 36.18 mm above the
+      prim's origin (Ouster's own lidar-to-sensor offset), while aib's mount puts the prim
+      origin where the rig's `top` frame is. If so, the clouds aib publishes are 36 mm low in
+      their own frame, a constant that NDT and the ground filter absorb. That is a candidate
+      issue for aib, not for the road layer.
+  - **With the offset taken out, the lidar reads the detail exactly.** Over the 5, 10 and 15 cm
+    cleats (9.1 to 10.8 m away) every return is at the cleat's top: dz to the detail is -36.22
+    mm, the offset alone. Over the washboard (9 to 38 m) the median dz to the detail is -36.21 mm
+    and the p95 is 36.26 mm, so the waves are read within 0.05 mm of the offset.
+  - **The pothole is not seen** (540 returns at 9.1 to 9.4 m): every return over it is at the
+    base road, dz to the base -36.22 mm and to the detail +43.78 mm (80 mm less the offset).
+  - **118's predictions against it:**
+    - Median |dz| at most 5 mm at 5-20 m and p95 at most 10 mm: **failed** as written, 36.2 mm
+      in both. Without the constant offset the rest is under 0.1 mm, so the RTX lidar has no
+      range noise here (the hypothesis held).
+    - 40-80 m shows the world's ground, not the detail: **not tested** (the deviation above).
+    - The cleats as steps with returns on their tops: **held**. The returns at their near faces
+      were not separated out.
+    - The pothole's floor seen within about 10 m: **failed**. Its amendment, made before the run
+      (the floor not seen at all, returns at the base road): **held**.
+  - **What follows.** On every road-layer world, the lidar sees max(base, base + detail): the
+    potholes, the ruts and the lower half of the roughness are invisible to it, as they were in
+    C6d's Haruna. C6e3's pothole therefore tests nothing about the ground filter, and its run
+    states that. Whether the render mesh should hide the base road under it (or cut the holes
+    into it) is a question for 133, as a candidate issue beside the 36 mm offset.
 - **C6e2. Motion BVH's cost (issue 138; a timing run).**
   - **Setup.** smooth Haruna, haruna_down with Autoware: the C6b budget's package, because the
     RTX lidar's render is what the setting changes. Motion BVH off against on, by issue 138's
