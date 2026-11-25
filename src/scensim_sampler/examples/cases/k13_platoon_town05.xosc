@@ -14,8 +14,8 @@
       <Property name="scensim.anchor.ego_s" value="west_avenue.local_s(33.73)"/>
       <Property name="scensim.anchor.m_lane" value="west_avenue.lanelet_at(68.43)"/>
       <Property name="scensim.anchor.m_s" value="west_avenue.local_s(68.43)"/>
-      <Property name="scensim.anchor.lead_lane" value="west_avenue.lanelet_at($lead_s)"/>
-      <Property name="scensim.anchor.lead_ls" value="west_avenue.local_s($lead_s)"/>
+      <Property name="scensim.anchor.lead_lane" value="west_avenue.lanelet_at(param:lead_s)"/>
+      <Property name="scensim.anchor.lead_ls" value="west_avenue.local_s(param:lead_s)"/>
       <Property name="scensim.anchor.goal_lane" value="west_avenue.lanelet_at(365)"/>
       <Property name="scensim.anchor.goal_s" value="west_avenue.local_s(365)"/>
     </Properties>
