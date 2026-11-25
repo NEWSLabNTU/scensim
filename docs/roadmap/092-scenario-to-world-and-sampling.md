@@ -2499,3 +2499,13 @@ centreline past the bend and loops at s 73 to 97, which at 49 m reads as 4 m. Ag
 centreline itself, slot 27 (decel 8, onset 1, T 0.6) has the ego within 0.38 m and M within
 0.03 m. The guard now takes the difference of the two cars' signed offsets from the lane's
 centreline (the anchor's polyline), the same "M's line" without M's heading in it.
+
+**Step 2 with the centreline guard (2026-11-25, at 62e7e826), as it came out: 0 of 36 failed,
+0 invalid.** The ego's largest lateral from M's line is 0.380 to 0.385 m in every slot. Closest
+gaps, at the set's a and b: 26.6 to 28.5 m at decel 2, 12.3 to 20.3 at 4, 5.4 to 18.4 at 6, 3.4
+to 17.7 at 8, the smallest at T 0.6 whatever the onset; minimum TTC 1.14 to 5.55 s, none under
+1 s. Stopped for 133 (the 0-or-36 rule). For that look, not a judgement: the four a, b corners
+(a 0.2, 0.6; b 1.2, 3.2) at decel 8, onset 1 and T 0.6 and 1.8 (8 slots) give closest gaps of
+0.62 m (a 0.2, b 3.2, T 0.6), 1.12 (a 0.6, b 3.2, T 0.6), 5.62 and 6.08 (b 1.2, T 0.6), 16.8 to
+18.4 at T 1.8; 2 under 1 s of TTC, 0 failed, 0 invalid. A large b (a later, harder IDM brake) and
+a short T bring the failure nearest.
