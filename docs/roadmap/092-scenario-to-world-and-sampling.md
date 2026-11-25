@@ -1047,6 +1047,16 @@ run, naming the measured limit.
 **Not in K9f-a:** a zone's geometry from anchors (K9c's regions name zones, never redraw them);
 zones on CARLA (CARLA 1.0, after 083 step 5); hydroplaning in the read-back's mu.
 
+**Amendment (2026-11-25, 243, at 133's ruling on issue 161's plan; before any K9f-a code or
+run).** The order is now: K9f-b lands, then issue 161, then K9f-a's code. Issue 161 adds
+`CAPABILITY_READBACK_AFTER_STEP` (15) and `StepReply.road_condition_applied`, the read-back
+taken after the simulator's tick, which the bridge marks `after_step: true`. Part 2 changes
+with it: the `road_condition` record's `applied` is the step's read-back on a server declaring
+the bit, marked `after_step`, and the reply's otherwise; Isaac declares the bit, so K9f-a's
+read-back check above is judged from the after-step value. scensim judges a marked record
+whatever the simulator; an unmarked one (a server without the bit) is recorded, not judged, as
+part 2 says for CARLA. No prediction above changes.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
