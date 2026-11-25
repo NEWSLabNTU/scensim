@@ -2472,3 +2472,13 @@ clear of the stretches at 0.05 and 23.99 m); no new pilot code. Its pilot, plain
 under 1.5 s; at 22 m/s it cruises while the gap stays above 33 m. A failure (closest gap at
 0 m or less) means M's braking, up to its cap of 8 m/s^2, outruns that. Step 2 is redone with
 it before the prediction; 0 or all 36 failing stops the work for a look at the bounds (133).
+
+**The dry run, step 2 redone with the amendment (2026-11-25, at 4d697ad5), as it came out: 0 of
+36 failed, and not a measurement of the platoon.** Closest gaps 0.37 to 3.27 m (the smallest at
+decel 8, onset 1, T 0.6), the secondary minimum TTC 0.0 in all 36; check 1 held again
+(4.0e-8). The point-mass ego has no steering: it drives straight on its start yaw, the lane's
+heading at s 18.73 (-178.856 deg), while west_avenue runs at -179.863 deg (+-0.01) from s 100 to
+its end, its first 100 m bending about 1 deg. It drifted 0.43 m/s sideways, 1.45 m off M's line
+by t = 5 s, so `aeb_ttc`'s corridor lost M and the ego passed beside it: the gaps are
+side-by-side passes, and the TTC's centre-distance gap went to 0 there. Stopped for 133 (the
+0-or-36 rule).
