@@ -22,11 +22,16 @@ the system Python's pytest lane of the same suite:
 | 186's first lane run, 365fc9b6 (landed as db52a744), 2026-11-25 22:23 to 23:12, nice 10 | 241, `CUDA_VISIBLE_DEVICES` empty; `OK (skipped=7)` | 2763 s |
 | 186's full gate, d780baf7, 2026-11-25 23:34 to 2026-11-26 00:29, nice 0 | 241, both GPUs visible; `OK (skipped=2)` | 1029 s |
 | 118's full gate, 1282c48e, 2026-11-26 00:40 to 01:02 | 118, `CUDA_VISIBLE_DEVICES=0` (one RTX 4090, otherwise idle); `Ran 259 tests in 78.028s`, `OK (skipped=2)`, lane "ran (936 tests in 3 suites, OK)" | 78 s |
+| 118's second full gate, c5aad663, 2026-11-26 01:03:39 to 01:25:20 | 118 (48 cores, 1-minute load about 2 to 14, max 13.79 at the end), `CUDA_VISIBLE_DEVICES=0`; `Ran 259 tests in 78.689s`, lane "ran (936 tests in 3 suites, OK)" | 79 s |
 | the system pytest lane, the same gates | 241 (166's gate) and 118 | 56 s and 64 s |
 
 So in Isaac's Python the suite took 1.2 times the system lane's time on 118's host (78 s
-against 64 s) and 18 and 49 times on this one (1029 s and 2763 s against 56 s). 118's three lines above are as 118 copied them from its log before the
-log was overwritten by its next gate.
+against 64 s) and 18 and 49 times on this one (1029 s and 2763 s against 56 s). 118's first run (00:40) is cited by the three lines 118 copied from its
+log before its next gate overwrote it, and has no load record. The second is kept on 118:
+`/mnt/renegade/aeon/gate-123/keep/gate-c5aad663-2026-11-26.log` (sha256
+`228ee9fe10ae91b5441ede8cb2c3ea25f4ab29b31dafcbfe6c79e5c31ed2b8bb`), its load every 30 s in
+`/mnt/renegade/aeon/gate-123/keep/load_c5aad663.txt` (sha256
+`1b95d7569062a190c998acc8fd6894d2277b44558de8cca86004dfd76ec3c3dd`).
 
 **The GPU is not the cause.** In `scensim_batch` only `test_device` uses CUDA in the tests (its
 5 CUDA cases are the difference between `skipped=7` and `skipped=2`); the package names `cuda`
