@@ -885,11 +885,12 @@ with offsets -1.3, 0 and 1.3 and h pi/2 relative, as CS3 had them. CS3 itself st
 - **Found: the passed run had lost its copy.** The works/closed run, kept at `full`, had no
   `scenario.xosc`, though `resolved.yaml` named it: no keep level listed it. It is now kept at
   `result` (08a772d0).
-- **Found, not K9f-b's: CARLA shows the barriers at yaw 0.** SSv2 commands -1.5712 rad (h pi/2
-  on the westbound lane); the CARLA world server's truth shows -0.0004 for every barrier, in
-  K9e's CS3 runs as here. Isaac's shows -1.5712. Issue 173 (243, after K9f-b). The positions
-  are right and the closed runs' verdicts are K9e's on both simulators, so K9f-b's exit does not
-  depend on it, but CARLA's barriers stand turned a quarter from what the scenario says.
+- **Reported and withdrawn the same day: "CARLA shows the barriers at yaw 0" (issue 173, not a
+  defect).** I read the raw `sim_pose` yaw, -0.0004, against SSv2's -1.5712. That is CARLA's
+  body pose: the CARLA world server spawns the street barrier turned 90 degrees to fit its
+  declared box (its entity row's `origin_offset` yaw is pi/2), and every reader of the truth
+  takes the offset back off (`scensim.truth.boxes`, the gap oracle). With it taken off the
+  barriers stand at yaw -1.5712 on CARLA, as on Isaac (offset 0).
 
 **Predicted for the rerun on issue 171 (main 47b59256 plus K9f-b; before any run).** The same
 suite, CARLA and setup, the none-case first:
@@ -918,7 +919,8 @@ its order, which puts the none-case where the first suite's false error run was:
 
 - No contact in any run. The none-cases had no copy and no barrier; both closed runs' copies
   have sha256 5fd2feb1... and each run directory kept its `scenario.xosc` (08a772d0). The
-  barriers' truth: x 305.641, y -128.206, -129.506, -130.806, at yaw 0 (issue 173).
+  barriers' truth: x 305.641, y -128.206, -129.506, -130.806, yaw -1.5712 (the body's offset
+  taken off; issue 173).
 - Every first read-back showed the value sent (1.0472): the stale reply of the first suite
   did not recur, so this rerun shows the fixed judgement running live (two sends, judged from
   the repeat, no false error), and issue 171's tests show it judging a stale reply.
