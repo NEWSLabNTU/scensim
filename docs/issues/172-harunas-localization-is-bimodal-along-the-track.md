@@ -340,3 +340,25 @@ from step 2's tick figures, so the two are not compared here.
 0291abb3 under the quiet rule (H-a predicts behind runs return; H-b predicts none), or 1ed265d7
 under step 2's load (H-b predicts behind runs return; H-a predicts none). Record the load average
 at each start.
+
+## Step 4's plan, H-a first (written 2026-11-26, before any change or run; 133's choice)
+
+**The runs.** Nine smooth haruna_down runs as in steps 2 and 3, at scensim main **0291abb3**
+(scensim_isaac_world 4706ff9, step 2's build), under the quiet rule as in step 3. aib is the
+local branch `issue-172-age` at 86a9207, as in step 3: on step 2's aib 3b69851 it adds only the
+timing lines behind the same switch, so that step 4's timing reads like step 3's. ws-c6e3 is
+rebuilt at 0291abb3 with that aib, and the testbench `isaac_i172_smooth` as in step 3 (the
+record with `/clock`). The load average is recorded at each start (`/proc/loadavg`, logged by
+the runner just before the run). The quiet rule is the condition that can be reproduced. Step 2's
+load (around 45) cannot be.
+
+**Predictions (before any run).**
+- *H-a (issue 161's read-back after the step removed the behind mode):* the behind runs come back
+  at about step 2's rate, about 3 in 9, along about -0.086 m. H-a holds if at least one run is
+  behind. With 3 in 9 as the rate, none in nine has a chance of about 3 %.
+- *H-b (step 2's load made the mode):* no behind run in nine under the quiet rule.
+- *The timing:* in level runs, `to_sim` and the substeps as in step 3 (0 s, 3 a frame). If a run
+  is behind, its timing lines are read against the level runs' for the first difference, if any,
+  and if there is none the offset is downstream of aib's stamp.
+- *If none come back,* the next set is 1ed265d7 under load, with a load recipe agreed with 133
+  first.
