@@ -243,6 +243,20 @@ into the fixture's local `course/road_detail.yaml`, stored and current; `c6e1_li
   and the pose error p95 from the judges.
 - **Judged:** by this doc's noise rule and its eight-comparison rule. The "off" sides are also
   issue 167's reach check, judged by 167's doc.
+- **Load (133, 2026-11-25, before any result).** The judged quantities are not timing, but they
+  are sensitive to load, and the series shares GPU0 with codec 118's training job. Every 15 s
+  `i168/load_log.sh` logs GPU0's utilisation, each compute process on it (ours by the
+  environment's `I168=1`, else foreign) and the load average. `pair_load.py` gives per run the
+  mean GPU0 utilisation while a foreign process was on it, the share of such samples, and the
+  mean 1-min load.
+  - **A pair counts** (off and on on the same map in the same round) only if its two runs' mean
+    GPU0 utilisation under foreign load differs by less than 20 percentage points.
+  - A pair that does not count is rerun under the full quiet rule, and the rerun replaces it.
+  - 167's reach comparison against C6d is labelled "C6d quiet, these shared".
+- **A false start:** the first attempt (10:33) was refused by `scensim run`, because the maps
+  were not fetched. The testbench was built without `--symlink-install`, so a fetch in a
+  package's source did not reach it. It was rebuilt with `--symlink-install`, the maps fetched
+  by package name, and the series restarted.
 
 ## Reach
 
