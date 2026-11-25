@@ -17,7 +17,7 @@ from roboracer_vesc.component import RoboRacerVesc, RoboRacerVescBatch  # noqa: 
 from sim_vehicle_ecu import batch as B  # noqa: E402
 from sim_vehicle_ecu.signals import Sensors, VescCommand  # noqa: E402
 
-CAR = {"geometry": {"wheel_radius": 0.055, "max_steer_angle": 0.36}}
+from _car import CAR  # noqa: E402,F401 - re-exported: test_torch imports it from here
 DT = 1 / 240
 
 
@@ -146,3 +146,10 @@ def test_a_rear_driven_car_drives_and_reads_its_rear_wheels_only():
     assert math.isclose(rear.sum(), full.sum(), rel_tol=1e-12)
     with pytest.raises(ValueError, match="drive_axle"):
         RoboRacerVescBatch(dict(CAR, powertrain={"drive_axle": "middle"}), {}, [0])
+
+
+def test_car_is_the_plain_modules():
+    """The re-export cannot drift: scensim_batch's test_device reads _car's (issue 186)."""
+    import _car
+    assert CAR is _car.CAR
+

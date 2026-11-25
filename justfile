@@ -381,7 +381,7 @@ test:
     # SSv2's protos in scensim_world_protocol are the fork's (roadmap 051)
     # no pytest plugins: ROS's launch_testing hook would import scripts/test_phase1.py, a
     # live ZMQ client (pyzmq, the runtime's protobuf), and fail where those differ (swb 139)
-    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q scripts/test_ssv2_protos.py scripts/test_sim_time.py scripts/test_t3.py scripts/test_ego_used.py scripts/test_coop_pilots_dir.py scripts/test_land_pin.py scripts/test_pre_push.py scripts/test_czp_rows_check.py scripts/test_crossing_aw_score.py scripts/test_world_keys.py scripts/test_build_jobs.py scripts/test_check_release_rosdep.py scripts/sim_compare/test_scene.py
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q scripts/test_ssv2_protos.py scripts/test_sim_time.py scripts/test_t3.py scripts/test_ego_used.py scripts/test_coop_pilots_dir.py scripts/test_land_pin.py scripts/test_pre_push.py scripts/test_czp_rows_check.py scripts/test_crossing_aw_score.py scripts/test_world_keys.py scripts/test_build_jobs.py scripts/test_check_release_rosdep.py scripts/test_isaac_lane.py scripts/sim_compare/test_scene.py
     # T1, world-server conformance (077 item 56): skipped unless SCENSIM_WORLD_CHECK=carla|isaac
     # names a running world server (SCENSIM_WORLD_ENDPOINT, SCENSIM_WORLD_MAP; scripts/test_world_conformance.py)
     PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q -rs scripts/test_world_conformance.py
@@ -416,21 +416,21 @@ test:
     # scipy 1.8 these tests import (numpy.core.multiarray failed to import; swb 243)
     PYTHONNOUSERSITE=1 python3 -m unittest discover -s src/scensim_isaac_world/test
     # The same suite in Isaac's own Python, where the world server runs (issue 090), and the
-    # sampler's (numpy 2 there; a seed gives the same bits in both): when
-    # ISAAC_ROOT (a host setting) names an install, in a clean environment (isaac_env.sh: no
-    # system Humble in it); otherwise said, and skipped
-    if [ -n "${ISAAC_ROOT:-}" ] && [ -e "$ISAAC_ROOT/venv/bin/activate" ]; then
-        env -i HOME="$HOME" USER="$USER" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" bash -c \
-            'source src/scensim_isaac_world/scripts/isaac_env.sh && PYTHONNOUSERSITE=1 python3 -c "import numpy; print(\"numpy (Isaac):\", numpy.__version__, numpy.__file__)" ; PYTHONNOUSERSITE=1 python3 -m unittest discover -s src/scensim_isaac_world/test && PYTHONNOUSERSITE=1 PYTHONPATH=src/scensim_sampler python3 -m unittest discover -s src/scensim_sampler/test && PYTHONNOUSERSITE=1 python3 -m unittest discover -s src/scensim_batch/test'
-    else
-        echo "skipped: scensim_isaac_world's, scensim_sampler's and scensim_batch's suites in Isaac's Python (ISAAC_ROOT${ISAAC_ROOT:+=$ISAAC_ROOT} names no Isaac Sim install)"
-    fi
+    # sampler's (numpy 2 there; a seed gives the same bits in both), when ISAAC_ROOT (a host
+    # setting, passed through a gate's env -i) names an install; otherwise NOT RUN, loudly, and
+    # repeated as this recipe's last line (scripts/isaac_lane.sh; issue 186)
+    isaac_status=$(mktemp)
+    trap 'rm -f "$isaac_status"' EXIT
+    scripts/isaac_lane.sh "$isaac_status"
     # The Autoware profile's settings (autoware_sim_vehicle)
     python3 -m pytest -q src/autoware_sim_vehicle/test
     # Scenario cars come from sim_vehicle_spec's catalog (roadmap 051); every other vehicle
     # named by a CARLA blueprint declares that car's measured box and axles (roadmap 050)
     PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q scripts/test_scenario_vehicle.py scripts/test_catalog_scenarios.py
     python3 scripts/check_scenario_vehicles.py
+    # last, so a lane that did not run cannot scroll away (issue 186)
+    echo "just test: done; $(cat "$isaac_status")"
+    case "$(cat "$isaac_status")" in NOT\ RUN*) echo "just test: $(cat "$isaac_status")" >&2 ;; esac
 
 # Run CI checks: build, check (format + clippy), and tests
 ci: build check test

@@ -147,7 +147,7 @@ def _roboracer():
         return None
     sys.path[:0] = [str(comp), str(comp / "test")]
     from roboracer_vesc.component import RoboRacerVesc
-    from test_batch import CAR
+    from _car import CAR   # not test_batch: it imports pytest (issue 186)
     return RoboRacerVesc, CAR
 
 
