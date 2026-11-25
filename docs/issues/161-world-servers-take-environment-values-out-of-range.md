@@ -103,6 +103,28 @@ shell (`scensim_core::world_server`, which the CARLA world server runs on) and t
      stops choosing by simulator name, and a CARLA `weather:` knob is judged again.
      `weather_read: unverified` stays for a trace without the mark, from a server without the
      bit.
+
+   *Amended 2026-11-25 (243, found writing the scensim part; 133's choice (ii) the same day;
+   before any of its code):* the paragraph above does not reach a `weather:` knob. The run sends
+   it through the bridge's `set_weather` before the scenario starts and reads it back at once
+   with `get_weather`, with no step between, so `READBACK_AFTER_STEP` (`SetEnvironment` and
+   `SetRoadCondition` only) never covers it; the `after_step` mark reaches only the gap trace's
+   knob lines (profiles and static `environment:` values), which issue 171's repeat already
+   judges on CARLA. So:
+   - a `weather:` knob is judged from a `get_weather` at the run's end, while the world server is
+     still up and before the stack stops, hundreds of ticks after the send (the world server keeps
+     the weather; a scenario `EnvironmentAction` that sets weather beside a weather knob is
+     already refused). The record and the verdict call it the read "after the run", never
+     "applied before frame 0";
+   - the immediate read-back stays in the record, unjudged on CARLA, as now;
+   - an end read that fails (the stack gone, a time-out) leaves the knob `unverified`, not an
+     error;
+   - tests: a fake bridge whose immediate read is stale and whose end read is right judges ok;
+     one whose end read is wrong judges `knob_mismatch`; one whose end read fails is
+     `unverified`.
+   The probe (step 0) stays, for the doc's cause only. If it shows the unordered send, the CARLA
+   world server's `set_weather` could wait until `get_weather` shows the request (bounded),
+   and an immediate judgement could replace this one later.
 4. **Tests.**
    - Each shell refuses each field out of range by name and applies nothing. Each takes the
      bounds themselves. Every refusal message names the unit.
@@ -162,3 +184,9 @@ The check, after the landing, written before it:
 - 092 K9e's knob runs on CARLA judge the weather knob again, with no false error. Their gap
   traces carry `after_step: true` on every knob read-back after the first frame, and the read-back
   equals the value sent within `knobs.TOLERANCE`.
+
+  *Amended 2026-11-25 (243, with the amendment above, before any run):* a frame that sends
+  takes the send's own reply, unmarked, and the next step's read-back marks it: a static value
+  is sent at frames 1 and 2 (issue 171), so its lines carry `after_step: true` from frame 3 on.
+  A `weather:` knob on CARLA is judged from the read after the run: ok, with the read labelled
+  "after the run".
