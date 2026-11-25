@@ -21,7 +21,7 @@ simulator-agnostic: CARLA's and Isaac's world servers answer the same messages.
 
 ## 2. Two forms, one content
 
-- **The per-run file.** The gap trace's JSON Lines file, schema 3: one file per episode, in the
+- **The per-run file.** The gap trace's JSON Lines file, schema 4: one file per episode, in the
   run's `gap_trace/` directory (`results-and-logs.md`), written by the bridge's writer thread.
   The gap trace is the run's truth file; it keeps its name, which judges use. It is recorded by
   default (`logging.gap_trace` defaults to true from K4), and follows the run's keep levels
@@ -42,14 +42,15 @@ frame is the same.
 Every line is one JSON object with a `type`. Units are SI; poses are in the map frame (the
 world frame moved by `map_origin`) as `[x, y, z, roll, pitch, yaw]`, metres and radians.
 
-| type | when | fields (schema 3) |
+| type | when | fields (schema 4) |
 |---|---|---|
-| `episode` | first line | `schema` (3), `episode`, `start_unix`, `npc_motion`, `map` (the map directory's name), `step_time` (s); the world's identity (the stage's hashes on Isaac) is the run's `result.json` `provenance`, beside the file |
+| `episode` | first line | `schema` (4), `episode`, `start_unix`, `npc_motion`, `map` (the map directory's name), `step_time` (s); the world's identity (the stage's hashes on Isaac) is the run's `result.json` `provenance`, beside the file |
 | `entity` | at each spawn | `frame`, `name`, `index` (stable per episode, see 5), `role` (`ego`, `scenario`, `autopilot`, `agent` or `model`: who drives it), `kind`, `subtype` (SSv2's: car, truck, pedestrian, ...), `declared {center, dimensions}`, `origin_offset [x, y, yaw]`, `sim_id`, `asset`, `asset_box` |
 | `frame` | each SSv2 step | `frame`, `sim_time`, `sim_time_ns` (the time SSv2 is told: the world server's, else the bridge's), `sim_frame`, `wall_ns` (the bridge's monotonic clock when the world's state arrived, ns since the episode began; the paced clock's lag, `time-and-ticking.md`), `npc_logic_started` (SSv2's, in the entity status that staged the frame: the frames before the first true one are S, the frames before `startNpcLogic`, which a batch replay takes as `start_frames`; `scensim.truth.start_frames`), `commands` (schema 3, from a world server that commands bodies: `unknown_entity`, `gate_misses`, `malformed`, `stale`, its counts since the world's last load, roadmap 092 K12; `stale` was added within schema 3 and reads as 0 where a file lacks it; only a server that offers `COMMANDS` sends counts, CARLA's today: Isaac's world server offers none, so its truth has no `commands` at all, never a measured 0, and a commanded entity is refused there), `entities {name: state}` |
 | `contact` | each contact | `frame`, `sim_frame`, `sim_time`, `ego_id`, `subject`, `other_id`, `name`, `other_type`, `other_kind`, `impulse` |
 | `signal` | each change | `frame`, `sim_time_ns`, `opendrive_id`, `colour` (`off`, `red`, `amber`, `green`: what the bridge set) |
 | `knob` | each frame, per knob profile | `frame`, `sim_time_ns`, `knob`, `commanded` (the profile's value), `applied` (the world's last read-back; null before the first), `sent` (the bridge sent it this frame), and `after_step: true` when `applied` was read back after a step's tick (`READBACK_AFTER_STEP`, issue 161; absent otherwise, so a frame that sends shows the send's own reply until the next step's); a `time` profile runs on SSv2's scenario time (roadmap 092 K9) |
+| `road_condition` | each road condition the bridge sends, and its read-back after the next step | schema 4 (roadmap 092 K9f-a): `frame`, `sim_time_ns`, `sent` (`friction_scale_factor`, `wetness`, `properties`: the condition's `scensim.*` properties), `applied` (the world's read-back from a server that offers `ROAD_CONDITION_APPLIED`: `friction_scale_factor`, `wetness`, `zones {id: {surface_class, wetness, water_depth, mu}}`; null otherwise), and `after_step: true` on the second line, the read-back taken after the step's tick (`READBACK_AFTER_STEP`); the first line holds the send's own reply. Isaac's world server offers both; a zone knob is judged from the first `after_step` line |
 | `end` | last line | `frame`, `sim_time`, `frames`, `dropped_frames`, `complete` |
 
 An entity's state in a frame: `ssv2` (SSv2's pose), `sim_pose` (the simulator's pose: the
@@ -178,8 +179,11 @@ both simulators; the budget is 1 ms per step.
 
 `scensim_launch/scripts/gap_trace.py` reads every schema, by the `episode` line's `schema`:
 schema 1's names in a schema 1 file, schema 2's in a schema 2 or 3 file, schema 2's additions
-as unknown in a schema 1 file, and `cmd_frame` as unknown before schema 3 (the role `model` is
-refused there). The gap oracle, `incident_judge` and `scensim.truth` read through it, so they
+as unknown in a schema 1 file, `cmd_frame` as unknown before schema 3 (the role `model` is
+refused there), and `road_condition` as unknown before schema 4. Its record types are a closed
+set per schema: a reader refuses a file of a schema it does not know, by the number, at its
+first line, so a reader of schemas 1 to 3 refuses a schema 4 file rather than skip its new
+records. The gap oracle, `incident_judge` and `scensim.truth` read through it, so they
 read every schema; the oracle finds a `model` entity read back from its poses, as any other.
 `scensim_batch` writes schema 2. The topic's readers subscribe in the scenario domain with
 the stack's DDS settings (`domains-and-dds.md`).

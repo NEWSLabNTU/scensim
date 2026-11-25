@@ -363,6 +363,41 @@ both have), a lane or point the world lacks, an s off its lane, another category
 already one of the scenario's entities or in two bound layouts, and a layout knob on SSv2's own
 distribution.
 
+A value may also set zones of the scenario's surface map (roadmap 092 K9f-a):
+
+```yaml
+world:
+  knobs:
+    goal_surface:
+      values:
+        asphalt: {zones: {ice_at_goal: {class: asphalt}}}
+        ice: null                      # the map's own: ice_at_goal is ice
+      default: ice
+```
+
+Each zone takes `class` (a key of the surface class table), `wetness` (an OpenSCENARIO level:
+`dry`, `moist`, `wetWithPuddles`, `lowFlooded`, `highFlooded`; "wet" is not one) and
+`water_depth` (m, 0 or more). The run writes them into the same copy as the layouts, as
+`scensim.zone.<id>.<field>` properties: into the Init's RoadCondition when the source has one,
+else into a new Init EnvironmentAction whose Environment holds only that RoadCondition (dry,
+scale 1.0). The copy is the same bytes for the same source, layouts and zones, and
+`resolved.yaml`'s `scenario.copy.zones` lists each knob's properties and the surface map they
+were checked against. The map is the scenario's: the one its Init RoadCondition names
+(`scensim.surface_map`, from `ground.<map>.surface_maps`, else the map directory's
+`surfaces/<name>.yaml`), else the map's own (`ground.<map>.surfaces`, else its
+`surfaces.yaml`). `testbench check` and the run refuse, by one rule, a zone that map lacks, a
+class not in the table, a class on a soil zone (its class is its soil's), a zone field the
+scenario sets too or two bound knobs set (two writers), a value that also names a
+`surface_map`, zones on CARLA (its friction trigger sets a whole car by its body and reaches
+every car of the blueprint, 086 C7), and a zone knob on SSv2's own distribution. After the run,
+each zone is judged from the truth's first `road_condition` record read back after a step
+(`truth-stream.md`): class and wetness equal, water depth and mu within 1e-6 of what was sent
+and of the class table (mu: the class's mu times its wet factor at the zone's wetness, the
+world's where the zone sets none, times the condition's scale; a zone with no class reads
+class "" and mu 0). `result.json` records each zone in `knobs.<knob>.zones`; a mismatch, or no
+such record, is a `knob_mismatch` error run. The read-back needs the gap trace:
+`logging.gap_trace: false` with a zone knob is refused.
+
 ```yaml
 world:
   knobs:

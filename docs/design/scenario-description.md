@@ -466,6 +466,13 @@ Rules:
   is refused by name, and so are the other pairs. An `environment:` value is sent once, as a
   profile held at its value from time 0, sent on its first frame and again on the next, and
   judged on every frame's read-back from that second send's on (issue 171).
+- *Built, K9f-a (roadmap 092):* **a value may set zones** of the scenario's surface map,
+  `zones: {<zone id>: {class?, wetness?, water_depth?}}`: a class of the surface class table,
+  an OpenSCENARIO wetness level (`dry`, `moist`, `wetWithPuddles`, `lowFlooded`,
+  `highFlooded`), a water depth in metres. The run writes them into its own copy of the
+  scenario, as the Init road condition's `scensim.zone.<id>.<field>` properties, and judges
+  each zone from the world's read-back (projects-and-pilots.md). Isaac only: CARLA 0.9.16
+  cannot set a zone's ground (086 C7), and a zone knob is refused there by name.
 - **A knob with `profile: true`** accepts a value along time or route position (CS5).
 - *Built, K9 (roadmap 092):* knob profiles. A profile knob declares a range and the one
   environment field it sets; a scenario binds it to breakpoints along `time` or a resolved lane

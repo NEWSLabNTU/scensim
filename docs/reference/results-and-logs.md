@@ -32,7 +32,7 @@ every stack pilot is). A run refuses a stack whose fingerprint is not the testbe
 | `result.json` | result | the verdict and its first cause, the scenario, events, metrics, pilots, provenance (below) |
 | `resolved.yaml` | result | everything the run was given, after defaults |
 | `junit.xml` | result | SSv2's verdict as JUnit |
-| `scenario.xosc` | result | with a layout knob bound: the run's copy of the scenario with the layout's props, the file SSv2 ran (`resolved.yaml`'s `scenario.copy` names it and its sha256) |
+| `scenario.xosc` | result | with a layout or zone knob bound: the run's copy of the scenario with the layout's props and the zones' `scensim.zone.<id>.<field>` properties, the file SSv2 ran (`resolved.yaml`'s `scenario.copy` names it and its sha256, and lists the zones it set) |
 | `timeline.jsonl` | result | one event per line, by wall time (below) |
 | `judges/<name>.json` | result | each judge's record |
 | `attachments/<name>/` | standard | each attachment's console and what it wrote ([attachments](project-file.md#attachments)) |
@@ -130,7 +130,7 @@ class a report can count (`scensim runs coverage` lists the error runs by kind).
 | `pilot` | a pilot never became ready, or was lost during the run |
 | `ssv2` | SSv2 did not start or end, reported an error, or wrote no usable JUnit |
 | `scenario` | the scenario cannot be read or run here |
-| `knob_refused`, `knob_mismatch` | a bound knob the world cannot honour, or whose read-back differs (a `weather:` read-back on CARLA is recorded, not judged: issue 171) |
+| `knob_refused`, `knob_mismatch` | a bound knob the world cannot honour, or whose read-back differs (a `weather:` read-back on CARLA is recorded, not judged: issue 171; a zone knob is judged from the truth's first `road_condition` record read back after a step, in `knobs.<knob>.zones`: per zone `sent`, `expected`, `read`, `frame`, `ok`, and `off`, the fields that differ; no such record is a mismatch too) |
 | `attachment` | a required attachment failed |
 | `clock_lag` | a paced run fell behind wall time by more than its budget |
 | `command_lag` | under lockstep, a commanded entity's commands were not the previous frame's at every frame (`commands` below) |
