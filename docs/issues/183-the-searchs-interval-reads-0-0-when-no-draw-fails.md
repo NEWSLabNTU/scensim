@@ -1,6 +1,6 @@
 # 183: the search's interval reads [0, 0] when no draw fails
 
-**Status:** open; plan approved by 133 (2026-11-25), no code yet.
+**Status:** fixed in code and tests (plan approved by 133, 2026-11-25).
 **Severity:** medium. A search that sees no failure reports an interval of [0, 0] under the name
 of a 95 % interval, which reads as "the rate is 0" when the run says only that it is small.
 **Found:** 2026-11-25, scensim 241, 092 K13 step v: the platoon search on Town05 ran 20
@@ -131,5 +131,33 @@ Points 1, 4 and 6 as before. Point 1's code was begun before this amendment and 
 it before it is committed.
 
 Out of scope: a tighter bound that uses where the failures lie; the generations' diagnostic
-estimate. Order: this plan (docs); the code and tests; point 3's measurement into this record;
+estimate.
+
+## Point 3, measured (2026-11-25)
+
+K11 check 1's rare event (base N(0, I) in 2-D, failure x1 + x2 > 5.2, p = 1.18e-4) under the
+defensive mixture 0.1 base + 0.9 N(mu (1, 1), I), mu set so that 1000 draws hold about 1, 2, 3
+and 5 failures; 2000 repetitions per setting, through `search.plain_estimate` (cap 10, the
+normaliser exact). The delta (normal) interval's two-sided coverage of p among the repetitions
+with a failure, the headline's over all of them (k = 0 gives [0, U_0]), and U_k's one-sided
+coverage (`i183_coverage.py`, seeds 184, 185, 186 and 188):
+
+| expected k | mu | mean k | share k = 0 | delta, k >= 1 | headline | U_k | clipped |
+|---|---|---|---|---|---|---|---|
+| 1 | 0.4346 | 1.02 | 0.355 | 1.000 | 1.000 | 1.000 | 0.000 |
+| 2 | 0.5871 | 2.05 | 0.119 | 0.977 | 0.980 | 1.000 | 0.000 |
+| 3 | 0.6807 | 2.96 | 0.047 | 0.919 | 0.922 | 1.000 | 0.000 |
+| 5 | 0.8039 | 5.04 | 0.005 | 0.911 | 0.911 | 1.000 | 0.000 |
+
+The delta interval covers 0.91 to 1.00 at 1 to 5 failures, within or above the 0.61 to 0.94
+sample-record.md measured for the self-normalised delta interval, and it stays labelled
+approximate. U_k covered p in all 8000 repetitions, as predicted; it was never below the
+delta's upper end here, so nothing was clipped (the clipping is tested on a stated cap below
+the weights). A seeded 200-repetition version of the 3-failure setting is in test_search.py.
+
+**coverage.py** passes no cap (a record names its proposal by id only), so a cell made of a
+search's fresh stage with no failure now has no interval, said so in its method, where it had
+[0, 0]; its exposure-weighted overall refuses such a category by name. The bound is in the
+search's report.
+ Order: this plan (docs); the code and tests; point 3's measurement into this record;
 local checks and a full gate; a landing request to 133.
