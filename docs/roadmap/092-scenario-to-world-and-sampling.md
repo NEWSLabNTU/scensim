@@ -947,6 +947,78 @@ pm=current then pm=works on one stack, Isaac Sim 6.2:
   Measured this time, card-wide every 5 s: 15970 MiB used before the run (others' jobs), 23606
   at peak, so 7636 MiB ours; free never fell below 8505 MiB, and the guard did not fire.
 
+## K9f-a: zone-scoped surface knobs (plan, 2026-11-25, 243; for 133, before any code or run)
+
+As K9f's plan (above, approved with its conditions), with what reading main 0291abb3 decides.
+What is already there: the protocol (scensim_world_protocol f2d9103: `ROAD_ZONES = 13` needs
+`ROAD_CONDITION_APPLIED = 14`; `RoadConditionReply {friction_scale_factor, wetness, zones}`,
+`ZoneApplied {surface_class, wetness, water_depth, mu}`, `mu` the class's mu times the wetness
+factor times the condition's scale), the Python world-server shell's reply
+(`World.applied_road_condition`), and K9f-b's run copy. What is not: the Isaac world server
+declares neither capability; the bridge reads no `RoadConditionReply`; nothing records one.
+
+**Four parts, each with tests that need no simulator:**
+
+1. **Isaac world server** (scensim_isaac_world, pinned in lockstep). `IsaacWorld` declares
+   `ROAD_CONDITION_APPLIED` and `ROAD_ZONES` and implements `applied_road_condition(zone_ids)`
+   from its surface layer after `set_condition`: the world-wide scale and wetness, and for each
+   named zone its class, wetness, water depth and mu as the layer now holds them (the table's
+   mu at rest; hydroplaning's speed factor is not in it, as the field says). Isaac reads back
+   what it just set, with no tick between, so issue 171's lag does not arise there.
+2. **The bridge** reads the reply when the server offers `ROAD_CONDITION_APPLIED`, logs it, and
+   writes it to the gap trace as a new record, `road_condition`: `frame`, `sent` (scale,
+   wetness, the `scensim.*` properties) and `applied` (the reply). The record is additive in
+   scensim_core's `gap_trace` (scensim_world_protocol, lockstep); readers that do not know it
+   skip it (a test). CARLA 0.9.16 (C7) sends the world-wide part; scensim records it and, as
+   for the `weather:` knob (issue 171), does not judge it until issue 161 reads back after the
+   tick.
+3. **scensim.** A static knob value may carry `zones: {<zone id>: {class?, wetness?,
+   water_depth?}}`; wetness is OpenSCENARIO's level (dry, moist, wetWithPuddles, lowFlooded,
+   highFlooded; K9f's example "wet" is not one and is refused by name). The run writes the
+   fields as `scensim.zone.<id>.<field>` properties into the run's copy: into the Init's
+   RoadCondition when the source has one (`isaac_soil`'s scenarios do), else
+   into a new Init `EnvironmentAction` whose Environment holds only that RoadCondition (the
+   form `isaac_soil/town01_zones.xosc` runs today). One copy writer for layouts and zones,
+   byte-identical for the same inputs (a test); `resolved.yaml`'s `scenario.copy` lists the
+   zones. Refused by name, in `testbench check` and the run (one function, issue 154): a zone id
+   the scenario's surface map lacks (its `scensim.surface_map`, else the map's own
+   `surfaces.yaml`); a class not in the table; a `class` on a soil zone; a field the source
+   already sets for that zone (two writers); a zone value on CARLA, naming C7's measured limit;
+   a zone knob on SSv2's own distribution. **The judgement:** after the run, each zone the knob
+   set is read from the trace's `road_condition` record: class and wetness equal, water depth
+   and mu within 1e-6 of the sent value and the class table; `result.json`
+   `knobs.<knob>.zones`. A mismatch, or no record from a server that declares `ROAD_ZONES`, is
+   a `knob_mismatch` error run.
+4. **Docs**: scenario-description.md (the `zones:` form), projects-and-pilots.md (the copy holds
+   zones too), results-and-logs.md (`knobs.<knob>.zones`, the trace record), truth-stream.md.
+
+**The exit, and a correction to K9f's.** K9f's plan predicted the ego's stopping distance
+across a wet zone "as the class table's wet factor predicts". Under Autoware that cannot show:
+a planned stop decelerates comfortably (on the order of 1 m/s^2, not measured here), far
+under the grip of wet asphalt (1.12 x 0.75 x 9.81 = 8.2 m/s^2), so the distance is the
+planner's either way. A
+friction can only show where the stop asks for more than the surface gives. So the exit asks
+133 to choose (my lean: b):
+
+- (a) **the read-back alone** on Isaac (applied zone equal to the knob's, mu equal to the
+  table), plus CARLA's refusal by name; no physical number.
+- (b) **a stop that asks more than the surface gives.** `isaac_soil`'s `town01_route` map's
+  `ice_at_goal` zone (x 105..135) under a knob `goal_surface: {values: {asphalt: {zones:
+  {ice_at_goal: {class: asphalt}}}, ice: null}}`, and a pedestrian darting into the lane in the
+  zone when the ego is 20 m short (town01_mud_stop's pattern), so Autoware brakes hard.
+  Predicted, from truth velocities over the braking: on asphalt the peak deceleration is
+  Autoware's own (whatever it is, measured, not predicted); on ice (mu 0.265, dry) the peak is
+  capped at 0.265 x 9.81 = 2.6 m/s^2, within 25 % (C7's band), and lower than asphalt's; the
+  read-back as in (a) in both runs.
+- (c) a fixed-brake test outside scensim run (aib's vehicle check); not a knob test, so no.
+
+CARLA 0.9.16: the same scenario and knob refused by `testbench check` and the run, before any
+run, naming the measured limit. Exit runs are predicted again, with numbers, once the choice is
+made and before any run.
+
+**Not in K9f-a:** a zone's geometry from anchors (K9c's regions name zones, never redraw them);
+zones on CARLA (CARLA 1.0, after 083 step 5); hydroplaning in the read-back's mu.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
