@@ -493,7 +493,11 @@ Rules:
   value outside the knob's declared values. The refusal names the scenario, the parameter and
   the world.
 - **The same names on every target.** A CARLA town and an Isaac stage of the same place
-  declare the same anchors and knobs, so one scenario runs on both.
+  declare the same anchors and knobs, so one scenario runs on both. *Built, K9e (roadmap 092):*
+  CS3 ran unchanged on CARLA 0.9.16 and Isaac Sim 6.2 Town01, with the same lane anchor, the
+  same knob (in the portable `environment:` form, below) and the same pilot map variants, the
+  same routes and outcomes; a knob value a target cannot apply is refused by `testbench check`
+  for that target (issue 154).
 - *Built, K9a (roadmap 092):* lanes. The declaration lives beside the map, not in a
   `world.yaml`: `<map dir>/anchors.yaml` (`anchors: 1`, `lanes: {<name>: {lanelets: [...]}}`), so
   a CARLA town and its Isaac stage, which share the Lanelet2 map, read the same file. The map's
