@@ -397,6 +397,8 @@ def compile_scenario(path, records, world, provides=(), device="cpu", catalogs=N
             where = f"Storyboard/Init/Actions/Private[@entityRef='{ref}']/PrivateAction[{k + 1}]"
             pos = pa.find("TeleportAction/Position")
             sp = pa.find("LongitudinalAction/SpeedAction/SpeedActionTarget/AbsoluteTargetSpeed")
+            if entities[i].role == "model" and pos is None:
+                _model_init_action(pa, sp, where, ref)
             if pos is not None:
                 px, py, pyaw = _position(pos, where, P, world, names, x, y, yaw, placed)
                 x[:, i], y[:, i], yaw[:, i] = px, py, pyaw
@@ -442,6 +444,23 @@ def compile_scenario(path, records, world, provides=(), device="cpu", catalogs=N
     return Compiled(str(spath), n, entities, params, to(x), to(y), to(yaw), to(speed),
                     placed.to(device), speed_set.to(device), v, seeds, storyboard=story,
                     records=list(records), goal_waypoints=goal)
+
+
+def _model_init_action(pa, sp, where, ref):
+    """Issue 175: in Init a model entity takes a TeleportAction (its placement) and, in the
+    batch only, a step AbsoluteTargetSpeed (its speed at reset); anything else is refused by
+    name, since only its model moves it. Seats refuse the speed too."""
+    dyn = pa.find("LongitudinalAction/SpeedAction/SpeedActionDynamics")
+    if sp is not None and dyn is not None and dyn.get("dynamicsShape") == "step":
+        return
+    first = next(iter(pa), None)
+    inner = next(iter(first), None) if first is not None else None
+    what = "/".join(x.tag for x in (first, inner) if x is not None) or "an empty PrivateAction"
+    if sp is not None:
+        what += f" with dynamicsShape {dyn.get('dynamicsShape') if dyn is not None else None!r}"
+    raise CompileError(f"{where}: {what} on {ref!r}, a model entity: only its model moves it; "
+                       "in Init it takes a TeleportAction and a step AbsoluteTargetSpeed "
+                       "(issue 175)")
 
 
 class _StoryInfo:

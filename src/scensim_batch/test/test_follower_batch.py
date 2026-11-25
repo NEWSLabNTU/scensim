@@ -105,5 +105,87 @@ class Follower(unittest.TestCase):
         self.assertEqual([r["params"]["T"] for r in rec], [0.8, 0.8, 2.4, 2.4])
 
 
+def _with(xml, init="", story=""):
+    """k13_platoon_idm.xosc with `init` appended to the follower's Init Private and `story` a
+    ManeuverGroup naming the follower in the act (issue 175's cases)."""
+    import re
+    m = re.search(r'<Private entityRef="follower">(.*?)</Private>', xml, re.S)
+    xml = xml[:m.end(1)] + init + xml[m.end(1):]
+    if story:
+        i = xml.index("<ManeuverGroup")
+        xml = xml[:i] + story + xml[i:]
+    return xml
+
+
+def _speed(shape="step", target='<AbsoluteTargetSpeed value="11.0"/>'):
+    return ('<PrivateAction><LongitudinalAction><SpeedAction><SpeedActionDynamics '
+            f'dynamicsShape="{shape}" value="1" dynamicsDimension="time"/><SpeedActionTarget>'
+            f'{target}</SpeedActionTarget></SpeedAction></LongitudinalAction></PrivateAction>')
+
+
+@unittest.skipIf(torch is None, "no torch or no sim_vehicle_ecu")
+class InitialSpeed(unittest.TestCase):
+    """Issue 175: a model entity's Init step AbsoluteTargetSpeed is its speed at reset, in the
+    batch only; any other Init action on it, and any Story action, is refused by name."""
+
+    def compiled(self, xml, n=1):
+        import tempfile
+        from scensim_batch import compile as C
+        f = Path(tempfile.mkdtemp()) / CASE.name
+        f.write_text(xml)
+        return C.compile_scenario(f, records(n), StraightWorld())
+
+    def test_a_step_absolute_speed_starts_the_model_at_it_and_none_at_rest(self):
+        from scensim_batch import agreement as A, core
+        for xml, want in ((_with(CASE.read_text(), _speed()), 11.0), (CASE.read_text(), 0.0)):
+            c = self.compiled(xml)
+            run = core.BatchRun(c, StraightWorld(), PointMass(c.n),
+                                ecu_batch.load_batch(Accel, {}, {}, [7]), model_dt=DT,
+                                anchors={"straight": LANE})
+            run.reset()
+            j = run.models.idx.index(c.index("follower"))
+            self.assertEqual(float(run.models.v[0, j]), want)
+            self.assertEqual(A.batch_only(c), ["follower"] if want else [])
+
+    def test_its_own_object_controller_is_not_an_action(self):
+        c = self.compiled(CASE.read_text())    # the model's Controller in its definition
+        self.assertEqual(c.entities[c.index("follower")].role, "model")
+
+    def test_any_other_init_action_on_it_is_refused_by_name(self):
+        from scensim_batch import compile as C
+        ctrl = ('<PrivateAction><ControllerAction><ActivateControllerAction longitudinal="true"/>'
+                '</ControllerAction></PrivateAction>')
+        rel = ('<RelativeTargetSpeed entityRef="lead" value="0" speedTargetValueType="delta" '
+               'continuous="false"/>')
+        for init, what in ((_speed("linear"), "dynamicsShape 'linear'"),
+                           (_speed(target=rel), "LongitudinalAction/SpeedAction"),
+                           (ctrl, "ControllerAction/ActivateControllerAction")):
+            with self.subTest(what=what):
+                with self.assertRaisesRegex(C.CompileError, f"{what}.*on 'follower', a model "
+                                            r"entity.*\(issue 175\)"):
+                    self.compiled(_with(CASE.read_text(), init))
+
+    def test_a_story_action_on_it_is_refused_by_name(self):
+        from scensim_batch import compile as C
+        lane = ('<LateralAction><LaneChangeAction><LaneChangeActionDynamics dynamicsShape="step" '
+                'value="1" dynamicsDimension="time"/><LaneChangeTarget><RelativeTargetLane '
+                'entityRef="follower" value="1"/></LaneChangeTarget></LaneChangeAction>'
+                '</LateralAction>')
+        speed = _speed()[len("<PrivateAction>"):-len("</PrivateAction>")]
+        for action, what in ((speed, "a SpeedAction on 'follower', a model entity"),
+                             (lane, "a LaneChangeAction on 'follower', a model entity")):
+            mg = ('<ManeuverGroup name="m" maximumExecutionCount="1"><Actors '
+                  'selectTriggeringEntities="false"><EntityRef entityRef="follower"/></Actors>'
+                  '<Maneuver name="m"><Event name="m" priority="override"><Action name="m">'
+                  f'<PrivateAction>{action}</PrivateAction></Action><StartTrigger>'
+                  '<ConditionGroup><Condition name="m" delay="0" conditionEdge="none">'
+                  '<ByValueCondition><SimulationTimeCondition value="1" rule="greaterThan"/>'
+                  '</ByValueCondition></Condition></ConditionGroup></StartTrigger></Event>'
+                  '</Maneuver></ManeuverGroup>')
+            with self.subTest(what=what):
+                with self.assertRaisesRegex(C.CompileError, what):
+                    self.compiled(_with(CASE.read_text(), story=mg))
+
+
 if __name__ == "__main__":
     unittest.main()

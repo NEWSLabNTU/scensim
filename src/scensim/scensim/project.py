@@ -845,6 +845,11 @@ def check_scenario(project: Path, sc: Scenario, settings: dict, managed: bool = 
         if not (project / "assets" / "maps" / name).is_dir():
             out.append(Finding(rel, f"map {name} is not fetched (assets/maps/{name})",
                                _map_fix(name, settings), refused=True, host=True))
+    # issue 175: a model entity's initial speed is the batch's only; seats start it at rest
+    if sc.path.suffix == ".xosc":
+        out += [Finding(rel, msg, "remove the SpeedAction (a model entity starts at rest), or "
+                        "run the scenario in the batch", refused=True)
+                for msg in attachmentsmod.initial_speed_problems(sc.path, sc.entities)]
     # issue 166: a LanePosition written into the scenario inside a reversed stretch of SSv2's
     # spline (an entity placed there faces backward)
     if lf and lf.startswith(MAPS_PREFIX) and "LanePosition" in _text(sc.path):

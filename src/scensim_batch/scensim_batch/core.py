@@ -592,7 +592,10 @@ class Models:
         self.x = torch.where(m2, c.x[:, cols], self.x)
         self.y = torch.where(m2, c.y[:, cols], self.y)
         self.yaw = torch.where(m2, c.yaw[:, cols], self.yaw)
-        self.v = torch.where(m2, torch.zeros_like(self.v), self.v)
+        # issue 175: an entity's Init step AbsoluteTargetSpeed is its speed at reset (the batch
+        # only; seats refuse it), else it starts at rest
+        v0 = torch.where(c.speed_set[:, cols], c.speed[:, cols], torch.zeros_like(self.v))
+        self.v = torch.where(m2, v0, self.v)
         self._prev_v = None
         for j, p in enumerate(self.pending):     # a reset slot has no command yet
             if p is not None:

@@ -14,13 +14,15 @@ starts it moving.
   `c.speed_set`; the model block's reset (`core.py`, the models' `reset`) then sets every model
   entity's speed to 0. A probe (`k13_platoon_idm.xosc` with an 11.0 m/s step `SpeedAction`
   added to `follower`'s Init, on test_core's straight world) prints `compiled: speed 11.0
-  speed_set True` and `after reset: model v 0.0`.
-- **The rule is a convention, not a check.** The K10 and K13 scenarios say "the model alone
-  moves the follower: no storyboard action names it", but nothing refuses one: the batch's
-  compile takes Init's TeleportAction and SpeedAction on a model entity and skips a
-  ControllerAction on any entity, and the storyboard's compile takes a model entity among a
-  ManeuverGroup's actors. On seats the world server spawns a model entity at rest and moves it
-  only on the model's commands.
+  speed_set True` and `after reset: model v 0.0`. A silent drop is worse than a refusal: the
+  scenario reads as if the car started at that speed, and nothing says it did not.
+- **In Init the rule is a convention, not a check.** The K10 and K13 scenarios say "the model
+  alone moves the follower: no storyboard action names it". The Story's side is enforced: each
+  Story private action the batch compiles refuses a model entity by name (a SpeedAction or a
+  LaneChangeAction on one is "a model entity", a RoutingAction is the ego's only; test_compile's
+  `cs1_walker_dartout.xosc` case). Init's is not: the batch's compile takes a SpeedAction on a
+  model entity and skips a ControllerAction on any entity. On seats the world server spawns a
+  model entity at rest and moves it only on the model's commands.
 - **A model car cannot reach speed in a lane.** With the set's a (0.362 m/s^2) or K13 step v's
   range [0.2, 0.6], an IDM car from rest needs well over a minute and far more than Town05's
   372 m anchor to come near 22 m/s. Town01's platoon raised a to 1.5 ("ours") for that reason.
@@ -33,8 +35,10 @@ starts it moving.
    first decision (issue 165, on the reset observation) reads that speed.
 2. **Every other action on a model entity is refused, by name**, in the batch's compile: in
    Init anything but a TeleportAction and that SpeedAction (another shape, a relative target, a
-   ControllerAction, a RoutingAction), and in the Story a model entity among a ManeuverGroup's
-   actors. A condition that reads a model entity (a trigger) is not an action and stays.
+   ControllerAction, a RoutingAction); the Story's refusals stay as they are (each of its
+   private actions already refuses a model entity) and get a test per action. A condition that
+   reads a model entity (a trigger) is not an action and stays; nor does the refusal touch the
+   model's own ObjectController in the entity's definition (its test, 133).
 3. **Seats refuse the exception by name**, citing issue 175: `scensim run` before SSv2 starts
    (beside `check_commands`) and `scensim check`, for any scenario whose model entity has an
    Init `SpeedAction`. No world server or fork change.
@@ -57,5 +61,12 @@ before); seats (`scensim run`, `scensim check`) refuse a model entity's Init `Sp
 naming 175; another Init action on M (a linear-shape `SpeedAction`, a relative target, a
 ControllerAction) and a Story action on M are refused in the batch; the agreement runner
 refuses a scenario that has the exception.
+
+**Before the code: the refusals over every tracked scenario with a model entity** (133;
+2026-11-25, a scan of the 113 tracked `.xosc` files, `scan175.py`): 9 have one (the CS1 walker
+in `k12_commanded`'s three and four sampler cases, the follower in `platoon_town01.xosc` and
+`k13_platoon_idm.xosc`). None has an Init action on its model entity other than a TeleportAction,
+so none is newly refused. The two `cs1_walker_dartout*.xosc` cases have a Story SpeedAction on
+the model walker, which the batch already refuses today (test_compile, test_subset).
 
 It lands in K13 step v's one gated landing, asking 133 first.

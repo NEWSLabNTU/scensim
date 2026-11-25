@@ -306,7 +306,8 @@ def check_commands(spec, project: Path):
         attached = []   # no project file: the run refuses that itself, later
     if not attachmentsmod.commanded(sc.entities) and not attachmentsmod.claims(attached):
         return
-    probs = attachmentsmod.command_problems(attached, sc.entities)
+    probs = (attachmentsmod.initial_speed_problems(path, sc.entities)
+             + attachmentsmod.command_problems(attached, sc.entities))
     if probs:
         raise Refused(f"{path}: " + "; ".join(probs))
 

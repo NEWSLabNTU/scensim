@@ -250,6 +250,13 @@ def element_paths(storyboard):
     return out
 
 
+def batch_only(compiled) -> list:
+    """Issue 175: the model entities a compiled scenario starts at an Init speed, which seats
+    refuse (a known divergence between the batch and seats): no agreement check may use it."""
+    return [compiled.entities[i].name for i in compiled.of_role("model")
+            if bool(compiled.speed_set[:, i].any())]
+
+
 def event_names(compiled) -> dict:
     """{model entity: {event code: name}}: each model's own `events` table, as the seats runner
     names them (issue 164; the walker's table only for a model that has none)."""

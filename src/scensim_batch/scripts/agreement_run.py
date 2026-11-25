@@ -85,6 +85,9 @@ def from_truth(a, run_dir, trace, S, A):
     world = LaneletWorld.load(a.world, map_dir=a.map or None)
     record = json.loads(Path(a.record).read_text()) if a.record else A.run_record(run_dir)
     c = compile_scenario(a.scenario, [record], world)
+    if A.batch_only(c):
+        raise SystemExit(f"{a.scenario}: {', '.join(A.batch_only(c))}: an Init speed on a model "
+                         "entity is the batch's only (issue 175), so no agreement with seats")
     ego_name = c.entities[c.of_role("ego")[0]].name
     models = [c.entities[i].name for i in c.of_role("model")]
     states = A.ego_states(trace, S, steps, ego_name)

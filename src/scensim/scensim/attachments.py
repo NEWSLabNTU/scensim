@@ -124,6 +124,28 @@ def commanded(entities) -> list:
     return [e.name for e in entities if e.controller == MODEL_CONTROLLER]
 
 
+def initial_speed_problems(path: Path, entities) -> list:
+    """Issue 175: [message] for each model entity (controller ``model``) that the scenario's
+    Init gives a SpeedAction. A model entity starts at rest on seats and only its model moves
+    it; an initial speed is the batch's only, a known divergence between the two."""
+    import xml.etree.ElementTree as ET   # noqa: PLC0415
+    models = set(commanded(entities))
+    if not models:
+        return []
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError):
+        return []
+    out = []
+    for pr in root.findall("Storyboard/Init/Actions/Private"):
+        ref = pr.get("entityRef")
+        if ref in models and pr.find("PrivateAction/LongitudinalAction/SpeedAction") is not None:
+            out.append(f"entity {ref}: an Init SpeedAction on a model entity is the batch's "
+                       "only (issue 175); on seats a model entity starts at rest and only its "
+                       "model moves it")
+    return out
+
+
 def claims(attachments) -> dict:
     """Entity name to the attachments that claim it (``commands:``), in order."""
     out = {}

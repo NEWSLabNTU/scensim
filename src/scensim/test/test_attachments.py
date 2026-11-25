@@ -265,3 +265,43 @@ def test_ten_commands_at_the_bounds_fit_one_datagram():
     except ValueError as e:
         assert "over the gate's 1472" in str(e)
     gate.close()
+
+
+def _platoon_with_init_speed(tmp_path):
+    """k13_platoon's project in tmp_path, its Town01 platoon with a step AbsoluteTargetSpeed on
+    the model follower's Init (issue 175)."""
+    import re
+    import shutil
+    src = Path(__file__).resolve().parents[3] / "scenarios" / "projects" / "k13_platoon"
+    (tmp_path / "scenarios").mkdir()
+    shutil.copy(src / "testbench.yaml", tmp_path / "testbench.yaml")
+    xml = (src / "scenarios" / "platoon_town01.xosc").read_text()
+    m = re.search(r'<Private entityRef="follower">(.*?)</Private>', xml, re.S)
+    sp = ('<PrivateAction><LongitudinalAction><SpeedAction><SpeedActionDynamics '
+          'dynamicsShape="step" value="0" dynamicsDimension="time"/><SpeedActionTarget>'
+          '<AbsoluteTargetSpeed value="8.0"/></SpeedActionTarget></SpeedAction>'
+          '</LongitudinalAction></PrivateAction>')
+    f = tmp_path / "scenarios" / "platoon.xosc"
+    f.write_text(xml[:m.end(1)] + sp + xml[m.end(1):])
+    return f
+
+
+def test_seats_refuse_a_model_entitys_initial_speed_naming_175(tmp_path):
+    from types import SimpleNamespace
+    from scensim import project as P
+    from scensim import run as R
+    f = _platoon_with_init_speed(tmp_path)
+    sc = P.read_scenario(f)
+    (m,) = at.initial_speed_problems(f, sc.entities)
+    assert "entity follower: an Init SpeedAction on a model entity" in m and "issue 175" in m
+    found = [x for x in P.check_scenario(tmp_path, sc, {}) if "issue 175" in x.what]
+    assert len(found) == 1 and found[0].refused
+    try:
+        R.check_commands(SimpleNamespace(scenario=str(f)), tmp_path)
+        raise AssertionError("scensim run took a model entity's initial speed")
+    except R.Refused as e:
+        assert "issue 175" in str(e)
+    # the scenario as written (no Init speed) is not refused for it
+    plain = Path(__file__).resolve().parents[3] / "scenarios" / "projects" / "k13_platoon" \
+        / "scenarios" / "platoon_town01.xosc"
+    assert at.initial_speed_problems(plain, P.read_scenario(plain).entities) == []
