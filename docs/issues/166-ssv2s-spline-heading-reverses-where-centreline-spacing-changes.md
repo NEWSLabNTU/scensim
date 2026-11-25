@@ -1,6 +1,6 @@
 # 166: SSv2's spline heading reverses where a centreline's point spacing changes
 
-**Status:** open (241; numbered by 133, 2026-11-25). **Severity:** to judge: a lane position's
+**Status:** open (241; numbered by 133, 2026-11-25); the gap-in-s fix's plan approved (2026-11-25). **Severity:** to judge: a lane position's
 heading 180 degrees off over a few centimetres, on many lanelets of Town05 and some of Town01.
 **Found:** 2026-11-25, scensim 241, resolving a Town05 lane anchor for 092 K13's first search
 (`west_avenue`: lanelets 105401 to 3337, maps dataset v2026.11f): the resolve reported a heading
@@ -242,3 +242,58 @@ Measuring the gap in s instead (each polyline point's `heading_s`) would remove 
 model change, not made here: it is this record's **open fix** for the placement-against-gap mismatch, out of 092 K13, with a plan before any code (133). K13 step v corrects its placement instead: L starts at 73.13 +
 0.025868 + s_e(T), the arc difference computed from the polyline, not fitted to a0. The
 difference varies by under 5e-6 m over L's range, all on lanelet 219, past the loops.
+
+## The open fix's plan: a car-follower's gap in s (approved by 133, 2026-11-25, before any code)
+
+**What is there.** `idm_follower` (`src/scensim/scensim/behaviour/follower.py`) resamples the
+lane anchor's x/y every `DS` (0.5 m) of polyline arc on the host (`resample()`), and `_place`
+puts a point at s = (k + t) DS, k the nearest resampled segment and t the fraction along it.
+The anchor's x/y are the spline sampled at `heading_s`; across a reversed loop the chord
+between two samples is shorter than their `heading_s` step (36 segments over 1 mm short on
+Town05's `west_avenue`; the polyline 0.0935 m short of s over the lane), so the follower's s,
+and its gap, runs short of the placement s by the loops' overshoot between it and its leader.
+`heading_s` is monotone on `west_avenue` except 7 equal pairs at lanelet joins (repeated
+points, within 1e-13).
+
+**The change.** `resample()` resamples uniformly in `heading_s`, the spline's s, instead of in
+polyline arc: point k sits at spline s = k DS, linearly interpolated in x/y between the anchor
+samples around it, so `_place`'s (k + t) DS is spline s, the s the world places by. Repeated
+`heading_s` values are dropped, as zero-length steps are now. An anchor without `heading_s`
+(resolved before K9's cd65e4ce) keeps today's arc resampling, said in the docstring. Nothing
+else moves: the step uses the same xp operations, so numpy and torch stay bit for bit; the
+leader is placed by the same code; `end_s` is already in s. Inside a loop the chord between two
+resampled points is short by that loop's overshoot, so a point within that one segment reads s
+off by at most the overshoot (millimetres); elsewhere it is exact to interpolation.
+
+**K13 step v's correction comes out.** `k13_platoon_town05.yaml`'s `lead_s` carries
++ 0.025868; with the gap in s it must go, or M starts 0.026 m long of equilibrium. The yaml,
+its comment, the case's comment and this record change together. K13 step v's search result
+stands, not re-run: it ran with the correction and the old gap, consistent with each other,
+and 092 says so in one line.
+
+**Checks**, each with its bar; the predictions for 3 and 4 are committed before they run:
+
+1. Unit (test_follower.py): on a synthetic lane with a reversed loop (a spline sampled across
+   a loop, as here), a point at spline s reads s within 1e-3 m outside the loop's own segment
+   and within the overshoot inside it; on a lane whose `heading_s` is its own chord arc the
+   result equals today's to 1e-12, the two resamplings being the same there.
+2. `west_avenue`, no simulation, both ways (133): for M's start (68.43) and every L start the
+   search drew, the follower's s at the placed position minus the placement s within 1e-4 m
+   (today 0.0259 m between M and L); and the follower's x/y at spline s (its resampled
+   polyline) against the world's placement at that s within 1e-3 m outside loops, so the
+   truth pose and the gap agree.
+3. K13 step v's dry-run check 1, redone without the correction: M's acceleration at t = 0
+   within 1e-6 m/s^2 in all 36 slots.
+4. The onset sweep (092, K13 step v's open question) rerun: record 842ce095 with `lead_s`
+   without the correction, onsets 1.00 to 4.00 by 0.25, the same measures.
+5. Every test, batch and seats; numpy and torch bit for bit (the existing agreement tests).
+
+**Scope.** Seats and batch alike (one model). The ego's pilots and the truth's closest gap (box
+to box in x/y) are untouched. K13's exit checks 2 and 3 are not re-run: their SSv2 entities and
+the model car stay on Town01's `west_street` (6583), which has no reversed stretch (this
+record, "The plan" item 1 and the impact measure's prediction 3); no other Town01 lanelet was
+used by those runs.
+
+**Order.** This plan; check 3 and 4's predictions; the code and tests; the results here;
+local checks and a full gate; a landing request to 133.
+
