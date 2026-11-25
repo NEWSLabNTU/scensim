@@ -1,7 +1,6 @@
 # 171: a read-back taken right after a send is judged as what the world applied
 
-**Status:** fixed in code and tests 2026-11-25 (243; numbered by 133); the live check is
-pending 092 K9f-b's CARLA rerun on the fix. **Severity:** medium. A run's knob judgement can
+**Status:** fixed; live check: K9f-b's CARLA rerun (4 runs, no false error; the stale first reply did not recur, so the stale case is shown by the tests), 2026-11-25 (243; numbered by 133; the rerun in 092 K9f-b). **Severity:** medium. A run's knob judgement can
 report a value the world shows as off, or one it does not show as applied, depending on whether
 CARLA ticked between the send and the read. Found as a false error run, and K9e's CARLA results
 stand. A false pass is also possible when the stale value happens to equal the one sent.
