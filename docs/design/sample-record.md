@@ -344,7 +344,11 @@ out and counted.
 Each generation is a proposal file, drawn as the defensive mixture 0.9 g_t + 0.1 base, so every
 weight is at most 10 times the normaliser. The rate comes only from the fresh stage, N new
 draws from the last mixture, with the plain estimator mean(w f), its standard error and a normal
-95 % interval; Kish's n_eff and the largest weight are reported beside it. The generations' own
+95 % interval; Kish's n_eff and the largest weight are reported beside it. Since issue 183 the
+record also holds `upper_exact`, an exact one-sided 95 % upper bound at any failure count
+through the weight cap (cap x the normaliser's bound x Clopper-Pearson for k of n); with no
+failure the interval is [0, upper_exact], marked exact, not the normal [0, 0], and with
+failures the normal interval is marked approximate and clipped at the bound. The generations' own
 estimate is printed as a diagnostic: they chose their densities from their own draws, and it is
 biased. A searched variable is a normal, log-normal, uniform (searched as a normal within its
 range) or categorical with constant parameters; a latent, grouped, conditional or other

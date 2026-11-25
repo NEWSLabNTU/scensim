@@ -1480,6 +1480,9 @@ normalised weight and f_i 1 for a failure:
   constraints' relative error added as above);
 - a normal 95 % interval, p_hat plus or minus 1.96 standard errors;
 - Kish's effective count n_eff = (sum w)^2 / sum w^2, reported beside it.
+- (Issue 183, after K13 step v.) With no failure that interval is [0, 0], which is no answer:
+  the interval is then an exact one-sided 95 % upper bound through the mixture's weight cap,
+  also reported at every failure count as `upper_exact`; the normal one is marked approximate.
 
 The generations' own estimate is reported next to it, marked as a diagnostic, never as the rate.
 K7's report gets the same plain estimator for a search's fresh stage, with `interval_method`

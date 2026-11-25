@@ -216,7 +216,8 @@ def _rate(rows, failure):
         from .search import plain_estimate
         e = plain_estimate([float(r["log_weight"]) for r, _ in rows], s0["normaliser"],
                            [_failed(o, failure) for _, o in rows], 0.0)
-        return {"n": n, "failures": k, "rate": e["p"], "interval": tuple(e["interval"]),
+        return {"n": n, "failures": k, "rate": e["p"],
+                "interval": None if e["interval"] is None else tuple(e["interval"]),
                 "interval_method": e["interval_method"], "weighted": True,
                 "n_eff": e["n_eff"], "n_eff_share": e["n_eff"] / n,
                 "heavy_weights": e["n_eff"] / n < HEAVY,
@@ -350,6 +351,10 @@ def _overall(exposure, by_cat, failure):
         rt = _rate(rows, failure)
         if rt.get("rate") is None:
             missing.append(c + (f" ({rt['refused']})" if rt.get("refused") else " (no runs)"))
+            continue
+        if rt.get("interval") is None:
+            missing.append(c + " (no interval: 0 failures in a search's fresh stage; its bound "
+                               "is in the search's report, issue 183)")
             continue
         lo, hi = rt["interval"]
         sd = (hi - lo) / (2 * Z)

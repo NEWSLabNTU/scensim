@@ -171,7 +171,8 @@ class Files(unittest.TestCase):
                                       "seeds_not_applied": False, "run": r["id"]}))
         rep = C.report(items)
         (cell,) = rep["layer3"]
-        self.assertEqual(cell["interval_method"], "plain likelihood ratio, normal 95 %")
+        self.assertIn("plain likelihood ratio, normal 95 % (delta; approximate)",
+                      cell["interval_method"])
         self.assertAlmostEqual(cell["rate"], st["estimate"]["p"], places=15)
 
     def test_records_name_the_scenario_as_the_spec_writes_it(self):
@@ -277,6 +278,119 @@ class Refusals(unittest.TestCase):
                      "  - {name: gap, normal: {mean: 0, sd: 1}}\n"
                      "  - {name: lanes, poisson: {mean: 2}}\n", "[lanes]",
                      "lanes: a poisson, which K11 does not search")
+
+
+class Interval183(unittest.TestCase):
+    """Issue 183: the exact upper bound through the mixture's weight cap, at every failure
+    count; the normal (delta) interval at k >= 1, approximate; no [0, 0] at k = 0."""
+
+    def test_clopper_pearson_against_the_binomial_tails(self):
+        for k, n in ((0, 20), (1, 20), (7, 20), (20, 20), (3, 50)):
+            lo, hi = S.clopper_pearson(k, n, 0.025)
+            tail = lambda p, lo_k, hi_k: sum(math.comb(n, j) * p ** j * (1 - p) ** (n - j)
+                                             for j in range(lo_k, hi_k + 1))
+            if k > 0:
+                self.assertAlmostEqual(tail(lo, k, n), 0.025, 9)    # P(X >= k | lo)
+            else:
+                self.assertEqual(lo, 0.0)
+            if k < n:
+                self.assertAlmostEqual(tail(hi, 0, k), 0.025, 9)    # P(X <= k | hi)
+            else:
+                self.assertEqual(hi, 1.0)
+
+    def test_zero_failures_gives_the_closed_form_bound_not_0_0(self):
+        e = S.plain_estimate([0.0] * 1000, 1.0, [False] * 1000, 0.0, cap=10.0)
+        u = 10.0 * (1 - 0.025 ** (1 / 1000))
+        self.assertAlmostEqual(e["interval"][1], u, 12)
+        self.assertAlmostEqual(u, 3.682e-2, 5)
+        self.assertEqual(e["interval"][0], 0.0)
+        self.assertEqual(e["interval_normal"], [0.0, 0.0])
+        self.assertTrue(e["interval_exact"])
+        self.assertIn("0 failures: exact one-sided 95 % bound", e["interval_method"])
+        self.assertIn("normaliser taken as exact", e["interval_method"])
+
+    def test_with_constraints_the_normaliser_widens_the_bound(self):
+        zq, zb = 0.5, 0.8
+        e = S.plain_estimate([0.0] * 1000, zq / zb, [False] * 1000, 0.0, cap=10.0,
+                             z_q=zq, m_q=100000, z_b=zb, m_b=100000)
+        qh = S.clopper_pearson(50000, 100000, 0.0125)[1]
+        bl = S.clopper_pearson(80000, 100000, 0.0125)[0]
+        self.assertAlmostEqual(e["interval"][1], 10.0 * qh / bl * (1 - 0.025 ** (1 / 1000)), 12)
+        self.assertGreater(e["interval"][1], 10.0 * zq / zb * (1 - 0.025 ** (1 / 1000)))
+        self.assertIn("Bonferroni (0.025 / 0.0125 / 0.0125)", e["interval_method"])
+
+    def test_the_bound_grows_when_the_acceptance_counts_shrink(self):
+        def u(m):
+            return S.plain_estimate([0.0] * 1000, 0.5 / 0.8, [False] * 1000, 0.0, cap=10.0,
+                                    z_q=0.5, m_q=m, z_b=0.8, m_b=m)["interval"][1]
+        self.assertGreater(u(100), 1.2 * u(100000))
+        self.assertGreater(u(100000), u(10 ** 7))
+
+    def test_a_proposal_without_a_defensive_share_has_cap_1(self):
+        d = Dir()
+        d.write("g0.yaml", "proposal: 1\nname: t.g0\nbase: m.yaml\nvariables: []\n")
+        d.write("g1.yaml", "proposal: 1\nname: t.g1\nbase: m.yaml\ndefensive: 0.1\n"
+                           "variables: []\n")
+        self.assertEqual(S._cap(d.path, {"proposal": "g0.yaml"}), 1.0)
+        self.assertAlmostEqual(S._cap(d.path, {"proposal": "g1.yaml"}), 10.0, 12)
+        d.close()
+
+    def test_failures_give_the_delta_interval_approximate_and_the_bound_beside_it(self):
+        f = [i < 3 for i in range(1000)]
+        e = S.plain_estimate([0.0] * 1000, 1.0, f, 0.0, cap=10.0)
+        self.assertFalse(e["interval_exact"])
+        self.assertIn("(delta; approximate)", e["interval_method"])
+        self.assertEqual(e["interval"], e["interval_normal"])
+        self.assertAlmostEqual(e["upper_exact"],
+                               10.0 * S.clopper_pearson(3, 1000, 0.025)[1], 12)
+        self.assertGreater(e["upper_exact"], e["interval"][1])
+
+    def test_a_delta_upper_end_past_the_exact_bound_is_clipped_there(self):
+        # weights of 10 under a stated cap of 1: the delta interval runs past U_k
+        f = [i < 3 for i in range(1000)]
+        e = S.plain_estimate([math.log(10.0)] * 1000, 1.0, f, 0.0, cap=1.0)
+        self.assertGreater(e["interval_normal"][1], e["upper_exact"])
+        self.assertEqual(e["interval"][1], e["upper_exact"])
+        self.assertIn("clipped at the exact bound", e["interval_method"])
+
+    def test_a_caller_without_the_new_arguments_still_gets_a_result(self):
+        e = S.plain_estimate([0.0] * 10, 1.0, [False] * 10, 0.0)
+        self.assertIsNone(e["interval"])
+        self.assertIsNone(e["upper_exact"])
+        self.assertIn("no bound", e["interval_method"])
+        e = S.plain_estimate([0.0] * 10, 1.0, [True] + [False] * 9, 0.0)
+        self.assertEqual(e["interval"], e["interval_normal"])
+
+    def test_the_search_records_and_prints_the_method_and_the_failure_count(self):
+        d = Dir()
+        d.write("m.yaml", TAIL_MODEL)
+        out, st = run(d, spec(3, n=200), lambda r: 1.0)    # nothing ever fails
+        e = st["estimate"]
+        self.assertTrue(e["interval_exact"])
+        self.assertAlmostEqual(e["interval"][1], 10.0 * (1 - 0.025 ** (1 / 200)), 12)
+        import io
+        buf = io.StringIO()
+        S.print_report(S.report(out), buf)
+        self.assertIn("failures 0 of 200: rate 0", buf.getvalue())
+        self.assertIn("exact one-sided 95 % bound through the weight cap 10", buf.getvalue())
+        d.close()
+
+    def test_the_bound_covers_in_every_seed_at_few_failures(self):
+        """K11 check 1's tail (p 1.18e-4) under the defensive mixture centred at 0.68 (1, 1):
+        about 3 failures in 1000 draws; U_k covers p in all 200 seeded repetitions (point 3
+        measured 2000 per setting, 1 to 5 failures)."""
+        import numpy as np
+        rng = np.random.default_rng(1183)
+        mu, beta = 0.6807, 0.1
+        for _ in range(200):
+            from_base = rng.random(1000) < beta
+            x = rng.normal(0.0, 1.0, (1000, 2))
+            x[~from_base] += mu
+            lb = -0.5 * (x ** 2).sum(1)
+            lq = np.logaddexp(math.log(beta) + lb,
+                              math.log(1 - beta) - 0.5 * ((x - mu) ** 2).sum(1))
+            e = S.plain_estimate(lb - lq, 1.0, x.sum(1) > 5.2, 0.0, cap=1 / beta)
+            self.assertLessEqual(P_TAIL, e["upper_exact"])
 
 
 if __name__ == "__main__":

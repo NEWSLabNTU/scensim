@@ -375,19 +375,154 @@ def _records(path):
     return [json.loads(x) for x in Path(path).read_text().splitlines() if x.strip()]
 
 
-def plain_estimate(log_w, normaliser, failed, rel_err):
-    """The plain likelihood-ratio estimate {p, se, interval, n_eff, max_weight}."""
+# 183's one-sided 95 % split (Bonferroni): the failure share at ALPHA_F, each acceptance at ALPHA_Z
+ALPHA_F, ALPHA_Z = 0.025, 0.0125
+
+
+def _betacf(a, b, x):
+    """The continued fraction of the regularised incomplete beta (modified Lentz)."""
+    tiny, qab, qap, qam = 1e-300, a + b, a + 1.0, a - 1.0
+    c, d = 1.0, 1.0 - qab * x / qap
+    d = 1.0 / (d if abs(d) > tiny else tiny)
+    h = d
+    for m in range(1, 10000):
+        m2 = 2 * m
+        aa = m * (b - m) * x / ((qam + m2) * (a + m2))
+        d = 1.0 + aa * d
+        d = 1.0 / (d if abs(d) > tiny else tiny)
+        c = 1.0 + aa / c
+        c = c if abs(c) > tiny else tiny
+        h *= d * c
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
+        d = 1.0 + aa * d
+        d = 1.0 / (d if abs(d) > tiny else tiny)
+        c = 1.0 + aa / c
+        c = c if abs(c) > tiny else tiny
+        delta = d * c
+        h *= delta
+        if abs(delta - 1.0) < 1e-15:
+            return h
+    raise ArithmeticError("the incomplete beta did not converge")
+
+
+def _betainc(a, b, x):
+    """I_x(a, b), the regularised incomplete beta."""
+    if x <= 0.0:
+        return 0.0
+    if x >= 1.0:
+        return 1.0
+    lb = (math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b)
+          + a * math.log(x) + b * math.log1p(-x))
+    if x < (a + 1.0) / (a + b + 2.0):
+        return math.exp(lb) * _betacf(a, b, x) / a
+    return 1.0 - math.exp(lb) * _betacf(b, a, 1.0 - x) / b
+
+
+def _beta_quantile(a, b, q):
+    """x with I_x(a, b) = q, by bisection (to 1e-15)."""
+    lo, hi = 0.0, 1.0
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if _betainc(a, b, mid) < q:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < 1e-15:
+            break
+    return 0.5 * (lo + hi)
+
+
+def clopper_pearson(k, n, alpha):
+    """(lower, upper): Clopper-Pearson's one-sided bounds at `alpha` each for k of n."""
+    lo = 0.0 if k == 0 else _beta_quantile(k, n - k + 1, alpha)
+    hi = 1.0 if k == n else _beta_quantile(k + 1, n - k, 1.0 - alpha)
+    return lo, hi
+
+
+def _normaliser_bounds(z_q, m_q, z_b, m_b):
+    """(low, high) of Z_q / Z_b at ALPHA_Z for each acceptance, or None: taken as exact (no
+    counts given, or both acceptances exact: no constraints draw)."""
+    if z_q is None or z_b is None:
+        return None
+    def side(z, m):
+        if not m:
+            return z, z
+        k = round(z * m)
+        return clopper_pearson(k, m, ALPHA_Z)
+    (ql, qh), (bl, bh) = side(z_q, m_q), side(z_b, m_b)
+    return ql / bh, qh / bl
+
+
+def plain_estimate(log_w, normaliser, failed, rel_err, *, cap=None, z_q=None, m_q=None,
+                   z_b=None, m_b=None):
+    """The plain likelihood-ratio estimate {p, se, interval, interval_method, interval_exact,
+    interval_normal, upper_exact, n_eff, max_weight} (issue 183).
+
+    `upper_exact` is a rigorous one-sided 95 % upper bound at any failure count k: every weight
+    before the normaliser is at most `cap` (the defensive mixture's 1 / beta), so
+    p <= cap (Z_q / Z_b) q(F), q(F) the proposal's own failure share, bounded by Clopper-Pearson
+    for k of n at ALPHA_F; the normaliser's two acceptances by Clopper-Pearson at ALPHA_Z each
+    (`z_q`, `m_q`, `z_b`, `m_b`; without them it is taken as exact). It is loose: it charges
+    every failure the largest weight. Without `cap` there is none.
+
+    At k = 0 the normal interval is [0, 0], which is no answer: the interval is [0, upper_exact],
+    exact (None without `cap`). At k >= 1 the interval is the normal (delta-method) one,
+    p +- 1.96 se, approximate; with counts its ends are widened by the normaliser's bounds
+    instead of `rel_err`; an upper end past `upper_exact` is clipped there."""
     w = np.exp(np.asarray(log_w, dtype=float)) * normaliser
     f = np.asarray(failed, dtype=float)
     n = len(w)
     wf = w * f
     p = float(wf.mean())
-    se = float(wf.std(ddof=1) / math.sqrt(n)) if n > 1 else math.inf
-    se = math.sqrt(se ** 2 + (p * rel_err) ** 2)
-    return {"n": n, "failures": int(f.sum()), "p": p, "se": se,
-            "interval": [max(0.0, p - Z95 * se), p + Z95 * se],
-            "interval_method": "plain likelihood ratio, normal 95 %",
-            "n_eff": float(w.sum() ** 2 / (w ** 2).sum()), "max_weight": float(w.max())}
+    se0 = float(wf.std(ddof=1) / math.sqrt(n)) if n > 1 else math.inf
+    se = math.sqrt(se0 ** 2 + (p * rel_err) ** 2)
+    k = int(f.sum())
+    nb = _normaliser_bounds(z_q, m_q, z_b, m_b)
+    if nb is None:
+        normal = [max(0.0, p - Z95 * se), p + Z95 * se]
+        how = "normaliser taken as exact"
+    else:
+        normal = [max(0.0, p - Z95 * se0) * nb[0] / normaliser,
+                  (p + Z95 * se0) * nb[1] / normaliser]
+        how = f"normaliser by Bonferroni ({ALPHA_F} / {ALPHA_Z} / {ALPHA_Z})"
+    upper = None
+    if cap is not None:
+        upper = cap * (normaliser if nb is None else nb[1]) * clopper_pearson(k, n, ALPHA_F)[1]
+    out = {"n": n, "failures": k, "p": p, "se": se, "interval_normal": normal,
+           "upper_exact": upper,
+           "n_eff": float(w.sum() ** 2 / (w ** 2).sum()), "max_weight": float(w.max())}
+    if k == 0:
+        if upper is None:
+            return dict(out, interval=None, interval_exact=False,
+                        interval_method="0 failures: no bound (the proposal's weight cap is not "
+                                        "known here; the search's report has it)")
+        return dict(out, interval=[0.0, upper], interval_exact=True,
+                    interval_method=f"0 failures: exact one-sided 95 % bound through the weight "
+                                    f"cap {cap:.4g}, Clopper-Pearson, {how}")
+    method = f"plain likelihood ratio, normal 95 % (delta; approximate), {how}"
+    interval = list(normal)
+    if upper is not None and interval[1] > upper:
+        interval[1] = upper
+        method += "; upper end clipped at the exact bound"
+    return dict(out, interval=interval, interval_exact=False, interval_method=method)
+
+
+def _cap(out, gen):
+    """The largest weight the stage's proposal can give before the normaliser: 1 / its
+    `defensive` share of the base (issue 183), or 1 for a proposal without one."""
+    doc = yaml.safe_load((Path(out) / gen["proposal"]).read_text()) or {}
+    beta = doc.get("defensive")
+    return 1.0 / float(beta) if beta else 1.0
+
+
+def _estimate(out, gen, state, rows, th):
+    """A stage's plain estimate from its scored rows [(record, score)]."""
+    rel = math.sqrt(_rel_err(state["z_base"], state["z_base_draws"]) ** 2
+                    + _rel_err(gen["z_proposal"], gen["z_proposal_draws"]) ** 2)
+    return plain_estimate([r["log_weight"] for r, _ in rows], gen["normaliser"],
+                          [s <= th for _, s in rows], rel, cap=_cap(out, gen),
+                          z_q=gen["z_proposal"], m_q=gen["z_proposal_draws"],
+                          z_b=state["z_base"], m_b=state["z_base_draws"])
 
 
 def _scored(out, gen, outcomes_path, spec, state):
@@ -414,10 +549,7 @@ def _scored(out, gen, outcomes_path, spec, state):
                                       "log_base_density": base_model.logpdf(vals)})
     if not rows:
         raise SearchError(f"generation {gen['generation']}: no run has a score")
-    rel = math.sqrt(_rel_err(state["z_base"], state["z_base_draws"]) ** 2
-                    + _rel_err(gen["z_proposal"], gen["z_proposal_draws"]) ** 2)
-    est = plain_estimate([r["log_weight"] for r, _ in rows], gen["normaliser"],
-                         [s <= th for _, s in rows], rel)
+    est = _estimate(out, gen, state, rows, th)
     gen.update(outcomes=os.path.relpath(Path(outcomes_path).resolve(), out.resolve()),
                errors=errors, estimate=est, max_weight=est["max_weight"],
                went_avoided=len(avoided))
@@ -478,8 +610,22 @@ def next_step(out, outcomes_path):
     return state
 
 
+def _fresh_estimate(out, state):
+    """The fresh stage's estimate read again from its records and outcomes, so a search done
+    before issue 183 reports by today's rule (nothing is re-run); None before the fresh stage
+    has its outcomes."""
+    gen = state["generations"][-1]
+    if gen.get("stage") != "fresh" or "outcomes" not in gen:
+        return state.get("estimate")
+    recs = _records(out / gen["records"])
+    got = read_outcomes(out / gen["outcomes"], recs)
+    rows = [(r, float(got[r["id"]][0])) for r in recs if got[r["id"]][0] is not None]
+    return _estimate(out, gen, state, rows, state["parameters"]["threshold"])
+
+
 def report(out):
-    state = json.loads((Path(out) / STATE).read_text())
+    out = Path(out)
+    state = json.loads((out / STATE).read_text())
     fails = sorted(state["failures"], key=lambda f: (-f["log_base_density"], f["record"]))
     return {"schema": "scensim.search/1", "id": state["id"], "phase": state["phase"],
             "stop": state["stop"], "parameters": state["parameters"],
@@ -490,7 +636,7 @@ def report(out):
                             | {"failures": (g.get("estimate") or {}).get("failures"),
                                "estimate": (g.get("estimate") or {}).get("p")}
                             for g in state["generations"]],
-            "estimate": state.get("estimate"), "diagnostic": state.get("diagnostic"),
+            "estimate": _fresh_estimate(out, state), "diagnostic": state.get("diagnostic"),
             "failures": fails}
 
 
@@ -506,9 +652,14 @@ def print_report(rep, file):
              if g.get("went_avoided") is not None else ""), file=file)
     e = rep["estimate"]
     if e:
-        p(f"  rate {e['p']:.4g} (se {e['se']:.3g}; {e['interval_method']} "
-          f"[{e['interval'][0]:.4g}, {e['interval'][1]:.4g}]), n {e['n']}, "
-          f"n_eff {e['n_eff']:.1f}, largest weight {e['max_weight']:.4g}", file=file)
+        iv = ("none" if e.get("interval") is None
+              else f"[{e['interval'][0]:.4g}, {e['interval'][1]:.4g}]")
+        p(f"  failures {e['failures']} of {e['n']}: rate {e['p']:.4g} (se {e['se']:.3g}), "
+          f"interval {iv} ({e['interval_method']}), n_eff {e['n_eff']:.1f}, largest weight "
+          f"{e['max_weight']:.4g}", file=file)
+        if e.get("upper_exact") is not None and e["failures"] > 0:
+            p(f"  exact one-sided 95 % upper bound {e['upper_exact']:.4g} (loose: every "
+              f"failure charged the largest weight)", file=file)
         p(f"  diagnostic, not the rate: the generations' own estimate "
           f"{rep['diagnostic']['generations_estimate']:.4g}", file=file)
     p(f"  failures found: {len(rep['failures'])}", file=file)
