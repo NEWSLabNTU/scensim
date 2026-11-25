@@ -93,3 +93,37 @@ walls (the root's x less the sensor's x at the ahead wall's hit, over v), over 5
   ahead) also sit 0.03 to 0.04 m further across in left bends than the level runs (-0.09 to
   -0.10 m against about -0.06 m), while the right bends and the straights are the same. An
   along error seen through a bend may be part of 170's split.
+
+## Step 2's spec (written 2026-11-25, before any change or run; for 133)
+
+**The observable.** The RTX annotator's `info` holds `transform`, the sensor's world pose the
+revolution was rendered from (issue 167's probe printed it). aib keeps the sensor's track, its
+pose a substep apart with the world's clock (`Lidar.track`). So each scan's render age is the
+lidar's clock at the read less the track time whose pose is `transform`'s: the point on the track
+nearest it, interpolated between substeps. That works when the car moves; above 1 m/s at 4.5 m/s
+the track's substeps are about 4 cm apart, which resolves the age to about 1 ms after
+interpolation.
+
+**The change (aib, a branch `issue-172-age` from aib main, not landed).** In `Lidar._msg`,
+behind a rig key `isaac.log_render_age` (default off, so nothing changes unless it is set):
+compute the age as above and log it at INFO once a second (every 20th scan) and for the first
+five scans: "lidar top: render age X ms (transform at track t, clock c, speed v)". Nothing
+else changes, including the published cloud and its stamp. A unit test with a synthetic track
+and a transform two frames back gives 100 ms.
+
+**Checks before the runs.** (a) 169's probe with the branch and the key set, case A at 4.5 m/s:
+the logged age equals the walls' 0.100 s within 2 ms. (b) The branch's `just test` in aib.
+
+**The runs.** smooth haruna_down (C6e2's map, motion BVH off), 9 runs, from a testbench over a
+workspace with the branch, the key set through the rig, GPU0, non-timing, with the per-run exe
+and provenance checks as in 168's A/B. Nine, because with 168's split (4 behind in 12) the
+chance of no behind run in nine is about 3 %. Each run is read with `c6e2/along.py` for its mode
+and with its log for the age.
+
+**Predictions (before any run).**
+- Within a run, the age is constant within 2 ms after the first five scans.
+- The hypothesis: the behind runs' age is larger than the level runs' by about 19 ms (0.086 m /
+  4.5 m/s), and each run's along median follows -v x (age - the level runs' age) within 0.01 m.
+- If every run's age is the same (within 2 ms) while the modes still split, the hypothesis
+  **fails**. The stamp is then not the cause, and the next candidate is NDT's or the EKF's
+  start-up (their first pose and its time), from the same runs' logs.
