@@ -257,6 +257,15 @@ into the fixture's local `course/road_detail.yaml`, stored and current; `c6e1_li
   were not fetched. The testbench was built without `--symlink-install`, so a fetch in a
   package's source did not reach it. It was rebuilt with `--symlink-install`, the maps fetched
   by package name, and the series restarted.
+- *Amended during the series (2026-11-25, labelled, 133):* the runner's provenance check
+  was widened during run 2. result.json names siw `4706ff9...+`, which is scensim's mark for a
+  submodule checked out off main's pin, as ws168's is by design, and the check had wanted the
+  bare SHA.
+  - Runs 1 and 2 (rough_off_1, rough_on_1, both passed) ran the old check. Run 2 had started at
+    10:42:47, before the file was replaced (atomically), so it kept the old one. Both were
+    refused and then accepted by hand on the same evidence (`i168/times.txt` says so).
+  - From run 3 (smooth_off_1) the widened check runs.
+  - Run 2's log shows the road lowered 0.114 m from the stored depth, with no fallback WARN.
 
 ## Reach
 
