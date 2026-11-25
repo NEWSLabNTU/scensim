@@ -45,6 +45,11 @@ bridge sends twice (frames 1 and 2), judged from the second send's read-back on 
 A value may name a prop layout, `layout: <name>` (092 K9f-b; scensim.layouts): the run adds its
 props to its own copy of the scenario.
 
+A value may set zones of the scenario's surface map, `zones: {<zone id>: {class?, wetness?,
+water_depth?}}` (092 K9f-a; scensim.zones): the run writes them into the same copy, as the Init
+road condition's `scensim.zone.<id>.<field>` properties, and judges the world's read-back of
+each zone from the truth file. Isaac only: CARLA cannot set a zone's ground.
+
 On Isaac there is no weather service: a value with weather parameters is refused there by name
 (its scenario's EnvironmentAction sets the sky). On CARLA a surface map cannot be applied, and weather (wetness) is visual only: a value that
 names a surface map or a friction (`mu`) is refused there by name, unless it says
@@ -53,7 +58,7 @@ names a surface map or a friction (`mu`) is refused there by name, unless it say
 import math
 from pathlib import Path
 
-KINDS = ("weather", "environment", "surface_map", "mu", "physics", "layout")
+KINDS = ("weather", "environment", "surface_map", "mu", "physics", "layout", "zones")
 TOLERANCE = 1e-3   # a read-back may round (the world server stores floats)
 
 
@@ -426,6 +431,16 @@ def problems(world_knobs: dict, where="world.knobs", simulator: str = None) -> l
                 out.append((f"{w}.values.{v}.weather", "is {parameter: number}"))
             if m.get("layout") is not None and not (isinstance(m["layout"], str) and m["layout"]):
                 out.append((f"{w}.values.{v}.layout", "a layout's name (092 K9f-b), or null"))
+            if m.get("zones") is not None:
+                from scensim import zones as zonesmod  # noqa: PLC0415
+                zp = zonesmod.value_problems(m["zones"], f"{w}.values.{v}.zones")
+                if zp:
+                    out += zp
+                    continue
+                if m.get("surface_map"):
+                    out.append((f"{w}.values.{v}", "names a surface map and sets zones: zones "
+                                "are the scenario's surface map's, set one or the other"))
+                    continue
             if m.get("environment") is not None:
                 env = environment_problems(m["environment"], f"{w}.values.{v}.environment")
                 if env:
@@ -477,6 +492,9 @@ def simulator_problem(knob, value, m: dict, simulator: str):
     one rule `plan` refuses a run by and `problems` refuses a testbench by (issue 154)."""
     m = m or {}
     if simulator == "carla":
+        if m.get("zones"):
+            from scensim import zones as zonesmod  # noqa: PLC0415
+            return f"knob {knob}={value}: zones: {zonesmod.CARLA_LIMIT}"
         if m.get("surface_map"):
             return (f"knob {knob}={value}: a surface map, which CARLA cannot apply per run; "
                     "declare a visual-only value (physics: none) for CARLA")
@@ -529,7 +547,7 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
     name}, notes: {knob: text}}. KnobError names a knob the world lacks, a value it does not
     declare, or one this simulator cannot honour."""
     weather = dict(baseline or {})
-    maps, notes, environment, layouts = {}, {}, {}, {}
+    maps, notes, environment, layouts, zones = {}, {}, {}, {}, {}
     for knob, value in knobs.items():
         decl = (world_knobs or {}).get(knob)
         if decl is None:
@@ -550,6 +568,8 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
             raise KnobError(why)
         if m.get("layout"):
             layouts[knob] = str(m["layout"])
+        if m.get("zones"):
+            zones[knob] = m["zones"]
         if m.get("environment"):
             for f, x in m["environment"].items():
                 off = field_range_problem(f, x)
@@ -562,7 +582,7 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
         if m.get("surface_map"):
             maps[knob] = str(m["surface_map"])
     return {"weather": weather, "surface_maps": maps, "notes": notes,
-            "environment": environment, "layouts": layouts}
+            "environment": environment, "layouts": layouts, "zones": zones}
 
 
 # issue 171: CARLA 0.9.16's get_weather right after set_weather can show the weather before it

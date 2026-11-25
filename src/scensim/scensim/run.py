@@ -235,15 +235,41 @@ def run_layouts(spec, project: Path) -> list:
                               distribution=bool(spec.distribution))
 
 
+def run_zones(spec, project: Path) -> list:
+    """The zones a spec's knobs set (092 K9f-a; scensim.zones.for_run). ZoneError, by name, for
+    what that refuses, and for zones whose read-back the gap trace would not hold."""
+    from scensim import zones as zonesmod   # noqa: PLC0415
+    if Path(spec.scenario).suffix != ".xosc" or "scensim.knob." not in \
+            Path(spec.scenario).read_text(errors="replace"):
+        return []
+    try:
+        settings = config.project_settings(project)
+    except config.ConfigError:
+        return []
+    world = settings.get("world") or {}
+    zs = zonesmod.for_run(project, Path(spec.scenario), spec.parameters,
+                          world.get("knobs") or {}, scenario_map(Path(spec.scenario)),
+                          simulator=settings.get("simulator"),
+                          distribution=bool(spec.distribution), settings=settings)
+    if zs and not (settings.get("logging") or {}).get("gap_trace", True):
+        raise zonesmod.ZoneError(f"knob {zs[0]['knob']}: a zone's read-back is read from the gap "
+                                 "trace, which logging.gap_trace: false turns off")
+    return zs
+
+
 def check_layouts(spec, project: Path, out=None):
-    """Refuse, before any run, a spec whose knobs name a layout that cannot be added; warn of a
-    lane prop the run's layout places inside a reversed stretch of SSv2's spline (issue 174)."""
-    from scensim import layouts as layoutsmod   # noqa: PLC0415
+    """Refuse, before any run, a spec whose knobs name a layout that cannot be added, or set
+    zones that cannot be (092 K9f-a): the copy is written once, with both, as the run does.
+    Then warn of a lane prop the run's layout places inside a reversed stretch of SSv2's spline
+    (issue 174): outside the refusal, so a map that does not load is a warning, never a refusal."""
+    from scensim import layouts as layoutsmod, zones as zonesmod   # noqa: PLC0415
     try:
         lays = run_layouts(spec, project)
-        if lays:
-            layoutsmod.inject(Path(spec.scenario), [p for x in lays for p in x["props"]])
-    except (layoutsmod.LayoutError, ValueError) as e:
+        zs = run_zones(spec, project)
+        if lays or zs:
+            layoutsmod.inject(Path(spec.scenario), [p for x in lays for p in x["props"]],
+                              zonesmod.properties(zs))
+    except (layoutsmod.LayoutError, zonesmod.ZoneError, ValueError) as e:
         raise Refused(f"{Path(spec.scenario).name}: {e}") from None
     warn_layout_stretches(spec, project, lays, out)
 
@@ -1386,6 +1412,28 @@ def apply_profiles(rec, spec, psettings, project=None, call=_ros_call):
     return plan, ""
 
 
+def judge_zones(zone_runs, run_dir, knob_block, run_events) -> str:
+    """Each zone the run's knobs set (092 K9f-a), judged from the truth's first road_condition
+    record read back after a step, into result.json's `knobs.<knob>.zones`; the knob, and the
+    block, not ok when a zone is off or unread. Returns why the run is a knob_mismatch, or ""."""
+    from scensim import zones as zonesmod   # noqa: PLC0415
+    try:
+        rcs = [r for t in truthmod.load(run_dir) for r in t.road_conditions]
+    except Exception as e:  # noqa: BLE001 -- an unreadable trace: no record, said
+        rcs = []
+        run_events.append({"t_wall": time.time(), "event": "knobs.zones_unread", "why": str(e)})
+    zblocks, why = zonesmod.judge(zone_runs, rcs)
+    for knob, zb in zblocks.items():
+        entry = knob_block.setdefault("knobs", {}).setdefault(knob, {})
+        entry["zones"] = zb
+        if any(not z["ok"] for z in zb.values()):
+            entry["ok"] = False
+    run_events.append({"t_wall": time.time(), "event": "knobs.zones", "ok": not why})
+    if why:
+        knob_block["ok"] = False
+    return why
+
+
 AFTER_RUN = "after the run"
 AFTER_RUN_LABEL = ("read with get_weather after the run ended, the stack still up (issue 161): "
                    "not the weather applied before frame 0")
@@ -1631,12 +1679,18 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
         run_pilots.append((p, entry))
 
     scenario_file = spec.scenario
-    # 092 K9f-b: a knob naming a prop layout runs the run's own copy, saved beside the record
+    # 092 K9f-b: a knob naming a prop layout runs the run's own copy, saved beside the record;
+    # K9f-a: so does one setting zones, in the same copy
     lays = run_layouts(spec, project)
+    try:
+        zone_runs = run_zones(spec, project)
+    except ValueError as e:   # zones.ZoneError; expand refused it already, unless it changed
+        shutil.rmtree(run_dir, ignore_errors=True)
+        raise Refused(f"{Path(spec.scenario).name}: {e}") from None
     copy = None
-    if lays:
+    if lays or zone_runs:
         from scensim import layouts as layoutsmod   # noqa: PLC0415
-        copy = layoutsmod.write_copy(Path(spec.scenario), lays, run_dir)
+        copy = layoutsmod.write_copy(Path(spec.scenario), lays, run_dir, zone_runs)
         scenario_file = Path(copy["path"])
     ssv2_argv = (ctx.scenario_command or scenario_argv)(rec, spec, run_dir, scenario_file)
     resolved = {
@@ -1920,6 +1974,12 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                    f"its read-back off by {e['max_deviation']:.4g}, beyond {e['tolerance']:.4g} "
                    f"(frames {', '.join(map(str, e['off_frames'][:5]))})")
             infra.append(results.Infra("knob_profile", f"knob profile {bad[0]}: {why}"))
+    # 092 K9f-a: each zone a knob set, from the truth's first road_condition record read back
+    # after a step; a mismatch, or no such record, makes it an error run
+    if zone_runs and ssv2 is not None and knob_block is not None:
+        why = judge_zones(zone_runs, run_dir, knob_block, run_events)
+        if why:
+            infra.append(results.Infra("knob_mismatch", why))
     # issue 161: a weather: knob CARLA's immediate read-back could not judge, from a read now,
     # after the run, the stack still up
     if ssv2 is not None and knob_block is not None:

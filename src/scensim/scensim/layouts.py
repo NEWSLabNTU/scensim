@@ -19,7 +19,9 @@ in both is refused::
 (a MiscObject) at the end of Entities and a TeleportAction at the end of the Init's Actions, on
 a LanePosition with the literal lanelet and lanelet-local s of its lane anchor, or a
 WorldPosition at a point anchor. The props are SSv2's entities, so its verdict and the truth
-see them. The same source, layouts and anchors give a byte-identical copy.
+see them. A knob's zones (092 K9f-a; scensim.zones) go into the same copy, as the Init road
+condition's `scensim.zone.<id>.<field>` properties. The same source, layouts, zones and anchors
+give a byte-identical copy.
 """
 import hashlib
 import math
@@ -185,9 +187,10 @@ def _absolute(root, source_dir: Path):
                 el.set(attr, os.path.normpath(str(Path(source_dir).resolve() / v)))
 
 
-def inject(source: Path, placements: list) -> bytes:
+def inject(source: Path, placements: list, zone_properties=()) -> bytes:
     """The scenario at `source` with `placements` (place's) added as MiscObject entities and Init
-    TeleportActions: the run's copy, the same bytes for the same inputs. LayoutError: a prop
+    TeleportActions, and `zone_properties` ([(name, value)], scensim.zones.properties) in its
+    Init road condition: the run's copy, the same bytes for the same inputs. LayoutError: a prop
     whose name is already an entity of the source (two writers), or no Entities/Init."""
     root = ET.parse(source).getroot()
     ents = root.find("Entities")
@@ -223,6 +226,12 @@ def inject(source: Path, placements: list) -> bytes:
             ET.SubElement(pos, "WorldPosition", {"x": _fmt(p["x"]), "y": _fmt(p["y"]),
                                                  "z": "0.0", "h": _fmt(p["h"]), "p": "0.0",
                                                  "r": "0.0"})
+    if zone_properties:
+        from scensim import zones as zonesmod  # noqa: PLC0415
+        try:
+            zonesmod.write(root, list(zone_properties))
+        except zonesmod.ZoneError as e:
+            raise LayoutError(f"{source}: {e}") from None
     return (b'<?xml version="1.0" encoding="UTF-8"?>\n'
             + ET.tostring(root, encoding="utf-8", xml_declaration=False) + b"\n")
 
@@ -276,12 +285,20 @@ def for_run(project: Path, scenario: Path, parameters: dict, world_knobs: dict, 
     return out
 
 
-def write_copy(source: Path, layouts: list, run_dir: Path) -> dict:
-    """The run's copy of `source` with every layout's props, at <run_dir>/scenario.xosc:
-    resolved.yaml's `copy` ({path, sha256, layouts})."""
-    data = inject(source, [p for lay in layouts for p in lay["props"]])
+def write_copy(source: Path, layouts: list, run_dir: Path, zones=()) -> dict:
+    """The run's copy of `source` with every layout's props and every knob's zones
+    (scensim.zones.for_run's), at <run_dir>/scenario.xosc: resolved.yaml's `copy` ({path,
+    sha256, layouts[, zones]})."""
+    from scensim import zones as zonesmod  # noqa: PLC0415
+    data = inject(source, [p for lay in layouts for p in lay["props"]],
+                  zonesmod.properties(list(zones)))
     out = Path(run_dir) / COPY
     out.write_bytes(data)
-    return {"path": str(out), "sha256": sha256(data),
+    copy = {"path": str(out), "sha256": sha256(data),
             "layouts": [{"knob": x["knob"], "layout": x["layout"], "sha256": x["sha256"]}
                         for x in layouts]}
+    if zones:
+        copy["zones"] = [{"knob": z["knob"], "value": z["value"],
+                          "surface_map": z["surface_map"], "properties": z["properties"]}
+                         for z in zones]
+    return copy

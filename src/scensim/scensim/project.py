@@ -659,6 +659,53 @@ def _layout_stretch_findings(project: Path, rel: str, knob, map_name, name, prop
                         host=True)]
 
 
+def zone_problems(project: Path, settings: dict) -> list:
+    """Each scenario binding a knob whose values set zones (092 K9f-a) the run could not set: a
+    zone its surface map lacks, a class not in the table, a class on a soil zone, a field the
+    scenario sets too. One rule with the run (scensim.zones.check); zones on CARLA are refused
+    with the knob (knobs.simulator_problem)."""
+    from scensim import knobs as knobsmod, zones as zonesmod  # noqa: PLC0415
+    world = settings.get("world") if isinstance(settings.get("world"), dict) else {}
+    wknobs = world.get("knobs") if isinstance(world.get("knobs"), dict) else {}
+    valued = {k: {str(v): m["zones"] for v, m in ((d or {}).get("values") or {}).items()
+                  if isinstance(m, dict) and isinstance(m.get("zones"), dict)}
+              for k, d in wknobs.items() if isinstance(d, dict)}
+    if not any(valued.values()) or settings.get("simulator") == "carla":
+        return []
+    files, _ = collect_scenarios(project)
+    out = []
+    for f in files:
+        if "scensim.knob." not in _text(Path(f)):
+            continue
+        try:
+            bound = knobsmod.bound(Path(f), {})
+            sc = read_scenario(f)
+        except Exception:   # noqa: BLE001 -- check_scenario reports an unreadable scenario
+            continue
+        lf = sc.logic_file or ""
+        map_name = lf[len(MAPS_PREFIX):].strip("/") if lf.startswith(MAPS_PREFIX) else None
+        rel = _rel(project, f)
+        for k in bound:
+            if not valued.get(k):
+                continue
+            try:
+                if not map_name:
+                    raise zonesmod.ZoneError("zones need the scenario's project map")
+                facts = zonesmod.source_facts(Path(f))
+                smap = zonesmod.read_map(zonesmod.find_map(project, map_name,
+                                                           facts["surface_map"], settings))
+                table = zonesmod.load_table(smap["table"] or zonesmod.default_table())
+            except (zonesmod.ZoneError, ValueError) as e:
+                out.append(Finding(rel, f"knob {k}: {e}", "fix the knob's zones or the "
+                                   "scenario's surface map", refused=True))
+                continue
+            for v in sorted(valued[k]):
+                for msg in zonesmod.check(k, v, valued[k][v], smap, table, facts["sets"]):
+                    out.append(Finding(rel, msg, "fix the knob's zones or the scenario",
+                                       refused=True))
+    return out
+
+
 def wet_look_problems(project: Path, settings: dict) -> list:
     """Each scenario that binds a knob whose weather: names the road's wet look (wetness,
     precipitation_deposits) and sets a RoadCondition: two writers, refused (086 C7 owns the
@@ -1225,6 +1272,7 @@ def check_project(path, scenarios: bool = True) -> list:
     out += profile_problems(project, settings)
     out += wet_look_problems(project, settings)
     out += layout_problems(project, settings)
+    out += zone_problems(project, settings)
     try:
         host = config.host_settings(project)
     except config.ConfigError:
