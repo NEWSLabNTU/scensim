@@ -2657,6 +2657,13 @@ shows no such drop. The
 search's result stands as recorded; the question stays open and goes to 166's follow-up, whose
 plan can test it (the same sweep with M's gap measured in s).
 
+**Later (issue 166's gap-in-s fix, 2026-11-25).** The follower now measures its gap in s and
+`lead_s` no longer carries + 0.025868; this search ran with both, consistent with each other,
+and stands. The sweep rerun under the fix (166's check 4) FAILED the second hypothesis: the drop
+of about 0.05 m between onsets 3.25 and 3.50 s is still there, and the 1.100 m jump moved from
+4.00 to 2.75 s. 1.100 m is 22 m/s times one 0.05 s step; that the jumps are the ego's `aeb_ttc`
+latching a frame earlier is 166's hypothesis, not tested. The question stays open.
+
 **The commits named above, before and after the landing's rebase (133, 2026-11-25).** K13 step
 v was written, run and judged on a branch based on d7a25ff5; it landed rebased onto
 77fcc1a3. The SHAs named in this section are the pre-rebase ones, the commits the dry runs, the

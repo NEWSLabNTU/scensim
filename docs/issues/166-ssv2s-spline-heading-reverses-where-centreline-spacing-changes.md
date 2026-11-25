@@ -306,3 +306,49 @@ local checks and a full gate; a landing request to 133.
   claim). Onset 4.00's jump to 1.47 m is about forty times the largest of those shortfalls
   (0.026 m); no prediction is made for it, and it is recorded as it comes out.
 
+**The checks' results (2026-11-25, on the fix as coded; scripts `i166_check2.py`,
+`i166_check3.py`, `i166_check4.py`, from the dev worktree at 02913108 plus the code).**
+
+1. **Unit: held.** Across a synthetic reversed loop of 0.02 m, a point placed at spline s
+   reads s within 1e-3 m outside the resampled segment holding the loop and within the
+   overshoot inside it; resampled in polyline arc (no `heading_s`) it read 0.02 m short. A lane
+   whose `heading_s` is its own chord arc resamples as before to 1e-12; a repeated `heading_s`
+   is dropped, one that goes back is refused by name.
+2. **Both ways on `west_avenue`: held one way, FAILED the other.**
+   - Placement s to follower s: held. Over M's start and the 21000 L starts the search drew,
+     the follower's s minus the placement s is within 4.0e-5 m (bar 1e-4); M to L's gap error
+     -4.0e-5 to +3.8e-5 m, where the old resampling gave -0.02591 to -0.02583 m.
+   - Follower x/y at spline s against the world's placement at s, every 0.1 m outside the 13
+     resampled segments holding a reversed stretch (3661 points): FAILED, largest 0.0122 m (bar
+     1e-3), at s 72.2. All 50 points over the bar lie within 2 m of a reversed stretch
+     (24.6 to 24.9, 72.1 to 73.7, 96.6 to 97.4, 226 to 227, 255 to 256, 291.9, 314.6 to
+     316.8 m); beyond 2 m of every stretch the largest is 8.6e-4 m (3332 points). The error is
+     along the lane (up to 0.0122 m), not across it (at most 5.3e-4 m): near a loop the
+     anchor's samples, linearly interpolated, run ahead of or behind the world's spline at the
+     same s. So a car within about 2 m of a reversed stretch reads its s off by up to 1.2 cm;
+     the bar's "outside loops" was too narrow by that margin.
+3. **K13 step v's dry-run check 1 without the correction: held.** M's acceleration at t = 0
+   is at most 7.4e-8 m/s^2 over the 36 slots (bar 1e-6).
+4. **The onset sweep rerun: FAILED.** Without the correction, the closest gap over onsets 1.00
+   to 3.75 s spans 1.100 m (bar 0.005):
+
+   | onset (s) | gap (m) | frame |
+   |---|---|---|
+   | 1.00 | 0.40693 | 173 |
+   | 1.25 to 2.50 (6 slots) | 0.39870 to 0.39895 | 178 to 204 |
+   | 2.75 to 3.25 | 1.49794 to 1.49980 | 208 to 218 |
+   | 3.50 | 1.44936 | 223 |
+   | 3.75 and 4.00 | 1.44786, 1.44762 | 228, 233 |
+
+   The gap is flat to 2.5e-4 m over onsets 1.25 to 2.50 (it was 0.4245 to 7e-5 there), then
+   jumps by 1.100 m at 2.75 s, where the old sweep jumped by 1.100 m at 4.00; and the drop of
+   about 0.05 m between 3.25 and 3.50 s is still there, so it is not M's gap measurement
+   either. Record 842ce095 itself (onset 3.628) now gives 1.448 m. A hypothesis, not a claim:
+   1.100 m is 22 m/s times one 0.05 s step, and at both jumps (here 2.50 to 2.75 s, the old
+   sweep's 3.75 to 4.00 s) the closest approach's frame advances 4 frames for 0.25 s of onset
+   where it otherwise advances 5 (once 6, 2.00 to 2.25 s, with no jump), so the jumps would be
+   the ego's braking latching one frame earlier, a discretisation of the point-mass ego's
+   `aeb_ttc` (TTC checked each 0.05 s step), not the follower. Not tested here.
+5. **Every test** (the local follower and batch suites so far: 23 passed, 1 skipped); the full
+   gate follows.
+
