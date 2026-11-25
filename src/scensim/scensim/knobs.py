@@ -563,9 +563,10 @@ def plan(world_knobs: dict, knobs: dict, simulator: str, baseline: dict = None) 
 # issue 171: CARLA 0.9.16's get_weather right after set_weather can show the weather before it
 # until the world ticks, and nothing ticks between a run's set_weather and its read-back (the
 # world server stays owned and synchronous through a suite). Such a read-back is recorded, not
-# judged, until the CARLA world server reads back after its tick (issue 161).
-WEATHER_UNVERIFIED = ("unverified: CARLA's read-back precedes its next tick (issue 171), "
-                      "judged once its world server reads back after the tick (issue 161)")
+# judged; the knob is judged from a get_weather after the run instead (issue 161,
+# run.weather_after_run), and stays unverified only when that read fails.
+WEATHER_UNVERIFIED = ("unverified: CARLA's read-back precedes its next tick (issue 171); "
+                      "judged from a read after the run (issue 161)")
 
 
 def compare(knobs: dict, world_knobs: dict, sent: dict, read: dict, maps_read=None,

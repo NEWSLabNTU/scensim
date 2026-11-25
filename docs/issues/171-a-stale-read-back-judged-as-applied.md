@@ -77,6 +77,13 @@ Coverage names such a knob's cell `<value> (unverified)`, as for a surface map w
 one; another world server's read-back is judged as before. C7's reply is listed above and not
 changed here.
 
+*Since issue 161 (2026-11-25):* the immediate read-back stays recorded and unjudged on CARLA,
+and the knob is judged from a second `get_weather` at the run's end, labelled "after the run"
+(`weather_read: after the run`, `weather_after_run`); a differing one is `knob_mismatch`, and
+one that cannot be read leaves the knob unverified, as above. The step's read-back after the
+tick (`READBACK_AFTER_STEP`) does not reach a `weather:` knob, which no step follows before the
+read.
+
 **The deeper fix belongs in the CARLA world server, and is folded into issue 161.** Issue 161
 already has the server validate the environment's ranges and read back the physical value. It
 now also takes this: a read-back the server reports after CARLA has ticked, or the value it will

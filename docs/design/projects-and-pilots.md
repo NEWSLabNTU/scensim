@@ -294,8 +294,14 @@ On CARLA that read-back is recorded and not judged (`weather_read: unverified`; 
 differs is listed under `weather_read_off`): CARLA 0.9.16 can return the weather before the send
 until it ticks, and nothing ticks between the send and the read (issue 171), so the read cannot
 tell a stuck weather from a stale one. A refused `set_weather`, or no answer, still ends the run.
-Coverage names such a knob's cell `<value> (unverified)`. It is judged again once the CARLA
-world server reads back after its tick (issue 161).
+The knob is judged instead from a second `get_weather` at the run's end, while the stack is
+still up, hundreds of ticks after the send (issue 161): the world server keeps the weather, and a
+scenario `EnvironmentAction` that sets weather beside a weather knob is refused. `result.json`
+labels it so (`weather_read: after the run`, `weather_after_run` with the values read and the
+parameters off, `applied_after_run` per knob): it is the weather the world held after the run, not
+a reading taken before frame 0. One that differs from what was sent makes the run an error run
+(`knob_mismatch`); one that cannot be read (the stack gone, no answer) leaves the knob unverified,
+and coverage then names its cell `<value> (unverified)`.
 Once `world.knobs` is declared, every run sends and checks the baseline, bound knobs or not:
 the world server keeps its weather across runs and world loads, so a run without knobs would
 otherwise run in the last knobbed run's. A scenario that binds a weather knob and also sets

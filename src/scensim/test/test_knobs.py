@@ -195,10 +195,13 @@ def knobbed_project(where):
 
 class Bridge:
     """The bridge's set_weather and get_weather: it keeps what it is sent, and `drop` names a
-    parameter it then reports wrong (a world that did not apply it)."""
+    parameter it then reports wrong (a world that did not apply it). With `stale`, the first
+    get_weather after a set_weather shows the weather before it, as CARLA 0.9.16's may until it
+    ticks (issue 171); `gone`: get_weather does not answer after the first (the stack gone)."""
 
-    def __init__(self, drop=None):
+    def __init__(self, drop=None, stale=False, gone=False):
         self.weather, self.sent, self.drop = {}, [], drop
+        self.stale, self.gone, self.before, self.gets = stale, gone, None, 0
 
     def __call__(self, rec, argv):
         if "set_weather" in argv[3]:
@@ -206,9 +209,15 @@ class Bridge:
             names = [n.strip() for n in req.split("names: [")[1].split("]")[0].split(",")]
             values = [float(v) for v in req.split("values: [")[1].split("]")[0].split(",")]
             self.sent.append(dict(zip(names, values)))
+            self.before = dict(self.weather) if self.stale else None
             self.weather.update(zip(names, values))
             return "response:\nSetWeather_Response(success=True, message='')", ""
+        self.gets += 1
+        if self.gone and self.gets > 1:
+            return "", "the service did not answer"
         w = dict(self.weather)
+        if self.before is not None:
+            w, self.before = {k: self.before.get(k, 0.0) for k in w}, None
         if self.drop in w:
             w[self.drop] = 12.5
         return ("response:\nGetWeather_Response(success=True, message='', preset='', names=["
@@ -237,6 +246,9 @@ def _use(monkeypatch, bridge):
     monkeypatch.setattr(run, "apply_knobs",
                         lambda rec, spec, ps, call=None, project=None:
                         real(rec, spec, ps, call=bridge, project=project))
+    after = run.weather_after_run
+    monkeypatch.setattr(run, "weather_after_run",
+                        lambda rec, block, call=None: after(rec, block, call=bridge))
 
 
 def _suite(d, n):
@@ -260,39 +272,70 @@ def test_sampled_night_and_wet_reach_the_world_and_the_record(knob_stack, where)
         assert rec["cell"] == {"illumination": light, "surface": road}
         assert r.knobs["ok"] and r.knobs["knobs"]["illumination"]["value"] == light
         want = -30.0 if light == "night" else 60.0
-        # recorded, not judged, on CARLA (issue 171)
+        # on CARLA the read right after the send is recorded (issue 171), and the knob judged
+        # from the read after the run (issue 161)
         assert r.knobs["knobs"]["illumination"]["applied"]["sun_altitude_angle"] == want
-        assert r.knobs["knobs"]["illumination"]["weather_read"] == "unverified"
-        assert r.knobs["weather_read"] == K.WEATHER_UNVERIFIED
+        assert r.knobs["knobs"]["illumination"]["applied_after_run"]["sun_altitude_angle"] == want
+        assert r.knobs["knobs"]["illumination"]["weather_read"] == run.AFTER_RUN
+        assert r.knobs["weather_read"] == run.AFTER_RUN
+        assert r.knobs["weather_after_run"]["label"] == run.AFTER_RUN_LABEL
         assert r.knobs["sent"]["wetness"] == (80.0 if road == "wet_look" else 0.0)
         assert r.knobs["knobs"]["surface"]["physics"].startswith("none")
         seen.add((light, road))
     assert ("night", "wet_look") in seen or len(seen) >= 2
     # absolute: every run sent every knob's parameters, so none inherits another's weather
     assert all({"sun_altitude_angle", "wetness"} <= set(s) for s in bridge.sent)
-    # K7 groups the runs by the knobs the world applied; a weather knob not judged on CARLA
-    # (issue 171; both knobs here set weather, the surface its wetness) is its own cell, named so
+    # K7 groups the runs by the knobs the world applied; judged after the run, a weather knob
+    # on CARLA is a cell of its own value (issue 161), no longer "(unverified)"
     from scensim_sampler import coverage
     rep = coverage.report(coverage.outcomes_from_runs([runs_dir(where)]))
     cells = {tuple(sorted(c["cell"].items())) for c in rep["layer3"]}
-    assert cells == {(("illumination", f"{l} (unverified)"), ("surface", f"{r} (unverified)"))
-                     for l, r in seen}
+    assert cells == {(("illumination", l), ("surface", r)) for l, r in seen}
 
 
-def test_a_carla_weather_read_back_that_differs_is_recorded_not_judged(knob_stack, where):
-    # issue 171: CARLA's get_weather right after set_weather may show the weather before it, and
-    # nothing ticks between them, so a differing read-back is no evidence the world kept it
-    d, mp = knob_stack
-    _use(mp, Bridge(drop="sun_altitude_angle"))
-    out = io.StringIO()
-    run.main([str(_suite(d, 1)), "--project", str(d)], out=out)
+def _one_run(d, where, mp, bridge):
+    _use(mp, bridge)
+    run.main([str(_suite(d, 1)), "--project", str(d)], out=io.StringIO())
     rd = sorted(runs_dir(where).iterdir())[-1]
-    r = results.RunResult.read(rd / "result.json")
+    return results.RunResult.read(rd / "result.json")
+
+
+def test_issue_161_a_stale_carla_read_back_then_a_right_one_after_the_run_is_ok(knob_stack,
+                                                                                where):
+    # issue 171: CARLA's get_weather right after set_weather may show the weather before it, and
+    # nothing ticks between them: recorded, not judged. Issue 161: judged from the read after
+    # the run, which is right here
+    d, mp = knob_stack
+    r = _one_run(d, where, mp, Bridge(stale=True))
     assert r.verdict != "error", (r.verdict, r.reason)
     assert r.knobs["ok"] is True
-    assert r.knobs["knobs"]["illumination"]["applied"]["sun_altitude_angle"] == 12.5
+    ill = r.knobs["knobs"]["illumination"]
+    assert "sun_altitude_angle" in r.knobs["weather_read_off"]     # the stale one, recorded
+    assert ill["weather_read"] == run.AFTER_RUN and ill["ok"]
+    assert ill["applied_after_run"]["sun_altitude_angle"] in (-30.0, 60.0)
+    assert r.knobs["weather_after_run"]["off"] == []
+
+
+def test_issue_161_a_wrong_carla_weather_after_the_run_is_a_knob_mismatch(knob_stack, where):
+    d, mp = knob_stack
+    r = _one_run(d, where, mp, Bridge(drop="sun_altitude_angle"))
+    assert r.verdict == "error", (r.verdict, r.reason)
+    assert "after the run" in r.reason and "sun_altitude_angle 12.5" in r.reason, r.reason
+    assert r.knobs["ok"] is False
+    assert r.knobs["weather_off_after_run"] == ["sun_altitude_angle"]
+    assert r.knobs["knobs"]["illumination"]["ok"] is False
+    assert r.error["kind"] == "knob_mismatch", r.error
+
+
+def test_issue_161_an_end_read_that_fails_leaves_the_knob_unverified(knob_stack, where):
+    d, mp = knob_stack
+    r = _one_run(d, where, mp, Bridge(drop="sun_altitude_angle", gone=True))
+    assert r.verdict != "error", (r.verdict, r.reason)
+    assert r.knobs["ok"] is True
+    assert r.knobs["weather_read"] == K.WEATHER_UNVERIFIED
+    assert r.knobs["weather_after_run"] == {"read": "unverified",
+                                            "why": "the service did not answer"}
     assert r.knobs["knobs"]["illumination"]["weather_read"] == "unverified"
-    assert r.knobs["weather_read_off"] == ["sun_altitude_angle"]
 
 
 def test_a_world_that_did_not_apply_a_knob_gives_an_error_run(knob_stack, where, monkeypatch):

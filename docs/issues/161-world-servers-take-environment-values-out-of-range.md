@@ -1,6 +1,7 @@
 # 161: the world servers take environment values out of range, and read back what they stored
 
-**Status:** open, plan written 2026-11-25 before any code (243; numbered by 133 on 2026-11-25;
+**Status:** fixed in code and tests, 2026-11-25; live check pending (118's C7 conformance on
+CARLA 2010, 092 K9e's knob runs on CARLA; the probe, step 0) (243; numbered by 133 on 2026-11-25;
 after 092 K9f). **Severity:** medium. A world server's read-back is the check behind every knob
 and every road condition. On CARLA it can echo an impossible value, or show the value before a
 send.

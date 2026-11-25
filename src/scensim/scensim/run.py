@@ -932,6 +932,7 @@ class Context:
     lost_probe: object = None         # callable(rec, entities) -> {entity: why} (tests; G32)
     end_episodes: object = None       # callable(rec, entities, verdict, reason, run_id) (tests; G57)
     apply_knobs: object = None        # callable(rec, spec, psettings) -> (knobs, why) (tests; D7)
+    weather_after_run: object = None  # callable(rec, knobs) -> (knobs, why) (tests; issue 161)
     pilots_broken: str = None         # the pilots did not come back after a crash (079 step 5)
     testbench: dict = None            # {name, workspace}: the testbench run (081 step 3)
 
@@ -1365,6 +1366,55 @@ def apply_profiles(rec, spec, psettings, project=None, call=_ros_call):
         return None, ("knobs: the bridge's set_knob_profiles refused or did not answer: "
                       f"{(m.group(1) if m else '') or err or 'no answer'}")
     return plan, ""
+
+
+AFTER_RUN = "after the run"
+AFTER_RUN_LABEL = ("read with get_weather after the run ended, the stack still up (issue 161): "
+                   "not the weather applied before frame 0")
+
+
+def weather_after_run(rec, block, call=_ros_call):
+    """`(block, why)`: a `weather:` knob whose read-back right after the send was recorded, not
+    judged (CARLA: `knobs.WEATHER_UNVERIFIED`, issue 171), judged from a `get_weather` at the
+    run's end, while the world server is still up, hundreds of ticks after the send (issue 161;
+    the world server keeps the weather, and a scenario EnvironmentAction that sets weather
+    beside a weather knob is refused). The read is labelled as taken after the run. One that
+    fails leaves the knob unverified, never an error. `why` is the mismatch, or ""."""
+    if not block or block.get("weather_read") != knobsmod.WEATHER_UNVERIFIED:
+        return block, ""
+    sent = block.get("sent") or {}
+    try:
+        out, err = call(rec, knobsmod.get_weather_argv())
+    except Exception as e:  # noqa: BLE001 -- the stack gone: unverified, said
+        out, err = "", str(e)
+    read = knobsmod.weather_read(out)
+    if read is None:
+        block["weather_after_run"] = {"read": "unverified",
+                                      "why": err or "get_weather did not answer"}
+        return block, ""
+
+    def off_of(params):
+        return sorted(p for p in params if read.get(p) is None
+                      or abs(float(read[p]) - float(sent[p])) > knobsmod.TOLERANCE)
+
+    off = off_of(sent)
+    block["weather_after_run"] = {"read": {p: read.get(p) for p in sent}, "off": off,
+                                  "label": AFTER_RUN_LABEL}
+    block["weather_read"] = AFTER_RUN
+    for entry in (block.get("knobs") or {}).values():
+        if entry.get("weather_read") != "unverified":
+            continue
+        params = [p for p in entry.get("applied") or {} if p in sent]
+        entry["applied_after_run"] = {p: read.get(p) for p in params}
+        entry["weather_read"] = AFTER_RUN
+        if off_of(params):
+            entry["ok"] = False
+    if not off:
+        return block, ""
+    block["ok"] = False
+    block["weather_off_after_run"] = off
+    return block, (f"knobs: the weather read after the run differs from what was sent: "
+                   f"{', '.join(f'{p} {read.get(p)} (sent {sent[p]})' for p in off)}")
 
 
 def apply_knobs(rec, spec, psettings, call=_ros_call, project=None):
@@ -1852,6 +1902,15 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                    f"its read-back off by {e['max_deviation']:.4g}, beyond {e['tolerance']:.4g} "
                    f"(frames {', '.join(map(str, e['off_frames'][:5]))})")
             infra.append(results.Infra("knob_profile", f"knob profile {bad[0]}: {why}"))
+    # issue 161: a weather: knob CARLA's immediate read-back could not judge, from a read now,
+    # after the run, the stack still up
+    if ssv2 is not None and knob_block is not None:
+        knob_block, why = (ctx.weather_after_run or weather_after_run)(rec, knob_block)
+        if knob_block.get("weather_after_run"):
+            run_events.append({"t_wall": time.time(), "event": "knobs.weather_after_run",
+                               "ok": not why})
+        if why:
+            infra.append(results.Infra("knob_mismatch", why))
     verdict, reason = results.verdict_from(
         junit if junit.is_file() else None, infra,
         hint="" if junit.is_file() else results.ssv2_hint(logs / "scenario"))
