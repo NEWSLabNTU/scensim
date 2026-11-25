@@ -5,7 +5,7 @@
 **Status:** open; plan later, after 086 C6e3 (133, 2026-11-25). **Severity:** to be judged in
 the plan: on Isaac, Autoware drives into anything between the car's ground clearance (0.138 m)
 and its ground filter's threshold (0.20 m) that lies under the underbody, and the car stops dead
-on it. **Found:** 2026-11-25, scensim 118, 086 C6e3 run b1 (numbered by 133).
+on it. **Found:** 2026-11-25, scensim 118, 086 C6e3 run b1; confirmed on the repeat, b2 (numbered by 133).
 
 **Correction first (118, 2026-11-25, before this was written down).** The first report to 133
 gave the rock's top as 0.101 m, "under the 0.138 m clearance", and two hypotheses: the plate sits
@@ -27,6 +27,15 @@ x 97.32, where the plate's front edge (2.541 m ahead of it) meets the rock's nea
 that the car crept at about 1 cm/s for 570 s and the scenario timed out (pose error p95 1.70 m
 while stuck, NVTL p05 3.14). The contact is inferred from the truth trace, not measured: the
 world server reports no chassis contacts (issue 176).
+
+## The repeat (b2, the same day)
+
+Run b2, built the same way, struck the same rock at the same place. The origin was at x 97.29,
+with the rock 0.27 m left of the car's centre, under the plate. The truth trace shows 4.17 m/s to
+3.26 m/s in one 50 ms frame, then further hits over the next metre down to about 2.3 m/s, with the
+body bouncing (up to 0.027 m above its height before the rock, roll swinging between +0.4 and -1.8 deg). It scraped over and drove on,
+and again no object or non-ground point was published at the rock. Two strikes in two runs: b1
+stopped dead, b2 got over by striking. Again inferred, not measured.
 
 ## The static check (no simulator; 133, 2026-11-25)
 

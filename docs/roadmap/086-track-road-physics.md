@@ -2271,6 +2271,77 @@ runs. A step's own details (scripts, packages) are added to its section before i
       the start and end). Motion BVH is off (issue 169).
     - *Measure.* `isaac-ex/c6e/c6e3/measure.py`, C6d's `c6d_extras.py` extended to the measures
       above, per fixture and run.
+- **C6e3's result (2026-11-25, 118, GPU0, 16:19:24 to 16:47:48; non-timing, codec 118 told).**
+  Four runs: a1, b1, a2, b2 (a: fixture_c6a, b: fixture_c6b). Each was built at scensim main
+  0291abb3 (siw 4706ff9) in `ws-c6e3`. Each passed the runner's checks: the live bridge and
+  world server under its install; result.json's provenance 0291abb3+dirty, with Cargo.lock
+  files only; the console's road-layer line for the copy's `road_detail.yaml`; and 168's line
+  (`/World/env/Road` drawn 0.090 m on c6a, 0.010 m on c6b). Motion BVH was off. Measured by
+  `isaac-ex/c6e/c6e3/measure.py` (`a1.json` to `b2.json`). Every contact below is inferred,
+  not measured (issue 176).
+  - *Amendments to the measure, made after a result (labelled).* After a1, before judging its
+    counts: bare-road control bands, the cleat's band's size, at x 150, 250, 350 and 450 m.
+    After b1: a rock's height is taken above the road under it, not above the base (the crown
+    falls 0.0485 m at v 2.425). The car's place at a fixture is taken when its mid-wheelbase
+    reaches it, or at its stop if it stops first.
+  - *The runs.*
+
+    | run | verdict | pose error p95 | NVTL p05 | speed p50 | reached x | record |
+    |---|---|---|---|---|---|---|
+    | a1 | passed | 0.22 m | 3.28 | 4.18 m/s | 605 m (the goal) | 5.2 MB |
+    | a2 | passed | 0.46 m | 3.28 | 4.18 m/s | 605 m (the goal) | 5.3 MB |
+    | b1 | FAILED (timeout, 600 s) | 1.70 m | 3.14 | 4.17 m/s | 99.7 m | 21.2 MB |
+    | b2 | FAILED (timeout, 600 s) | 0.91 m | 3.28 | 4.18 m/s | 397.0 m | 22.0 MB |
+
+    The record sizes are far under the 1 to 2 GB expected: the non-ground cloud is small on
+    these roads. The run directories are 12 MB (c6a) and 51 to 53 MB (c6b).
+  - *fixture_c6a (a1 / a2).* No object and no stop at any fixture in either run. The most
+    non-ground points in one frame: the 5 cm cleat 3 / 4, the 10 cm cleat 6 / 7, the 15 cm
+    cleat 17 / 15, the pothole 0 / 0, the washboard 2 / 5. The bare-road controls: 1 to 3 / 1
+    to 7. The pothole passed under the left wheel (0.73 / 0.76 m from the car's centre).
+  - *fixture_c6b.*
+
+    | rock (top above the road under it) | b1 | b2 |
+    |---|---|---|
+    | 15 cm static, x 100 (0.150 m) | no object, no points; under the plate (0.28 m from the centre); struck, stopped dead, crept 570 s | no object, no points; under the plate (0.27 m); struck (4.17 to 3.26 m/s in one frame, then down to about 2.3 m/s), scraped over |
+    | 15 cm loose, x 200 (0.150 m) | not reached | no object, no points; under the outer left tyre (0.90 m); body up 0.033 m |
+    | 8 cm loose, x 300 (0.080 m) | not reached | no object, no points; under the left tyre (0.70 m); no body motion |
+    | 35 cm static, x 400 (0.350 m) | not reached | non-ground points from 30.8 m (up to 135 a frame); an object only from 8.0 m (origin to rock, about 4.3 m from the bumper), 10 frames; braking from about x 390 at about 2.2 m/s^2; struck at 0.77 m/s, then crept and struck again for about 500 s, never holding a stop |
+
+  - *The predictions.*
+    - Washboard, pothole and the 5 cm cleat give no non-ground points: **FAILED as written** for
+      the 5 cm cleat and the washboard. Beside it, the control reading (added after a1, before
+      judging): both are at the bare-road floor. The pothole: **held**. No object and no stop
+      at any of them: **held**.
+    - The 10 and 15 cm cleats are ground (no object, no stop): **held**. The 15 cm cleat stands
+      above the bare-road floor in points only (15 to 17 a frame). The hypothesis about the
+      faces is not tested further.
+    - The pothole, now seen (the amendment): ground, no object, no stop: **held**. Its far rim
+      gave no non-ground points, so the rim hypothesis did not show.
+    - The 8 and 15 cm rocks passed as ground (no object): **held**, all three rocks, every run
+      that reached them. The ego drives over them: **FAILED**. b1 stopped dead on the 15 cm
+      static rock and b2 got over it only by striking it, with the rock under the plate both
+      times (issue 180). The 15 cm loose and the 8 cm loose went under a tyre in b2 and were
+      driven over.
+    - 133's amendment (a rock driven over is a finding): recorded per rock above; the static
+      rock under the plate is issue 180.
+    - The 35 cm boulder is non-ground and an object: **held**. It is first seen at 32 m at most:
+      **held** for its points (30.8 m), and its object came at 8.0 m. The ego stops before it:
+      **FAILED**: it struck it at 0.77 m/s and kept creeping into it.
+    - False stops over the cleats, the pothole and the washboard: 0, **held**.
+  - **Judged:** R7's "false obstacles over washboard and ruts", as no stop and no object over the
+    washboard and the pothole in both runs: **held** (a1, a2). Neither fixture has ruts.
+  - **Findings.** (1) Issue 180: a 15 cm rock is passed as ground and strikes the plate when it
+    lies under it. It happened twice in two runs. (2) Issue 181: the boulder becomes an object
+    only at 8 m, although its points show from 31 m, so the stack brakes too late. *Hypothesis,
+    untested:* the clustering or shape stage drops a low, wide cluster until it is close.
+    (3) Issue 182: after the strike, the ego creeps into the boulder again and again for about
+    500 s instead of holding a stop. The MRM's emergency stop operated and cancelled 844 times,
+    and no stop reason was recorded. (4) Autoware drove 0.27 to 0.28 m left of the lane's centre at x 100 in
+    both b runs, and 0.04 to 0.08 m left at c6a's pothole.
+  - **No c6b variant (133, 2026-11-25).** The variant starting past x 100, proposed after b1 so
+    that the other rocks would be reached, is not needed: b2 got past x 100 and reached every
+    rock. It takes the place of the variant's amendment.
 - **C6e4. NDT with leverage (a proposal, brought to 133 after C6e3; 133, 2026-11-25).** haruna_down's 16 km/h is why
   C6d's roughness cost localization nothing (the hypothesis above). A pairing with leverage
   needs speed. The plan is a copy of *rough_none* and of smooth Haruna with the lanelets' speed
