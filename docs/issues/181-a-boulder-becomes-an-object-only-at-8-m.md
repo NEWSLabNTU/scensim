@@ -100,3 +100,22 @@ to the NAS and then off the log disk after the judgement.
   how much of the 90 s it holds.
 - *Expected size from that window.* The raw cloud over at most 150 s at about 40 MB a second is
   about 6 GB. With the rest, about 6.5 GB. The 60 GB floor is checked just before the run.
+
+**Amended before the run (2026-11-25 22:3x, not after a result): the record's names, checked on
+a live stack.** The run's testbench is `isaac_c6e3_r181` (from `isaac_c6e3_c6b`, its scenario the
+copy above). Its stack was brought up alone at 22:26, `ros2 topic list` read in the ego's domain
+(653 topics) and the scenario's (14), and the stack stopped at 22:27, before the record was set.
+Recorded besides C6e3's six: the raw cloud `/sensing/lidar/top/pointcloud_before_sync`; the
+clustering's `detection/clustering/clusters`; shape estimation's `clustering/objects_with_feature`;
+the feature remover's `clustering/objects`; the validator's `clustering/validation/objects`;
+`detection/detection_by_tracker/objects`; `tracking/objects`. Not found, so not recorded: a lanelet
+filter's own output and a merged `detection/objects` (no such topic on the live stack; the stage
+between the validator and tracking is read from tracking's input side, not recorded).
+For 182: `/system/fail_safe/mrm_state`, `/system/mrm/emergency_stop/status`,
+`/system/emergency/hazard_status`, `/system/emergency_holding`, `/diagnostics`,
+`/diagnostics_graph/struct` and `/status`, `/api/planning/velocity_factors`, the planning factors of
+`obstacle_stop`, `motion_velocity_planner` and `surround_obstacle_checker`,
+`/control/command/control_cmd`, `/control/command/emergency_cmd`, `/system/emergency/control_cmd`
+and `/control/collision_detector/debug_markers` (the collision detector publishes no other topic;
+its state is in `/diagnostics`). `stop_reasons` is not published in this stack (Autoware 1.5 has
+planning factors instead).
