@@ -50,8 +50,43 @@ C6d's Haruna had all three of the first. Its "pothole detection range: not measu
      a scenario's road_detail change needs a rebuilt world, and a 0.05 m grid over a 2 km road
      is a large mesh (about 6.4 million vertices for 2 km of an 8 m carriageway at 0.05 m, before any decimation).
 
-My recommendation is option 1, with its reach and cost measured first (C6e2's method), unless
-the cost at speed is over R4's budget. Then option 3 for published worlds.
+My first recommendation was option 1, with its reach and cost measured first (C6e2's method).
+It is amended below, before any code.
+
+## What else reads the base road's render (133's check, 2026-11-25, before any code)
+
+Option 1 hides the world's road from every renderer, not only from the lidar. Beyond
+`MeshStream`'s reach nothing draws the road. The course's terrain is then what is seen there, 0.30
+m below the road on a fixture course (`terrain_below`), and the world's own terrain on Haruna.
+These read the render beyond 120 m:
+
+- **The lidar itself.** The Model 3 rig gives it `range: 200.0` m (`tesla_model3.rig.yaml`'s
+  profile), and the OS1 profile's far range is 170 m. Its road returns from 120 to 200 m would
+  come from the terrain. NDT uses them, and the ground filter would see a drop at 120 m.
+- **The ego's camera.** `camera6` is `enabled: false` in the rig, so no Autoware run so far has
+  had one. Traffic light recognition names camera6 but runs fusion only by default
+  (`traffic_light_fusion_only: true`). Turned on, its clipping range is 0.1 to 1000 m
+  (`aib.isaac.sensors.Camera`): it would see the road end at the reach.
+- **The viewport and recordings.** The world server's `--display`/`--follow` viewport (the
+  demos' videos) looks along the road to the horizon. Option 1 would show the road ending 120 m
+  ahead.
+- **rviz** draws the topics (the clouds, the map's own cloud and lanelets), not Isaac's render.
+  It sees the lidar's effect only.
+
+So option 1 as written breaks the demos' view and the lidar's far returns. **Amended
+recommendation (before any code):** option 2 with option 1's mesh. Keep the world's road
+drawn, but lowered by 0.15 m under the corridor, and keep `MeshStream`'s 40 m reach, raised
+only if C6e3 needs the detail further out. Then:
+
+- within the reach, the detail is drawn exact (the base road is below it);
+- beyond it, the road is drawn 0.15 m low;
+- the demos see a road to the horizon, with a 0.15 m step at the reach's edge in the lidar and
+  in a camera.
+
+*Predicted cost:* none per frame, since only the base road's transform moves once at load. The
+step at the reach is a known artefact, to be measured (the ground filter's split at 40 m, NDT's
+NVTL). Option 3 (bake the detail in) removes the step and stays the target for published
+worlds. Option 1 remains if 133 prefers no step and accepts the view's end.
 
 ## Predictions for the fix (before any code)
 
