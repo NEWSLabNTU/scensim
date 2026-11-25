@@ -161,3 +161,26 @@ first move):
 3. CARLA's car, tracking SSv2's pose (`npc_motion: tracked`), cannot follow a reversal in place:
    its tracking error grows over the loop and the tracker snaps it at least once (`contacts`'
    tracking record), so the body visibly jumps or turns about.
+
+**The targeted run's result (2026-11-25): no vehicle can be there.** The run (scensim c8ca43e0
+with this branch, rebuilt; `~/nas/autoveh/logs/issue-166/targeted-run/`) ended as an error run
+before any frame of the loop: SSv2's spawn of the vehicle on lanelet 38627 at s 200 failed, the
+CARLA world server reporting "5 attempt(s) at increasing height collided ... the static world
+blocks this pose" at CARLA (303.0, 324.2, 0.3). The prediction FAILED on its premise: 38627 is
+not a road a car stands on.
+
+Why, from the export: lanelet 38627 has no predecessor and no follower, and neither has any of
+the 52 lanelets whose loops are longer than 0.5 m. They are the isolated lanelets of the Town01
+lanelet map (170 of 300: 66 `walkway`, 65 `unknown`, 39 `road`), 220 to 369 m long around the
+blocks, the walkways and the kerb lines. SSv2 routes a vehicle over connected lanelets only.
+Split by connection (a lanelet with a predecessor or a follower):
+
+| map | connected lanelets | their stretches | longest | isolated lanelets | their stretches | longest |
+|---|---|---|---|---|---|---|
+| Town01 | 130 (7.2 km), 6 with stretches | 8, 0.185 m in all | 0.032 m | 170 (19.3 km), 35 with | 137, 247.9 m | 11.25 m |
+| Town05 | 470 (24.2 km), 239 with | 696, 10.9 m in all | 0.032 m | 559 (40.4 km), 133 with | 411, 363.2 m | 13.88 m |
+
+So on the network vehicles drive, a stretch is at most 3.2 cm: a vehicle at 8 m/s (0.4 m a
+frame) lands a frame in one with a chance of at most about 8 % per stretch it passes, and then
+for that one frame. The long loops lie on lanelets no vehicle is routed over; a pedestrian placed
+by LanePosition on a walkway lanelet could meet one; none in the runs measured above does.
