@@ -1071,6 +1071,46 @@ is in scensim_world_protocol, so part 2 is another protocol commit, with the dep
 scensim_carla_world and scensim_isaac_world moved to it (part 1 lands in that cascade), then
 scensim's pins, as for issue 161. No prediction changes.
 
+**The parts' state, and the exit testbench's first version against the plan (2026-11-25, 243,
+before any exit run).** Parts 1 to 4 are committed on branch `092-k9f-a-2` (scensim_isaac_world
+`76ba145`, scensim_world_protocol `0488577`, scensim `79cf18de`, `eccb2902`, `032fa1c4`), not
+landed. Their tests need no simulator. **The fake stack does not run a zone knob end to end:**
+`scensim run`'s fake-stack harness (`test_run.py`'s `start_stack`, the knob tests' `knob_stack`)
+builds CARLA testbenches only, and zones are refused on CARLA. The run's zone judgement is
+therefore tested as `run.judge_zones` against a schema 4 truth in a run directory, and the
+end-to-end check of a zone knob is the exit runs below. A fake Isaac stack for the harness is a
+follow-up, with no issue number. In the full scensim suite run against an older install
+(scensim main 8ad9f151, whose gap trace reader reads schemas 1 to 3), 3 of the zone tests fail on
+"unsupported schema 4": expected, since they read the truth through the installed reader; they
+pass against the branch's own reader, which a build of the branch installs.
+
+The exit testbench is `scenarios/projects/k9f_zones` (Isaac, Town01, the Autoware ego), checked
+against the plan above before it runs:
+
+- **The map.** `ground/town01_route.yaml`, isaac_soil's `town01_route` copied with its zones
+  unchanged, so the testbench owns the map its knob is judged against. `ice_at_goal` is x 105
+  to 135, y -134 to -126.
+- **The drive and the dart.** `goal_stop.xosc` is `town01_zones`' drive (from x 190.8, y -130.1,
+  heading west, at up to 50 km/h) with `town01_mud_stop`'s pedestrian pattern, moved onto the
+  zone: the pedestrian is added on the right of the lane at x 112, y -126.5; it darts 3.2 m to
+  y -129.7 at 1.5 m/s when the ego reaches x 132 (2 m tolerance), 20 m short; it holds 4 s and
+  crosses to y -136.7. The goal is x 104 (3 m), the timeout 240 s, a contact with the pedestrian
+  exitFailure. The trigger at x 132 is 3 m inside the zone, so the whole stop, from the trigger
+  to the pedestrian, is on it.
+- **Amended: the ice value sets the zone.** The plan's knob had `ice: null` (the map's own ice).
+  Then the ice run sets no zone, and nothing is judged from its read-back, which the plan wants
+  in both runs. So `ice` is `{zones: {ice_at_goal: {class: ice}}}`, the map's own class set
+  explicitly; the default is `ice`.
+- **Amended: the speed at the trigger.** The plan took the lane's limit, 11.2 m/s. The ego starts
+  58.8 m short of the trigger from rest, and Autoware's start, on the order of 1 m/s^2 (not
+  measured here), gives about 10.8 m/s there. Stopping on ice from 10.8 m/s takes at least
+  10.8^2 / (2 x 2.6) = 22 m, still more than the 20 m the dart leaves: **contact on ice is still
+  predicted**, and the precondition and the deceleration bands are unchanged. The speed at the
+  trigger is measured and recorded in both runs.
+- **The order.** The suite `both` runs asphalt first, then ice, one run each, on a clean build of
+  the branch's stack, after issue 161's live check on CARLA (done, 2026-11-25 20:45-20:57), never
+  beside a CARLA of mine, with the card checked first.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
