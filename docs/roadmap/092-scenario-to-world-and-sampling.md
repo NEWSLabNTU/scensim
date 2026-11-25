@@ -2491,3 +2491,11 @@ guard: each sample records the ego's largest |lateral| from M's line (across M's
 counts and leaves out of its estimate, not a pass or a fail (`search_run.py --corridor 1.9`).
 So the failure is judged only while the two are in one corridor, as the TTC is. The search
 reports the invalid count; step 2, redone again, should have none.
+
+**Step 2 with the guard (2026-11-25, at 05fc96f8), as it came out: all 36 invalid, the guard's
+fault.** Every slot read 4.044 m: the guard measured the ego's lateral across M's heading, and M's
+heading swings up to 4.3 deg (-175.66 deg at t 0.75 s, s 85) as it corrects toward the
+centreline past the bend and loops at s 73 to 97, which at 49 m reads as 4 m. Against the
+centreline itself, slot 27 (decel 8, onset 1, T 0.6) has the ego within 0.38 m and M within
+0.03 m. The guard now takes the difference of the two cars' signed offsets from the lane's
+centreline (the anchor's polyline), the same "M's line" without M's heading in it.

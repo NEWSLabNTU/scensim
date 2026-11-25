@@ -51,7 +51,14 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
     label = paths.pop() if len(paths) == 1 and None not in paths else str(scenario)
     truth = TruthRecorder(r, step_time=step_time, start_unix=0.0, scenario=label)
     truth.begin(r.obs)
-    ttc = (Ttc(names.index("ego"), names.index(walker), ttc_length, c.n, corridor)
+    lane = None
+    if ttc_length and corridor is not None:   # the target's lane anchor: its centreline
+        ent = c.entities[names.index(walker)]
+        name = ((ent.model or {}).get("params") or [{}])[0].get("lane")
+        if name not in (anchors or {}):
+            raise SystemExit(f"--corridor: {walker!r} holds no lane anchor of --anchors")
+        lane = anchors[name]
+    ttc = (Ttc(names.index("ego"), names.index(walker), ttc_length, c.n, corridor, lane)
            if ttc_length else None)
     if ttc:
         ttc.add(r.obs)
@@ -111,22 +118,48 @@ class Ttc:
     """092 K13 step v's secondary output: each slot's minimum time to collision of the ego
     behind `target` on one lane, (centre distance - length) / closing speed while closing; the
     two boxes share their length and centre offset (the case's cars). None: never closing.
-    With `corridor` (m), also each slot's largest |lateral| of the ego from the target's line
-    (across the target's heading), and the TTC only while that is within it (133's guard)."""
+    With `corridor` (m) and `lane` (a resolved lane anchor), also each slot's largest |lateral|
+    of the ego from the target's line, the difference of their signed offsets from the lane's
+    centreline (the target's own heading swings a few degrees as it corrects toward the
+    centreline, which across its heading at tens of metres reads as metres), and the TTC only
+    while that is within the corridor (133's guard)."""
 
-    def __init__(self, ego, target, length, n, corridor=None):
+    def __init__(self, ego, target, length, n, corridor=None, lane=None):
+        import numpy as np
         self.e, self.t, self.length = ego, target, float(length)
         self.corridor = corridor
         self.best = [None] * n
         self.max_lateral = [0.0] * n
+        if lane is not None:
+            x, y = np.asarray(lane["x"], float), np.asarray(lane["y"], float)
+            keep = np.r_[True, np.hypot(np.diff(x), np.diff(y)) > 1e-9]
+            self.ax, self.ay = x[keep][:-1], y[keep][:-1]
+            self.dx, self.dy = np.diff(x[keep]), np.diff(y[keep])
+            self.l2 = self.dx ** 2 + self.dy ** 2
+
+    def offset(self, px, py):
+        """Signed offsets [N] of points from the lane's centreline (left positive)."""
+        import numpy as np
+        px, py = np.asarray(px, float)[:, None], np.asarray(py, float)[:, None]
+        tt = np.clip(((px - self.ax) * self.dx + (py - self.ay) * self.dy) / self.l2, 0.0, 1.0)
+        qx, qy = self.ax + tt * self.dx, self.ay + tt * self.dy
+        d = np.hypot(px - qx, py - qy)
+        k = np.argmin(d, axis=1)
+        r = np.arange(len(k))
+        side = np.sign(self.dx[k] * (py[r, 0] - self.ay[k]) - self.dy[k] * (px[r, 0] - self.ax[k]))
+        return side * d[r, k]
 
     def add(self, obs):
         import math
-        x, y, v, yaw = obs["x"], obs["y"], obs["v"], obs["yaw"]
+        x, y, v = obs["x"], obs["y"], obs["v"]
+        lats = None
+        if self.corridor is not None:
+            col = lambda a, j: a[:, j].detach().cpu().numpy()   # noqa: E731
+            lats = abs(self.offset(col(x, self.e), col(y, self.e))
+                       - self.offset(col(x, self.t), col(y, self.t)))
         for i in range(len(self.best)):
             dx, dy = float(x[i, self.e] - x[i, self.t]), float(y[i, self.e] - y[i, self.t])
-            h = float(yaw[i, self.t])
-            lat = abs(-dx * math.sin(h) + dy * math.cos(h))
+            lat = float(lats[i]) if lats is not None else 0.0
             self.max_lateral[i] = max(self.max_lateral[i], lat)
             if self.corridor is not None and lat > self.corridor:
                 continue
