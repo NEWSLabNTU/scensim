@@ -1184,6 +1184,16 @@ with `max_velocity` taken, the ego braking early) and the stop being by impact, 
 asphalt no-contact prediction FAILED. The two findings are issues 189 and 190, records only.
 K9f-a proceeds to its cascade.
 
+**Correction (2026-11-26, 243, after issue 189's step 1 by 241).** Run 2's record above says
+SSv2's boxes were "about 1.5 m apart at the contact". That was wrong: I measured from the ego's
+`sim_pose` as if the body box were centred on it, but `sim_pose` is the base_link and the
+Model 3's declared box is centred 1.416 m ahead of it. On the declared boxes the gap at the
+contact frame was -0.4 mm (asphalt, frame 516) and +1.3 mm (ice, frame 482): the car did hit
+the pedestrian's box. SSv2's `CollisionCondition` stayed false because it judges on its own
+poses a frame behind and needs zero distance (issue 189, 241's step 1). Nothing else in run 2's
+record or in 133's ruling changes: the stop was by impact, not brakes, and the friction
+comparison is not shown.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
