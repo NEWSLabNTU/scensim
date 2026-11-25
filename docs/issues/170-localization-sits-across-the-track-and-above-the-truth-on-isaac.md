@@ -311,3 +311,34 @@ set side by side.
   The regional map offset reproduces the straights and roughly the left hairpins. It does **not**
   explain the right hairpins: it predicts -0.03 m where +0.055 m is measured. The right hairpins'
   +0.13 m residual has another cause, still open.
+
+## CORRECTION to step 3's registration (2026-11-25, the same evening): the map is NOT off the world
+
+The two sections above ("Step 3's result: the point cloud map against the world" and "The
+hairpin prediction from the registration") rest on a fit that was pulled by off-surface points,
+and their conclusion, that the map sits 5 to 10 cm off the world, is **withdrawn**.
+
+- *Why it was rechecked.* The course builder (`course/maps.py`, `point_cloud`) samples the map
+  from the same meshes the USD is made of, written two minutes apart (`meshes.npz` 10:20:29,
+  `world.usdc` 10:20:30, the cloud 10:22:30, 2026-11-23). A real 10 cm offset between them is
+  then hard to explain.
+- *The cause.* The fit kept every map point within 1 m of a ground face. Points from props and
+  foliage near the ground (guardrails at the road's edge, the course's other objects) are within
+  that distance and off the surface, and they pulled the fit sideways and down. The synthetic
+  self-test had no props, so it did not show this.
+- *The fit again, keeping only points within 0.05 m of a face's plane* (`ROBUST=0.05`):
+  straights (-0.002, -0.001, +0.001), right hairpins (-0.002, +0.005, +0.000), left hairpins
+  (-0.001, -0.004, +0.001) m, plane residual 0.012 m rms. With a 0.10 m cut the old result comes
+  back (props still in). *The tight cut's own check* (`selftest170.py` with the same cut): a true 0
+  reads within 1.3 mm, and planted shifts of (+0.10, +0.04, -0.035) and (+0.10, +0.04, 0) are
+  recovered within 1.3 mm. A horizontal shift on the course's sloped ground stays well inside the
+  cut, so the cut does not hide one.
+- *So:* Haruna's point cloud map matches the world's ground within about 5 mm, in x, y and z, on
+  the straights and in both hairpins. The step 3 prediction "if the map is not the cause, every
+  offset within 0.01 m of 0" **held**. The prediction that the map explains the runs' fixed
+  vector **FAILED**. The hairpin comparison above is void (its vectors were the artifact).
+- *What stays open.* The runs' fixed map-frame vector (about 5 cm toward +x, +y), the car-fixed
+  -0.037 m across, and the right hairpins' +0.13 m are all still unexplained, and the map's
+  ground is not their cause. Left: the props in the map against the world's (the cloud includes
+  them; they were not exported), and a frame offset between the map and the truth (the
+  projector, `map_origin`).
