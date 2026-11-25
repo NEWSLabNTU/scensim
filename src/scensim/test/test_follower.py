@@ -10,7 +10,7 @@ from scensim import behaviour
 from scensim.behaviour import follower as f
 
 xpmod = pytest.importorskip("sim_vehicle_ecu.xp")
-from test_behaviour import usable_torch  # noqa: E402
+from test_behaviour import cuda_unusable, usable_torch  # noqa: E402
 
 DT = 0.05
 
@@ -229,8 +229,9 @@ def test_torch_on_a_gpu_agrees_with_numpy():
     bit there too (its own tests check it); the bound K13 states for a GPU is 0 differing
     arrays, checked here when a GPU is present."""
     torch = usable_torch()
-    if not torch.cuda.is_available():
-        pytest.skip("no CUDA device")
+    why = cuda_unusable(torch)      # issue 179: a card this torch has no kernel for is a skip
+    if why:
+        pytest.skip(why)
     compare(closed_loop("numpy"), closed_loop("torch", "cuda"))
 
 

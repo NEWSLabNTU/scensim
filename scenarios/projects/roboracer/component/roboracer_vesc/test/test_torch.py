@@ -17,7 +17,31 @@ from roboracer_vesc.component import RoboRacerVesc  # noqa: E402
 from sim_vehicle_ecu import batch as B  # noqa: E402
 from test_batch import CAR, DT, sequence  # noqa: E402
 
-DEVICES = ["cpu"] + (["cuda"] if torch.cuda.is_available() else [])
+DEVICES = ["cpu", "cuda"]
+
+
+def cuda_unusable():
+    """Why torch cannot run on CUDA device 0 here, or None (issue 179; the same check as
+    src/scensim/test/test_behaviour.py's, which has its tests): no device, or a card this
+    torch has no kernel for (sm_XY, an earlier minor of its major, or a PTX at or below it)."""
+    if not torch.cuda.is_available():
+        return "no CUDA device"
+    major, minor = torch.cuda.get_device_capability(0)
+    cc = major * 10 + minor
+    get = getattr(torch.cuda, "get_arch_list", None)
+    archs = list(get()) if get else []
+    if not archs:
+        return None
+
+    def number(a, prefix):
+        digits = "".join(ch for ch in a[len(prefix):] if ch.isdigit())
+        return int(digits) if a.startswith(prefix) and digits else None
+    for a in archs:
+        sm, ptx = number(a, "sm_"), number(a, "compute_")
+        if (sm is not None and sm // 10 == major and sm <= cc) or (ptx is not None and ptx <= cc):
+            return None
+    return (f"torch {torch.__version__} has no kernel for {torch.cuda.get_device_name(0)} "
+            f"(sm_{cc}); its arch list: {' '.join(archs)}")
 
 
 def to_dev(d, device):
@@ -38,7 +62,10 @@ def bits(a):
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("n,jitter", [(8, 0.0), (32, 0.004)])
 def test_torch_equals_numpy_bit_for_bit(device, n, jitter):
-    params = {"latency_jitter": jitter} if jitter else {}
+    why = cuda_unusable() if device == "cuda" else None
+    if why:
+        pytest.skip(why)
+    params ={"latency_jitter": jitter} if jitter else {}
     seeds = [11 + i for i in range(n)]
     ref = B.load_batch(RoboRacerVesc, CAR, params, seeds)
     tb = B.load_batch(RoboRacerVesc, CAR, params, seeds, array_api="torch", device=device)

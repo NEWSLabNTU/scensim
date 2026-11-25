@@ -175,6 +175,76 @@ def usable_torch():
     return torch
 
 
+def cuda_unusable(torch):
+    """Why torch cannot run on CUDA device 0 here, or None when it can (issue 179).
+    `is_available()` is true whenever the driver sees a card, also one this torch has no kernel
+    for (torch 2.0.0+cu117, sm_37 to sm_86, on an RTX 5090, sm_120): its first operation there
+    raises "no kernel image is available". Kernels count when torch has the device's own
+    sm_XY, an sm_X* of the same major at a lower or equal minor (cubins run on later minors),
+    or a compute_* PTX at or below the device's capability (the driver compiles it). An empty
+    or missing arch list (a CPU-only build) says nothing, and is not a reason."""
+    if not torch.cuda.is_available():
+        return "no CUDA device"
+    major, minor = torch.cuda.get_device_capability(0)
+    cc = major * 10 + minor
+    get = getattr(torch.cuda, "get_arch_list", None)
+    archs = list(get()) if get else []
+    if not archs:
+        return None
+
+    def number(a, prefix):
+        digits = "".join(ch for ch in a[len(prefix):] if ch.isdigit())
+        return int(digits) if a.startswith(prefix) and digits else None
+    for a in archs:
+        sm, ptx = number(a, "sm_"), number(a, "compute_")
+        if sm is not None and sm // 10 == major and sm <= cc:
+            return None
+        if ptx is not None and ptx <= cc:
+            return None
+    return (f"torch {torch.__version__} has no kernel for {torch.cuda.get_device_name(0)} "
+            f"(sm_{cc}); its arch list: {' '.join(archs)}")
+
+
+def FakeTorch(cap=None, archs=(), version="2.0.0+cu117", name="GPU"):
+    """A torch as cuda_unusable sees one: a version, a device and an arch list (archs None:
+    a torch without get_arch_list)."""
+    from types import SimpleNamespace
+    cuda = SimpleNamespace(is_available=lambda: cap is not None,
+                           get_device_capability=lambda i=0: cap,
+                           get_device_name=lambda i=0: name)
+    if archs is not None:
+        cuda.get_arch_list = lambda: list(archs)
+    return SimpleNamespace(__version__=version, cuda=cuda)
+
+
+CU117 = ("sm_37", "sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86")
+
+
+def test_a_card_newer_than_torchs_arch_list_is_named_with_the_list():
+    why = cuda_unusable(FakeTorch((12, 0), CU117, name="NVIDIA GeForce RTX 5090"))
+    assert why == ("torch 2.0.0+cu117 has no kernel for NVIDIA GeForce RTX 5090 (sm_120); its "
+                   "arch list: sm_37 sm_50 sm_60 sm_70 sm_75 sm_80 sm_86")
+
+
+def test_torchs_kernels_for_the_card_make_it_usable():
+    assert cuda_unusable(FakeTorch((8, 6), CU117)) is None           # its own sm
+    assert cuda_unusable(FakeTorch((8, 9), CU117)) is None           # same major, later minor
+    assert cuda_unusable(FakeTorch((12, 0), CU117 + ("compute_86",))) is None   # PTX JIT
+    assert cuda_unusable(FakeTorch((12, 0), ("sm_90", "sm_100", "sm_120"))) is None
+
+
+def test_an_older_minor_or_a_newer_ptx_does_not_count():
+    assert cuda_unusable(FakeTorch((8, 0), ("sm_86",))) is not None
+    assert cuda_unusable(FakeTorch((8, 6), ("compute_90",))) is not None
+    assert cuda_unusable(FakeTorch((9, 0), ("sm_86", "sm_90a"))) is None   # sm_90a is sm_90
+
+
+def test_no_device_and_no_arch_list_read_as_before():
+    assert cuda_unusable(FakeTorch(None, CU117)) == "no CUDA device"
+    assert cuda_unusable(FakeTorch((12, 0), ())) is None
+    assert cuda_unusable(FakeTorch((12, 0), None)) is None
+
+
 def test_numpy_and_torch_agree_bit_for_bit():
     torch = usable_torch()
     rng = random.Random(7)

@@ -13,14 +13,45 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 
+def cuda_unusable(torch):
+    """Why torch cannot run on CUDA device 0 here, or None (issue 179; the same check as
+    src/scensim/test/test_behaviour.py's, which has its tests): no device, or a card this
+    torch has no kernel for (sm_XY, an earlier minor of its major, or a PTX at or below it)."""
+    if not torch.cuda.is_available():
+        return "no CUDA device"
+    major, minor = torch.cuda.get_device_capability(0)
+    cc = major * 10 + minor
+    get = getattr(torch.cuda, "get_arch_list", None)
+    archs = list(get()) if get else []
+    if not archs:
+        return None
+
+    def number(a, prefix):
+        digits = "".join(ch for ch in a[len(prefix):] if ch.isdigit())
+        return int(digits) if a.startswith(prefix) and digits else None
+    for a in archs:
+        sm, ptx = number(a, "sm_"), number(a, "compute_")
+        if (sm is not None and sm // 10 == major and sm <= cc) or (ptx is not None and ptx <= cc):
+            return None
+    return (f"torch {torch.__version__} has no kernel for {torch.cuda.get_device_name(0)} "
+            f"(sm_{cc}); its arch list: {' '.join(archs)}")
+
+
 try:
     import torch
     from sim_vehicle_ecu import batch as ecu_batch
     from sim_vehicle_ecu import xp as xpmod
-    CUDA = (int(torch.__version__.split(".")[0]) >= 2 and torch.cuda.is_available()
-            and torch.zeros(1, device="cuda").add(1).item() == 1.0)
-except Exception:   # noqa: BLE001 - no torch, or a GPU it cannot run on
-    CUDA = False
+    if int(torch.__version__.split(".")[0]) < 2:
+        WHY = f"torch {torch.__version__}: torch 2 needed"
+    else:
+        WHY = cuda_unusable(torch)
+    # and a kernel run, for what an arch list cannot tell
+    if WHY is None and torch.zeros(1, device="cuda").add(1).item() != 1.0:
+        WHY = "a kernel on cuda gave a wrong result"
+except Exception as e:   # noqa: BLE001 - no torch, or a GPU it cannot run on
+    WHY = f"no torch 2 with a usable GPU ({type(e).__name__}: {e})"
+CUDA = WHY is None
+WHY = WHY or ""
 
 from test_core import CASES, DT, MASS, RADIUS, PointMass, StraightWorld, cmds  # noqa: E402
 
@@ -56,7 +87,7 @@ class AccelX:
     batch = AccelXBatch
 
 
-@unittest.skipUnless(CUDA, "no torch 2 with a usable GPU")
+@unittest.skipUnless(CUDA, WHY)
 class DeviceResident(unittest.TestCase):
     def run_on(self, device, recs, steps):
         from scensim_batch import compile as C, core
@@ -120,7 +151,7 @@ def _roboracer():
     return RoboRacerVesc, CAR
 
 
-@unittest.skipUnless(CUDA, "no torch 2 with a usable GPU")
+@unittest.skipUnless(CUDA, WHY)
 class NoHostSync(unittest.TestCase):
     """094 P2's configuration (an ego alone, a storyboard that ends it on time, the VESC
     component on torch on the device): no host sync in a step between BatchRun's checks, every
