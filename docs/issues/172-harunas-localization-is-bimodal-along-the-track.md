@@ -162,3 +162,51 @@ and with its log for the age.
   the level runs. r8's and r9's load averages at their starts come from a watcher. A start-up
   lag is a weaker signal than the load itself, so a "no overlap" on the proxies counts as
   suggestive at most, not as shown.
+
+## Step 2's result (2026-11-25, 118, GPU0, 19:04:57 to 20:26:46; non-timing, codec told)
+
+Nine smooth haruna_down runs (r3 rerun; see times.txt for r1's hand acceptance, r3's two
+attempts and the record's amendment from r3). Each mode is read with `c6e2/along.py`, and the
+render age with the branch's log lines (364 or 365 per run, after the first moving scan).
+
+| run | start | along | mode | render age (every logged scan) | stack.start to world.ready / pilot.ready | tick p50 / p95 / max, over budget |
+|---|---|---|---|---|---|---|
+| r1 | 19:05 | +0.005 | level | 100.0 ms | 14.6 / 32.0 s | 50.3 / 104.6 / 597 ms, 110 |
+| r2 | 19:14 | -0.086 | **behind** | 100.0 ms | 14.6 / 32.1 s | 55.8 / 113.9 / 214 ms, 125 |
+| r3 | 19:24 | +0.004 | level | 100.0 ms | 14.6 / 31.9 s | 50.7 / 101.9 / 184 ms, 76 |
+| r4 | 19:33 | +0.005 | level | 100.0 ms | 14.6 / 31.8 s | 50.6 / 90.8 / 176 ms, 68 |
+| r5 | 19:41 | +0.004 | level | 100.0 ms | 14.6 / 32.1 s | 49.1 / 70.0 / 998 ms, 46 |
+| r6 | 19:49 | +0.005 | level | 100.0 ms | 14.6 / 32.1 s | 49.4 / 79.6 / 164 ms, 46 |
+| r7 | 19:57 | -0.087 | **behind** | 100.0 ms | 14.6 / 33.1 s | 67.3 / 155.9 / 277 ms, 388 |
+| r8 | 20:08 | +0.005 | level | 100.0 ms | 26.1 / 36.7 s | 64.4 / 95.8 / 336 ms, 193 |
+| r9 | 20:18 | -0.089 | **behind** | 100.0 ms | 14.6 / 38.6 s | 53.2 / 125.7 / 195 ms, 140 |
+
+Load averages at the start: r8 47.50 (level), r9 44.60 (behind). A 25 s build of mine ran
+mid-r7, not at its start.
+
+- *Within a run, the age is constant within 2 ms:* **held** (100.0 ms in every logged scan).
+- *The hypothesis (the behind runs' render age about 19 ms larger):* **FAILED.** Three behind runs
+  in nine (r2, r7, r9), all at exactly the level runs' 100.0 ms. The render's age is not the cause.
+- *The load hypothesis, by proxies (suggestive at most, as written):* world.ready **FAILED**
+  (the behind runs are at 14.6 s like six level runs; the one slow start, 26.1 s, is level r8).
+  pilot.ready **FAILED** (overlap: behind 32.1 to 38.6 s, level 31.8 to 36.7 s). tick_p95: no
+  overlap (behind 113.9 to 155.9 ms, level 70.0 to 104.6 ms). That is suggestive only, and it is
+  over the whole run, so it may be an effect of the mode, not its cause. The start loads read
+  directly go the other way: behind r9 started at a lower load than level r8. **Load at start-up
+  is not supported.**
+- *A new finding from the start-up record (r3 to r9, the amendment's topics; found after the
+  result, labelled).* `startup172.py`: standing still before the car moves, NDT's along error is
+  within 1 cm of 0 in **every** run (r7 +0.004, r9 -0.002). The behind runs' -0.085 to -0.089 m
+  appears only once the car moves, from the first moving NDT output, and stays for the whole
+  run. So the behind mode is not a position offset: it is a time offset of about 19 ms (0.086 m
+  at 4.5 m/s) between the scan and the pose it is matched or fused at, set per run before the car
+  moves. It is not the render's age. The initial pose (`/initialpose3d`, one message) is off by
+  -0.128 to +0.136 m along and does not predict the mode (behind r7 +0.136, level r8 -0.128,
+  behind r9 -0.018). The behind runs' first NDT output came earlier after the clock's start
+  (1006.1 and 1005.8 s against 1006.2 to 1006.8 s for the level runs). That is a pattern in two
+  runs, noted and not claimed.
+- *Next (to plan with 133):* a 19 ms time offset fixed at start-up, outside the render's age.
+  The candidates are the scan's header stamp against the sim clock (the phase between the
+  lidar's 20 Hz publish and `/clock`), and what NDT and the EKF use to time-align a scan (the
+  twist's and pose's interpolation at the stamp). The record to settle it is each scan's header
+  stamp against the frame it was rendered in, logged by the same branch, in a few runs.
