@@ -80,3 +80,17 @@ Isaac may still gate, and its landing message says "Isaac lane not run (no insta
 Order: this plan; point 4's prediction; the code and tests; the first real run and its result
 here; a full gate with the lane run; a landing request to 133.
 
+**Point 4's prediction (2026-11-25, before the code and the run).** Both of this host's GPUs
+are fully used by other work (19 and 22 GB, 100 %), so the first run hides them
+(`CUDA_VISIBLE_DEVICES=` empty) instead of picking one: the GPU cases skip, and that is said in
+the result. With the fix, the lane's command in Isaac's Python on the gated tree:
+
+- `scensim_isaac_world`: OK, `test_installed` skipped (no pytest there), as in 243's run
+  (`Ran 525`, `skipped=19`, give or take the tests landed since);
+- `scensim_sampler`: OK;
+- `scensim_batch`: OK, 0 errors, its CUDA cases skipped (`test_device`'s and any other
+  `skipUnless(CUDA)`), `test_layout`'s cases run.
+
+Held if all three end OK with 0 errors and 0 failures; any other failure is recorded here and
+gets its own issue.
+
