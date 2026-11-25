@@ -86,6 +86,7 @@ tests, `OK (skipped=7)`, 0 failures, 0 errors.
 |---|---|---|---|---|
 | A, 01:06:54 to 01:23:12 | 24 (the default) | 18.12 (the driver, just before), 20.27 (the runner, after `isaac_env.sh`) | 47.18 | 973.5 s |
 | B, 01:23:12 to 01:24:17 | 4 | 47.18 | 26.71 | 61.0 s |
+| B repeated in a quiet hour (133), 01:27:42 to 01:28:43, its own worktree at 62bfa985 | 4 | 11.99 (the runner's) | 16.89 | 60.9 s |
 
 1. **Torch's default threads = `os.cpu_count()` = 24: held.**
 2. **A's total by its start load: held or FAILED by which reading counts.** At the driver's
@@ -95,7 +96,12 @@ tests, `OK (skipped=7)`, 0 failures, 0 errors.
    10 share, 0.759 (bar 0.70): held.**
 3. **B's load condition was not met:** B started at 47.18, 2.3 to 2.6 times A's start, so by its
    own rule B is repeated once in a quiet hour (1-minute load under 12; 133: not waived), and
-   recorded beside this one. B took 61.0 s, 0.063 of A's, under the higher
+   recorded beside this one. **The repeat:** 60.9 s at a start load of 11.99 (the waiter ran it
+   as soon as the 1-minute load fell under 12; 7 samples, 12.0 to 17.4), the same as at 47.18.
+   Neither B run started within 30 % of A's load (A's 18.12 or 20.27; the repeat is 34 % to
+   41 % under), so prediction 3 is not judged by its own condition; what both show is that B's
+   time does not move with the load (61.0 s at 47, 60.9 s at 12), while A at 18 to 20 took
+   973.5 s. B took 61.0 s, 0.063 of A's, under the higher
    load: load cannot explain the difference, its direction is the opposite.
 4. **Run C: not run today** (no free GPU on 241; the GPUs' owners are other users, and codec
    139, asked, holds none). 133: not moved to 118, whose 78 s total already bounds
