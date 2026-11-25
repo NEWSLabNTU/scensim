@@ -73,6 +73,10 @@ shell (`scensim_core::world_server`, which the CARLA world server runs on) and t
    Every message names a unit, rad or deg as the field is. This covers a scenario's
    own `EnvironmentAction`, which SSv2 forwards and scensim does not check. The bridge passes the
    refusal to SSv2 as it passes any.
+   *Amended 2026-11-25 (243, found writing the shells, before any run):* cloud cover takes 0 to
+   9 oktas in the shells, not 0 to 8. The protocol defines 9 as "the sky cannot be seen"
+   (`ScenarioWeather.CloudCover`), so a scenario may send it. scensim's knobs keep [0, 8], their
+   own narrower choice.
 2. **Read back the sun CARLA shows** (`scenario_weather.rs`, `scenario_sun`): CARLA's altitude
    folded into [-90, 90] deg, the azimuth turned by 180 deg when the fold crosses a pole. The
    other fields already read back what CARLA holds after its own clamps (rain at most 25 mm/h,
