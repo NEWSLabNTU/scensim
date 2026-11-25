@@ -19,8 +19,12 @@ empty because both GPUs were fully used by other work), 22:23 to 23:12 +08:00:
 
 For comparison, the system-Python lane ran `scensim_batch`'s suite under pytest in 56 s in
 issue 166's gate (ce3b2f3c: `251 passed, 12 skipped`), with the GPUs visible. So the two runs
-differ in more than the Python: the device too. Which of the two makes the 49 times is not
-measured; nor is which tests take the time (the lane runs `unittest` without per-test timing).
+differ in more than the Python: the device too. A second point, from issue 186's full gate
+(d780baf7, 2026-11-25 23:34 to 2026-11-26 00:29, the GPUs visible, both fully used by other
+work): the same suite in Isaac's Python took 1029 s (`Ran 259 tests`, `OK (skipped=2)`). So the
+CPU accounts for a factor of about 2.7 (2763 s against 1029 s), and Isaac's Python against the
+system's pytest lane for about 18 (1029 s against 56 s), on a loaded host; which tests take the
+time is not measured (the lane runs `unittest` without per-test timing).
 
 ## The fix wanted (a plan later, not in 186)
 
