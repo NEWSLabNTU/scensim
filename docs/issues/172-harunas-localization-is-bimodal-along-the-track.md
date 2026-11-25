@@ -134,3 +134,16 @@ and with its log for the age.
   only, in `ws-c6e3`'s aib submodule. The runs use scensim main 0291abb3, so issue 168's
   lowering is in (smooth haruna: the bound's WARN, since no `base_drop` is stored), unlike C6e2.
   The runner refuses a run whose console has no render-age line.
+- *During the runs (labelled, 133).* **result.json's `src/autoware_isaac_bridge` field is the
+  install's build commit, not the source that ran.** It records bb2283f, the commit `ws-c6e3` was
+  built at. aib is a Python package linked into the install (`build/aib/aib` resolves to
+  `src/autoware_isaac_bridge/src/aib/aib`), so the branch's code, 3b69851, is what ran. The
+  render-age lines prove it, since only the branch logs them (380 in r1). Each run therefore has a
+  sidecar, `isaac-ex/i172/aib_source_<run>.txt`: aib's `git rev-parse HEAD` and
+  `git status --porcelain`, read from the linked source directory. From r3 it is read at the run's
+  start. r1's and r2's were written after their starts (19:15:10), labelled so: the source was
+  committed at 19:04:00, before r1 (19:04:57), and was not edited after, its status clean.
+- *The runner's check was widened mid-series, after r1 (labelled).* r1 was refused for naming aib
+  bb2283f and then accepted by hand, the render-age lines being the proof. The check was widened
+  at 19:14:04 to accept bb2283f when the console has render-age lines. r2 to r9 ran under the
+  widened check. `times.txt` has the record.
