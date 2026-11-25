@@ -1987,7 +1987,7 @@ Record: NAS "2026-11-24 086 C6d Haruna rough (118)": the six run directories, th
 (`run_one.sh`, `run_all.sh`, `times.txt`), the GPU log over the runs, `c6d_extras.py` and its
 output (`extras.jsonl`), and issue 152's `where.py`.
 
-#### C6e's spec: R7's remainder (written 2026-11-25, before any run; a plan for 133's review)
+#### C6e's spec: R7's remainder (written 2026-11-25, before any run; C6e1 to C6e3 approved by 133 the same day, C6e4 a proposal)
 
 066 R7 asks for four things. The first is motion BVH on for rough-road runs, with its render
 cost measured. The second is the lidar mount following the chassis. The third is
@@ -2067,9 +2067,9 @@ runs. A step's own details (scripts, packages) are added to its section before i
     - The pose error and NVTL are unchanged within C6b's run-to-run spread (C6d's sd of the
       difference, 0.0245 m, for p95). The ego's own motion is already de-skewed, and nothing
       else moves.
-  - **Decision proposed.** Motion BVH is on for C6e3 if the tick p50 rises by 5 ms or less (R4's
-    budget per feature); otherwise it stays off, and the C6e3 runs state it. The bar is 133's
-    to set.
+  - **Decision (133, 2026-11-25, before any run).** Motion BVH is on for C6e3 if the tick p50
+    rises by 5 ms or less (R4's budget per feature), measured under the full quiet rule;
+    otherwise it stays off, and the C6e3 runs state it.
 - **C6e3. The ground filter and detection on the fixtures (R7's fixtures).**
   - **Setup.** Autoware on two fixture courses, built with their Autoware maps as C5d's fixture
     was. fixture_c6a has the cleats, the pothole and the washboard. fixture_c6b has rocks on the
@@ -2097,8 +2097,14 @@ runs. A step's own details (scripts, packages) are added to its section before i
       prediction. *Hypothesis:* both are under the 0.20 m thresholds, but a vertical face fails
       the 13 deg local slope, and the filter may still mark the face's points non-ground.
     - The 8 and 15 cm rocks are passed as ground (under 0.20 m): no object, and the ego drives
-      over them. This is 066 R7's "rocks passed as ground". Whether driving over a 15 cm rock
-      is right is the car's clearance's question, reported, not judged here.
+      over them. This is 066 R7's "rocks passed as ground".
+    - *Amended before any run (133, 2026-11-25):* passing a rock as ground is not benign. The
+      threshold of 0.20 m is Autoware's choice, and by design it lets objects up to 20 cm
+      through. A Model 3's ground clearance is about 14 cm, so a 15 cm rock between the
+      wheels may strike the underbody. For each rock the run records where it passed (between
+      the wheels or under one, from the truth trace and the rock's place) and any contact with
+      the chassis (the skid plate's and the body's contacts in the world server's log). A rock
+      driven over is judged as a finding, not as a pass.
     - The 35 cm boulder is non-ground and an object, and the ego stops before it. It is first
       seen at 32 m at most, issue 143's rock reach, not the lidar's own range. If its first
       range equals the reach, the reach is the limit; rocks the sensors see beyond it are 066
@@ -2106,7 +2112,7 @@ runs. A step's own details (scripts, packages) are added to its section before i
     - False stops: 0 over the cleats, the pothole and the washboard.
   - **Judged (proposed):** R7's "false obstacles over washboard and ruts" as no stop and no
     object over the washboard and the pothole in both runs. Everything else is reported.
-- **C6e4. NDT with leverage (a proposal, after C6e1 to C6e3).** haruna_down's 16 km/h is why
+- **C6e4. NDT with leverage (a proposal, brought to 133 after C6e3; 133, 2026-11-25).** haruna_down's 16 km/h is why
   C6d's roughness cost localization nothing (the hypothesis above). A pairing with leverage
   needs speed. The plan is a copy of *rough_none* and of smooth Haruna with the lanelets' speed
   limit raised, so that the ego cruises at about 40 km/h where the road allows, three runs a
