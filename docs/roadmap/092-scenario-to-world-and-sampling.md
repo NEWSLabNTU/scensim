@@ -1111,6 +1111,48 @@ against the plan above before it runs:
   the branch's stack, after issue 161's live check on CARLA (done, 2026-11-25 20:45-20:57), never
   beside a CARLA of mine, with the card checked first.
 
+**The exit's run 1 (2026-11-26, 03:54:52-03:58:59, 243).** From wt-k9fa2's clean build of
+72a629ea (scensim_world_protocol `0488577` and scensim_isaac_world `76ba145` checked out, their
+superproject pins e63aaea7 and 3a948eea not yet moved; scensim run's "off its pins" warning
+names those two), Isaac Sim 6.2 on this host, the suite `both` on one stack. Logs:
+`/var/tmp/aeon/k9fa-logs/k9f_zones/`, the script's in `/var/tmp/aeon/k9fa-exit/run4-*`.
+
+- **Asphalt** (`2026-11-26T03-55-52_goal_stop_goal_surface-asphalt_r0`): passed, no contact, no
+  error, `knobs` ok.
+  - **The read-back held.** `knobs.goal_surface.zones.ice_at_goal`: sent `{class: asphalt}`;
+    expected and read surface_class asphalt, wetness dry, water depth none, mu 1.12; from the
+    truth's first `road_condition` record read back after a step, frame 2; ok.
+  - **The speed at the trigger FAILED: 4.17 m/s, against about 10.8 predicted.** The ego
+    cruised at a flat 4.17 m/s (15 km/h) from x 174 to the trigger (x 133.3, frame 555),
+    braked from 4.17 to 1.0 m/s over 1.6 s (about 2 m/s^2) and stopped at x 121.3, 9.3 m short
+    of the pedestrian. **Cause:** k9f_zones' pilot passed no `max_velocity`, so autoware_launch's
+    `common.param.yaml` `max_vel`, 4.17 m/s, capped every planner (autoware_sim_profile's
+    `planning_common_param` raises it only from that argument); demo, gap_campaign and
+    isaac_demo pass `max_velocity: 11.11`.
+  - **The precondition, both readings.** By the letter of the measure (the largest 0.25 s
+    average from the trigger to the stop) the peak is **4.06 m/s^2**, over the 3.9 required. By
+    its intent it is **not shown**: that peak is the last five frames, 1.0 m/s to rest (frames
+    624 to 629), the stop's creep, not braking the surface limits; at 4.17 m/s even ice (about
+    2.6 m/s^2) stops in about 3.3 m. So run 1 shows nothing about the zone's friction.
+- **Ice** (`2026-11-26T03-58-07_goal_stop_goal_surface-ice_r0`): **void, not a result.** No
+  `result.json`, a partial truth only. As its stack started, teacup1117's jobs took the card:
+  pid 538122 (`deepsight243/venv/bin/python`, started 03:38:41), pid 631002
+  (`envs/unidrivevla/bin/python`, started 03:52:36) and pid 670767 (`CARLA_0.9.15`
+  CarlaUE4-Linux-Shipping, started 03:56:08, after this run began), all user teacup1117 by `ps`.
+  The card fell to 34 MiB free at 03:58:33 and 237 MiB at 03:58:38, and the guard stopped this
+  run's own process group and its stack (exit 99, no retry). Nothing of mine was left; the card's
+  peak was 32076 MiB card-wide, this run's share about 6 GB (the world server 5520 MiB, the
+  container 526 MiB).
+
+**Amendment (2026-11-26, 243, with 133's OK; before any rerun).** (i) k9f_zones' pilot passes
+`args: {max_velocity: 11.11}`, as demo does. (ii) Both cases are run again, asphalt then ice, on
+the same build, with the same floor (12288 MiB held 120 s) and guard, after issue 184's gate.
+(iii) Run 1 stands as recorded above. The predictions stand as amended before run 1 (about
+10.8 m/s at the trigger; asphalt's peak at least 3.9 m/s^2 by intent, a braking phase, not the
+stop's last frames; ice's peak 2.6 m/s^2 within 25 %; contact on ice), with one line added:
+**the speed at the trigger is now predicted with `max_velocity` 11.11**, so a rerun that cruises
+at 4.17 m/s shows the argument did not take, and is not judged.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
