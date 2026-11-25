@@ -624,15 +624,24 @@ def test_k9e_a_constant_profile_is_judged_on_every_frame_after_its_send():
     plan = [{"knob": "illumination.sun_elevation", "field": "sun_elevation", "step": 1e-3,
              "min_interval": 1.0, "coordinate": "time", "points": [[0.0, PI3]],
              "static": True}]
-    good = [L(1, 0.8, True), L(2, PI3, False), L(3, PI3 + 0.0004, False)]
+    # issue 171: the bridge sends a constant twice (frames 1 and 2); the first read-back may
+    # predate the world's tick (the 20 deg boot sun Initialize put back) and is not judged
+    good = [L(1, 0.3491, True), L(2, PI3, True), L(3, PI3 + 0.0004, False)]
     s = K.profile_summary(ENV_WORLD, plan, good)["illumination.sun_elevation"]
-    assert s["ok"] and s["static"] and s["sent"] == 1 and s["read_back"] == PI3 + 0.0004
+    assert s["ok"] and s["static"] and s["sent"] == 2 and s["read_back"] == PI3 + 0.0004
+    assert (s["first_read_back"], s["judged"]) == (0.3491, 2)
     assert s["tolerance"] == pytest.approx(1e-3 + 1e-4 * PI3)
     off = good + [L(4, PI3 - 0.01, False)]
     s = K.profile_summary(ENV_WORLD, plan, off)["illumination.sun_elevation"]
     assert not s["ok"] and s["off_frames"] == [4]
-    # never read back after its send, or no frame at all
-    assert not K.profile_summary(ENV_WORLD, plan, [L(1, 0.8, True), L(2, None, False)])[
+    # the stale first read-back carried on, as K9f-b's none-case ran before the fix: not ok
+    stale = [L(1, 0.3491, True), L(2, 0.3491, True), L(3, 0.3491, False)]
+    assert not K.profile_summary(ENV_WORLD, plan, stale)["illumination.sun_elevation"]["ok"]
+    # read back only after its first send (no repeat), never read back, or no frame at all
+    once = K.profile_summary(ENV_WORLD, plan, [L(1, PI3, True), L(2, PI3, False)])[
+        "illumination.sun_elevation"]
+    assert not once["ok"] and once["why"] == "unread after its send: no second send's read-back"
+    assert not K.profile_summary(ENV_WORLD, plan, [L(1, 0.8, True), L(2, None, True)])[
         "illumination.sun_elevation"]["ok"]
     assert not K.profile_summary(ENV_WORLD, plan, [L(1, 0.8, True)])[
         "illumination.sun_elevation"]["ok"]

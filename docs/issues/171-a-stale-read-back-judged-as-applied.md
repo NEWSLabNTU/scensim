@@ -47,8 +47,12 @@ Each is a single reply taken right after a send, with no tick between, on CARLA 
   re-read would not help.
 - **086 C7's `RoadConditionReply`** (`CarlaBackend::applied_road_condition`): the weather's wet
   look and the ego's tyre friction, read right after `update_environment` applies them. No
-  scensim judgement reads it yet (092 K9f-a will), so nothing is misjudged today. Told to 118,
-  who owns C7.
+  scensim run judges it yet (092 K9f-a will). Told to 118, who owns C7.
+- **`scensim_world_check conformance`**: it reads `RoadConditionReply` after each
+  `SetRoadCondition` (0.7 wetWithPuddles, every level, then 0.8, within 1e-5), and the weather
+  after a `SetWeather`, each right after its send. C7's run on CARLA passed 30 of 30 (118,
+  2026-11-25). Either the lag did not show in those reads, or that read path differs from the
+  probe's; neither is measured (nor is `physics_control`'s lag).
 
 Isaac's world server writes its renderer settings and sun light when asked, and its read-back
 (`world.applied_environment`) reads those same settings back, so no tick lies between. No lag of
@@ -67,4 +71,6 @@ listed above and not changed here.
 already has the server validate the environment's ranges and read back the physical value. It
 now also takes this: a read-back the server reports after CARLA has ticked, or the value it will
 apply, for `EnvironmentReply`, `set_weather`'s reply and `RoadConditionReply`. Then no client has
-to know about the tick.
+to know about the tick. 118 prefers the read-back after the tick: a value "it will apply" would
+report a stuck or refused apply as applied, and the post-tick read catches it. 118 will rerun
+C7's conformance on CARLA as 161's check when it lands.

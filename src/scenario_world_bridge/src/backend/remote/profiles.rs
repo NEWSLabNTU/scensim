@@ -290,6 +290,10 @@ pub struct Active {
     pub last_s: Option<f64>,
     /// The coordinate at the last frame: a breakpoint crossed since is sent at once.
     pub last_x: Option<f64>,
+    /// Sends so far: the first is repeated on the next frame (issue 171), since a world may
+    /// read back the value before it until it has ticked (CARLA 0.9.16's `get_weather` right
+    /// after `set_weather`), and only the repeat's read-back follows a tick.
+    pub sends: u32,
 }
 
 impl Active {
@@ -301,14 +305,15 @@ impl Active {
             applied: None,
             last_s: None,
             last_x: None,
+            sends: 0,
         }
     }
 
     /// This frame's commanded value (`sim_time`, s; the ego's map position, if known), and
-    /// whether it is to be sent: the first frame, a value moved by the step since the last
-    /// send, or a breakpoint crossed since the last frame (so a ramp's end, or a plateau, is
-    /// reached within a frame, never left up to a step short). A lane profile with no ego
-    /// pose holds its first value.
+    /// whether it is to be sent: the first frame and the one after it (the first send repeated,
+    /// issue 171), a value moved by the step since the last send, or a breakpoint crossed since
+    /// the last frame (so a ramp's end, or a plateau, is reached within a frame, never left up
+    /// to a step short). A lane profile with no ego pose holds its first value.
     pub fn commanded(&mut self, sim_time: f64, ego: Option<[f64; 2]>) -> (f64, bool) {
         let x = match &self.profile.coordinate {
             Coordinate::Time => Some(sim_time),
@@ -335,10 +340,11 @@ impl Active {
         let due = self
             .last_sent_at
             .is_none_or(|t0| sim_time - t0 >= self.profile.min_interval - 1e-9);
-        let send = self.last_sent.is_none_or(|l| {
-            ((v - l).abs() >= self.profile.step && due)
-                || (crossed && (v - l).abs() > 1e-9 * l.abs().max(1.0))
-        });
+        let send = self.sends == 1
+            || self.last_sent.is_none_or(|l| {
+                ((v - l).abs() >= self.profile.step && due)
+                    || (crossed && (v - l).abs() > 1e-9 * l.abs().max(1.0))
+            });
         (v, send)
     }
 
@@ -346,12 +352,37 @@ impl Active {
     pub fn mark_sent(&mut self, v: f64, t: f64) {
         self.last_sent = Some(v);
         self.last_sent_at = Some(t);
+        self.sends += 1;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_171_the_first_send_is_repeated_on_the_next_frame_and_then_held() {
+        // a constant (092 K9e's environment: form): sent on frames 1 and 2, then never
+        let mut a = Active::new(
+            parse(
+                r#"{"profiles": [{"knob": "illumination.sun_elevation", "field": "sun_elevation",
+                    "step": 0.001, "coordinate": "time", "points": [[0, 1.0472]]}]}"#,
+            )
+            .unwrap()
+            .remove(0),
+        );
+        let mut sent = Vec::new();
+        for f in 0..10 {
+            let t = f as f64 * 0.05;
+            let (v, send) = a.commanded(t, None);
+            assert!((v - 1.0472).abs() < 1e-12);
+            if send {
+                a.mark_sent(v, t);
+                sent.push(f);
+            }
+        }
+        assert_eq!(sent, vec![0, 1]);
+    }
 
     fn fog_time() -> Profile {
         parse(

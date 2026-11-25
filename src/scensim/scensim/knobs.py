@@ -39,8 +39,8 @@ weather baseline merged with its knobs' parameters, so no run inherits another's
 A value may instead set the scenario environment by field, `environment: {sun_elevation: 1.0472}`
 (radians, as OpenSCENARIO's angles; each field's range is FIELD_RANGES)
 (092 K9e; the fields a profile sets): the portable form, which both world servers apply and
-read back. The run sends it as a profile held constant from time 0 (`<knob>.<field>`), judged on
-every frame's read-back after the send. One value sets a quantity in one form (SAME_QUANTITY).
+read back. The run sends it as a profile held constant from time 0 (`<knob>.<field>`), which the
+bridge sends twice (frames 1 and 2), judged from the second send's read-back on (issue 171). One value sets a quantity in one form (SAME_QUANTITY).
 
 On Isaac there is no weather service: a value with weather parameters is refused there by name
 (its scenario's EnvironmentAction sets the sky). On CARLA a surface map cannot be applied, and weather (wetness) is visual only: a value that
@@ -251,12 +251,15 @@ def static_profiles(environment: dict, environment_elements=(), profiles=None) -
 
 
 def _static_summary(p: dict, lines: list) -> dict:
-    """A constant's summary: every frame's read-back after its first send within the field's
-    tolerance, none missing, at least one."""
+    """A constant's summary. The bridge sends it twice, on the first frame and the next (issue
+    171): the first send's read-back may predate the world's tick and show the value before it
+    (CARLA 0.9.16), so it is recorded, not judged. Every frame from the second send's on is
+    judged: its read-back within the field's tolerance, none missing. A constant read back only
+    after its first send is not ok (`unread after its send`)."""
     value = p["points"][0][1]
     tol = static_tolerance(p["field"], value)
     sends = [k for k in lines if k.sent]
-    after = lines[lines.index(sends[0]) + 1:] if sends else []
+    after = lines[lines.index(sends[1]):] if len(sends) > 1 else []
     unread = sum(1 for k in after if k.applied is None)
     off = [k.frame for k in after if k.applied is not None and abs(k.applied - value) > tol]
     dev = max((abs(k.applied - value) for k in after if k.applied is not None), default=None)
@@ -266,7 +269,8 @@ def _static_summary(p: dict, lines: list) -> dict:
             "max_deviation": dev, "tolerance": tol,
             "first_read_back": (sends[0].applied if sends else None),
             "read_back": (read[-1] if read else None),
-            "ok": bool(after) and not unread and not off}
+            "ok": bool(after) and not unread and not off,
+            **({} if after else {"why": "unread after its send: no second send's read-back"})}
 
 
 def merge_static(block: dict, summary: dict) -> dict:

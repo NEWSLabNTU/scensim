@@ -463,7 +463,8 @@ Rules:
   `surface_map:` and `mu` are a surface's (Isaac; on CARLA only as `physics: none`). One value
   sets a quantity in one form: `environment.sun_elevation` with `weather.sun_altitude_angle`
   is refused by name, and so are the other pairs. An `environment:` value is sent once, as a
-  profile held at its value from time 0, and judged on every frame's read-back after the send.
+  profile held at its value from time 0, sent on its first frame and again on the next, and
+  judged on every frame's read-back from that second send's on (issue 171).
 - **A knob with `profile: true`** accepts a value along time or route position (CS5).
 - *Built, K9 (roadmap 092):* knob profiles. A profile knob declares a range and the one
   environment field it sets; a scenario binds it to breakpoints along `time` or a resolved lane

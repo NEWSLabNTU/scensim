@@ -1771,6 +1771,7 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
             knob_block["ok"] = False
             e = summary[bad[0]]
             why = ("no knob line in the gap trace" if not e["frames"] else
+                   e["why"] if e.get("why") else
                    f"{e['unread']} send(s) not read back" if e["unread"] else
                    f"its read-back off by {e['max_deviation']:.4g}, beyond {e['tolerance']:.4g} "
                    f"(frames {', '.join(map(str, e['off_frames'][:5]))})")

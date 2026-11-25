@@ -522,6 +522,14 @@ that this be recorded too). The unit was assumed, not read; the bridge's doc com
    makes the world servers validate `SetEnvironment`'s fields themselves, refusing by name,
    and read back the physical value.
 
+**A correction to K9e's CARLA read-backs (2026-11-25, issue 171).** Each "read back on N of N
+frames after its send" on CARLA below was one `EnvironmentReply`, taken right after the single
+send and carried onto every frame; CARLA 0.9.16 can return the weather before a send until it
+ticks (issue 171's probe). Those replies happened to be fresh (each showed the value sent), so
+the conclusions hold, but that judgement could not have caught a lag; K9f-b's none-case then
+showed one (a false error run). Since issue 171 a constant is sent twice and judged from the
+second reply. Isaac's read-backs have no such lag.
+
 **Step 2a again (2026-11-25, after the units fix d80dfd41): as predicted.** k9_cs3 pm=current, the
 same install (its Python links to the source, so the fix ran) and setup, my CARLA on RPC 2100,
 started at 05:52 with 10.9 GB of VRAM free; on the card teacup1117's unidrivevla python (9.5 GB)
