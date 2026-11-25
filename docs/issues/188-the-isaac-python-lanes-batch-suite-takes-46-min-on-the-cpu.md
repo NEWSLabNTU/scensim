@@ -173,3 +173,10 @@ through it: 9.7 to 22.7, median 13.3, 158 samples).
 - The gate: rc 0, "just test: done; Isaac-Python lane: ran (937 tests in 3 suites, OK)", pins 0
   mismatches, docs ok, no failure in any suite.
 
+**The landing gate (2026-11-26, 02:15 to 02:52):** rebased onto b627508d (issue 174), the full
+gate again on e8c54a81, a fresh worktree: `just test` began at a 1-minute load of 18.02;
+"torch threads 4" in all three lines; `scensim_batch` in Isaac's Python `Ran 259 tests in
+90.000s`, in the system lane `247 passed, 12 skipped in 50.60s`; rc 0, "Isaac-Python lane: ran
+(937 tests in 3 suites, OK)". Held again. It lands rebased onto c5c45188, whose change since
+b627508d is one docs file (`git range-diff`: "=" for all three commits).
+
