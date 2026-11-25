@@ -1,0 +1,29 @@
+# k9f_zones (roadmap 092 K9f-a): a zone-scoped surface knob on Isaac Sim. The Autoware ego drives
+# Town01's y -130 street west (isaac_soil's town01_zones drive) into the ice_at_goal zone (x 105
+# to 135) of ground/town01_route.yaml; a pedestrian darts into its lane at x 112 when it is 20 m
+# short, so it stops hard on the zone. The goal_surface knob sets that zone's class: asphalt
+# (mu 1.12) or ice (mu 0.265, the map's own, set explicitly so both runs read it back). The run
+# judges each zone from the truth's road_condition read-back; the deceleration is measured from
+# the truth after the runs (092's exit for K9f-a).
+simulator: isaac
+assets:
+  - dataset: carla-town-autoware-maps
+    take: [Town01]
+  - dataset: carla-0.9.16-isaac-usd
+    take: [Town01, vehicles]
+maps: [Town01]
+ground:
+  Town01:
+    surface_maps:
+      town01_route: ground/town01_route.yaml
+world:
+  knobs:
+    goal_surface:
+      values:
+        asphalt: {zones: {ice_at_goal: {class: asphalt}}}
+        ice: {zones: {ice_at_goal: {class: ice}}}
+      default: ice
+pilots:
+  ego: {kind: autoware, autoware_profile: scensim, vehicle: tesla_model3}
+logging: {capture: standard, gap_trace: true, keep: {passed: full, failed: full, error: full}}
+default: both

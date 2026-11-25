@@ -362,3 +362,36 @@ def test_a_layout_prop_in_a_stretch_beside_a_zone_warns_at_run_and_is_refused_by
     assert len(found) == 2 and all(f.refused and f.fix == "move s outside the stretch"
                                    for f in found)
     assert project.zone_problems(d, tb) == []
+
+
+REPO = Path(__file__).resolve().parents[3] / "scenarios" / "projects"
+
+
+@pytest.mark.skipif(not (REPO / "k9f_zones" / "testbench.yaml").is_file(),
+                    reason="the repository's scenarios/projects is not beside this package")
+def test_k9f_zones_sets_ice_at_goal_either_way_and_passes_the_rule(tmp_path):
+    """092 K9f-a's exit testbench: both goal_surface values set ice_at_goal's class on its own
+    copy of town01_route, the check finds nothing, and CARLA would refuse it by name."""
+    import shutil
+    src = REPO / "k9f_zones"
+    d = tmp_path / "k9f_zones"
+    shutil.copytree(src, d, ignore=shutil.ignore_patterns("assets", "state", "runs"))
+    md = d / "assets" / "maps" / "Town01"
+    md.mkdir(parents=True)
+    (md / "lanelet2_map.osm").write_text("<osm town01/>")
+    settings = yaml.safe_load((d / "testbench.yaml").read_text())
+    world = settings["world"]["knobs"]
+    assert K.problems(world, simulator="isaac") == []
+    assert "CARLA 0.9.16 cannot set a zone's ground" in K.problems(world, simulator="carla")[0][1]
+    sc = d / "scenarios" / "goal_stop.xosc"
+    for value, cls in (("asphalt", "asphalt"), ("ice", "ice")):
+        zs = Z.for_run(d, sc, {"goal_surface": value}, world, "Town01", simulator="isaac")
+        assert [z["properties"] for z in zs] == [{"scensim.zone.ice_at_goal.class": cls}]
+        assert zs[0]["surface_map"] == str(d / "ground" / "town01_route.yaml")
+        # the zone's expected read-back: dry, the table's mu (the workspace's class table)
+        want = Z.expected(zs, 1.0, "dry")["goal_surface"]["ice_at_goal"]
+        assert want["mu"] == pytest.approx({"asphalt": 1.12, "ice": 0.265}[cls])
+    assert project.zone_problems(d, settings) == []
+    root = ET.fromstring(L.inject(sc, [], Z.properties(zs)))
+    assert [(p.get("name"), p.get("value")) for p in root.find(Z.INIT_ROAD).iter("Property")] \
+        == [("scensim.surface_map", "town01_route"), ("scensim.zone.ice_at_goal.class", "ice")]

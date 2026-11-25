@@ -1,0 +1,17 @@
+# k9f_zones (roadmap 092 K9f-a): isaac_soil's town01_route surface map, copied unchanged so the
+# testbench owns what its knob is judged against; its ice_at_goal zone (x 105..135) is what the
+# goal_surface knob sets.
+defaults: {Road: asphalt, RoadLine: asphalt, SideWalk: concrete, Terrain: grass, Ground: dirt}
+zones:
+  - id: wet_stretch
+    wetness: wetWithPuddles
+    polygon: [[160.0, -134.0], [175.0, -134.0], [175.0, -126.0], [160.0, -126.0]]
+  - id: puddle_left
+    water_depth: 0.006
+    polygon: [[150.0, -134.0], [160.0, -134.0], [160.0, -130.0], [150.0, -130.0]]
+  - id: gravel_patch
+    class: gravel
+    polygon: [[140.0, -134.0], [150.0, -134.0], [150.0, -126.0], [140.0, -126.0]]
+  - id: ice_at_goal
+    class: ice
+    polygon: [[105.0, -134.0], [135.0, -134.0], [135.0, -126.0], [105.0, -126.0]]

@@ -1,0 +1,4 @@
+# 092 K9f-a's exit: asphalt first (the precondition: its peak deceleration at least 3.9 m/s^2),
+# then ice, one run each
+scenarios: [scenarios/goal_stop.xosc]
+cases: [{goal_surface: asphalt}, {goal_surface: ice}]

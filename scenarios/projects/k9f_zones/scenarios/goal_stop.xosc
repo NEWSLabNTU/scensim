@@ -1,0 +1,149 @@
+<?xml version="1.0"?>
+<OpenSCENARIO>
+	<FileHeader author="scenario-world-bridge" date="2026-11-25T00:00:00+00:00" description="Roadmap 092 K9f-a: a hard stop on a zone the goal_surface knob sets. Town01's y -130 street, heading west from x 190.8 (town01_zones' drive) at up to 50 km/h, into town01_route's ice_at_goal zone (x 105..135); a pedestrian darts into the lane at x 112 when the ego is 20 m short of it, waits 4 s, crosses; then the goal at x 104. The knob makes the zone asphalt or ice. Isaac only: zones are its surface layer's" revMajor="1" revMinor="2">
+		<Properties><Property name="scensim.knob.goal_surface" value="param:goal_surface" /></Properties>
+	</FileHeader>
+	<ParameterDeclarations>
+		<ParameterDeclaration name="goal_surface" parameterType="string" value="ice" />
+	</ParameterDeclarations>
+	<CatalogLocations><VehicleCatalog><Directory path="$(env SCENSIM_VEHICLES)" /></VehicleCatalog></CatalogLocations>
+	<RoadNetwork><LogicFile filepath="$(env SCENSIM_MAPS)/Town01" /></RoadNetwork>
+	<Entities>
+		<ScenarioObject name="ego">
+			<CatalogReference catalogName="vehicles" entryName="tesla_model3">
+				<ParameterAssignments>
+					<ParameterAssignment parameterRef="maxSpeed" value="13.89" />
+					<ParameterAssignment parameterRef="maxAcceleration" value="15.0" />
+					<ParameterAssignment parameterRef="maxDeceleration" value="15.0" />
+					<ParameterAssignment parameterRef="maxSteering" value="0.5" />
+				</ParameterAssignments>
+			</CatalogReference>
+			<ObjectController><Controller name="Autoware"><Properties>
+				<Property name="maxJerk" value="1.5" /><Property name="minJerk" value="-1.5" />
+			</Properties></Controller></ObjectController>
+		</ScenarioObject>
+		<ScenarioObject name="ped">
+			<Pedestrian model="unspecified" mass="70.0" name="walker.pedestrian.0001" pedestrianCategory="pedestrian">
+				<BoundingBox><Center x="0.0" y="0.0" z="0.9" /><Dimensions width="0.6" length="0.6" height="1.8" /></BoundingBox>
+				<Properties />
+			</Pedestrian>
+			<ObjectController><Controller name=""><Properties></Properties></Controller></ObjectController>
+		</ScenarioObject>
+	</Entities>
+	<Storyboard>
+		<Init><Actions>
+			<GlobalAction><EnvironmentAction><Environment name="route">
+				<RoadCondition frictionScaleFactor="1.0" wetness="dry">
+					<Properties>
+						<Property name="scensim.surface_map" value="town01_route" />
+					</Properties>
+				</RoadCondition>
+			</Environment></EnvironmentAction></GlobalAction>
+			<Private entityRef="ego">
+				<PrivateAction><TeleportAction><Position><WorldPosition x="190.8" y="-130.1" z="0.3" h="3.14159" p="0" r="0" /></Position></TeleportAction></PrivateAction>
+				<PrivateAction><RoutingAction><AcquirePositionAction><Position><WorldPosition x="104.0" y="-129.8" z="0.0" h="3.14159" p="0" r="0" /></Position></AcquirePositionAction></RoutingAction></PrivateAction>
+			</Private>
+		</Actions></Init>
+		<Story name="goal_stop">
+			<Act name="act">
+				<ManeuverGroup maximumExecutionCount="1" name="ego_group">
+					<Actors selectTriggeringEntities="false"><EntityRef entityRef="ego" /></Actors>
+					<Maneuver name="end_conditions">
+						<Event name="success" priority="parallel" maximumExecutionCount="1">
+							<Action name="exit_success"><UserDefinedAction><CustomCommandAction type="exitSuccess" /></UserDefinedAction></Action>
+							<StartTrigger><ConditionGroup><Condition name="reach_goal" delay="0" conditionEdge="none"><ByEntityCondition>
+								<TriggeringEntities triggeringEntitiesRule="any"><EntityRef entityRef="ego" /></TriggeringEntities>
+								<EntityCondition><ReachPositionCondition tolerance="3.0"><Position><WorldPosition x="104.0" y="-129.8" z="0.0" h="3.14159" p="0" r="0" /></Position></ReachPositionCondition></EntityCondition>
+							</ByEntityCondition></Condition></ConditionGroup></StartTrigger>
+						</Event>
+						<Event name="timeout" priority="parallel" maximumExecutionCount="1">
+							<Action name="exit_failure"><UserDefinedAction><CustomCommandAction type="exitFailure" /></UserDefinedAction></Action>
+							<StartTrigger><ConditionGroup><Condition name="timeout_condition" delay="0" conditionEdge="none"><ByValueCondition>
+								<SimulationTimeCondition value="240" rule="greaterThan" />
+							</ByValueCondition></Condition></ConditionGroup></StartTrigger>
+						</Event>
+						<Event name="contact" priority="parallel" maximumExecutionCount="1">
+							<Action name="exit_contact"><UserDefinedAction><CustomCommandAction type="exitFailure" /></UserDefinedAction></Action>
+							<StartTrigger><ConditionGroup><Condition name="ego_hits_ped" delay="0" conditionEdge="none"><ByEntityCondition>
+								<TriggeringEntities triggeringEntitiesRule="any"><EntityRef entityRef="ego" /></TriggeringEntities>
+								<EntityCondition><CollisionCondition><EntityRef entityRef="ped" /></CollisionCondition></EntityCondition>
+							</ByEntityCondition></Condition></ConditionGroup></StartTrigger>
+						</Event>
+					</Maneuver>
+				</ManeuverGroup>
+				<ManeuverGroup maximumExecutionCount="1" name="ped_group">
+					<Actors selectTriggeringEntities="false"><EntityRef entityRef="ped" /></Actors>
+					<Maneuver name="ped_m">
+						<Event name="ped_add" priority="parallel" maximumExecutionCount="1">
+							<Action name="add_ped"><GlobalAction><EntityAction entityRef="ped"><AddEntityAction><Position><WorldPosition x="112.0" y="-126.5" z="0.00" h="-1.5708" p="0" r="0" /></Position></AddEntityAction></EntityAction></GlobalAction></Action>
+							<StartTrigger><ConditionGroup><Condition name="sim_start" delay="0" conditionEdge="none"><ByValueCondition>
+								<SimulationTimeCondition value="0" rule="greaterThan" />
+							</ByValueCondition></Condition></ConditionGroup></StartTrigger>
+						</Event>
+						<Event name="ped_dart" priority="parallel" maximumExecutionCount="1">
+							<Action name="dart_speed"><PrivateAction><LongitudinalAction><SpeedAction>
+								<SpeedActionDynamics dynamicsShape="linear" value="1.5" dynamicsDimension="rate" />
+								<SpeedActionTarget><AbsoluteTargetSpeed value="1.5" /></SpeedActionTarget>
+							</SpeedAction></LongitudinalAction></PrivateAction></Action>
+							<Action name="dart_path"><PrivateAction><RoutingAction><FollowTrajectoryAction initialDistanceOffset="0">
+								<TimeReference><Timing domainAbsoluteRelative="relative" offset="0" scale="1" /></TimeReference>
+								<TrajectoryFollowingMode followingMode="position" />
+								<TrajectoryRef><Trajectory name="dart_line" closed="false"><ParameterDeclarations />
+									<Shape><Polyline><Vertex><Position><WorldPosition x="112.0" y="-126.5" z="0.00" h="-1.5708" p="0" r="0" /></Position></Vertex><Vertex><Position><WorldPosition x="112.0" y="-129.7" z="0.00" h="-1.5708" p="0" r="0" /></Position></Vertex></Polyline></Shape>
+								</Trajectory></TrajectoryRef>
+							</FollowTrajectoryAction></RoutingAction></PrivateAction></Action>
+							<StartTrigger><ConditionGroup><Condition name="ego_near" delay="0" conditionEdge="none"><ByEntityCondition>
+								<TriggeringEntities triggeringEntitiesRule="any"><EntityRef entityRef="ego" /></TriggeringEntities>
+								<EntityCondition><ReachPositionCondition tolerance="2.0"><Position><WorldPosition x="132.0" y="-130.1" z="0.00" h="3.14159" p="0" r="0" /></Position></ReachPositionCondition></EntityCondition>
+							</ByEntityCondition></Condition></ConditionGroup></StartTrigger>
+						</Event>
+						<Event name="ped_hold" priority="parallel" maximumExecutionCount="1">
+							<Action name="ped_stop"><PrivateAction><LongitudinalAction><SpeedAction>
+								<SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time" />
+								<SpeedActionTarget><AbsoluteTargetSpeed value="0.0" /></SpeedActionTarget>
+							</SpeedAction></LongitudinalAction></PrivateAction></Action>
+							<StartTrigger><ConditionGroup><Condition name="after_ped_dart" delay="0.0" conditionEdge="none"><ByValueCondition>
+								<StoryboardElementStateCondition storyboardElementType="event" storyboardElementRef="ped_dart" state="completeState" />
+							</ByValueCondition></Condition></ConditionGroup></StartTrigger>
+						</Event>
+						<Event name="ped_cross" priority="parallel" maximumExecutionCount="1">
+							<Action name="cross_speed"><PrivateAction><LongitudinalAction><SpeedAction>
+								<SpeedActionDynamics dynamicsShape="linear" value="1.5" dynamicsDimension="rate" />
+								<SpeedActionTarget><AbsoluteTargetSpeed value="1.5" /></SpeedActionTarget>
+							</SpeedAction></LongitudinalAction></PrivateAction></Action>
+							<Action name="cross_path"><PrivateAction><RoutingAction><FollowTrajectoryAction initialDistanceOffset="0">
+								<TimeReference><Timing domainAbsoluteRelative="relative" offset="0" scale="1" /></TimeReference>
+								<TrajectoryFollowingMode followingMode="position" />
+								<TrajectoryRef><Trajectory name="cross_line" closed="false"><ParameterDeclarations />
+									<Shape><Polyline><Vertex><Position><WorldPosition x="112.0" y="-129.7" z="0.00" h="-1.5708" p="0" r="0" /></Position></Vertex><Vertex><Position><WorldPosition x="112.0" y="-136.7" z="0.00" h="-1.5708" p="0" r="0" /></Position></Vertex></Polyline></Shape>
+								</Trajectory></TrajectoryRef>
+							</FollowTrajectoryAction></RoutingAction></PrivateAction></Action>
+							<StartTrigger><ConditionGroup><Condition name="after_ped_hold" delay="4.0" conditionEdge="none"><ByValueCondition>
+								<StoryboardElementStateCondition storyboardElementType="event" storyboardElementRef="ped_hold" state="completeState" />
+							</ByValueCondition></Condition></ConditionGroup></StartTrigger>
+						</Event>
+						<Event name="ped_across" priority="parallel" maximumExecutionCount="1">
+							<Action name="ped_stop_far"><PrivateAction><LongitudinalAction><SpeedAction>
+								<SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time" />
+								<SpeedActionTarget><AbsoluteTargetSpeed value="0.0" /></SpeedActionTarget>
+							</SpeedAction></LongitudinalAction></PrivateAction></Action>
+							<StartTrigger><ConditionGroup><Condition name="after_ped_cross" delay="0.0" conditionEdge="none"><ByValueCondition>
+								<StoryboardElementStateCondition storyboardElementType="event" storyboardElementRef="ped_cross" state="completeState" />
+							</ByValueCondition></Condition></ConditionGroup></StartTrigger>
+						</Event>
+						<Event name="ped_gone" priority="parallel" maximumExecutionCount="1">
+							<Action name="delete_ped"><GlobalAction><EntityAction entityRef="ped"><DeleteEntityAction /></EntityAction></GlobalAction></Action>
+							<StartTrigger><ConditionGroup><Condition name="after_ped_across" delay="2.0" conditionEdge="none"><ByValueCondition>
+								<StoryboardElementStateCondition storyboardElementType="event" storyboardElementRef="ped_across" state="completeState" />
+							</ByValueCondition></Condition></ConditionGroup></StartTrigger>
+						</Event>
+					</Maneuver>
+				</ManeuverGroup>
+				<StartTrigger><ConditionGroup><Condition name="start" delay="0" conditionEdge="none"><ByValueCondition>
+					<SimulationTimeCondition value="0" rule="greaterThan" />
+				</ByValueCondition></Condition></ConditionGroup></StartTrigger>
+			</Act>
+		</Story>
+		<StopTrigger />
+	</Storyboard>
+</OpenSCENARIO>
