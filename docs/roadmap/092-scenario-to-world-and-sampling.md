@@ -1153,6 +1153,37 @@ stop's last frames; ice's peak 2.6 m/s^2 within 25 %; contact on ice), with one 
 **the speed at the trigger is now predicted with `max_velocity` 11.11**, so a rerun that cruises
 at 4.17 m/s shows the argument did not take, and is not judged.
 
+**The exit's run 2 (2026-11-26, 05:49:03-05:54:13, 243).** The same build (72a629ea; HEAD
+13acc454 adds only this document and `max_velocity: 11.11`), the suite `both` on one stack, the
+card's peak 23994 MiB card-wide, no guard. Logs: `/var/tmp/aeon/k9fa-logs/k9f_zones/`, the
+script's `/var/tmp/aeon/k9fa-exit/run5.sh`. Both cases passed, no error, `knobs` ok.
+
+- **The read-back held in both**, from the after_step `road_condition` record at frame 2:
+  asphalt (`2026-11-26T05-50-10_goal_stop_goal_surface-asphalt_r0`) expected and read asphalt,
+  dry, no water depth, mu 1.12; ice (`2026-11-26T05-52-05_goal_stop_goal_surface-ice_r0`)
+  expected and read ice, dry, no water depth, mu 0.265.
+- **The speed at the trigger FAILED again, differently:** 7.65 m/s (asphalt) and 7.64 m/s (ice)
+  against about 10.8. `max_velocity` took (not 4.17): the ego peaked near 8.4 m/s about x 140
+  and was already braking gently (about 1 to 1.5 m/s^2) before the trigger.
+- **No surface-limited stop in either case.** The two profiles are nearly the same: gentle
+  braking from about 8.3 m/s to 3.5 m/s (asphalt) or 4.3 m/s (ice), then the speed falls to 0
+  within one 0.15 s window at x 116.1 (frames 513 to 516; 480 to 483), at exactly the frame of
+  a truth contact with `ped` (asphalt frame 516, impulse 5470.5 N s; ice frame 482, 7595.5
+  N s). The car is stopped by the impact, not by its brakes. **The precondition, both
+  readings:** by the letter of the measure the peaks are 14.9 m/s^2 (asphalt, frame 511) and
+  19.3 m/s^2 (ice, frame 477), each window holding the impact; by intent **not shown**: before
+  the impact neither case asked more than about 1.5 m/s^2, under ice's 2.6.
+- **Contact:** on ice, predicted, it happened; **on asphalt no contact was predicted: FAILED.**
+  SSv2 judged no collision in either (its boxes about 1.5 m apart at the contact; issue 189).
+  Autoware braked only about 1 to 1.5 m/s^2 for the darting pedestrian (issue 190).
+
+**133's ruling (2026-11-26).** The exit is judged on the read-back alone, the plan's
+pre-declared fallback (a): **it held**, in run 1's asphalt and in both of run 2's cases.
+**The friction comparison is NOT shown**, for two causes: the speed at the trigger (7.6 m/s
+with `max_velocity` taken, the ego braking early) and the stop being by impact, not brakes. The
+asphalt no-contact prediction FAILED. The two findings are issues 189 and 190, records only.
+K9f-a proceeds to its cascade.
+
 ## K12's spec (2026-11-23, 243; reviewed by 133 the same day, before any code)
 
 K12 lets a K4 attachment move an entity on seats: a behaviour model (K10) or a learned
