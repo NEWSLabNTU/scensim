@@ -129,6 +129,20 @@ judge; on fixture_c6a, the static C6e1 method plus one Autoware drive a side.
   option 1, with the detail mesh's reach at the lidar's range and its cost measured. C6d's noise
   for pitch and z is not on record yet, so the "not lowered" side's three runs give it (the sd of
   the three), and the rule is applied against it.
+- **"Beyond the noise", numerically (133, 2026-11-25, before any run).** It is computed per
+  quantity: NDT's pitch against the truth (median a run), NDT's z against the truth (median a
+  run), NVTL p05, and the horizontal pose error p95. Let s be the sd of the three "not lowered"
+  runs' values, raised to a floor when it is below it. The change exceeds the noise when
+  |mean(lowered) - mean(not lowered)| > 2 x s x sqrt(2/3), twice the sd of a difference of two
+  means of three. The floors keep one quiet side from making any change significant:
+  - pitch: 0.01 deg;
+  - z: 0.005 m;
+  - NVTL p05: 0.02;
+  - pose error p95: 0.030 m, the 12 smooth Haruna runs' sd (C6d's rule), which gives C6d's
+    0.049 m bar.
+
+  The rule is applied per map (rough_none, smooth), and one quantity beyond it on either map
+  switches the fix to option 1.
 
 ## Predictions for the fix (before any code)
 
