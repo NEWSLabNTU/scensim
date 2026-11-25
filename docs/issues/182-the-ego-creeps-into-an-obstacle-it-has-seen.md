@@ -177,3 +177,7 @@ late and lost at the car) is what keeps the loop going. The MRM's stop is what e
 Why NDT's pose leaves the EKF's gate while the car is held (the scan with the boulder at the
 bumper, or the body moving on its suspension) is not settled by this record. Recording NDT's
 pose and the EKF's innovation would settle it.
+
+**Next step (133, 2026-11-25; not now).** Why NDT's pose leaves the EKF's gate while the car is
+held: on a future fixture run, record NDT's pose (`/localization/pose_estimator/pose_with_covariance`)
+and the EKF's innovation, and read the pose's jump against the scan at those frames.
