@@ -278,3 +278,113 @@ run the judge on CARLA see no change.
 3. The templates and examples: add the judge explicitly, so a reader sees it.
 4. The scenarios that collide on purpose: declare `csbExpectedContacts`.
 5. A full gate (`just check` included, issue 191).
+
+## Step 3: the default-on contact judge, the plan (241, 2026-11-26; before any code)
+
+The user approved it through 133 as a change to verdicts, with four conditions:
+- a 10 N·s impulse floor, calibrated against CARLA's kept contact reports too;
+- a testbench opts out only by name, with a reason;
+- every scensim run keeps its `scenario.xosc` beside `contacts/`;
+- the templates and examples carry the judge explicitly.
+
+**What the code does today.**
+- A project's judges run after the verdict (`run.py`: `results.verdict_from` at the JUnit, then
+  `judges.run_all`). Their records sit beside the run's verdict and never replace it
+  (`judges.py`'s docstring). `physical_verdict` edits `junit.xml` in place, but only after the
+  verdict has been taken from it.
+- So listing the judge today gives `judges: physical_verdict=failed` on a run whose
+  `result.json` still says `passed`, with exit 0.
+- `scenario.xosc` is written only when a layout or a zone applies (`layouts.write_copy`).
+  Otherwise the run keeps only `resolved.yaml`'s path to the source, which is why the
+  rear-contact runs in step 2's dry pass had to be re-judged against the source.
+
+**The change.**
+1. *The contact check runs before the verdict.* When the run directory holds `contacts/`,
+   scensim runs `physical_verdict` on its `junit.xml` before `verdict_from`. A `carla_contact`
+   failure then fails the run the way any JUnit failure does, and the reason names the
+   contact. This is the place `run_suite --physical-verdict` had (roadmap 021). The run's
+   line and `result.json`'s reason say why, for example `failed: undeclared contact
+   'ped' (pedestrian) 5470.5 N·s (floor 10)`, and the exit code is the failed run's. The judge's
+   record is still written to `judges/physical_verdict.json`, so `scensim` lines and readers
+   see it as before.
+   - It runs with `--min-impulse 10` and `--scenario <run dir>/scenario.xosc` (point 3).
+   - A run with no `contacts/` (no bridge report, as with `logging` off) is not judged. The
+     record says why, and the verdict is not changed.
+2. *The opt-out.* A project turns the default off only with an entry in its `judges:` list,
+   by name, with a reason: `- {name: physical_verdict, off: true, why: "..."}`. An empty
+   `why`, or `off` without the name, is refused by `judges.problems`.
+   - An entry with `run:` keeps today's meaning. It replaces the default's arguments (its own
+     `--min-impulse`, say) and also runs before the verdict, never twice.
+   - `off` and `why` become known keys only for that name. Any other judge given them is
+     refused.
+3. *`scenario.xosc` always.* `write_copy` runs for every run: with no layout and no zone it
+   copies the source unchanged, and `resolved.yaml`'s `copy` records its sha256 (equal to the
+   source's). The judge reads the copy, so a later offline re-judge sees what SSv2 ran.
+4. *Templates and examples.* Each of the 3 templates and the 5 examples without the judge
+   lists it explicitly, as `basic` does, with a comment saying it would run anyway. That
+   means first_drive, isaac_first_drive, multi_pilot, road_physics and simple_drive.
+5. *Scenarios that touch on purpose.* These declare `csbExpectedContacts`, or opt out with a
+   reason. From the dry pass, at 10 N·s none is left. town01_rear_contact already declares
+   `npc_rear`, and isaac_soil's and isaac_rough_road's static contacts fall under the floor.
+   The step lists them, and declares nothing new unless the repeat dry pass finds a run.
+6. *Docs.* The design doc's "Results", judges.py's docstring, and the testbench reference.
+
+**The floor: calibration.**
+
+*Isaac.* 47 contact entries in 72 kept run reports (241, step 2's set). Max impulses of the ego's
+contacts, sorted:
+
+| contact | max impulse (N·s) |
+|---|---|
+| the soil meshes' cut strips (`/World/soil/*_road/cut/m0`), static, 20 runs | 0.0 |
+| a road rock (`/World/RoadRocks/r128`), rough road, 1 run | 1.1 |
+| the pedestrian in 189's two K9f-a runs (goal_stop_goal, asphalt and ice) | 5470, 7595 |
+| `npc_rear` in town01_rear_contact, declared, 4 runs | 16431 |
+
+The floor at 10 N·s falls in a gap more than three orders of magnitude wide:
+- Below it are the soil strips (a contact with zero impulse, the car resting on the mesh it
+  drives over) and one rock graze.
+- Above it is every contact a scenario author would call a collision.
+
+The soil strips are step 2's "soil-mesh handling": the floor covers them, and no
+`static` opt-out is needed for them.
+
+The NPCs' own contacts on soil (`npc_contacts`, 111 to 1426 N·s) are not judged. The judge
+reads only the ego's.
+
+*CARLA.* None exist. Every kept CARLA contact report is empty:
+- on 241 and the NAS, 11 runs (243's k10/k12 cs1 and k13 platoon);
+- on 118, 11 (carla_verge, first_drive, my_first_drive, my_tb).
+
+- 243 has 7 kept CARLA runs from issue 073 (2026-11-20) with one contact each: six s5 v10
+  gap-sweep runs over several builds, and one basic town01_rear_contact. They are on 243's
+  disk. Their impulses go here when 243 copies them.
+
+Two fresh CARLA runs, approved by 133, calibrate it on CARLA directly:
+- basic's town01_rear_contact (the declared contact);
+- a drive past a static object close enough to touch it.
+
+They run when a GPU is free without displacing P1 or anyone else. At 10:14 both of 241's
+GPUs were at 99 to 100 % (P1 on GPU 0, and two other users). Their impulses are recorded
+here before the code lands. Until then the floor is 10, per 133's condition.
+
+CARLA's collision sensor reports a normal impulse in N·s from its PhysX, so the unit is the
+same. The prediction: a CARLA touch lands well above 10 N·s (hundreds or more), and a static
+touch at walking speed lands above it too.
+
+**Predictions, before code.**
+- The unit tests (new):
+  - the default runs before the verdict and fails a run with an undeclared 16431 N·s contact;
+  - it passes one with a 1.1 N·s rock and the 0.0 soil strips;
+  - an `off` entry without `why` is refused;
+  - `off` with `why` skips the judge and records the reason;
+  - a `run:` entry replaces the default and runs once;
+  - `scenario.xosc` exists for a run with no layout, with the source's sha256.
+- The step 2 dry pass, repeated at `--min-impulse 10` on the same 72 reports:
+  - the soil strip and rock runs flip to pass;
+  - the four rear-contact runs pass with the source scenario's declaration of `npc_rear`;
+  - 189's two K9f-a runs fail. No other run fails.
+- A failed run's line names the contact, its impulse and the floor.
+- `just gate` on the change: ok on 241 with the Isaac lane run.
+- No CARLA run is needed for the gate. The first CARLA project run after landing shows
+  `judges: physical_verdict=passed` with "no unexpected contact".
