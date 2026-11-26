@@ -526,3 +526,38 @@ scan's useful range behind, within it ahead). So:
   the drive (sd along over 2 times sd across), whatever its across level is (G2).
 I expect S1 at the smaller end: with the goal 30 m from the road's end, the end wall of points
 is inside the scan, so some along constraint exists; the drift, if any, is under run A's 0.36 m.
+
+## The two offline checks left, (a) and (b): predictions (243, 2026-11-27, before reading any output)
+
+Inputs: 118's staging (`home/2026-11-27 issue 170 inputs (118)/` on the NAS, SHA256SUMS verified
+here): smooth Haruna's map directory and `isaac-ex/i170`; the runs from their NAS records.
+
+**(a) Are the map's props the USD's props?** `props_points.npy` (12,131,948 points) is what the
+builder sampled from each prop asset by its own placement code (`course/props.py`, `place`); the
+renderer draws what USD composition makes of `world.usdc`. A check by composition, not by that
+code: `props_vs_usd.py` composes the stage (guardrail meshes by their composed transforms, the
+trees by the PointInstancer's `ComputeInstanceTransformsAtTime` and each prototype's meshes),
+samples the composed triangles, and measures map points against them and back.
+- On paper first: a guardrail prim authors its own `xformOpOrder` (translate, rotateZ, scale)
+  over the referenced asset, which would drop a non-identity transform on the asset's root,
+  while `asset_surface` keeps it. Read: all five Town01 assets have an identity `/Root`,
+  metersPerUnit 1, Z up. So no difference is expected from that.
+- Limits here: this host's asset set is Town01 only, so tree kind 4 (`Town02/.../
+  SM_Japanese_Maple_01.usd`) is left out, with map points within 6 m of its instances; trees are
+  composed within 60 m of the road and map points beyond 55 m are left out; the asset revision
+  is this host's cache (38347e26), assumed the same as 118's.
+- *Predictions:* the map's prop points lie on the composed props: |distance to the nearest
+  composed triangle's plane| p50 under 1 mm, the mean offset vector under 1 cm in each axis;
+  and the rendered props within 40 m of the road are in the map: under 1 % of composed samples
+  more than 1 m from a map point. If either fails, the size and direction of the difference is
+  set against 170's ~5 cm fixed vector.
+
+**(b) NDT's own convergence against the error.** The 18 records hold NDT's
+`nearest_voxel_transformation_likelihood` (all) and `iteration_num` (168's twelve), not NDT's
+pose. Per run, each kinematic-state sample's across error from the truth (as in step 1) is
+joined with the nearest NVTL and iteration count in time.
+- *Predictions,* if the error is a converged bias rather than poor convergence: (b1) the across
+  error and NVTL are uncorrelated, |Pearson r| under 0.3 in every run; (b2) in the right
+  hairpins, where the across error reaches +0.13 m, the median NVTL is within 0.1 of the
+  straights'; (b3) iteration_num at the limit (30) in under 1 % of samples. If (b1) or (b2) fails,
+  NDT's convergence on this map's geometry is implicated, and where it fails says where.
