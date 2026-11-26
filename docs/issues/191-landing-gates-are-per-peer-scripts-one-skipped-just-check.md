@@ -138,3 +138,16 @@ worktree's path cut off, when it differs from the last line. A stub test covers 
   K9f-a adds tests, so the lane's count may be above 937.
 - `GATE_STEPS=check` on 550a8b41 fails at check, its summary line ending `first: Diff in
   src/scenario_world_bridge/src/backend/remote/profiles.rs:521:)`.
+
+**The follow-up's outcome:**
+- `just gate` on b8defc88: `gate ok b8defc88429a4bd80207e9edf21ddbcd0bbae177 tree 556b19d8 on
+  newslab-server-241 2026-11-26T10:47:31+08:00: build test check clean; Isaac lane ran (942
+  tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29)`, 42 min.
+  Held. The lane counts 942 tests with K9f-a's.
+- `GATE_STEPS=check` on 550a8b41: a miss in the setup, not the code. `just check` sources
+  `install/setup.bash`, which only `just build` makes, so it failed on that line before
+  rustfmt ran. Run as `GATE_STEPS="build check"`: `gate FAILED
+  550a8b414b8aafc56eb3f808b58cdd9d430e5c41 at check: \`just check\` exited non-zero (last
+  line: error: recipe \`check\` failed with exit code 1; first: Diff in
+  src/scenario_world_bridge/src/backend/remote/profiles.rs:521:)`. Held: the summary line
+  now names the file.
