@@ -1,7 +1,7 @@
 # 193: a kill-timing test fails under load: the engine outlives its SIGKILLed keeper
 
-**Status:** open (243; numbered by 133, 2026-11-26). Cause found (hypothesis 3, the reaper's
-handover order) and fixed on branch `i193-fix`, which is gating; see "The fix" below.
+**Status:** closed (243, 2026-11-26). Cause: hypothesis 3, the reaper's handover order (118's
+reading). Fixed on main in a02e9dc6; see "The fix" below.
 **Severity:** a gate failure on code the change did not touch; it stops a landing (issue 166's
 rule for this class). Whether CARLA's engine can really outlive a killed keeper in use is open.
 **Found:** 2026-11-26, scensim 243, `just gate` on b48261bd (190 (d)'s pins, R4).
@@ -283,4 +283,7 @@ imports and the whole first scan. Both tests (`:732` and `:815`) take "a pidfd i
   in the engine under the launcher. The helper was checked once by hand to see a blocked
   child as blocked. The reaper and keeper tests: 11 passed, 3 runs; the file: 47 passed,
   2 skipped.
-- P4: the gate is recorded below when it ends.
+- P4: held. The gate, run plainly (no GATE_WRAP, no setsid; memory logged by hand, never
+  under 29 GB available): `gate ok a02e9dc6b4cdfd7cab81b83ddbb7a39bdd844b09 tree 7e40dbff on
+  newslab-server243 2026-11-26T23:24:44+08:00: build test check clean; Isaac lane ran (947
+  tests)`. Pushed to main by 133's OK, a fast-forward from a4388a35.
