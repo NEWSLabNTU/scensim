@@ -147,3 +147,48 @@ Companion tests:
     run in both lanes.
 
   The result is 9 passed in the system Python, and 2 passed with 7 skipped in Isaac's.
+
+## Landed (2026-11-27)
+
+The code is siw e763170. The pin commit is scensim main 7716891b, and the docs went first as
+f5f46ea5. The gate passed at the landed tree (`ef22d921`): "gate end 03:17:23 rc=0",
+"Isaac-Python lane: ran (967 tests in 3 suites, OK)". The 7 builder tests run in the system
+lane only: they skip in the Isaac-Python lane, which has no pyproj (133). The 2 warning tests
+run in both.
+
+## The live check's plan (written 2026-11-27, before any run; 133)
+
+**The map.** `isaac-ex/i177/maps/fixture_c6b` is a hard-linked copy of the fixture_c6b build,
+without C6e3's hand-placed top-level `road_detail.yaml` and `section.npz`:
+- the record step at siw e763170 wrote its `road_detail.yaml`;
+- `base_drop --write` wrote 0.0000 m (a 0.010 m render drop);
+- the rewritten files are unlinked, and C6e3's copy was checked unchanged by sha256;
+- the rebuilt `course/road_detail.yaml` is byte-identical to the old one, and `course/section.npz`
+  equal array for array;
+- `pointcloud_map.pcd` is the same inode as r1's.
+
+**The runs.** The testbench `isaac_i177_c6b` (C6e3's c6b as the pattern) runs on the workspace
+gate-c5c at main 7716891b, built by the landing gate, on GPU0:
+1. the 177 check: `fixture_c6b_down` (start x 20, goal x 490), as C6e3's b1 and b2;
+2. run A for issues 181 and 182 (241): `fixture_c6b_r181` (start x 320), r1's scenario, on the
+   same stack, with 181's and 182's topics recorded. Their predictions are in 181 and 182.
+
+The runner refuses a run unless:
+- the live bridge and world server run from gate-c5c's install;
+- `result.json` names 7716891b and siw e763170;
+- the console has the road line and issue 168's 0.010 m drop line.
+
+**Predictions for the 177 check (before the run).**
+- The world server's console reads `road detail .../fixture_c6b/road_detail.yaml: 1
+  corridor(s)` and issue 168's `['/World/env/Road'] drawn 0.010 m`, with no "scensim issue 177"
+  warning. This is the fix's live test.
+- **What the ego meets first: the 15 cm static rock** at s 100 m, v 2.425 m, in the left wheel
+  track of the lane (y 1.62). It is unchanged by any fix since C6e3: issue 180 is open, so it is
+  passed as ground, with no object and no non-ground point published at it. The ego arrives at
+  about 4.17 m/s with no braking for it.
+- The plate meets the rock with the origin at x 97.3 ± 0.3 (b1 97.32, b2 97.29), seen in the
+  truth trace as a speed drop in one 50 ms frame. Whether it stops dead (b1) or scrapes over
+  (b2) is not predicted: one of each so far.
+- Later fixtures, if it gets past (the loose rocks at 200 and 300, the 35 cm boulder at 400),
+  are not predicted here. The run's verdict is not a 177 criterion. main now carries 190's
+  -6 m/s^2 MRM, unlike C6e3's 0291abb3.
