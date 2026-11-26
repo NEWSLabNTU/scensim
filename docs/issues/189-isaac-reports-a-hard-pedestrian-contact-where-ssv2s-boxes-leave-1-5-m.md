@@ -427,3 +427,18 @@ are in this commit:
   gives the same 70 passes and 189's two failures. No actor contact in them is under 10.
 - 243's 7 CARLA runs give the same verdicts as before.
 - `just gate` passes on 241, with the Isaac lane run.
+
+**Step 3's outcome against the predictions:**
+- The repeat dry pass over the 72 reports, with the static-only floor, held. It gave 70 passes
+  and 189's two failures, each first line naming the pedestrian:
+  `'ped' (pedestrian) 5470.5 N*s (static floor 10 N*s): 1 contact(s) ...` and 7595.5.
+- 243's 7 CARLA runs gave the same verdicts as before, as predicted. The six s5 runs fail on
+  `coop_a`, 4610.6 to 12111.8 N*s, and SSv2 had already failed them. The declared rear contact
+  passes.
+- `just gate` on 1d9ec114: `gate ok 1d9ec114ce136e1edffd87db0d66ad3ed467ad06 tree 680df579 on
+  newslab-server-241 2026-11-26T12:37:45+08:00: build test check clean; Isaac lane ran (942
+  tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29)`, 41 min.
+  Held. 1d9ec114 was rebased onto 86354c07, docs only, before landing.
+- Still to do: two fresh CARLA contact runs (a declared rear contact, a drive past a static
+  object) to measure CARLA's static impulses. They wait for a GPU that is free without
+  displacing anyone.
