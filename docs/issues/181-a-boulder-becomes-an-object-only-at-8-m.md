@@ -222,3 +222,15 @@ The fidelity check comes first: the replayed clustering must agree with the reco
 
 The validator's second delay (from 12.3 m to 8.8 m) is not in this step. It is read after,
 from the same replay's clusters, as its own prediction.
+
+**The first replay was invalid: the wrong map (2026-11-27, recorded; nothing read from it).**
+The replay above assumed Town01's `pointcloud_map.pcd`. r1 ran on `fixture_c6b`, a map on 118's
+host (`isaac_c6e3_r181`'s testbench: `path: /mnt/renegade/aeon/isaac-ex/c6e/maps/fixture_c6b`),
+which I did not check first.
+
+The fidelity check caught it. Against Town01's map, the replay removed 100 % of the boulder's
+points at every range and formed no cluster, while the record has clusters from 13.1 m. That
+is 0.780 frame agreement against the 0.90 required. So nothing is read from it, as planned.
+
+118 has been asked to put fixture_c6b's map (the version r1 used) on the NAS. The replay is run
+again on it, with the predictions above unchanged.
