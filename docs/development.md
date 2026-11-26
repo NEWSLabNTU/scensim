@@ -242,11 +242,17 @@ sides need no shared domain. Details: [architecture](design/architecture.md),
   the commit is on origin. A commit gated and then rebased before landing counts too, when
   every commit of it is patch-equivalent on origin/main (`git cherry`). It first gets the
   local tag `gate/gate-<sha8>`, so the SHA the gate's line cites stays reachable.
-  `notag=true` never tags: such a gate is kept, and the `git tag` command is printed. A gate
-  stopped during its submodule checkout still goes: a submodule at its pin whose only changes
-  are missing files is named as an interrupted checkout. `dir=<path>` takes a gate made with
-  `just gate <commit> <dir>`; it must be a worktree of this repository at that commit. A
-  docs-only change needs only `scripts/check_docs.py` and `scripts/check_pins.py`.
+  Its arguments are `name:=value`; a bare `name=value` is refused.
+  - `notag:=true` never tags: such a gate is kept, and the `git tag` command is printed.
+  - `dir:=<path>` takes a gate made with `just gate <commit> <dir>`; it must be a worktree of
+    this repository at that commit.
+  - `unlanded:=true` removes the gate of a commit that never landed, when a local branch or
+    tag (not `gate/*`) holds the SHA.
+
+  A gate stopped during its submodule checkout still goes: a submodule whose only changes are
+  missing files is named as an interrupted checkout, nested submodules included. So is one
+  left on its origin's branch. A docs-only change needs only `scripts/check_docs.py` and
+  `scripts/check_pins.py`.
 
 ## Design documents
 

@@ -1,9 +1,13 @@
 #!/bin/bash
 # Remove a gate's worktree (issue 191) once its commit has landed. `just gate-clean` runs it:
 #
-#     scripts/gate_clean.sh <commit> [--notag] [--unlanded] [--dir <path>]
+#     scripts/gate_clean.sh <commit> [notag:=true|false] [unlanded:=true|false] [dir:=<path>]
 #
-# The worktree is $SCENSIM_GATE_ROOT/gate-<sha8> (default /var/tmp/$USER), or `--dir`'s: one of
+# Arguments are name:=value, as the other recipes take them (issue 191's seventh follow-up: the
+# recipe used to bind `notag=true` by position, so no flag ever arrived). A bare name=value, an
+# old --flag, an unknown name or a bad value is refused (exit 2) before anything is touched.
+#
+# The worktree is $SCENSIM_GATE_ROOT/gate-<sha8> (default /var/tmp/$USER), or `dir:=`'s: one of
 # this repository's registered worktrees whose HEAD is <commit> (a gate made with `just gate
 # <commit> <dir>`); any other path is refused. It is removed only when nothing tracked changed
 # in it and when either:
@@ -11,29 +15,39 @@
 # - it was gated before a rebase: every commit from its merge base with origin/main is
 #   patch-equivalent to one on origin/main (`git cherry`: all "-"). Then the local tag
 #   gate/<dir name> is set to it first, so the SHA a gate record cites stays reachable, and
-#   printed. A tag of that name on another commit is refused. With `--notag` (`just gate-clean
-#   <commit> notag=true`, for a user whose own go every tag needs) it tags nothing: the
+#   printed. A tag of that name on another commit is refused. With `notag:=true` (`just gate-clean
+#   <commit> notag:=true`, for a user whose own go every tag needs) it tags nothing: the
 #   worktree is kept, and the `git tag` command the user could run is printed.
-# - with `--unlanded` (`unlanded=true`), a commit on no origin branch: removed when a local
+# - with `unlanded:=true`, a commit on no origin branch: removed when a local
 #   branch or tag other than gate/* holds it (named), so nothing is orphaned; no tag.
 # "Nothing tracked changed" allows a gate stopped during its submodule checkout (see sub_ok):
 # named and removed with the rest, with the ref that made it safe; nothing in it is anyone's
 # edit. Otherwise the worktree is kept, saying why.
 set -euo pipefail
-usage="usage: scripts/gate_clean.sh <commit> [--notag] [--unlanded] [--dir <path>]"
+usage="usage: scripts/gate_clean.sh <commit> [notag:=true|false] [unlanded:=true|false] [dir:=<path>]"
 commit=${1:?$usage}
 shift
 notag=""
 unlanded=""
 given=""
-while [ $# -gt 0 ]; do
-    case $1 in
-        --notag) notag=1; shift ;;
-        --unlanded) unlanded=1; shift ;;
-        --dir) given=${2:?$usage}; shift 2 ;;
-        *) echo "$usage"; exit 2 ;;
+refuse() { echo "gate-clean: $*"; echo "$usage"; exit 2; }
+for a in "$@"; do
+    case $a in
+        notag:=true) notag=1 ;;
+        notag:=false) notag="" ;;
+        unlanded:=true) unlanded=1 ;;
+        unlanded:=false) unlanded="" ;;
+        notag:=*|unlanded:=*) refuse "'$a': ${a%%:=*}:=true or ${a%%:=*}:=false" ;;
+        dir:=) refuse "dir:= needs a path" ;;
+        dir:=*) given=${a#dir:=} ;;
+        --notag|--unlanded) refuse "'$a' is now ${a#--}:=true" ;;
+        --dir|--dir=*) refuse "'$a' is now dir:=<path>" ;;
+        *:=*) refuse "unknown argument '$a' (notag:=, unlanded:=, dir:=)" ;;
+        *=*) refuse "'$a': arguments are name:=value (${a%%=*}:=${a#*=})" ;;
+        *) refuse "unknown argument '$a' (notag:=, unlanded:=, dir:=)" ;;
     esac
 done
+echo "gate-clean ${commit}: notag:=${notag:+true}${notag:-false} unlanded:=${unlanded:+true}${unlanded:-false} dir:=${given}"
 sha=$(git rev-parse --verify --quiet "$commit^{commit}") || { echo "$commit: not a commit here"; exit 1; }
 if [ -n "$given" ]; then
     [ -d "$given" ] || { echo "no directory $given"; exit 1; }
@@ -119,7 +133,7 @@ if [ -z "$(git branch -r --contains "$sha")" ]; then
     if [ -z "$cherry" ] || echo "$cherry" | grep -q '^+'; then
         if [ -z "$unlanded" ]; then
             echo "$sha is on no origin branch, nor all patch-equivalent on origin/main: kept" \
-                 "(unlanded=true removes it when a local branch or tag holds $sha)"
+                 "(unlanded:=true removes it when a local branch or tag holds $sha)"
             exit 1
         fi
         # only the main repository's branches and tags; never gate-clean's own gate/* tags
@@ -139,7 +153,7 @@ if [ -z "$(git branch -r --contains "$sha")" ]; then
     if [ -n "$notag" ]; then
         echo "$sha landed rebased (every commit patch-equivalent on origin/main), but notag:"
         echo "kept $dir; to tag the SHA its gate cites and then remove it, run:"
-        echo "  git tag $tag $sha && just gate-clean $sha${given:+ dir=$dir}"
+        echo "  git tag $tag $sha && just gate-clean $sha${given:+ dir:=$dir}"
         exit 1
     fi
     if have=$(git rev-parse --verify --quiet "refs/tags/$tag^{commit}"); then

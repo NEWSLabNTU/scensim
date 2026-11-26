@@ -205,7 +205,7 @@ def test_gate_clean_removes_a_worktree_whose_commit_is_on_origin(tmp_path):
     git(r, "push", "-q", "origin", "main")
     p = clean(r, root, sha)
     assert p.returncode == 0, p.stdout + p.stderr
-    assert not d.exists() and "tag" not in p.stdout
+    assert not d.exists() and "tag gate/" not in p.stdout    # (the echo names notag:=)
     assert git(r, "tag", "-l") == ""
 
 

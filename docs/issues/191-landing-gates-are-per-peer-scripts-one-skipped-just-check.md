@@ -427,3 +427,22 @@ no alias:
   refusals fails: the script's catch-all prints its usage, and the recipe misbinds.
 - After the fix, all pass, and the gate-clean tests that take no arguments are unchanged.
 - `just gate` passes, with the Isaac lane run.
+
+**Tests first** (9e6d481a, before the fix): 16 of the 39 gate tests failed on the old script
+and recipe, every one that passes a name or expects a refusal. The 23 that take no arguments
+passed. The prediction **held**.
+
+**118's tags:** none. 118 never ran `just gate-clean`, because its user's rule forbids it without
+their go. Both `for-each-ref` listings (`refs/tags/gate/`, `refs/tags/keep/`) are empty in both
+of 118's checkouts. So the ignored `notag=true` did no harm there.
+
+**The fix:**
+- `gate_clean.sh` parses `notag:=`, `unlanded:=` and `dir:=`, and refuses the rest, as planned.
+  Its first line echoes what it read.
+- The recipe is `[positional-arguments] gate-clean commit *args`, passing its arguments through.
+- `docs/development.md` names the new form.
+- One existing assertion was narrowed, from "no `tag` anywhere in the output" to "no `tag
+  gate/` line": the echo line's `notag:=false` contains "tag".
+
+**Result:** the 39 gate tests pass. By hand, `just gate-clean HEAD unlanded=true` gives
+"gate-clean: 'unlanded=true': arguments are name:=value (unlanded:=true)", exit 2.
