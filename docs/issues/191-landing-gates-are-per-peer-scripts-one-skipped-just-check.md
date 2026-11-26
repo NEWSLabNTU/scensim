@@ -215,3 +215,53 @@ line ending `carried ISAAC_ROOT`, and the 16 tests pass within `just test`.
 on newslab-server-241 2026-11-26T14:04:32+08:00: build test check clean; Isaac lane ran (942
 tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29); carried
 ISAAC_ROOT`. Every prediction held. It was rebased onto 6df260e3 (docs only) before landing.
+
+
+## The fifth follow-up: gate-clean after an interrupted gate, and by directory (241, 2026-11-26; a plan, before any code)
+
+133, from 243's cleanup, asks for two changes, bundled.
+
+**1. An interrupted checkout is not an edit.** If a gate stops during `git submodule update`
+(killed, or out of disk), it leaves a submodule whose clone checked out part of its tree. That
+submodule's `git status` lists the missing files as deleted, and the superproject shows it as
+modified. `gate_clean.sh`'s check (`git status --porcelain --untracked-files=no` in the gate
+worktree, non-empty means kept) refuses it as "tracked changes". Today only a reset by hand in
+each submodule gets past.
+
+The rule: the worktree is removed as clean when the superproject's own tracked files are
+unchanged, and every submodule it lists meets all of these:
+- its HEAD is the commit the gate's tree pins for that path (`git ls-tree <sha> <path>`);
+- its only tracked changes are deletions (`D` in either column of `git status --porcelain`),
+  recursively for nested submodules;
+- or it has no HEAD at all (a clone that never got as far as its checkout).
+
+Anything else is kept, as now: a modified or added file, a submodule at another commit, or a
+change in the superproject's own files. Before removing, it names each submodule it accepted
+("<path>: an interrupted checkout at <pin8>, N files missing"). The removal is `git worktree
+remove --force` as now, so no reset is needed: nothing in an incomplete checkout is lost.
+
+**2. `dir=`.** Use `just gate-clean <commit> dir=<path>` for a gate made with `just gate
+<commit> <dir>` (e.g. `gate-<sha8>-2`). The directory must be one of this repository's
+registered worktrees (`git worktree list --porcelain`), and its HEAD must be `<commit>`.
+Otherwise it is refused, so `dir=` can never remove an arbitrary path. The rest is unchanged:
+landed or patch-equivalent, the tag (or `notag`), and the clean check above. The tag of a
+custom directory is `gate/<its basename>`.
+
+**Tests** (scripts/test_gate.py, against a bare origin, as the gate-clean tests are):
+- a submodule with files deleted at its pin is accepted and removed, and the line names it;
+- the same submodule with a modified file is kept;
+- a submodule at another commit is kept;
+- a superproject file changed is kept, as now;
+- `dir=` on a registered worktree at the commit is removed;
+- `dir=` on a registered worktree at another commit is refused;
+- `dir=` on an unregistered directory is refused, and the directory is untouched.
+
+**Predictions, before any code:**
+- The 7 new tests pass, and the 16 existing gate tests are unchanged.
+- `just gate` passes on 241 with the Isaac lane run.
+- The first real use is 243's interrupted gate, if it is still there. It is removed, naming its
+  submodules. That is 243's call, on its own host.
+
+133 approved it as written (2026-11-26). 243 had already cleaned its interrupted gate by hand,
+so the 7 fixture tests are the evidence. `scripts/gate_clean.sh` now takes `--notag` and `--dir
+<path>` as flags; the recipe passes `notag=true` and `dir=` through.

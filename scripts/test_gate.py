@@ -228,7 +228,7 @@ def rebased_gate(tmp_path):
 def test_gate_clean_notag_keeps_a_rebased_gate_and_prints_the_tag_command(tmp_path):
     """118's user gives their own go for every tag: notag never tags."""
     r, root, sha, d = rebased_gate(tmp_path)
-    p = clean(r, root, sha, "notag")
+    p = clean(r, root, sha, "--notag")
     assert p.returncode == 1, p.stdout + p.stderr
     assert d.exists() and git(r, "tag", "-l") == ""
     assert f"  git tag gate/gate-{sha[:8]} {sha} && just gate-clean {sha}" in p.stdout
@@ -239,7 +239,7 @@ def test_gate_clean_notag_still_removes_a_gate_on_origin(tmp_path):
     sha = commit(r, "b.txt", "b\n")
     d = gate_tree(r, root, sha)
     git(r, "push", "-q", "origin", "main")
-    p = clean(r, root, sha, "notag")
+    p = clean(r, root, sha, "--notag")
     assert p.returncode == 0 and not d.exists(), p.stdout + p.stderr
 
 
@@ -282,3 +282,101 @@ def test_gate_clean_keeps_a_worktree_with_tracked_changes(tmp_path):
     p = clean(r, root, sha)
     assert p.returncode == 1 and "has tracked changes: kept" in p.stdout
     assert d.exists()
+
+
+# --- gate_clean.sh after an interrupted checkout, and --dir (issue 191's fifth follow-up) ----
+
+def git_f(r, *a):
+    """git with file:// submodules allowed (a test's local origins)."""
+    return git(r, "-c", "protocol.file.allow=always", *a)
+
+
+def repo_with_submodule(tmp_path):
+    """A superproject on a bare origin pinning one submodule (two files) on its own origin."""
+    sub_origin = tmp_path / "sub.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(sub_origin)], check=True)
+    s = tmp_path / "subwork"
+    subprocess.run(["git", "clone", "-q", str(sub_origin), str(s)], check=True,
+                   capture_output=True)
+    git(s, "checkout", "-q", "-b", "main")
+    commit(s, "one.txt", "1\n")
+    commit(s, "two.txt", "2\n")
+    git(s, "push", "-q", "origin", "main")
+    r, root = landed_repo(tmp_path)
+    git_f(r, "submodule", "add", "-q", str(sub_origin), "sub")
+    git(r, "commit", "-qm", "sub")
+    git(r, "push", "-q", "origin", "main")
+    return r, root, git(r, "rev-parse", "HEAD")
+
+
+def sub_gate(r, root, sha, name=None):
+    d = root / (name or f"gate-{sha[:8]}")
+    git(r, "worktree", "add", "-q", "--detach", str(d), sha)
+    git_f(d, "submodule", "update", "-q", "--init", "--recursive")
+    return d
+
+
+def test_gate_clean_removes_a_gate_whose_submodule_checkout_was_cut_short(tmp_path):
+    r, root, sha = repo_with_submodule(tmp_path)
+    d = sub_gate(r, root, sha)
+    (d / "sub" / "one.txt").unlink()
+    (d / "sub" / "two.txt").unlink()                   # a clone stopped before its checkout
+    p = clean(r, root, sha)
+    assert p.returncode == 0, p.stdout + p.stderr
+    pin = git(r, "ls-tree", sha, "sub").split()[2]
+    assert f"sub: an interrupted checkout at {pin[:8]}, 2 files missing" in p.stdout
+    assert not d.exists()
+
+
+def test_gate_clean_keeps_a_submodule_with_an_edit(tmp_path):
+    r, root, sha = repo_with_submodule(tmp_path)
+    d = sub_gate(r, root, sha)
+    (d / "sub" / "one.txt").unlink()
+    (d / "sub" / "two.txt").write_text("edited\n")
+    p = clean(r, root, sha)
+    assert p.returncode == 1 and "sub/two.txt: a tracked change ( M): kept" in p.stdout
+    assert d.exists()
+
+
+def test_gate_clean_keeps_a_submodule_at_another_commit(tmp_path):
+    r, root, sha = repo_with_submodule(tmp_path)
+    d = sub_gate(r, root, sha)
+    commit(d / "sub", "three.txt", "3\n")
+    p = clean(r, root, sha)
+    assert p.returncode == 1 and "not its pin" in p.stdout and d.exists()
+
+
+def test_gate_clean_keeps_a_superprojects_own_change(tmp_path):
+    r, root, sha = repo_with_submodule(tmp_path)
+    d = sub_gate(r, root, sha)
+    (d / "a.txt").write_text("changed\n")
+    p = clean(r, root, sha)
+    assert p.returncode == 1 and "a.txt: a tracked change ( M): kept" in p.stdout
+    assert d.exists()
+
+
+def test_gate_clean_dir_removes_a_custom_named_gate(tmp_path):
+    r, root, sha = repo_with_submodule(tmp_path)
+    d = sub_gate(r, root, sha, name=f"gate-{sha[:8]}-2")
+    assert clean(r, root, sha).returncode == 1          # not at the default path
+    p = clean(r, root, sha, "--dir", str(d))
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert not d.exists()
+
+
+def test_gate_clean_dir_refuses_a_worktree_at_another_commit(tmp_path):
+    r, root, sha = repo_with_submodule(tmp_path)
+    first = git(r, "rev-parse", "HEAD~1")
+    d = sub_gate(r, root, first, name="gate-other")
+    p = clean(r, root, sha, "--dir", str(d))
+    assert p.returncode == 1 and f"not {sha}: refused" in p.stdout and d.exists()
+
+
+def test_gate_clean_dir_refuses_a_directory_that_is_no_worktree(tmp_path):
+    r, root, sha = repo_with_submodule(tmp_path)
+    stray = tmp_path / "stray"
+    stray.mkdir()
+    (stray / "keep.txt").write_text("mine\n")
+    p = clean(r, root, sha, "--dir", str(stray))
+    assert p.returncode == 1 and "is not a worktree of this repository: refused" in p.stdout
+    assert (stray / "keep.txt").read_text() == "mine\n"
