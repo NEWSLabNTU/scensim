@@ -470,3 +470,16 @@ signature from the vehicle's own state, judged alongside contacts. For example:
   (the hit distance's jump), with the prim hit when the query reports it.
 Each needs a calibration like this issue's step 3, on kerb and rock strikes known to be
 strikes, before it can fail a run.
+
+**SSv2 saw a later contact of the same kind (243, 2026-11-26; recorded by 241).** In issue 190's
+step (b) run, 2026-11-26T13-20-19_goal_stop_goal_surface-asphalt_r0, SSv2's
+CollisionCondition fired, unlike K9f-a's run 2:
+- the run: Isaac 6.2, the K9f-a gate install 91d3e9ab, the same k9f_zones scenario, the
+  asphalt case;
+- the verdict: SimulationFailure from "ego_hits_ped";
+- its contact report: `ped` (pedestrian), first at SSv2 frame 538, count 2, max impulse
+  6189.7 N*s.
+
+So the same touch is sometimes seen by SSv2's boxes and sometimes not, as step 1 found (the
+boxes touch; SSv2 reads them a frame late). Details: issue 190's step (b), main 6df260e3. The
+run directory with its gap trace: `~/nas/home/2026-11-26 190 b run (243)/`.
