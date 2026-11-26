@@ -42,6 +42,15 @@ FAKE_SSV2 = textwrap.dedent('''\
         time.sleep(1.0)
     if outcome == "error":
         sys.exit(1)
+    # the bridge's contact report for the ego run, as a real one writes before SSv2 exits
+    # (issue 189: a run the stack collects no report for is an error)
+    if len(sys.argv) > 4 and sys.argv[4]:
+        import json
+        c = Path(sys.argv[4])
+        c.mkdir(parents=True, exist_ok=True)
+        (c / f"{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime(t))}_e1.json").write_text(
+            json.dumps({"schema": 1, "episode": 1, "ego": "ego", "start_unix": t,
+                        "complete": True, "contacts": []}))
     j = run_dir / "logs" / "ssv2" / "scenario_test_runner" / "result.junit.xml"
     j.parent.mkdir(parents=True, exist_ok=True)
     case = ('<failure type="SimulationFailure" message="ego collided"/>'
@@ -211,7 +220,7 @@ def fake(where):
 
     def cmd(rec, spec, run_dir, scenario):
         return [sys.executable, script, str(run_dir), str(spec.parameters.get("outcome", "passed")),
-                rec["proc"]]
+                rec["proc"], (rec.get("episodes") or {}).get("contacts") or ""]
     return cmd
 
 
@@ -471,7 +480,8 @@ def test_keep_prunes_a_passed_run(live, where):
     r = api.run_one(d, "scenarios/three_pilots.xosc", {"scenario_command": fake(where)})
     run_dir = where["tmp"] / "logs" / "proj" / "runs" / r.run_id
     assert sorted(x.name for x in run_dir.iterdir()) == [
-        "judges", "junit.xml", "resolved.yaml", "result.json", "scenario.xosc", "timeline.jsonl"]
+        "contacts", "judges", "junit.xml", "resolved.yaml", "result.json", "scenario.xosc",
+        "timeline.jsonl"]
 
 
 def test_error_when_ssv2_writes_nothing(live, where):

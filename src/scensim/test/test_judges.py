@@ -1,5 +1,6 @@
 import json
 import sys
+from pathlib import Path
 
 from scensim import budget, judges
 
@@ -127,7 +128,7 @@ def test_the_contact_judge_is_off_only_by_name_and_with_a_reason():
             ([{"name": "physical_verdict", "off": "yes", "why": "x"}], "off: true"),
             ([{"name": "physical_verdict", "run": ["true"], "why": "x"}], "goes with off"),
             ([{"name": "physical_verdict", "off": True, "why": "x", "run": ["true"]}],
-             "runs nothing")):
+             "takes only name, off and why")):
         msgs = " | ".join(m for _, m in judges.problems(bad))
         assert part in msgs, (bad, msgs)
 
@@ -174,19 +175,59 @@ def test_an_undeclared_contact_fails_the_run_naming_it(tmp_path):
     assert json.loads((d / "judges" / "physical_verdict.json").read_text())["verdict"] == "failed"
     verdict, reason = results.verdict_from(d / "junit.xml")
     assert verdict == "failed"
-    assert reason.startswith("UndeclaredContact: 'ped' (pedestrian) 5470.5 N*s (floor 10 N*s)")
+    assert reason.startswith("UndeclaredContact: 'ped' (pedestrian) 5470.5 N*s")
 
 
-def test_the_contact_judge_off_or_without_a_report_records_why(tmp_path):
+PV = Path(__file__).resolve().parents[2] / "scensim_launch" / "scripts" / "physical_verdict"
+
+
+def real_pv():
+    return {"name": "physical_verdict",
+            "run": [sys.executable, str(PV), "{run_dir}/junit.xml", "--min-impulse", "10"]}
+
+
+def test_a_run_without_a_report_where_the_world_reports_is_an_error(tmp_path):
+    """Issue 189 (133's ruling on 243's F2): a missing or empty contacts/ is NoContactReport."""
+    from scensim import results  # noqa: PLC0415
+    for report_dir in (True, False):
+        d = contact_run(tmp_path / str(report_dir), report=False)
+        if not report_dir:
+            (d / "contacts").rmdir()
+        rec = judges.run_contact([real_pv()], d, tmp_path, reporting=True)
+        assert rec["verdict"] == "failed", rec
+        verdict, reason = results.verdict_from(d / "junit.xml")
+        assert verdict == "error" and reason.startswith("NoContactReport:"), reason
+        assert judges.contact_warning(d) == ""
+
+
+def test_a_world_that_reports_no_contacts_leaves_the_run_unjudged_with_a_warning(tmp_path):
     d = contact_run(tmp_path, report=False)
-    pv = judge(tmp_path, FAILS_THE_JUNIT, name="physical_verdict")
-    assert judges.run_contact([pv], d, tmp_path) is None
+    assert judges.run_contact([real_pv()], d, tmp_path, reporting=False) is None
     rec = json.loads((d / "judges" / "physical_verdict.json").read_text())
-    assert rec["verdict"] == "off" and "no contact report" in rec["message"]
+    assert rec["verdict"] == "off" and rec["warn"] is True
     assert "carla_contact" not in (d / "junit.xml").read_text()
-    d2 = contact_run(tmp_path / "b")
+    assert judges.contact_warning(d).startswith("WARN physical_verdict: not judged: the world")
+
+
+def test_the_contact_judge_refuses_scheduling_keys_and_extras_when_off():
+    """243's F3: on/needs/timeout mean nothing for a judge that always runs before the verdict."""
+    for k, v in (("on", ["passed"]), ("needs", ["gap_trace"]), ("timeout", 30)):
+        msgs = " | ".join(m for _, m in judges.problems(
+            [{"name": "physical_verdict", "run": ["true"], k: v}]))
+        assert f"{k}: not for the contact judge" in msgs, (k, msgs)
+    assert judges.problems([{"name": "comfort", "run": ["true"], "on": ["passed"],
+                             "timeout": 5}]) == []
+    msgs = " | ".join(m for _, m in judges.problems(
+        [{"name": "physical_verdict", "off": True, "why": "x", "version": "2"}]))
+    assert "version: an entry that turns the judge off takes only name, off and why" in msgs
+
+
+def test_the_contact_judge_off_by_name_records_why(tmp_path):
+    d = contact_run(tmp_path)
     off = [{"name": "physical_verdict", "off": True, "why": "its own oracle"}]
-    assert judges.run_contact(off, d2, tmp_path) is None
-    rec = json.loads((d2 / "judges" / "physical_verdict.json").read_text())
+    assert judges.run_contact(off, d, tmp_path) is None
+    rec = json.loads((d / "judges" / "physical_verdict.json").read_text())
     assert rec == {"name": "physical_verdict", "version": "", "verdict": "off",
                    "message": "off in testbench.yaml: its own oracle"}
+    assert "carla_contact" not in (d / "junit.xml").read_text()
+    assert judges.contact_warning(d) == ""

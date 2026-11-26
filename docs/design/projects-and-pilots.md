@@ -799,10 +799,14 @@ stays SSv2's, and the scoring stays with the judges.
 The one exception is the contact judge, `physical_verdict` (roadmap 021, issue 189). It runs in
 every project, listed or not, and **before** the verdict, wherever the run holds a contact
 report. It adds its `carla_contact` testcase to the run's `junit.xml`, so a contact the
-scenario does not declare (`csbExpectedContacts`), above 10 N*s, fails the run. Its reason
-names the contact, its impulse and the floor. Listing it changes its arguments, and it still
-runs once, before the verdict. A project turns it off only by name and with a reason, `{name:
-physical_verdict, off: true, why: "..."}`, and `off`/`why` are refused on any other judge.
+scenario does not declare (`csbExpectedContacts`) fails the run: with an actor at any
+impulse, with the static world above 10 N*s (the floor is the static world's alone). Its
+reason names up to three contacts, their impulses and the floor. A run the stack collected
+no report for is an error (NoContactReport). A world whose `contact_report_dir` is off or the
+user's leaves the run unjudged, with a WARN on its line. Listing it changes its arguments,
+and it still runs once, before the verdict; `on`, `needs` and `timeout` are refused on it. A
+project turns it off only by name and with a reason, `{name: physical_verdict, off: true,
+why: "..."}`, which takes no other key, and `off`/`why` are refused on any other judge.
 Every run keeps the scenario it ran, `scenario.xosc`: the source's bytes, or the copy with a
 layout's props and zones.
 

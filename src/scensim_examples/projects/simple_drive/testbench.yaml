@@ -7,9 +7,10 @@ pilots:
   ego: {kind: simple, vehicle: tesla_model3, inputs: [map, ground_truth]}
 default: all   # the suite `scensim run <testbench>` runs
 # The contact judge (issue 189) runs by default, before the verdict; it is listed here so a
-# reader sees it. An undeclared contact above 10 N*s fails the run; a scenario that means to
-# touch declares csbExpectedContacts. Edit the entry to change it; to turn it off, replace it
-# with {name: physical_verdict, off: true, why: "<the reason>"}.
+# reader sees it. An undeclared contact fails the run: with an actor at any impulse, with the
+# static world above 10 N*s. A scenario that means to touch declares csbExpectedContacts.
+# Edit the entry to change it; to turn it off, replace it with
+# {name: physical_verdict, off: true, why: "<the reason>"}.
 judges:
   - name: physical_verdict
     run: [ros2, run, scensim_launch, physical_verdict, "{run_dir}/junit.xml",

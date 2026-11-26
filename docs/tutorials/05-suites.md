@@ -111,7 +111,8 @@ A **judge** is a program run over a finished run. `{run_dir}` and `{scenario}` i
 directory is appended as the last argument. It prints one JSON object, and its exit code
 (0 passed, 1 failed) or the object's own `verdict` is the judge's verdict. Other judges
 run after the verdict and are recorded beside it. This one runs before it (issue 189): a
-contact the scenario does not declare, above 10 N*s, fails the run. A scenario that means
+contact the scenario does not declare fails the run: with a pedestrian or a car at any
+impulse, with the static world above 10 N*s. A scenario that means
 to touch declares it (`csbExpectedContacts`, [Verdicts](../explanation/verdicts.md)). A
 project turns the judge off only by name and with a reason:
 `{name: physical_verdict, off: true, why: "..."}`.
@@ -122,7 +123,7 @@ scensim run my_first_drive/follow
 
 **What you see**: each run line shows `judges: physical_verdict=passed`. A failed one
 fails the run, and the reason names the contact, its impulse and the floor, such as
-`UndeclaredContact: 'ped' (pedestrian) 5470.5 N*s (floor 10 N*s)`.
+`UndeclaredContact: 'ped' (pedestrian) 5470.5 N*s (static floor 10 N*s)`.
 
 **Check**:
 

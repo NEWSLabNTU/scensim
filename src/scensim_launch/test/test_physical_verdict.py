@@ -157,13 +157,28 @@ class Judge(unittest.TestCase):
     def test_the_first_line_names_the_contact_its_impulse_and_the_floor(self):
         _, _, msg = pv.judge([report(1.0, [contact(impulse=5470.54)])], min_impulse=10.0)
         self.assertTrue(msg.splitlines()[0].startswith(
-            "'npc_rear' (vehicle.tesla.model3) 5470.5 N*s (floor 10 N*s): 1 contact(s)"),
+            "'npc_rear' (vehicle.tesla.model3) 5470.5 N*s (static floor 10 N*s): 1 contact(s)"),
             msg.splitlines()[0])
 
-    def test_min_impulse_filters(self):
-        r = [report(1.0, [contact(impulse=5.0)])]
+    def test_min_impulse_filters_the_static_world_only(self):
+        r = [report(1.0, [contact(impulse=5.0, static=True)])]
         self.assertEqual(pv.judge(r, min_impulse=10.0)[0], "pass")
         self.assertEqual(pv.judge(r, min_impulse=5.0)[0], "failure")
+
+    def test_an_actor_touch_under_the_floor_still_fails(self):
+        """Issue 189 (243's probes, 133's ruling): a pedestrian brush at 5 or 0 N*s fails."""
+        for imp in (5.0, 0.0):
+            r = [report(1.0, [contact(name="ped", impulse=imp)])]
+            kind, type_, msg = pv.judge(r, min_impulse=10.0)
+            self.assertEqual((kind, type_), ("failure", "UndeclaredContact"), (imp, msg))
+            self.assertIn("'ped'", msg)
+
+    def test_the_first_line_names_three_contacts_then_how_many_more(self):
+        r = [report(1.0, [contact(name=f"n{i}", impulse=100.0 + i) for i in range(5)])]
+        head = pv.judge(r, min_impulse=10.0)[2].splitlines()[0]
+        self.assertIn("'n2'", head)
+        self.assertNotIn("'n3'", head)
+        self.assertIn(", +2 more (static floor 10 N*s): 5 contact(s)", head)
 
     def test_no_report_is_an_error_unless_there_is_no_ego(self):
         kind, type_, _ = pv.judge([])

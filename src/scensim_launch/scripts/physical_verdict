@@ -13,7 +13,9 @@ place, next to SSv2's own testcases (which are never edited):
   - pass:    every report in the window is complete and has no unexpected contact
   - failure: a contact the scenario did not declare (entity, first frame, max impulse);
              the message's first line names each one, its impulse and the floor:
-             `'ped' (pedestrian) 5470.5 N*s (floor 10 N*s): 1 contact(s) ...`
+             `'ped' (pedestrian) 5470.5 N*s (static floor 10 N*s): 1 contact(s) ...`;
+             --min-impulse is a floor for the static world only: an undeclared actor
+             contact fails at any impulse
   - error:   no report in the window, or one cut short by a CARLA restart
 
 The window is [--since, --until] on each report's ego spawn time (Unix seconds or ISO 8601);
@@ -51,6 +53,7 @@ from typing import List, Optional, Set, Tuple
 SCHEMA = 1
 TESTCASE = "carla_contact"   # the name stays: gap_campaign and readers key on it
 TYPE = "UndeclaredContact"
+HEADS = 3   # contacts named on the message's first line
 EXPECTED_PARAM = "csbExpectedContacts"
 STATIC = "static"
 
@@ -184,7 +187,9 @@ def judge(reports: List[dict], expected: Set[str] = frozenset(), min_impulse: fl
             name = c.get("name")
             if (STATIC if is_static else name) in expected:
                 continue
-            if c.get("max_impulse", 0.0) < min_impulse:
+            # the floor is the static world's alone (issue 189): a soil mesh the ego rests on, a
+            # rock it grazes; an actor touch fails at any impulse, a slow brush included
+            if is_static and c.get("max_impulse", 0.0) < min_impulse:
                 continue
             if is_static:
                 who = "static world"
@@ -198,11 +203,13 @@ def judge(reports: List[dict], expected: Set[str] = frozenset(), min_impulse: fl
                 f"(t={c.get('first_sim_time', 0.0):.2f} s), {c.get('count')} contact(s), "
                 f"max impulse {c.get('max_impulse', 0.0):.1f} N*s")
     if lines:
-        # the first line is what a run's verdict line shows (issue 189): who, how hard, the floor
-        floor = f" (floor {min_impulse:g} N*s)" if min_impulse > 0 else ""
+        # the first line is what a run's verdict line shows (issue 189): who, how hard, the
+        # static floor; at most HEADS of them, then how many more
+        floor = f" (static floor {min_impulse:g} N*s)" if min_impulse > 0 else ""
+        more = f", +{len(heads) - HEADS} more" if len(heads) > HEADS else ""
         return ("failure", TYPE,
-                f"{', '.join(heads)}{floor}: {len(lines)} contact(s) the scenario did not "
-                "declare\n" + "\n".join(lines))
+                f"{', '.join(heads[:HEADS])}{more}{floor}: {len(lines)} contact(s) the scenario "
+                "did not declare\n" + "\n".join(lines))
     incomplete = [r for r in reports if not r.get("complete", True)]
     if incomplete:
         return ("error", "IncompleteContactReport",
@@ -306,7 +313,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="window start: Unix seconds or ISO 8601")
     ap.add_argument("--until", type=parse_time, metavar="T", help="window end")
     ap.add_argument("--min-impulse", type=float, default=0.0, metavar="N",
-                    help="ignore contacts below this normal impulse, N*s (default 0)")
+                    help="ignore static-world contacts below this normal impulse, N*s "
+                         "(default 0); an actor contact fails at any impulse (issue 189)")
     args = ap.parse_args(sys.argv[1:] if argv is None else argv)
     if not args.junit.is_file():
         print(f"[physical_verdict] no such file: {args.junit}", file=sys.stderr)

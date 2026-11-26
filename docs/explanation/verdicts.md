@@ -52,14 +52,18 @@ in every project, before the verdict (issue 189), so its failure fails the run:
 
 | `carla_contact` | When |
 |---|---|
-| passed | no contact above the floor (10 N*s), or only contacts the scenario declares |
-| failed | the ego touched something else; the reason names it, its impulse and the floor |
-| error | the contact record was cut short (a simulator restart mid-run) |
+| passed | no contact, or only contacts the scenario declares, or the static world below the floor (10 N*s) |
+| failed | the ego touched an actor (at any impulse) or the static world above the floor; the reason names it, its impulse and the floor |
+| error | no contact report for the run, or one cut short (a simulator restart mid-run) |
 
-A run without a contact report (the world's `contact_report_dir` off) is not judged.
-`judges/physical_verdict.json` then says `off` and why. The floor keeps the ego's
-resting contact with a soil mesh (0 N*s) and a graze of a road rock (about 1 N*s) from
-failing a run. Every collision in the kept runs was above 4000 N*s, on both simulators.
+The floor is the static world's alone. It keeps the ego's resting contact with a soil
+mesh (0 N*s) and a graze of a road rock (about 1 N*s) from failing a run. A pedestrian
+brushing the ego fails it at any impulse. Every collision in the kept runs was above 4000
+N*s, on both simulators.
+
+A world whose `contact_report_dir` is `off` (or a directory of yours) leaves the run
+unjudged: `judges/physical_verdict.json` says `off` and why, and the run's line ends with a
+`WARN`.
 
 A scenario that is *meant* to make contact declares with whom (SSv2 ignores the
 parameter); `static` allows contact with the static world:

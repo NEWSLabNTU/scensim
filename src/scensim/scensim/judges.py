@@ -34,9 +34,11 @@ A judge that exits other than 0 or 1, prints JSON that is not an object, or over
 **The contact judge is the exception** (issue 189). ``physical_verdict`` (roadmap 021) runs in
 every project, unlisted, and **before** the verdict: wherever the run directory holds the
 bridge's contact reports (``contacts/``), it adds its ``carla_contact`` testcase to the run's
-``junit.xml``, and an undeclared contact above ``CONTACT_FLOOR`` (N*s) fails the run as any
-JUnit failure does, its first line the reason: ``UndeclaredContact: 'ped' (pedestrian) 5470.5
-N*s (floor 10 N*s): ...``. A scenario that means to touch declares it (``csbExpectedContacts``);
+``junit.xml``. An undeclared contact with an actor, at any impulse, or with the static world
+above ``CONTACT_FLOOR`` (N*s), fails the run as any JUnit failure does, its first line the
+reason: ``UndeclaredContact: 'ped' (pedestrian) 5470.5 N*s (static floor 10 N*s): ...``. A run
+the stack collected no report for is an error (NoContactReport); a world that reports none
+(``contact_report_dir`` off or the user's) leaves the run unjudged, with a WARN on its line. A scenario that means to touch declares it (``csbExpectedContacts``);
 a project lists the judge only to change it::
 
     judges:
@@ -47,7 +49,8 @@ a project lists the judge only to change it::
         off: true
         why: "drives over rocks on purpose; judged by its own oracle"
 
-Either way it runs once, before the verdict. ``off`` and ``why`` are refused on any other judge.
+Either way it runs once, before the verdict. ``off`` and ``why`` are refused on any other judge,
+and ``on``, ``needs`` and ``timeout`` on this one.
 """
 import json
 import os
@@ -63,7 +66,8 @@ DEFAULT_ON = (results.PASSED, results.FAILED)
 DEFAULT_TIMEOUT = 120.0
 KEYS = ("name", "run", "version", "on", "timeout", "needs", "reads", "off", "why")
 CONTACT = "physical_verdict"
-CONTACT_FLOOR = 10.0   # N*s; issue 189's calibration, Isaac's and CARLA's kept reports
+CONTACT_FLOOR = 10.0   # N*s, the static world's only; issue 189's calibration (Isaac, CARLA)
+CONTACT_REFUSED = ("on", "needs", "timeout")   # it always runs, before the verdict
 CONTACT_DEFAULT = {
     "name": CONTACT, "version": "default",
     "run": ["ros2", "run", "scensim_launch", "physical_verdict", "{run_dir}/junit.xml",
@@ -105,9 +109,17 @@ def problems(judges) -> list:
             out.append((w, f"why: turning {CONTACT} off needs a reason (issue 189)"))
         elif "why" in j and off is not True:
             out.append((w, "why: goes with off: true"))
+        if name == CONTACT:
+            # it runs before the verdict, on every run with a report: nothing to schedule
+            for k in CONTACT_REFUSED:
+                if k in j:
+                    out.append((w, f"{k}: not for the contact judge, which always runs, before "
+                                   "the verdict (issue 189)"))
         if off is True and name == CONTACT:
-            if "run" in j:
-                out.append((w, "run: an entry that turns the judge off runs nothing"))
+            for k in j:
+                if k not in ("name", "off", "why") and k not in CONTACT_REFUSED:
+                    out.append((w, f"{k}: an entry that turns the judge off takes only name, "
+                                   "off and why"))
             continue
         run = j.get("run")
         if not (isinstance(run, list) and run and all(isinstance(a, (str, int, float))
@@ -148,22 +160,28 @@ def after_verdict(judges) -> list:
         if isinstance(judges, list) else []
 
 
-def run_contact(judges, run_dir: Path, project: Path, env=None):
+def run_contact(judges, run_dir: Path, project: Path, reporting: bool = True, env=None):
     """The contact judge over ``run_dir``, before the verdict (issue 189): its record, or
-    None when there is nothing to judge (no ``junit.xml``, no report in ``contacts/``) or the
-    project turned it off. Either of those is written to ``judges/<name>.json`` with
-    ``verdict: off`` and why, so a reader sees the run was not judged."""
+    None when it did not run. ``reporting``: the stack collects the bridge's contact reports
+    for each run (the world's ``contact_report_dir`` unset). Then a run without a report is
+    still judged, and physical_verdict's NoContactReport makes it an error: a bridge that
+    failed to report cannot hide a hit. It does not run when the project turned it off by name,
+    when the world reports nothing scensim can read (``contact_report_dir`` off or the user's;
+    the record has ``warn: true``, and the run's line says so), or without a ``junit.xml``.
+    Those are written to ``judges/<name>.json`` with ``verdict: off`` and why."""
     run_dir = Path(run_dir)
     j, why_off = contact_judge(judges)
+    warn = j is not None and not reporting
     why = (f"off in testbench.yaml: {why_off}" if j is None else
-           "no junit.xml" if not (run_dir / "junit.xml").is_file() else
-           "no contact report in contacts/ (the world's contact_report_dir is off or the "
-           "user's, or the bridge wrote none)"
-           if not any((run_dir / "contacts").glob("*.json")) else "")
+           "not judged: the world's contact_report_dir is off or the user's, so scensim has "
+           "no contact report for the run" if warn else
+           "no junit.xml" if not (run_dir / "junit.xml").is_file() else "")
     if why:
         out = run_dir / "judges"
         out.mkdir(exist_ok=True)
         rec = {"name": CONTACT, "version": "", "verdict": "off", "message": why}
+        if warn:
+            rec["warn"] = True
         (out / f"{CONTACT}.json").write_text(json.dumps(rec, indent=2) + "\n")
         _timeline(run_dir, rec)
         return None
@@ -297,6 +315,15 @@ def _timeline(run_dir: Path, rec: dict):
         ev["message"] = rec["message"]
     with tl.open("a") as f:
         f.write(json.dumps(ev) + "\n")
+
+
+def contact_warning(run_dir: Path) -> str:
+    """The run's line's WARN when the contact judge could not judge it (issue 189), else ""."""
+    try:
+        rec = json.loads((Path(run_dir) / "judges" / f"{CONTACT}.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return ""
+    return f"WARN {CONTACT}: {rec.get('message', '')}" if rec.get("warn") else ""
 
 
 def summary(run_dir: Path) -> dict:

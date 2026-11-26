@@ -1997,7 +1997,8 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
     judge_list = config.project_settings(project).get("judges")
     contact = None
     if ssv2 is not None:
-        contact = judgesmod.run_contact(judge_list, run_dir, project)
+        reporting = (rec.get("episodes") or {}).get(episodesmod.CONTACTS) is not None
+        contact = judgesmod.run_contact(judge_list, run_dir, project, reporting)
         if contact is not None:
             run_events.append({"t_wall": time.time(), "event": "contact.judged",
                                "verdict": contact["verdict"]})
@@ -2166,6 +2167,8 @@ def outcome(result: results.RunResult, expect=None) -> int:
 def line(result: results.RunResult, run_dir: Path, expect=None) -> str:
     tag = result.verdict + (f" (expected {expect})" if expect else "")
     why = f"  {result.reason}" if result.reason else ""
+    warn = judgesmod.contact_warning(run_dir)
+    why += f"  {warn}" if warn else ""
     judged = judgesmod.summary(run_dir)
     jud = ("  judges: " + " ".join(f"{k}={v}" for k, v in judged.items())) if judged else ""
     return f"{tag:<8} {result.run_id}  {run_dir}{jud}{why}"

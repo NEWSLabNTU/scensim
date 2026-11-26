@@ -388,3 +388,42 @@ touch at walking speed lands above it too.
 - `just gate` on the change: ok on 241 with the Isaac lane run.
 - No CARLA run is needed for the gate. The first CARLA project run after landing shows
   `judges: physical_verdict=passed` with "no unexpected contact".
+
+## Step 3: 243's review and 133's rulings (241, 2026-11-26; before the gate)
+
+243 reviewed aa3faf25 (CPU only). Its tests passed there. 133 ruled on the findings, and all
+are in this commit:
+1. *The floor applies to static contacts only.* At aa3faf25 it filtered every contact. An
+   undeclared pedestrian touch at 5 N*s, or at 0.0, passed. Every sub-floor entry in the
+   calibration is static: the soil strips at 0.0 and the rock at 1.1. Every actor contact is
+   at least 4611 N*s (CARLA 4611 to 12112, Isaac 5470 to 16431). An actor contact now fails
+   at any impulse unless declared. `--min-impulse` is documented as the static world's floor.
+   The 5 and 0.0 pedestrian probes are tests that must fail. This is stricter than the
+   literal "10 N*s floor", in the safe direction; 133 tells the user.
+2. *A missing report is an error, not "off".* At aa3faf25 a run without a report in
+   `contacts/` was recorded `off` and kept SSv2's verdict, so a bridge that failed to report
+   could hide a hit. Now, where the stack collects reports (the world's `contact_report_dir`
+   unset), the judge runs anyway, and physical_verdict's NoContactReport makes the run an
+   error. "off" stays for two cases:
+   - the project turned the judge off by name;
+   - the world reports nothing scensim can read (`contact_report_dir` off or the user's). The
+     run's line then ends `WARN physical_verdict: not judged: ...`.
+   No world server declares a contact capability in its Hello, so the world's
+   `contact_report_dir` is the declaration. scensim's test fakes of SSv2 now write the report
+   a real bridge writes.
+3. *`on`, `needs` and `timeout` are refused on the contact judge.* It always runs, before the
+   verdict. An `off` entry takes only name, off and why.
+4. *The reason's first line names at most 3 contacts*, then "+N more".
+
+243's other notes are recorded, with no change:
+- A CARLA restart mid-run (IncompleteContactReport) is an `<error>`, so it masks an SSv2
+  failure in the same run. It is an error run either way.
+- CARLA's `type` is a blueprint and Isaac's a class, which the judge does not filter on.
+- The judge reads csbExpectedContacts' default in the scenario, so a knob that overrides the
+  parameter is not seen. That predates this step.
+
+**Predictions, before the runs:**
+- The dry pass over the same 72 reports with this physical_verdict, at `--min-impulse 10`,
+  gives the same 70 passes and 189's two failures. No actor contact in them is under 10.
+- 243's 7 CARLA runs give the same verdicts as before.
+- `just gate` passes on 241, with the Isaac lane run.
