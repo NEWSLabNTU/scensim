@@ -526,3 +526,42 @@ the pothole or the washboard. Every spurious object is more than 3 m from the pa
 - They cannot reach the 27 to 31 m at which the boulder's points first appear: the hull rule
   and the lidar's few returns on a 0.35 m rock set the limit, not the thresholds.
 - Whether 0.7 s is enough to stop is 182's question, not this one.
+
+## The decision and the change (the user via 133, 2026-11-27; a plan, before any code)
+
+**The user's decision:** the validator's UNKNOWN threshold 5 in scensim's profile, so the
+boulder is validated from about 12.1 m instead of 9.6 m (step 4's cell). Then issue 182.
+
+**Why both `min_points_num` and `max_points_num`.** The validator's threshold is
+clamp(round(`min_points_and_distance_ratio` / d), `min_points_num`, `max_points_num`)
+(`Validator::getThresholdPointCloud`), with ratio 800 and min = max = 10 upstream:
+- today the clamp returns 10 at every distance;
+- with `min_points_num` 5 alone, 800 / d is still above 10 for every object nearer than 80 m,
+  so the clamp returns `max_points_num`, 10, and nothing changes where it matters;
+- step 4 set both to 5 ("`max_points_num` set equal"). With both at 5, the clamp returns 5 at
+  every distance under 160 m.
+
+So the change is UNKNOWN `min_points_num` 5 **and** `max_points_num` 5, the other classes and the
+ratio as upstream. It is the same decision, expressed so that it takes effect (133, 2026-11-27).
+An earlier summary to 133 named only `min_points_num`; that was imprecise.
+
+**The change (autoware_sim_vehicle, Autoware 1.5.0 only, as 190's tracker argument):**
+- `scripts/sync_perception_component.sh`, its sixth change:
+  - the profile's copy of autoware_launch's `obstacle_pointcloud_based_validator.param.yaml`,
+    upstream's but for those two UNKNOWN values, generated and checked like the others;
+  - the perception component passes the file `obstacle_pointcloud_based_validator_param_path`
+    names, whose default is that copy.
+- `autoware.launch.xml` declares the argument, defaulting to the copy, and passes it to the
+  component. A testbench can point it at upstream's file to compare.
+- Tests (`test/test_profile.py`):
+  - the copy's UNKNOWN `min_points_num` and `max_points_num` are both 5;
+  - the rest equals upstream's;
+  - the default path is the copy in the launch and in the component, and it reaches the
+    validator.
+- Then the pin chain, each step through `just gate` and with 133's OK before each push: asv,
+  then acb's, aib's and siw's `deps/`, then scensim. It lands after 177, 190's batch, gc-args and
+  this issue's docs.
+
+**Live confirmation (118, after its 177 check):** C6e3's c6b on the new pins. Prediction: the
+boulder's first validated range is about 12.1 m (±1.5 m), against r1's 8.8 m by step 1's rule
+(9.6 m by step 3's).
