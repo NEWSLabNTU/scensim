@@ -359,3 +359,60 @@ local checks and a full gate; a landing request to 133.
 **166's stretch counts were measured on lanelet2's raw centreline, which SSv2 replaces; see
 194** (2026-11-26). SSv2's `generateFineCenterline` line leaves no reversed stretch on a
 connected lanelet of Town01 or Town05.
+
+## 166's checks on SSv2's own centreline (241, 2026-11-27; predictions before any of it runs)
+
+Asked by 133: issue 194 showed that 166 measured lanelet2's raw centreline, which SSv2 replaces
+with its own 2 m line (`generateFineCenterline`). Recompute 166's checks on SSv2's line for
+Town01 and Town05, then decide whether 166 closes, narrows, or stays open. CPU only, docs only.
+The inputs: the maps at dataset df499322 (tag v2026.11h, whose anchors were resolved on SSv2's
+line), scensim main with 194's export (`map_export` v3) and 166's gap-in-s follower (c2bc1b91).
+
+What is recomputed, with each prediction:
+
+- **R1, the original finding.** Sampling every 5 mm, how many lanelets have a heading change of
+  more than 90 deg between samples (lanelet2's line: Town05 350 of 1018, Town01 37 of 300).
+  - Prediction: none on a connected lanelet of either town. In all, at most 4 lanelets on Town01
+    and at most 1 on Town05, which are 194's isolated lanelets with a stretch.
+- **R2, the resolver's predictions 1 and 2**, read from df499322's resolved anchors.
+  - Town01 `west_street`: no `reversed` stretch.
+  - Town05 `west_avenue`: no `reversed` stretch. `heading_max_error` is at most 0.01 rad, now
+    with nothing left out, so `heading_max_error_reversed` equals it.
+  - The old prediction 2's "at least one stretch on each lanelet" fails by construction, since
+    no stretch is left.
+- **R3, what the maps hold**, by `scensim.lane_positions.stretches` (the lint's own function) at
+  main, split by connection. Prediction: 194's survey table again. That is no stretch on a
+  connected lanelet; Town01 isolated 9 stretches on 4 lanelets (0.160 m, the longest 0.066 m);
+  Town05 isolated 1 (0.020 m).
+- **R4, the impact measure** (K13 on this host, K2.4's seats runs, K11c to K11e). Prediction: 0
+  frames in a stretch and 0 flipped. Every lanelet those runs used is connected, and R3 predicts
+  no stretch on any connected lanelet. If R3 holds, R4 follows from it and is not re-run frame
+  by frame. The lanelets they used are listed against R3's.
+- **R5, the lint over the repository's scenarios** (166's 152 LanePositions in 21 files; the
+  122 on dataset maps checked). Prediction: 0 refused, 0 warned, as on lanelet2's line.
+- **R6, the placement s against the polyline's arc** on `west_avenue` (K13 step v's 0.025868 m
+  between M and L; the lane's polyline 0.0935 m shorter than s). Prediction: the polyline is
+  within 1 mm of s over the whole lane, and within 1e-4 m between M and each L start of the
+  search. There is no loop for it to skip.
+- **R7, the gap-in-s fix's check 2, both ways** (`i166_check2.py`), on the v3 export and the new
+  resolved anchor.
+  - (a) Follower s minus placement s, within 1e-4 m. It held before at 4.0e-5 and should still
+    hold.
+  - (b) Follower x/y at spline s against the world's placement at s, every 0.1 m along the lane.
+    This FAILED before, at 0.0122 m within 2 m of a stretch. Prediction: it holds, at most
+    1e-3 m everywhere, since no stretch is left to stay out of.
+- **R8, check 3** (K13 step v's dry run, M's acceleration at t = 0 within 1e-6 m/s^2 in all 36
+  slots), if the batch runs on this host's CPU at main. Prediction: it holds, as before.
+- **Not recomputed: check 4** (the onset sweep). Its failure was jumps of 1.100 m at one onset,
+  put down to the point-mass ego's AEB timing, not the line. Re-running it here would not
+  separate the two. It is left to 092.
+
+**The decision rule, set now.**
+- If R1, R3 and R7(b) hold, 166's defect no longer arises on the network vehicles drive. SSv2's
+  uniform spline still reverses on uneven points, but SSv2's own line has even 2 m points, so
+  166 **closes**. It records what stays (the lint, the follower's s, the 10 isolated
+  stretches) and that the upstream report is moot for these maps.
+- 194's joined-route transient (2.10 cm at the 42664 to 32582 joint) is not 166's defect: it
+  comes from the joined spline's end conditions, not from a reversal. It stays with 092 K2.4's
+  follow-up, and 166 does not narrow to it.
+- If R1 or R3 finds a stretch on a connected lanelet, 166 stays open, narrowed to those lanelets.
