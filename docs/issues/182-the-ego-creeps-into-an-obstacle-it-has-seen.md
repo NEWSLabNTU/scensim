@@ -387,3 +387,56 @@ For run A's "while stopped" figures:
   on 118 (the record step does not touch it), sha256
   32bab6cc1a3ddccada85c3a897cb864e8b6cc762e82b9144342e1c69bab4e0f7. That is the NAS copy 181's
   replay used. So the runs' ranges compare with the replay directly.
+
+### Step 2b, run A's result (241, 2026-11-27, after the predictions above)
+
+118's run A:
+- scensim main 7716891b (result.json names the gate commit 44b68b65, the same tree), stock
+  validator, the -6 m/s^2 MRM, GPU0;
+- NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 177 live check and 181 182 run A
+  (118)/runs/A-2026-11-27T03-38-29_fixture_c6b_r181_r0`;
+- read with `run182.py` and `mrmsrc182.py` (NAS, 181's replay folder). Times are relative to the
+  stop; ranges are base_link to the boulder's centre, from the kinematic state.
+
+| | predicted (run A) | run A |
+|---|---|---|
+| AEB raises the MRM at | 11 to 13 m | AEB ERROR at 10.86 m (-1.55 s), the MRM OPERATING at 10.02 m (-1.34 s): **FAILED, narrowly** |
+| first validated | 9.6 ± 1.5 m | 8.82 m (-1.01 s): **held** |
+| first in the final objects | 8 to 9.5 m | 8.28 m (-0.79 s): **held** |
+| bumper gap at the stop | 3.5 to 6 m | 3.48 m by the kinematic state (range 7.20 m), 3.51 m by the truth trace (x 392.78), to the boulder's centre: **at the bound**, failed by 2 cm on the stack's own pose |
+| strike | none | none (truth: no deceleration over 15 m/s^2; physical_verdict passed): **held** |
+| the boulder an object while stopped | at least 60 % | final objects 1217 of 1221 frames, validated 2566 of 2574: **held** |
+| obstacle_stop's STOP while stopped | at least 60 % | 1283 of 1287: **held** |
+| moves again | no | no: the speed 0.000 m/s for the 152.7 s to the timeout: **held** |
+| MRM operations | a few at most | **73**, one about every 2 s while stopped: **FAILED** |
+
+**The MRM's operations while stopped.**
+- Before each of the 72 operations after the stop, in the 0.5 s window, `/diagnostics` had
+  `localization: ekf_localizer` at WARN ("mahalanobis distance of pose topic is large"). In the
+  quiet stretches it was never at WARN (0 messages).
+- Two other diagnostics stood at WARN or ERROR before every operation too, but just as often in
+  the quiet stretches, so they are steady states, not triggers:
+  - the traffic-signal topic monitor at ERROR (531 quiet messages);
+  - `gyro_bias_scale_validator` at WARN (559).
+- This is step 1's H3 loop, the EKF refusing NDT's pose, but here **with no contact**: the car
+  stands 3 m clear of the boulder. So step 1's reading that "H3's loop needs the push" is wrong.
+  The push was not the cause.
+- Over the stop, the kinematic state's x drifts back 0.36 m (x 392.80 to 392.44; range 7.19 to
+  7.60), while the truth trace stays within 1 mm. Localization drifts along the road while the car
+  stands still.
+- On a straight fixture road with few longitudinal features, NDT's along-road estimate is weakly
+  constrained. A drifting NDT pose that the EKF, held by zero wheel speed, refuses as an outlier
+  fits both observations. Not tested: NDT's pose and the EKF's innovation are still not recorded.
+- The operations are harmless here: the car is stopped, and each cancels within about 0.1 s.
+  They are 182's step 1 open question, now with the contact ruled out.
+
+**What run A says for 182's purpose:** with the -6 MRM, the stock stack stops 3.5 m short of the
+boulder (AEB through the MRM, on points) and holds it there: obstacle_stop's STOP in every frame,
+the boulder an object in every frame. b2's and r1's creep does not happen. H4's mechanism is
+confirmed by its absence:
+- the stop now ends outside the lidar's blind zone (gap 3.5 m against 1.2 m);
+- the boulder stays in view;
+- the planner's stop holds.
+
+So with the -6 MRM (190's change), the creep (182's title) is gone on this fixture even
+without 181's change. Run B shows what 181's change adds.
