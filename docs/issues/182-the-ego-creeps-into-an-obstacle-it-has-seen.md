@@ -383,3 +383,7 @@ For run A's "while stopped" figures:
   against the replay.
 - After the runs, the two PCDs are compared before either run's ranges are read against 181's
   replay.
+- Checked before the runs: the rebuilt map's `pointcloud_map.pcd` is r1's file, the same inode
+  on 118 (the record step does not touch it), sha256
+  32bab6cc1a3ddccada85c3a897cb864e8b6cc762e82b9144342e1c69bab4e0f7. That is the NAS copy 181's
+  replay used. So the runs' ranges compare with the replay directly.
