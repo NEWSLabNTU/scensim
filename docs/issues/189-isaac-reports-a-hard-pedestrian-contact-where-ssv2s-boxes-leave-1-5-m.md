@@ -483,3 +483,37 @@ CollisionCondition fired, unlike K9f-a's run 2:
 So the same touch is sometimes seen by SSv2's boxes and sometimes not, as step 1 found (the
 boxes touch; SSv2 reads them a frame late). Details: issue 190's step (b), main 6df260e3. The
 run directory with its gap trace: `~/nas/home/2026-11-26 190 b run (243)/`.
+
+## Step 3's CARLA calibration runs: the plan and predictions (241, 2026-11-26; before any run)
+
+133 decided the runs. They answer the floor's real risk: a harmless static touch on CARLA
+(a tyre grazing a kerb, the body meeting the ground) reported above 10 N*s, which would fail a
+run falsely.
+
+Setup:
+- On 241's GPU1, **shared with another user's training job** (thsxw's unitraj, about 10 GB
+  of 32.6 GB, bursty). 133 approved this. GPU0 is P1's.
+- One run at a time. A guard stops our run if GPU1's free memory falls below 4 GB, and logs
+  the other job's memory.
+- CARLA 0.9.16 started by hand on GPU1 (`-graphicsadapter=1`, Vulkan pinned to NVIDIA), and
+  scensim with `simulator_start:=external`.
+- scensim main 6690f884, built in a fresh worktree from a clean environment.
+- The ego is the simple pilot (simple_drive's testbench), so no Autoware stack shares the GPU.
+
+The runs:
+1. *A declared contact:* basic's town01_rear_contact (`npc_rear` declared), in a copy of
+   simple_drive's testbench.
+2. *A normal drive, no intended contact:* simple_drive's own suite (drive_to_goal,
+   turn_to_goal).
+3. *A real static hit:* town01_rear_contact with its 1 s exit removed, so npc_rear keeps
+   pushing and the shoved ego meets the static world. The scenario's record says it hit lamp
+   pole CityLamp121 "whenever it yawed a little left". Up to 3 tries.
+
+**Predictions, before the runs:**
+- Run 1: one contact with npc_rear (a vehicle, declared), its impulse in the thousands of N*s
+  as 243's (7955 N*s), and no static contact. The judge passes it.
+- Run 2: no static contact at all, or only ones under 10 N*s. The judge passes both scenarios.
+  This is the false-failure check: a static contact above 10 here would be the floor failing.
+- Run 3: a static contact (a pole, kerb or building), its impulse above 10 N*s and in the
+  hundreds or more. The judge fails it as UndeclaredContact with the static world. If 3 tries
+  give no static contact, that is recorded as such.
