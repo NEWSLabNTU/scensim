@@ -1,6 +1,6 @@
 # 177: a fixture's road_detail.yaml in course/ is not read by the world server
 
-**Status:** open; plan written 2026-11-27 (118, for 133), before any code. **Severity:** medium: a scenario run on either
+**Status:** fixed (118, 2026-11-27): siw e763170, scensim main 7716891b; live check passed (see the end). **Severity:** medium: a scenario run on either
 fixture map has no road detail, and nothing says so unless the console is read. **Found:**
 2026-11-25, scensim 118, while writing 086 C6e3's details (numbered by 133).
 
@@ -192,3 +192,46 @@ The runner refuses a run unless:
 - Later fixtures, if it gets past (the loose rocks at 200 and 300, the 35 cm boulder at 400),
   are not predicted here. The run's verdict is not a 177 criterion. main now carries 190's
   -6 m/s^2 MRM, unlike C6e3's 0291abb3.
+
+## The live check's result (2026-11-27, 118, GPU0, 03:21 to 03:42; codec told; after the predictions above)
+
+**Two attempts that were not runs.**
+- 03:19: `scensim run` refused both scenarios at its testbench check before any stack started:
+  the new testbench's map had not been fetched (`scensim assets fetch`). No GPU was used.
+- 03:21: the stack started, and the ego pilot's launch failed: gate-c5c had no acb workspace
+  install (`src/autoware_carla_bridge/install`), because the gate builds only this repository.
+  `stack_keeper` exited 2; run A was stopped by its process group before its stack came up.
+  acb's workspace was then built from a clean env (22 packages, 03:23:46, rc=0).
+
+**Provenance, labelled.** Both runs' `result.json` names 44b68b65, the local gate commit the
+install was built at, not main 7716891b. The runner's strict SHA check therefore refused both by
+name. 44b68b65's tree is 7716891b's (`ef22d921`), and siw is e763170 in both, so the record is
+kept with this label.
+
+**c1, fixture_c6b_down (start x 20), run 2026-11-27T03-24-46:**
+- *The fix, live:* **held.** The console reads `road detail .../assets/maps/fixture_c6b/
+  road_detail.yaml: 1 corridor(s)` (the file the new record step wrote) and issue 168's
+  `['/World/env/Road'] drawn 0.010 m`, with 0 "scensim issue 177" warnings.
+- *What the ego meets first, the 15 cm static rock at x 100, passed as ground:* **held.** The
+  truth trace shows the plate striking with the origin at x 97.30 (predicted 97.3 ± 0.3): 4.17
+  to 3.38 m/s in one 50 ms frame, the only deceleration over 15 m/s^2 in the run. It then slowed
+  to about 2.9 m/s over the next 1.5 m and drove on, like b2 (scraped over), not b1 (stopped).
+- *Not predicted, recorded:* it passed the loose rocks at x 200 (4.17 down to 3.5 m/s) and 300
+  (no change). It stopped at x 392.16, with the bumper about 4.1 m from the 35 cm boulder's
+  centre (origin plus wheelbase 2.875 plus front overhang 0.841), and stayed there to the 600 s
+  timeout. The verdict was failed (the timeout), and physical_verdict failed. NVTL p05 3.28, and
+  pose error p95 0.339 m over 378 m.
+
+**Run A, fixture_c6b_r181 (start x 320), run 2026-11-27T03-38-29**, for issues 181 and 182 (241
+judges it there):
+- It stopped at x 392.78 at t 26.45 s and did not move again (0.001 m), with no deceleration
+  over 15 m/s^2.
+- The bumper was 3.51 m from the boulder's centre.
+- It timed out at 150 s (failed), and physical_verdict passed.
+- 0 issue 177 warnings, and the same road and 168 lines.
+
+**Records.** NAS: `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 177 live check and 181 182 run
+A (118)/`, 133 files, SHA256SUMS verified on the NAS. It holds both run directories, the runner's
+log, the scripts, the testbench, and the map's two road-detail files and `world.yaml`.
+
+177 is fixed: the map's road detail now reaches the world server from the record step alone.
