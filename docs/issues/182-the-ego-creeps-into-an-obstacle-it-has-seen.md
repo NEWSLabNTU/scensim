@@ -452,3 +452,70 @@ without 181's change. Run B shows what 181's change adds.
   1.5.0's EKF publishes no innovation, so it is read as NDT's pose less the EKF's at each NDT
   stamp. Then the drift is measured, not guessed.
 - 243, who works 170, has run A's numbers.
+
+### Step 2b, run B's result, and run A's ranges measured again (241, 2026-11-27)
+
+118's run B:
+- scensim main e6a34fd5 (siw 542cfae; the installed validator file reads UNKNOWN 5), GPU0;
+- NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 181 182 run B
+  (118)/runs/B-2026-11-27T04-30-38_fixture_c6b_r181_r0`;
+- read with `run182.py`, `drift182.py`, `excur182.py` and `valrange182.py` (NAS, 181's replay
+  folder).
+
+**Ranges measured again, with the truth's pose.**
+- `run182.py` put objects into the map by the EKF's pose. In run B that pose was off by up to
+  0.4 m across and 0.05 rad in heading, enough to move a boulder detection out of the 1 m
+  radius.
+- `valrange182.py` places them by the truth's pose (ego.csv, `origin_offset` 0, so base_link).
+  The final objects go to base_link by the EKF's pose first. Ranges are the truth's base_link to
+  the boulder's centre.
+
+| | run A (stock validator) | run B (UNKNOWN 5) |
+|---|---|---|
+| first cluster | 13.47 m | 13.63 m |
+| first validated | 9.51 m | **13.41 m** |
+| first final object | 8.20 m | 9.99 m |
+
+Run A's result above used the EKF's pose (validated 8.82, final 8.28); its predictions hold
+either way.
+
+**Run B against its predictions:**
+- AEB at 11 to 13 m: 11.80 m, **held**.
+- First validated 12.1 ± 1.5 m: 13.41 m, **held**.
+- First final object 11 to 12.5 m: 9.99 m, **FAILED**. The change gains 3.9 m at the validator
+  and 1.8 m in the final objects; tracking passes on less of it.
+- The same stop as run A, within 1 m: the bumper gap to the centre was 4.29 m (truth), against
+  run A's 3.51 m, so **held**. But they are not comparable: B came on at about 1.3 m/s after
+  the rocks below, A at 4.2 m/s.
+- No strike on the boulder: **held**. But physical_verdict FAILED: three static contacts with
+  off-carriageway scatter rocks at x 345, max 10.0 N*s, 3.67 to 1.32 m/s in one frame.
+- The boulder an object while stopped, at least 90 %: final objects 1239 of 1241, validated
+  2489 of 2494, obstacle_stop's STOP 1245 of 1247, **held**.
+- No restart: **held**. MRM a few at most: **79**, **FAILED** (as in run A).
+
+**The lateral excursion is localization's, not planning's and not 181's (`excur182.py`).**
+- Standing at x 320 before the start, NDT and the EKF both read the heading 0.14 rad wrong
+  (NDT yaw less the truth's -0.142, the EKF's -0.143).
+- Once moving, the controller steers by it: the truth's yaw reaches +0.148 and the car swerves
+  left to y 3.84 at x 342, onto the rocks. Meanwhile the EKF's y stays between 1.4 and 2.6.
+- The planned trajectory stays at y 1.62, the lane centre, throughout, and no final object comes
+  within 3 m of the lane before the boulder. So it is no avoidance and no effect of the
+  validator.
+- The EKF's `estimated_yaw_bias` climbs from 0 to +0.064 rad, absorbing the error and
+  overshooting: the EKF's yaw error becomes +0.044, and the car swings right to y 0.8.
+- Stopped, the EKF keeps +0.052 rad against NDT's -0.005. That learned bias is the likely source
+  of the EKF's gate refusing NDT's pose, and so of the MRM's operations in both runs.
+- Run A had the same mechanism with the other sign: its EKF heading error at the start was
+  +0.071 rad, and it swung right to y 0.58 and back.
+- So the heading at the start differs from run to run, and it drives the lateral path, the
+  pose_error p95 (A 0.509, B 0.797 m) and the MRM's operations. That is 170's G6 (243), not 181
+  or 182.
+
+**What the pair says.**
+- 181's change does what it was for: the boulder validated 3.9 m earlier and in the final
+  objects 1.8 m earlier.
+- Both runs stop short of the boulder and hold: 182's creep is gone with the -6 MRM.
+- One run of each cannot separate the change's effect on the outcomes from the start heading's
+  draw. Repeats are proposed to 133: 3 runs of B at e6a34fd5, and 3 of A' at the same e6a34fd5
+  with `obstacle_pointcloud_based_validator_param_path` set to autoware_launch's file, which
+  isolates the change at identical code.
