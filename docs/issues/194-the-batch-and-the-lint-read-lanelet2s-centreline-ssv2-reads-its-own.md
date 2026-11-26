@@ -382,3 +382,23 @@ This is the second prediction's mechanism, made along-track. It is not measured 
 cheap test (CPU only): the per-lanelet spline lengths of 42664 and 32582 on the v3 line against
 the joined spline's arc length between the same points. If the difference is about 2 cm, it is
 the transient. Still a batch-model detail for 092 K2.4; 194's line is not the cause.
+
+**The follow-up check (CPU only, catmull.Spline on each export's lines of 42664 and 32582):**
+- *Total lengths agree:* the joined spline is 0.15 cm shorter than the two per-lanelet splines
+  together on v3, and equal on v2. So it is not a length mismatch.
+- *Shapes near the joint differ:* within 4 m of the joint, the largest distance between a
+  per-lanelet pose and the joined spline's pose at the same `s`:
+  - v2 (73 and 177 points): 0.00 cm;
+  - v3 (14 and 24 points): **2.10 cm**, 0.55 m before the joint, almost all along the route
+    (dx 0.09, dy 2.10 cm, heading -y).
+
+The joined spline's end conditions at the joint differ from each lanelet's own. On SSv2's
+sparse points, that moves the arc-length parameterisation by about 2 cm there. On lanelet2's
+dense line it does not show.
+
+That matches the replay's along-track transient of about 2 cm at the change from 42664 to 32582.
+The prediction above ("if the difference is about 2 cm, it is the transient") **held**,
+measured as a pose difference rather than a length.
+
+Where a fix would go is not decided, and not in 194: the batch's route would follow per-lanelet
+splines across the joint, as SSv2's entity does (`world_lanelet._route`). That is 092 K2.4's.
