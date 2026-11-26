@@ -270,3 +270,73 @@ so the 7 fixture tests are the evidence. `scripts/gate_clean.sh` now takes `--no
 on newslab-server-241 2026-11-26T17:00:21+08:00: build test check clean; Isaac lane ran (947
 tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29); carried
 ISAAC_ROOT`. Held: the 7 new tests and the 16 before (23) passed within `just test`.
+
+## The sixth follow-up: a gate stopped early, and a gate of an unlanded commit (241, 2026-11-27; a plan, before any code)
+
+243 stopped `just gate 9de5acd6` seconds into its checkout. In gate-9de5acd6:
+- `src/autoware_carla_bridge` had every tracked file deleted in its index ("D "): an index
+  written, files not yet checked out;
+- `src/scenario_simulator_v2` was at `+3370c817` (heads/master), not its pin.
+
+`gate-clean` kept it: "src/autoware_carla_bridge/.envrc: a tracked change (D ): kept". After a
+reset and a submodule update by hand, it refused the SHA as "on no origin branch". That is
+right for an unlanded commit, but it leaves no route for such a gate. 133 asked for both,
+test-first.
+
+**1. The cause of the first refusal, reproduced before any code.** `clean()` checks a
+submodule's status itself. It accepts deletions there and recurses only for a nested
+submodule's gitlink. But the recursion is `clean "$sub" "$pin" ...`, which runs the
+*superproject* rule on the parent submodule's whole status. There, every file other than a
+gitlink is "a tracked change: kept".
+
+So a submodule that has its own submodules (acb has `deps/*`) and an emptied index is refused at
+its first file. A two-level fixture reproduces it word for word: "mid/.envrc: a tracked change
+(D ): kept". The one-level fixture in the fifth follow-up never recursed, so it missed this.
+
+The fix: split the check per submodule. `sub_ok <parent> <path> <pin> <prefix>` checks one
+submodule:
+- its HEAD;
+- its status lines: deletions are counted, a nested gitlink calls `sub_ok` on that gitlink only,
+  anything else is kept.
+
+`clean()` keeps the superproject's rule and calls `sub_ok` for each gitlink it lists.
+
+**2. A submodule left on its clone's branch.** `git submodule update` clones, then checks out
+the pin. Stopped in between, the submodule sits on the commit its origin's default branch
+pointed at (ssv2's `master`). Today that is "not its pin: kept".
+
+The new rule: a submodule at another commit is an interrupted checkout when both hold:
+- its HEAD is contained in one of its remote-tracking branches (`git branch -r --contains
+  HEAD`), so no local commit is lost;
+- its tracked files show no change but deletions.
+
+A local commit (the existing "a submodule at another commit is kept" test commits locally) is
+still kept. A commit that is on its origin but is someone's checkout by hand is removable with
+nothing lost, which is the same standard as the deletions.
+
+**3. A gate of an unlanded commit:** `just gate-clean <commit> unlanded=true` (flag
+`--unlanded`). For a commit on no origin branch and not patch-equivalent on origin/main, it
+removes the worktree when both hold:
+- the tree passes the same clean check;
+- the SHA is reachable from a local branch or tag (`git for-each-ref --contains`), so removing
+  its last worktree orphans nothing.
+
+It tags nothing, and says which ref keeps the SHA. Without the flag, the behaviour is as now:
+kept, with a pointer to `unlanded=true`. A landed or rebased commit ignores the flag.
+
+**Tests, written first** (scripts/test_gate.py, bare origins, as now):
+- a submodule with a nested submodule, its index emptied and its files gone: removed, naming it
+  (fails today, with the message above);
+- the same, with one of its files modified: kept;
+- a submodule on its origin's branch head, not its pin, with no changes: removed (fails today);
+- a submodule at a local commit (the existing test) is still kept;
+- an unlanded gate with `--unlanded`, its SHA on a local branch: removed, no tag (fails today);
+- an unlanded gate with `--unlanded`, its SHA on no ref but its worktree: kept;
+- an unlanded gate without the flag: kept, and the message names `unlanded=true` (fails today:
+  the message lacks it).
+
+**Predictions, before any code:**
+- The 4 tests marked "fails today" fail on main's `gate_clean.sh`, and the other 3 pass on it.
+  All 7 pass after the fix.
+- The 23 existing gate tests are unchanged.
+- `just gate` passes on 241, with the Isaac lane run.
