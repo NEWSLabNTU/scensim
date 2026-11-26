@@ -236,3 +236,57 @@ used them.
     The gate exercises at least one project that reads resolved anchors, or a named test that
     loads the new revision's files, so a missed lock fails it. 243 reviews the code before the
     push.
+
+## The fix: results (241, 2026-11-26)
+
+**Step 7, against SSv2 itself.**
+- A one-off C++ program (the scratchpad's `ssv2_centre_dump`, not committed; its source and
+  dumps are on the NAS under `2026-11-26 194 review (241)/step7/`) was built against the
+  installed `traffic_simulator` of a clean build at main 6690f884, fork pin 31b12c5f.
+- It called `LaneletWrapper::activate` on each town and printed every lanelet's bounds and
+  `lanelet_map::centerPoints` (the cache's points, midpoint rule included), at %.17g.
+
+| town | lanelets | (a) the port on SSv2's bounds against SSv2's points | (b) the export (map frame, no offset) against SSv2's points | point counts |
+|---|---|---|---|---|
+| Town01 | 300 | max 1.99e-12 m (lanelet 25061); the six degenerate at most 5.7e-14 m | max 1.93e-12 m | equal on every lanelet |
+| Town05 | 1029 | max 1.48e-12 m (lanelet 53191); the six at most 2.8e-14 m | max 1.71e-12 m | equal on every lanelet |
+
+- (a) **held** (predicted 1e-9 m).
+- (b) **held** (predicted 1 mm): the two TransverseMercator implementations agree to 2e-12 m
+  on these towns, with nothing fitted.
+- Both towns export with **no refused bound** (predicted none).
+
+**Step 9, the anchors resolved again** on the new export, against the dataset's main
+(eb93b387). The diff summary and both files are on the NAS under `resolve/`.
+
+| anchor | change |
+|---|---|
+| Town01 west_street, north_through | length unchanged (under 0.1 mm) |
+| Town01 west_left_turn | length 290.0893 → 290.0786 m (-1.07 cm) |
+| Town01 west_left_turn_bend | mean radius -0.8 mm; **min radius 8.178 → 8.840 m (+0.662 m)**; turn +0.1 mrad |
+| Town01 west_junction | the west_left_turn s bounds -0.82 and -0.90 cm |
+| Town01 west_left_turn_x_north_through | s -0.96 and -0.34 cm; position -3.5 mm in y; **angle -2.1993 → -2.1781 rad (+0.021 rad)** |
+| Town05 west_avenue | length 372.5177 → 372.1070 m (-0.411 m); reversed stretches 18 → 0; heading error with them 3.14 → 0.0006 rad |
+
+- The lengths and s held as predicted: under 1.2 cm on Town01, and west_avenue's 0.411 m.
+- Not predicted: the bend's minimum radius rose 0.66 m, and the crossing angle moved
+  0.021 rad. Both are read off the line's own curvature. On lanelet 42664 the lanelet2 line had
+  close points with up to 4.4 cm of wiggle (this record's survey), which made its sharpest
+  local radius 8.18 m; SSv2's even 2 m points make it 8.84 m.
+- The heading tables are shorter (707 → 300 points on north_through), as the line has fewer,
+  evener points.
+- Main's resolved files were written by an earlier resolver: they lack `x` and `y` and
+  `heading_max_error_reversed`, which the new ones carry.
+
+**The projects that move.** Every lock that takes a map with an `anchors.resolved.json` moves
+to the new dataset revision. Every other file those locks name is byte for byte the same as
+main's (checked against eb93b387's hashes), so only the anchors files change for them:
+- 19d52699 (Town01): bench, demo, gap, gap_campaign, isaac_demo, isaac_road_physics,
+  isaac_rough_road, isaac_soil, isaac_t2 (autoware, command, launch_own, none, simple),
+  isaac_verge, k12_commanded, k12_commanded_free, k9f_zones, set050, set050_tour, two_av;
+- 19d52699 (Town01, Town02): isaac_basic;
+- 732fd615 (Town01, Town01_west_street_closed): k9_cs3, k9_cs3_isaac;
+- eb93b387: basic, dev, k13_platoon, drift_lap.
+
+The locks taking no anchors file (c2b, e2, s5 on Town03; speed_ladder on town05_ring_110kmh)
+stay. K2.4's recompute waits for 139's seats runs.
