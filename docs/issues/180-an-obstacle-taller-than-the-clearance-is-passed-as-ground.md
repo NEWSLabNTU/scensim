@@ -67,3 +67,63 @@ filter's 0.20 m threshold passes, as ground, an obstacle taller than the car's c
 - Accept it and document it: a car that passes 0.14 to 0.20 m obstacles as ground strikes them.
 
 066 R7's "rocks passed as ground" is realised here: see 066's R7.
+
+## The plan: which stage calls the rock ground (241, 2026-11-27; predictions before any reading)
+
+Asked by 133: find, from a record and on the CPU only, the stage that passes the 15 cm rock as
+ground. The record is issue 177's live check, run c1 (118, 2026-11-27: fixture_c6b_down from x
+20 at scensim 7716891b, siw e763170; NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 177
+live check and 181 182 run A (118)/runs/c1-2026-11-27T03-24-46_fixture_c6b_down_r0`). It met
+the same 15 cm static rock (s 100 m) and struck the plate with the origin at x 97.3. Its
+record has no raw lidar, but it has each stage's output at about 10 Hz:
+
+| stage | topic in the record |
+|---|---|
+| ground filter (ScanGroundFilter, elevation grid) | `/perception/obstacle_segmentation/pointcloud` |
+| compare-map filter (after 0.1 m downsampling) | `.../detection/pointcloud_map_filtered/pointcloud` |
+| clustering | `.../detection/clustering/clusters` |
+| validator | `.../detection/clustering/validation/objects` |
+| final objects | `/perception/object_recognition/objects` |
+
+Three stages can each pass a 15 cm rock as ground, on paper:
+
+- the ground filter: `non_ground_height_threshold` and `split_height_distance` are 0.20 m in
+  autoware_launch 1.5.0's `ground_segmentation.param.yaml`, which the profile uses unchanged;
+- the compare-map filter: issue 181 step 3 found that a point is dropped when a map point lies
+  in its own or one of the 26 neighbouring voxels (0.5 x 0.5 x 0.3 m) within |dz| < 0.3 m. The
+  road under the rock is in the map, so a point 0.15 m above it is dropped, whether or not the
+  rock itself is in the map;
+- clustering and the validator: `min_cluster_size` 10 points, and the validator's
+  clamp(round(800/d), 5, 5) for UNKNOWN since asv b269c4a (issue 181).
+
+Step 1 reads each stage in turn. It places the rock by siw's own placement, as gt181.py does
+for 181's boulder, and the car by the truth's pose (ego.csv). For each frame from 40 m out to
+the strike, it counts points inside the rock's footprint plus 0.1 m, more than 0.05 m above the
+road under it, in each cloud; clusters and objects whose hull reaches the rock. It also counts
+the map PCD's points over the rock's footprint more than 0.05 m above the road.
+
+Predictions, before any of it is read:
+
+1. The ground filter's output has no point on the rock in at least 90 % of the frames within
+   30 m, and at most 2 in any frame. The rock is gone at the first stage.
+2. So the compare-map, cluster and validator stages see nothing there either: no cluster and no
+   object at the rock in any frame.
+3. The map PCD has no point of the rock: the map is the road and its props, not the rocks.
+4. The second stage is analytic, not read: even with the ground filter at 0.10 m, the
+   compare-map filter would still drop the rock's points (|dz| 0.15 < 0.3 m). So a fix of the
+   ground threshold alone would not make an object. Step 2 checks that on the record's map,
+   by passing step 1's rock points (or, if prediction 1 holds, points placed on the rock's
+   collider as the lidar's rings would hit it) through 181's compare-map replay.
+5. Lidar geometry does not hide the rock: the OS1 at x 0.9, z 2.0, tilted down 22.5 deg, sees a
+   point 0.15 m high to within about 1.9 m of itself, inside the bumper. Under 15 m, each
+   frame's rings put at least 3 returns on the rock's top or face.
+
+If prediction 1 fails (the ground filter keeps rock points), the stage that drops them is the
+first one whose output loses them, and step 2 replays that one.
+
+Step 2, the fix's cost, before any change: rerun step 1's counting against the ground filter's
+own output in the stretches of c1 with no rock (crown, potholes, curbs), to count how many
+points a lower `non_ground_height_threshold` and a smaller compare-map dz would let through
+there. That is the false-obstacle cost of any fix; it needs the raw cloud for the ground
+filter, so that part is a request to 118 for one run recording the concatenated cloud, sent
+through 133. No change is made before 133 has the plan and the step 1 result.
