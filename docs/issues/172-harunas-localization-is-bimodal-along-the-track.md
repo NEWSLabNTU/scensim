@@ -1,6 +1,6 @@
 # 172: on Isaac's haruna_down, localization runs either level with the car or 0.086 m behind it, per run
 
-**Status:** open; plan written (2026-11-25, after 169's step 1 and 185), for 133. **Severity:** to be shown. It is the cause
+**Status:** open; parked 2026-11-26 after step 10 (see "Parked" at the end: what is excluded, what holds, the open leads). Plan written 2026-11-25, after 169's step 1 and 185, for 133. **Severity:** to be shown. It is the cause
 of Haruna's bimodal pose error p95 (about 0.12 or about 0.18 m), which has widened every A/B's
 noise on Haruna since 086 C5. **Found:** 2026-11-25, scensim 118, issue 168's A/B, round 1
 (numbered by 133).
@@ -1077,3 +1077,73 @@ the first `/initialpose3d` sorts 81 %, but only because of its extremes: the thr
 of step 5 (19.6, 39.15 and 41.15 s) and the earliest (4.25 s, step 7) are behind. It was not one
 of the two gaps the prediction named. It is recorded here as an observation, not a result. The
 labelled guess (a gap of 1 s or more) held.
+
+## Step 9 (a)'s readings (i) and (ii) (2026-11-26, offline on the step 9 (a) dumps; after the predictions in its plan)
+
+**(i) The render pose against the truth** (`rp9a.py`, step 8's reading 1, binned by 1 s of motion
+from each run's own t_move). Median along offset (m), per bin:
+
+| s of motion | 0 | 1 | 2 | 3 | 4 | 6 | 8 | 10 | 12 | 14 | 16 | 18 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| r1 level | 0.1045 | 0.1065 | 0.1109 | 0.1134 | 0.1233 | 0.1124 | 0.0732 | 0.0284 | 0.0041 | 0.0097 | 0.0433 | 0.0777 |
+| r2 level | 0.1047 | 0.1072 | 0.1109 | 0.1136 | 0.1238 | 0.1118 | 0.0721 | 0.0292 | 0.0044 | 0.0093 | 0.0422 | 0.0775 |
+| r3 behind | 0.1045 | 0.1069 | 0.1108 | 0.1135 | 0.1230 | 0.1127 | 0.0738 | 0.0306 | 0.0049 | 0.0085 | 0.0426 | 0.0775 |
+
+The behind run's render pose matches both level runs' to 0.002 m in every bin. The predicted
+difference is at least 10 ms x v, which is 0.014 to 0.042 m over the first 4 s. The common
+pattern (0.107 m at the stand, then a slow swing along the track) is my truth reference's
+offset, step 8's constant, and it is the same in all three runs.
+
+**(ii) The sector test** (`sectors.py` on the 40 dumps of each run's first 4 s of motion). Median
+shift (m) per firing-time sector 1 to 16:
+
+- r1 level, 0 to 2 s: 0 0 0 0 0 0 -0.09 -0.07 -0.05 -0.04 -0.02 0 -0.01 0 0 -0.01 (whole -0.010)
+- r2 level, 0 to 2 s: -0.005 0 0 0 0 0 -0.10 -0.08 -0.05 -0.05 -0.015 +0.01 0 0 0 -0.01 (whole -0.010)
+- r3 behind, 0 to 2 s: 0 0 0 0 -0.005 +0.01 -0.095 -0.075 -0.065 -0.055 -0.015 0 0 0 0 -0.01 (whole -0.010)
+- r1 level, 2 to 4 s: 0 0 0 0 +0.01 -0.005 -0.085 -0.045 -0.10 -0.05 -0.005 -0.005 0 0 0 0 (whole -0.010)
+- r2 level, 2 to 4 s: 0 0 0 0 -0.01 -0.02 -0.09 -0.04 -0.06 -0.045 -0.02 0 -0.01 0 0 -0.005 (whole -0.010)
+- r3 behind, 2 to 4 s: -0.005 0 0 0 +0.01 +0.01 -0.055 -0.03 -0.105 -0.10 -0.025 +0.005 0 0 -0.005 -0.005 (whole 0.000)
+
+The dip at sectors 7 to 10 is in all three runs, as in step 8. It is the scene's geometry in
+those directions. The behind run's sectors fall within the spread of the two level runs, and its
+whole-revolution shift is within the 0.01 m step of theirs.
+
+**Against the predictions.** *The start-up clouds explain the mode:* **FAILED.** *They do not:*
+**held.** (i) agrees within 0.002 m, far under 5 ms x v. (ii) agrees within the test's 0.01 m
+step. The amended world-frame pairing above is flat. The cloud aib publishes in the first 4 s of
+motion, and the pose it is rendered at, are the same in the behind run as in the level runs.
+
+## Parked (2026-11-26, 133)
+
+172 is parked. What the steps have shown:
+
+**Excluded.**
+- The build (step 3: 0 behind in 9 at 0291abb3; the mode came back under contention on the same
+  build).
+- Load at start (step 5's start-load records; step 10: the start follows readiness alike in both
+  modes).
+- The cloud and the render pose (steps 8 and 9 (a): the same in both modes, at cruise and in the
+  first 4 s of motion; the published cloud fits the map at its render pose).
+- The stitch and in-cloud motion (H-e, step 8).
+- The ramp and the initial guess (H-d, step 6; H-f, step 9 (3): NDT's own initial pose equals the
+  header guess).
+- Render age, to_sim and the stamp's phase (steps 3 and 4).
+- The twist input's lag (it leads by 4 ms, step 9 (3)).
+- Motion before localization's readiness (step 10: 42 runs; motion follows INITIALIZED by about
+  3 s in both modes, NDT converged from its first pose).
+
+**Holds.**
+- CPU contention makes the behind mode possible (step 5: 6 of 9 under burn.py, against 0 of 9
+  quiet at the same build).
+- The behind mode is about 24 ms (along about -0.1 m at 4.2 m/s), held from the first 1 to 2 s of
+  motion on. Every run starts motion with the EKF 20 to 34 ms late. In level runs NDT corrects
+  this in the first 2 s; in behind runs it keeps it.
+- At cruise NDT follows its guess, the EKF's (correction about -0.005 m in both modes).
+- EKF output stamps sit on the 50 ms grid in every run.
+
+**Open leads.**
+- The late /initialpose3d extremes (post-hoc, labelled): in step 10 the four runs whose gap from
+  the first /initialpose3d to motion is far from the common 7.4 to 14.3 s (19.6, 39.15 and
+  41.15 s in step 5, 4.25 s in step 7) are all behind.
+- The EKF's internal step phase and its delay compensation under the 50 ms sim clock.
+- Where the common 20 to 34 ms start lag of the EKF comes from.
