@@ -1048,3 +1048,32 @@ From these: t_move minus each of them, and the number of NDT outputs before t_mo
 - *If not:* the gaps of the two modes overlap, and no threshold sorts more than 75 % of runs.
 - *Guess (labelled, not a prediction):* the gap is of order 1 s or more in every run, because the
   car stood 7.5 s or more before moving in step 9 (a).
+
+## Step 10's result (2026-11-26, offline; after the predictions above)
+
+**The runs.** 42 runs from 2026-11-25T19-24-58 to 2026-11-26T15-01-09 (`ready10.py`,
+`step10.jsonl`): 11 behind and 31 level. 133 counted 20. This is every run on this testbench that
+has the topics.
+
+**Readings (sim time; gap = t_move less the event).**
+
+| gap to t_move (s) | behind (11): median, range | level (31): median, range | best threshold sorts |
+|---|---|---|---|
+| first converged NDT pose | 3.20, 2.85 to 3.50 | 3.15, 2.85 to 3.80 | 71 % |
+| INITIALIZED | 3.25, 2.90 to 3.55 | 3.20, 2.90 to 3.85 | 71 % |
+| first `/initialpose3d` | 7.95, 4.25 to 41.15 | 7.95, 7.35 to 14.30 | 81 % |
+
+"All level" alone sorts 74 %. In every run the first NDT pose already met the convergence test
+(iteration_num under 10, NVTL at least 2.3), and the EKF's first pose came at the same stamp.
+The car stood through 57 to 76 NDT outputs before it moved. The gap from INITIALIZED to motion
+is about 3 s in every run, so motion follows localization's readiness rather than an independent
+trigger. That is also why t_move varies: r3's earlier start in step 9 (a) reflects its earlier
+INITIALIZED.
+
+**Against the predictions.** The hypothesis "motion began before localization settled" is
+FAILED. In no run did motion begin before NDT converged, and the two predicted gaps overlap
+between the modes, at 71 %, under the 75 % bound and under the all-level baseline. The gap to
+the first `/initialpose3d` sorts 81 %, but only because of its extremes: the three latest starts
+of step 5 (19.6, 39.15 and 41.15 s) and the earliest (4.25 s, step 7) are behind. It was not one
+of the two gaps the prediction named. It is recorded here as an observation, not a result. The
+labelled guess (a gap of 1 s or more) held.
