@@ -100,3 +100,29 @@ a stub that passes or fails per step and can dirty a file. It checks:
 - Run on 550a8b41 (the 9-oktas code before the fmt fix), it fails at `check` naming
   profiles.rs.
 - The stub tests pass in `just test`.
+
+## `just gate`: the outcome against the plan's predictions (241, 2026-11-26)
+
+The recipe is c34124da. 7ede1183 streams each step into `gate.log` as it runs; the first
+version wrote a step's output only when the step ended, found in its own first gate. Gated on
+241 by itself, with `ISAAC_ROOT` and `SCENSIM_GATE_ROOT=/var/tmp/aeon`:
+
+- c34124da: `gate ok c34124da585fb408a0f2c7d49351b7ba550f6569 tree bab981de on
+  newslab-server-241 2026-11-26T07:37:19+08:00: build test check clean; Isaac lane ran (937
+  tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29)`, 34 min.
+- 7ede1183: `gate ok 7ede1183b41899e7046e226e2d6c758feaf80a34 tree d0310436 on
+  newslab-server-241 2026-11-26T08:14:02+08:00: build test check clean; Isaac lane ran (937
+  tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29)`, 35 min.
+
+Run on 550a8b41 (the 9-oktas code before the fmt fix): `gate FAILED
+550a8b414b8aafc56eb3f808b58cdd9d430e5c41 at check: \`just check\` exited non-zero (last line:
+error: recipe \`check\` failed with exit code 1)`. Build and test passed with clean trees. Its
+`gate.log` names `Diff in .../profiles.rs:521` right after `== check`.
+
+**Against the predictions:**
+- Both gates passed, in the predicted 35 to 45 min, with the Isaac lane run: held.
+- 550a8b41 fails at check: held. The plan also predicted the failure would name `profiles.rs`.
+  It does so in `gate.log`, not in the summary line, which quotes the recipe's last line
+  instead: a miss. A summary naming the first `Diff in` or `error` line of the failing step is
+  a small follow-up.
+- The stub tests (7) pass in `just test`: held.
