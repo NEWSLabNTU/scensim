@@ -1,6 +1,7 @@
 # 192: a soil world's cut road is reported as the static world
 
-**Status:** open; plan written (241, 2026-11-26; numbered by 133), before any code.
+**Status:** fixed in code and tests (siw 03876248; 241, 2026-11-26; numbered by 133). Open: the
+live soil run (plan step 4), when a GPU is free.
 **Severity:** medium. No verdict has changed yet. Under issue 189's default contact judge, the
 ego's contact with its own road in a soil world passes only because the static floor (10 N*s)
 sits above the 0.0 measured so far. An ego that bottoms out on that road (a dip, a hard landing)
@@ -101,3 +102,9 @@ siw's own check, in a fresh recursive clone at 03876248:
 The first prediction (the tests fail on today's filter and pass with the fix) is shown by the
 test that keeps today's ground: without a soil zone's root, the cut road gives its row. The live
 check (plan step 4) waits for a GPU.
+
+**The gate:** `gate ok dad1a526f87175d1e21b28454da9c0a0e67aef6d tree 9af5d8bc on
+newslab-server-241 2026-11-26T16:16:33+08:00: build test check clean; Isaac lane ran (947
+tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29); carried
+ISAAC_ROOT`. Held: 947 is 942 plus the 5 new tests. Rebased onto 7b7abfe6 (docs only) before
+landing.
