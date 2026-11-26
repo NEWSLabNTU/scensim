@@ -545,3 +545,50 @@ r3 to r9 (2 behind, 5 level; r1 and r2 recorded no NDT pose). Each has NDT's
   offset: b within 0.005 s of 0, and a within 0.02 m of the run's along median. If instead b is
   near -0.019 s and a near 0, the offset is a time offset (step 2's first reading). H-d's "held
   minimum" then fails, and the mode is a lag held in the EKF.
+
+## Step 6's result (2026-11-26, offline; after the predictions above)
+
+Read from step 5's ten runs and step 2's r3 to r9: 17 runs, 8 behind and 9 level (scripts
+`hd.py`, `hd_bins.py`, `hd_tau.py`). NDT's own initial guess is not in any record (no
+ndt_scan_matcher debug topic was recorded), so the guess is the EKF's pose interpolated at the
+scan's stamp, by header stamps.
+
+**(2) Offset against speed (first, as 133 asked).** A straight-line fit over the whole run is
+dominated by the cruise at 4.2 m/s and by about 4 cm of scatter around it (curves, the
+acceleration and the braking). So the offset is read as a time, tau = -along / v, per speed band:
+
+| | tau at 4.1 to 4.4 m/s | along there | tau at 1.5 to 2.5 m/s |
+|---|---|---|---|
+| behind runs (8) | 23.8 to 25.2 ms | -0.099 to -0.105 m | 23.8 to 30.5 ms in 5; about 0 in 3 (r7, r8 and step 2's r9: their low-speed outputs come before the mode sets) |
+| level runs (9) | 1.7 to 2.2 ms | -0.007 to -0.009 m | -18.5 to +11.7 ms (scatter) |
+
+By speed and phase in the behind runs, the along error grows with speed: about -0.03 m at 0.5
+to 1.5 m/s, -0.05 m at 1.5 to 2.5 m/s, and -0.09 to -0.10 m at cruise.
+- *H-d's position offset (b about 0, a about -0.09 m):* **FAILED.** The behind mode is a **time
+  offset**, about 22 ms more than the level mode's 2 ms. NDT's pose is the car's position about
+  24 ms before the scan's stamp.
+- *The predicted step (one scan period at start speed):* **FAILED.** The offset scales with speed,
+  and the extra delay is about 22 ms, not 50 ms. The first output behind by 0.05 m came at 0.40 to
+  2.32 m/s in the behind runs, and some level runs also cross -0.05 m once in their noise. The
+  voxel (2.0 m) was not predicted and is not seen.
+
+**(1) The initial guess at the first moving scans (0.2 to 0.6 m/s).** The guess's along error was
+0.0 to -2.4 cm in the behind runs and -0.4 to -2.2 cm in the level runs. NDT's results scattered
+by about +/-5 cm in both, with no early divergence.
+- *133's falsifier (level runs show the same guess error at the first moving scans):* **met, so
+  H-d FAILED.**
+- *Staleness (secondary, receive time; confounded by the recorder, which shares the CPU):* in all
+  17 runs, behind and level alike, the EKF poses the bag had received before each of NDT's outputs
+  were stamped 150 ms after the scan's stamp. No stale guess was found in either mode. NDT's own
+  initial guess is not recorded, so its real input is not read.
+
+**What the readings leave (labelled).** Both modes share the stamp and its timing (steps 3 to 5),
+but NDT's pose is the car's position about 24 ms before the stamp in one mode and about 2 ms in the
+other, and the mode is set during the first motion and held. 24 ms is about half the lidar's 50 ms
+revolution. **Hypothesis H-e (untested):** in the behind mode, the cloud carries the sensor's
+motion across the revolution (issue 169: with Motion BVH the sensor's motion is in the cloud), so
+an uncorrected cloud places NDT's match near the revolution's middle, half a revolution before its
+stamp. In the level mode it does not. Which mode applies is decided at the start under contention.
+The difference measured is 22 ms, not 25 ms; the hypothesis must account for that. The test needs
+the raw cloud (not recorded in these runs): the two-wall probe of issue 169, or the cloud's seam
+in a recorded run, behind against level.
