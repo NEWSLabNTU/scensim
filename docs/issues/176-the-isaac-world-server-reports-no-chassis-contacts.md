@@ -1,6 +1,8 @@
 # 176: the Isaac world server reports no chassis contacts
 
-**Status:** open; plan first, after 086 C6e3 (133, 2026-11-25). **Severity:** to be shown. No
+**Status:** closed, answered by step 1 (241, 2026-11-26): the chassis contact report exists,
+as the bridge's per-run `contacts/` (the ego's cube and skid plate as one reporter). The defect
+it found is issue 192. **Severity:** to be shown. No
 judged check rests on a contact today. **Found:** 2026-11-25, scensim 118, while writing 086
 C6e3's details (numbered by 133).
 
