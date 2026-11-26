@@ -1,7 +1,7 @@
 # 194: the batch and the lint read lanelet2's centreline; SSv2 reads its own
 
-**Status:** a draft (241, 2026-11-26; numbered by 133), read-only survey and fix plan; the fix
-awaits the user. **Severity:** to be judged by the user. On the lanelets vehicles drive, the
+**Status:** open; the fix approved by the user (through 133, 2026-11-26), its plan below,
+before any code. **Severity:** to be judged by the user. On the lanelets vehicles drive, the
 two lines differ by at most 7 cm on the lanelets checked, and every reversed stretch (issue 166)
 there is an artefact of the line scensim reads. On six connected lanelets of Town01 and Town05
 they differ by 5 to 52 m, where lanelet2's line is a chord across a corner. **Found:** 133's
@@ -132,3 +132,90 @@ used them.
    - Autoware's map loader builds its own centrelines, which this does not touch.
    - SSv2's warning says `use_custom_centerline`'s default becomes false after January 2026.
      With these maps nothing changes, since they carry no custom centrelines.
+
+## The fix: the plan (241, 2026-11-26; approved by the user through 133; 243's review folded in, before any code)
+
+243 reviewed the draft's plan against SSv2 31b12c5f (`lanelet_loader.cpp` 137-255,
+`lanelet_wrapper.hpp` 194-214). 133 had every point folded in.
+
+1. *The port, `ssv2_centerline(left, right)` in `scensim_batch.map_export`.* Pure Python, no
+   lanelet2. It keeps SSv2's arithmetic exactly:
+   - `n = max(ceil(longer bound's length / 2.0), 1)`, the lengths in **3D** (lanelet2's
+     `length` and `distance` on `Point3d`);
+   - each bound resampled with `resamplePoints`' order: the accumulated 3D lengths; for
+     `i in 0..n`, `t = (i / n) * length`; the index pair by `findNearestIndexPair`'s order
+     (`t < acc[1]` first, then `t > acc[N-2]`, then the first `i` with
+     `acc[i-1] <= t <= acc[i]`, so a tie takes the earlier segment);
+   - the point `back + dir * (t - back_len) / seg_len`;
+   - the pairwise average of left and right, z included.
+2. *What SSv2 cannot resample is refused, never skipped.* A bound with fewer than 2 points
+   (SSv2's `acc.at(1)` throws) and a bound with consecutive duplicate points (SSv2 can select
+   that zero-length segment and get NaN) are refused. The refusal names the lanelet and the
+   bound. The survey reports how many bounds of Town01 and Town05 are like that, predicted
+   none.
+3. *A custom centreline is kept, as SSv2 keeps it.* SSv2's test is lanelet2's
+   `hasCustomCenterline()`: a relation member with role `centerline`. The Python binding does
+   not expose it (checked 2026-11-26: `Lanelet` has only `centerline`), so `map_export` reads
+   the role from the OSM's relations.
+   - The towns' "none" was established that way: `role="centerline"` occurs 0 times in Town01's
+     and Town05's `lanelet2_map.osm`.
+   - SSv2 keeps a custom line only with `use_custom_centerline` true, the default of
+     scenario_test_runner's launch argument (`launch.py` 110). Nothing in scensim sets it. The
+     export records the value it assumes, `"use_custom_centerline": true`, so a future change
+     there is a refusal, not a silent difference.
+4. *The midpoint rule after it*, as SSv2's `CenterPointsCache::centerPoints` applies it. With the
+   fine line that is exactly when `n == 1`, a longer bound of 2.0 m or less.
+5. *Versions and refusals.*
+   - `map_export.VERSION` goes from 2 to 3, and the export records
+     `"centerline": "ssv2-fine-2.0"` and `"use_custom_centerline": true`.
+   - `LaneletWorld.load` refuses an older export with its cause and remedy: "exported with
+     lanelet2's centreline (v2); SSv2 uses its own 2 m line (issue 194): run python3 -m
+     scensim_batch.map_export again".
+   - **The resolved anchors** carry the line too. `anchors.VERSION` (batch and sampler) goes
+     from 1 to 2 and the resolved file records `"centerline": "ssv2-fine-2.0"`.
+     `scensim_sampler.anchors.load_resolved` refuses a v1 file the same way, naming the cause
+     and `scensim update` (or the lock bump). Until a project's lock moves to the new dataset
+     revision, its runs refuse to resolve anchors. That is loud, not silent.
+6. *Tests* (`test_map_export.py`, new, no lanelet2; and the sampler's):
+   - straight bounds of unequal lengths;
+   - a 2-point bound against a many-point one;
+   - a **sloped** bound (z changing), its split fractions taken from 3D lengths;
+   - the index search's order: a target exactly on a bound's point takes the earlier segment;
+     the first and last segments;
+   - a longer bound of exactly 2.0 m (one segment, the midpoint added) and just above it (two
+     segments, none added);
+   - refusals: a 1-point bound, and duplicate points at the start, in the middle and at the
+     end, each naming the lanelet;
+   - the OSM's `centerline` role detected and kept;
+   - a v2 export refused with the remedy;
+   - a v1 resolved-anchors file refused with the remedy.
+7. *Checked against SSv2 itself, once, in two parts.* A one-off C++ program in the scratchpad,
+   not committed, built against the workspace's installed `traffic_simulator`, activates the
+   fork's `lanelet_wrapper` on Town01 and Town05 and dumps each lanelet's bounds and centre
+   points in SSv2's load frame.
+   - (a) *The algorithm:* the port fed SSv2's own bound points against SSv2's line.
+     **Prediction:** equal to 1e-9 m on every lanelet.
+   - (b) *The frame:* the export's line, from its map-frame bounds, against SSv2's. SSv2
+     resamples in its projector's frame (`map_projector_info.yaml`; a TransverseMercator scale
+     of 0.9996), and the export in the map frame. **Prediction:** after the frames' rigid
+     offset, equal to 1 mm, since the towns' local frames differ by a translation. If they do
+     not, the difference is reported as the frame's, measured, not taken for a port bug.
+   If the fork's loader cannot be called that way, its gtest fixture (`test_lanelet_wrapper.hpp`)
+   is the fallback, in a scratch build.
+8. *What reads the export, re-measured* (CPU only):
+   - the lint over the repository's scenarios: 0 refused, 0 warned;
+   - `lane_positions.stretches` on both towns: none on a connected lanelet, 10 isolated;
+   - K2.4's agreement rows recomputed on the batch side against the kept seats runs (139's).
+     **Prediction:** follow_to_goal's lead max falls below 2.8 cm; k24_npc_stops_for_ego's
+     follower stays at about 2.6 cm. If the seats runs are not kept, that is recorded.
+9. *The dataset and the locks (outward: prepared, shown to 133, uploaded only on its OK).*
+   - `anchors resolve` again on every dataset map with an `anchors.yaml`.
+   - Each resolved value's change is listed here (predicted: under 1.2 cm on Town01,
+     west_avenue 0.411 m on Town05).
+   - A file diff summary and a dataset commit plan go to 133 first.
+   - After the upload: each project's `scensim.lock` bumped to the new revision. The projects
+     that move are listed here.
+10. *Kept:* 166's lint, 174's check, the follower's workaround. *Not here:* simple_route and czp
+    (a separate follow-up).
+11. *Gate:* `just gate`, then the push request with its line. 243 reviews the code before the
+    push.
