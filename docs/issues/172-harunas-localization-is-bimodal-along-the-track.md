@@ -911,3 +911,41 @@ speed against the truth's speed, aligned by a time shift, over the acceleration.
   larger (NDT moves the pose by a few cm) than in the behind run (it barely moves it).
 - *The common lag (the guess above):* the twist input's speed lags the truth's by 20 to 34 ms
   during the acceleration, in both runs alike.
+
+## Step 9 (3)'s result (2026-11-26, 118, GPU0, 12:11:22 to 13:22:00; the quiet rule, codec told)
+
+The stop rule held after two runs: r1 level (NDT along -0.001 m) and r2 behind (-0.0921 m). Both
+were accepted: provenance at 0291abb3 with siw 4706ff9, the aib sidecar at b354ab9, no probe line.
+Their lags were 56.4 s and 66.9 s at 24 workers, with the probe off. The 7 record names were all
+on the live stack (13:01) and were added with the stack down. The burner was verified gone after
+each run, and no foreign process was on GPU0. Script `hf.py`.
+
+| first moving scans | r1 level | r2 behind |
+|---|---|---|
+| 0 to 2 s (1.0 m/s): NDT's own initial pose / my header guess / NDT's result (tau, ms) | 20.5 / 20.5 / 6.6 | 24.3 / 24.3 / 17.8 |
+| 2 to 4 s (2.8 m/s) | 11.0 / 11.0 / -1.5 | 23.5 / 23.5 / 22.5 |
+| 4 to 6 s (4.2 m/s) | -1.8 / -1.8 / -4.7 | 22.8 / 22.8 / 23.6 |
+| initial_to_result_distance, 0 to 2 s | 0.018 m | 0.016 m |
+| the twist input's lag against the truth's speed (best shift, first 8 s) | -4.0 ms (ahead) | -4.0 ms (ahead) |
+
+Against the predictions:
+- *H-f:* **FAILED.** NDT's own logged initial pose equals the header-interpolated guess in every
+  bin of both runs. At the first moving scans it lags 20.5 ms (level) and 24.3 ms (behind), a
+  difference of 3.8 ms x v, inside the falsifier's 5 ms x v. **The falsifier is met.**
+- *initial_to_result_distance larger in the level run:* **about the same** (0.018 against 0.016 m).
+  Yet NDT's result goes 14 ms toward the truth in the level run and 6.5 ms in the behind run.
+- *The common lag's guess (the twist input lags 20 to 34 ms):* **FAILED.** The twist input leads
+  the truth's speed by 4 ms in both runs.
+
+**A reading after the result, labelled (no prediction was written for it).** The EKF's output
+stamps (`/localization/pose_twist_fusion_filter/pose`) sit on the 50 ms clock grid in all 19 runs
+of steps 2, 5 and 9 (3), behind and level alike, at 50.0 ms apart. The EKF's own 50 Hz timer is
+stepped by a sim clock that moves in 50 ms jumps, so the phase of its internal steps against the
+scans' stamps is not visible in its outputs. A start-up phase there is still a candidate, unread.
+
+**Where it stands.** Every run starts motion with the EKF's pose 20 to 34 ms behind. NDT gets the
+same guess in both modes and the same cloud (step 8, read from 60 s; the start-up clouds are not
+read). It corrects 14 ms in the first two seconds of a level run and about 6 ms in a behind run,
+and from there the loop holds the result. What makes NDT's first answers differ is not found. The
+untested candidates: the cloud at the start of motion (the dumps begin at 60 s); and the EKF's
+internal step phase under the 50 ms clock, with its delay compensation.
