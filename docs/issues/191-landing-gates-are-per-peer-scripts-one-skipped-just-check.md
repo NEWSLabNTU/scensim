@@ -372,3 +372,58 @@ and the test asserts the new one.
 
 **Result:** all 32 gate tests pass (`python3 -m pytest scripts/test_gate.py`): the 23 before,
 unchanged, and the 9 new.
+
+## The seventh follow-up: gate-clean's arguments were never read by name (241, 2026-11-27; a plan, before any code)
+
+243 found this on 2026-11-27, using the sixth follow-up.
+
+**What happened.** The recipe was `gate-clean commit notag="false" dir="" unlanded="false"`.
+just binds recipe parameters by position, so `just gate-clean <sha> unlanded=true` put the
+string "unlanded=true" into `notag`.
+- `[ "unlanded=true" = true ]` is false, so no flag reached the script. It kept the gate and
+  printed "(unlanded=true removes it ...)", as if the flag had been read.
+- The same held for the documented `notag=true` (fourth follow-up) and `dir=<path>` (fifth). Only
+  the positional form `just gate-clean <sha> false "" true` ever worked.
+- `dir=<path>` failed safe: no gate at the default path, so "no gate worktree": kept.
+- `notag=true` did not fail safe. A gate that had landed rebased was tagged `gate/<dir>` and
+  removed, the very thing 118's user's rule (their own go for every tag) was to prevent. Those
+  tags are on 118's host. 118 is asked to list them, and they are listed here when it answers.
+  None is removed without 118's user's go.
+
+**Why the tests missed it.** `scripts/test_gate.py` calls `gate_clean.sh` with its `--flags`,
+never through the recipe, so the recipe's binding was never exercised.
+
+**The fix.** One syntax, the one the other recipes use (`name:=value`, as CLAUDE.md asks), with
+no alias:
+- `gate_clean.sh <commit> [notag:=true|false] [unlanded:=true|false] [dir:=<path>]` parses the
+  names itself. Its `--notag`, `--unlanded` and `--dir` go.
+- The recipe becomes `[positional-arguments] gate-clean commit *args`, passing the arguments
+  through unchanged to `{{justfile_directory()}}/scripts/gate_clean.sh`.
+- Refused, with exit 2 and the worktree untouched:
+  - a bare `name=value`, with a message naming `name:=value`. Taking both would be an alias,
+    which CLAUDE.md's no-shims rule forbids;
+  - an old `--flag`, naming its new form;
+  - an unknown name, listing the known ones;
+  - a value other than true or false for `notag` and `unlanded`, and an empty `dir:=`.
+- Each run's first line echoes what it read (`gate-clean <sha8>: notag:=... unlanded:=...
+  dir:=...`), so a misread argument shows (243's second point). The printed commands
+  (`just gate-clean <sha> dir:=<dir>`, "unlanded:=true removes it") use the new form.
+
+**Tests, written first:**
+- The existing gate-clean tests move to the `name:=value` form.
+- Through the recipe (`just --justfile <repo>/justfile --working-directory <test repo>`):
+  - `unlanded:=true` removes an unlanded gate whose SHA a branch holds;
+  - `notag:=true` keeps a rebased gate and creates no tag.
+- At the script:
+  - `unlanded=true` is refused, naming `unlanded:=true`;
+  - `--notag` is refused, naming `notag:=true`;
+  - `foo:=1` is refused as unknown;
+  - `notag:=yes` is refused;
+  - `dir:=` is refused.
+  In each case the worktree stays.
+
+**Predictions, before any code:**
+- On today's script and recipe, every test that passes a `name:=value` or one of the new
+  refusals fails: the script's catch-all prints its usage, and the recipe misbinds.
+- After the fix, all pass, and the gate-clean tests that take no arguments are unchanged.
+- `just gate` passes, with the Isaac lane run.
