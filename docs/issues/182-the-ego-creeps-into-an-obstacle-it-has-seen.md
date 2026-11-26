@@ -373,3 +373,13 @@ For run A's "while stopped" figures:
   does the work, and the change only adds margin: 2.5 m more of validated range, and more frames
   with the object while stopped.
 - Either way, the first validated range shows the change's direct effect.
+
+**The map (118, before the runs).**
+- Runs A and B, and 118's 177 check, use the fixture_c6b map rebuilt by 177's record step
+  (`isaac-ex/i177/maps/fixture_c6b` on 118). Its features and section are r1's, and the course
+  record is byte for byte the same.
+- Its `pointcloud_map.pcd` may still differ from r1's. The compare-map filter, and so 181's
+  counts, read that file, so a difference there could move the first validated ranges a little
+  against the replay.
+- After the runs, the two PCDs are compared before either run's ranges are read against 181's
+  replay.
