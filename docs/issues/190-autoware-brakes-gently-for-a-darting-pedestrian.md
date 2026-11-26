@@ -542,3 +542,27 @@ asking for -3.40 and the trajectory for far more when the MRM capped the command
 Model 3's limit is about -9 to -10). So against an AEB-level stop the -2.50 is a quarter to
 two fifths of it. Nothing is changed here; whether the MRM's target or the AEB's role should
 change is the user's call through 133.
+
+## What raises the MRM: (c) again, recording the system side (243, 2026-11-26)
+
+**The run, planned.** Step (c) again, with the same install (main 9ed62536), testbench and
+CenterPoint, recording in addition (names from (c)'s live topic list):
+`/system/fail_safe/mrm_state`, `/system/emergency/*` (control_cmd, hazard_status and the rest),
+`/system/mrm/emergency_stop/status` and the comfortable stop's and pull over's,
+`/system/operation_mode/state` and `availability`, `/system/emergency_holding`,
+`/diagnostics`, `/diagnostics_agg`, `/diagnostics_graph/status` and `struct`, and
+`/control/autonomous_emergency_braking/` `metrics`, `debug/rss_distance`, `debug/markers` and
+`virtual_wall`. Nothing in the profile changes.
+
+**Predictions, before the run.**
+- E1 (the named one): the MRM is raised by Autoware's autonomous emergency braking. A
+  `/diagnostics` status from `autonomous_emergency_braking` goes to ERROR (its emergency stop),
+  the diagnostics graph marks the operation unavailable, and `mrm_state` goes to
+  MRM_OPERATING with behaviour EMERGENCY_STOP, before the gate's command takes the
+  emergency stop's shape (jerk -1.5, then -2.50).
+- E2: from AEB's first ERROR to the first emergency command at the gate is at most 0.2 s (AEB
+  at 10 Hz, the MRM handler, the operator at 30 Hz, the gate at 10 Hz).
+- E3: AEB's decision is its RSS check: at its first ERROR, its RSS distance exceeds the
+  distance to the nearest obstacle point on its path, and that point is the walker.
+- If E1 fails, the other sources read are the control validator, the operation mode's
+  availability and the topic state monitors, through the same diagnostics.
