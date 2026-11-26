@@ -197,3 +197,16 @@ a3c71b54 on newslab-server-241 2026-11-26T13:20:03+08:00: build test check clean
 (942 tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29); carried
 ISAAC_ROOT`, 39 min. Every prediction held: the pass, 942 (241's Isaac venv lacks pytest),
 `carried ISAAC_ROOT`, and the 14 gate tests within `just test`.
+
+## The fourth follow-up: two notes from 118 (241, 2026-11-26)
+
+- `COLCON_DEFAULTS_FILE` is on the gate's allow-list. 118's user caps colcon's workers with a
+  defaults file.
+- `just gate-clean <commit> notag=true` never tags. 118's user gives their own go for every
+  tag. A gate that landed rebased is kept, and the exact `git tag ... && just gate-clean ...`
+  command is printed. The default is unchanged.
+
+Three more stub tests (16 in all).
+
+**Predictions, before the gate:** `just gate` passes on 241 with the Isaac lane run (942), its
+line ending `carried ISAAC_ROOT`, and the 16 tests pass within `just test`.

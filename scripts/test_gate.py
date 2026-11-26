@@ -10,7 +10,7 @@ STUB = """#!/bin/bash
 # STUB_FIRST=<line> prints that line before a failing step's last one,
 # STUB_LANE=ran|skipped picks `just test`'s last line
 step=$1
-echo "stub env: MAKEFLAGS=${MAKEFLAGS:-} CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-} PWD=$PWD"
+echo "stub env: MAKEFLAGS=${MAKEFLAGS:-} CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-} COLCON_DEFAULTS_FILE=${COLCON_DEFAULTS_FILE:-} PWD=$PWD"
 [ "${STUB_FAIL:-}" = "$step" ] && { [ -n "${STUB_FIRST:-}" ] && echo "$STUB_FIRST"; echo "$step broke"; exit 3; }
 [ "${STUB_DIRTY:-}" = "$step" ] && echo dirt >> tracked.txt
 if [ "$step" = test ]; then
@@ -46,7 +46,7 @@ def gate(r, stub, tmp_path, dirname="g", isaac=None, host=None, **stub_env):
     wrapper.write_text(f"#!/bin/bash\n{exports}exec {stub} \"$@\"\n")
     wrapper.chmod(0o755)
     carry = ("ISAAC_ROOT", "SCENSIM_BUILD_JOBS", "MAKEFLAGS", "CARGO_BUILD_JOBS",
-             "CUDA_VISIBLE_DEVICES", "GATE_WRAP")
+             "COLCON_DEFAULTS_FILE", "CUDA_VISIBLE_DEVICES", "GATE_WRAP")
     env = {k: v for k, v in os.environ.items() if k not in carry}
     env.update(host or {})
     env.update(GATE_JUST=str(wrapper), SCENSIM_GATE_ROOT=str(tmp_path / "gates"))
@@ -132,14 +132,15 @@ def test_the_gate_carries_the_hosts_settings_and_names_them(tmp_path):
     r, stub = repo(tmp_path)
     (r / ".env").write_text("SCENSIM_GATE_TEST=1\n")
     p, d = gate(r, stub, tmp_path, host={"MAKEFLAGS": "-j3", "CARGO_BUILD_JOBS": "4",
+                                         "COLCON_DEFAULTS_FILE": "/c.yaml",
                                          "SOMETHING_ELSE": "x"})
     assert p.returncode == 0, p.stderr
     assert (d / ".env").read_text() == "SCENSIM_GATE_TEST=1\n"
     log = (d / "gate.log").read_text()
-    assert "stub env: MAKEFLAGS=-j3 CARGO_BUILD_JOBS=4" in log
+    assert "stub env: MAKEFLAGS=-j3 CARGO_BUILD_JOBS=4 COLCON_DEFAULTS_FILE=/c.yaml" in log
     assert "SOMETHING_ELSE" not in log
     line = p.stdout.strip().splitlines()[-1]
-    assert line.endswith("; carried .env MAKEFLAGS CARGO_BUILD_JOBS"), line
+    assert line.endswith("; carried .env MAKEFLAGS CARGO_BUILD_JOBS COLCON_DEFAULTS_FILE"), line
 
 
 def test_gate_wrap_runs_every_step_under_it(tmp_path):
@@ -192,9 +193,9 @@ def gate_tree(r, root, sha):
     return d
 
 
-def clean(r, root, sha):
-    return subprocess.run(["bash", str(CLEAN), sha], cwd=r, capture_output=True, text=True,
-                          env=dict(ENV, SCENSIM_GATE_ROOT=str(root)))
+def clean(r, root, sha, *extra):
+    return subprocess.run(["bash", str(CLEAN), sha, *extra], cwd=r, capture_output=True,
+                          text=True, env=dict(ENV, SCENSIM_GATE_ROOT=str(root)))
 
 
 def test_gate_clean_removes_a_worktree_whose_commit_is_on_origin(tmp_path):
@@ -206,6 +207,40 @@ def test_gate_clean_removes_a_worktree_whose_commit_is_on_origin(tmp_path):
     assert p.returncode == 0, p.stdout + p.stderr
     assert not d.exists() and "tag" not in p.stdout
     assert git(r, "tag", "-l") == ""
+
+
+def rebased_gate(tmp_path):
+    r, root = landed_repo(tmp_path)
+    git(r, "checkout", "-q", "-b", "topic")
+    sha = commit(r, "b.txt", "b\n")
+    d = gate_tree(r, root, sha)
+    git(r, "checkout", "-q", "main")
+    commit(r, "c.txt", "c\n")
+    git(r, "push", "-q", "origin", "main")
+    git(r, "checkout", "-q", "topic")
+    git(r, "rebase", "-q", "main")
+    git(r, "push", "-q", "origin", "topic:main")
+    git(r, "checkout", "-q", "main")
+    git(r, "branch", "-q", "-f", "topic", "main")
+    return r, root, sha, d
+
+
+def test_gate_clean_notag_keeps_a_rebased_gate_and_prints_the_tag_command(tmp_path):
+    """118's user gives their own go for every tag: notag never tags."""
+    r, root, sha, d = rebased_gate(tmp_path)
+    p = clean(r, root, sha, "notag")
+    assert p.returncode == 1, p.stdout + p.stderr
+    assert d.exists() and git(r, "tag", "-l") == ""
+    assert f"  git tag gate/gate-{sha[:8]} {sha} && just gate-clean {sha}" in p.stdout
+
+
+def test_gate_clean_notag_still_removes_a_gate_on_origin(tmp_path):
+    r, root = landed_repo(tmp_path)
+    sha = commit(r, "b.txt", "b\n")
+    d = gate_tree(r, root, sha)
+    git(r, "push", "-q", "origin", "main")
+    p = clean(r, root, sha, "notag")
+    assert p.returncode == 0 and not d.exists(), p.stdout + p.stderr
 
 
 def test_gate_clean_tags_a_gate_that_landed_rebased(tmp_path):

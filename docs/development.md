@@ -226,8 +226,8 @@ sides need no shared domain. Details: [architecture](design/architecture.md),
   (`$SCENSIM_GATE_ROOT/gate-<sha8>`, a host setting, default `/var/tmp/$USER`) and runs
   `just build`, `just test` and `just check` there from a clean environment. It carries the
   host's settings: the calling checkout's `.env` is copied into the worktree, and of
-  `ISAAC_ROOT`, `SCENSIM_BUILD_JOBS`, `MAKEFLAGS`, `CARGO_BUILD_JOBS` and
-  `CUDA_VISIBLE_DEVICES`, those the caller sets are passed. Nothing else is. `GATE_WRAP=<command>`
+  `ISAAC_ROOT`, `SCENSIM_BUILD_JOBS`, `MAKEFLAGS`, `CARGO_BUILD_JOBS`,
+  `COLCON_DEFAULTS_FILE` and `CUDA_VISIBLE_DEVICES`, those the caller sets are passed. Nothing else is. `GATE_WRAP=<command>`
   runs every step under that command, a memory guard for example. After each step `git status --porcelain --untracked-files=no`
   must be empty. Where `ISAAC_ROOT` is set, the Isaac-Python lane must run. It ends with one
   line to quote when asking to land, for example:
@@ -241,7 +241,8 @@ sides need no shared domain. Details: [architecture](design/architecture.md),
   The full log is `<worktree>/gate.log`. `just gate-clean <commit>` removes the worktree once
   the commit is on origin. A commit gated and then rebased before landing counts too, when
   every commit of it is patch-equivalent on origin/main (`git cherry`). It first gets the
-  local tag `gate/gate-<sha8>`, so the SHA the gate's line cites stays reachable. A
+  local tag `gate/gate-<sha8>`, so the SHA the gate's line cites stays reachable.
+  `notag=true` never tags: such a gate is kept, and the `git tag` command is printed. A
   docs-only change needs only `scripts/check_docs.py` and `scripts/check_pins.py`.
 
 ## Design documents

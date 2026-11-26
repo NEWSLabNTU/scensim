@@ -7,7 +7,8 @@
 # Steps: `just build`, `just test`, `just check`, each under `env -i` (HOME, USER, TERM, a fixed
 # PATH) plus the host's settings: the calling checkout's `.env` copied into the worktree (just's
 # dotenv-load reads it), and those of ISAAC_ROOT, SCENSIM_BUILD_JOBS, MAKEFLAGS,
-# CARGO_BUILD_JOBS and CUDA_VISIBLE_DEVICES the caller sets; the line names what it carried.
+# CARGO_BUILD_JOBS, COLCON_DEFAULTS_FILE and CUDA_VISIBLE_DEVICES the caller sets; the line
+# names what it carried.
 # GATE_WRAP=<command> runs every step under that command (a memory guard, say). After each, `git status --porcelain
 # --untracked-files=no` (no --ignore-submodules) must be empty. With ISAAC_ROOT set, `just
 # test` must end saying the Isaac-Python lane ran (issue 186). The worktree is
@@ -27,7 +28,7 @@ set -euo pipefail
 commit=${1:?usage: scripts/gate.sh <commit> [<dir>]}
 JUST=${GATE_JUST:-just}
 STEPS=${GATE_STEPS:-build test check}
-CARRY="ISAAC_ROOT SCENSIM_BUILD_JOBS MAKEFLAGS CARGO_BUILD_JOBS CUDA_VISIBLE_DEVICES"
+CARRY="ISAAC_ROOT SCENSIM_BUILD_JOBS MAKEFLAGS CARGO_BUILD_JOBS COLCON_DEFAULTS_FILE CUDA_VISIBLE_DEVICES"
 top=$(git rev-parse --show-toplevel)
 sha=$(git -C "$top" rev-parse --verify --quiet "$commit^{commit}") \
     || { echo "gate FAILED $commit at commit: not a commit here" >&2; exit 2; }

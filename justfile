@@ -346,10 +346,11 @@ gate commit="HEAD" dir="":
 
 # Remove a gate's worktree once its commit landed (on origin, or patch-equivalent on
 # origin/main after a rebase: then tagged gate/<dir> locally) and nothing tracked changed
-gate-clean commit:
+# notag=true: never tag; a gate that landed rebased is kept, printing the tag command
+gate-clean commit notag="false":
     #!/usr/bin/env bash
     set -euo pipefail
-    scripts/gate_clean.sh "{{commit}}"
+    scripts/gate_clean.sh "{{commit}}" {{ if notag == "true" { "notag" } else { "" } }}
 
 # Run format check and clippy
 check:
