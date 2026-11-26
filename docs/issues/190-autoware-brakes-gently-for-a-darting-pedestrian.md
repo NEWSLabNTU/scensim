@@ -319,3 +319,15 @@ Predictions for (d):
 **The comparison** for the user, after both: per run, the label, the velocity, which module
 stopped and when (relative to the walk's start), the peak commanded deceleration, the speed at
 contact or the stop distance, and the verdict, against (b).
+
+**Amendment to (c)'s predictions, 2026-11-26 14:08 (243), before the run.** The profile's
+`use_multi_channel_tracker_merger` defaults to true (`PROF/launch/autoware.launch.xml`, issue
+028). With centerpoint, the tracker then takes only CenterPoint's objects and
+detection_by_tracker's, so an object CenterPoint does not detect never reaches planning:
+clustering's UNKNOWN is not a fallback. Hence:
+- C0: if C1 fails because CenterPoint does not detect the walker at all, the objects hold
+  nothing for it and no module stops for it, not even `obstacle_stop` (b's late stop). The ego
+  then meets it at near goal-approach speed (about 6 m/s rather than b's 3.5).
+- C1, stated more fully: the walker is in the objects, labelled PEDESTRIAN, for most of its walk.
+Full CenterPoint needs about 2.05 GB of VRAM at peak against tiny's 1.46 (CLAUDE.md), so (c)'s
+card floor is 14336 MiB, 2048 above (b)'s 12288.
