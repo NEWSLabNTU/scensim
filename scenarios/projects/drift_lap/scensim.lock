@@ -3,12 +3,12 @@ version: 1
 datasets:
   carla-town-autoware-maps:
     repo: jerry73204/carla-town-autoware-maps
-    commit: eb93b387f96eccc3c83eacbc32628d66ac199b15
+    commit: df499322639f279f588ff5f6fd661169027eb7a8
     take:
     - Town05
     files:
       Town05/LICENSE.md: sha256:15b6eb7fe321599944ac6e278babdab10d30971f523b740517acf921bb9dcf1a
-      Town05/anchors.resolved.json: sha256:5b7b9959557f3da3e3933aabe224fe3c8a9d29c552e8d2e260221f02cd5ec78d
+      Town05/anchors.resolved.json: sha256:a47872b094608ae6d087a7fdad5376f9d83c15a5f9cc777a48d7d889ced58797
       Town05/anchors.yaml: sha256:0560a26bc42dd3ae312d44dc57033c9df8368ad5243e6bd95910b34ed631b57e
       Town05/isaac/world.yaml: sha256:8813b147e80b49a9b4d337cf5bc541affbab0c11556dec75d72131ca0f7e500e
       Town05/lanelet2_map.osm: sha256:6e3bf9fa3dc3645c306bfa99b5478d5bd21165bfdd100d46904af24f021b7535
