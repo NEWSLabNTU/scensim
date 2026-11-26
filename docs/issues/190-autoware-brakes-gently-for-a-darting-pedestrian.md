@@ -1,6 +1,6 @@
 # 190: Autoware brakes only about 1 to 1.5 m/s^2 for a pedestrian darting into its lane
 
-**Status:** open (243; numbered by 133, 2026-11-26); plan steps (a) to (d) done 2026-11-26, compared at the end. Full CenterPoint (c) labels the walker PEDESTRIAN, four modules stop for it, and the contact falls to 1.6 m/s; the tracker's UNKNOWN motion (d) changes nothing, since no module acting on motion considers an UNKNOWN object. All three runs fail. What to change is the user's call through 133.
+**Status:** open (243; numbered by 133, 2026-11-26). Steps (a) to (d) done and compared; the -2.50 m/s^2 is the MRM emergency stop, raised by the planning validator's deceleration check (stock), and the user's fix (b), a -6 m/s^2 emergency stop with the gate's limits raised to let it through, is on main (5cad4e9b, 2026-11-27). On the fix, (c) (CenterPoint, PEDESTRIAN) passes; (b) and (d) (the walker UNKNOWN) still strike, at about 2.3 m/s. An upstream report is drafted, not posted.
 **Severity:** to be judged. With room to stop, the Autoware ego kept a gentle deceleration
 until it struck the pedestrian (issue 189's contact).
 **Found:** 2026-11-26, scensim 243, 092 K9f-a's exit run 2 (k9f_zones, Isaac Sim 6.2).
@@ -711,3 +711,50 @@ system topics recorded as in the trigger run; written before any of them runs):
   contact, at about 3.4 m/s.
 - G6: outside the emergency, the gate's command never exceeds 5.0 m/s^2 nor 5 m/s^3 in any of
   the three runs (normal driving stays under the old ceiling).
+
+**Results on the fix (243, 2026-11-27).** Main 5cad4e9b (the pins), run from its gate's own
+install; the three testbenches record the system side as in the trigger run. The runs, the
+analysis script `fix190.py` and its output are on the NAS,
+`home/2026-11-27 190 fix reruns (243)/` (with SHA256SUMS). "Measured" is the deceleration of
+the car itself: the derivative over 0.1 s of `/vehicle/status/velocity_status` and of the
+simulator's true ego velocity (the gap trace), up to just before any impact.
+
+| | (b) clustering | (c) full CenterPoint | (d) UNKNOWN motion on |
+|---|---|---|---|
+| walk starts | 24.00 s | 23.70 s | 23.65 s |
+| what raised the MRM | AEB, ERROR at 26.20 s | the planning validator, ERROR at 25.10 s | AEB, ERROR at 25.90 s |
+| MRM takeover | 26.40 s, at 4.40 m/s | 25.30 s, at 5.45 m/s | 26.10 s, at 4.02 m/s |
+| emergency command at -6.0 | 26.60 s | 25.55 s | 26.30 s |
+| gate output at -6.0 | 26.65 s | 25.60 s | 26.35 s |
+| measured, first past -5.0 | 0.25 s after the takeover | 0.30 s | 0.25 s |
+| measured, peak (truth; reported) | -5.60; -5.56 | -6.89; -6.92 | -5.40; -5.35 |
+| wheel slip ratio, peak | -0.079 | -0.371 | -0.070 |
+| outcome | contact at 2.32 m/s, 3317.0 N*s | stopped at 26.35 s, no contact: passed | contact at 2.23 m/s, 3059.1 N*s |
+| before the fix | contact at about 3.5 m/s | contact at 1.58 m/s | contact at 3.34 m/s |
+
+Against the predictions:
+- G1 holds for (c) and fails for (b) and (d). In (c) the planning validator raised the MRM as
+  before (trajectory minimum -10.32 m/s^2 at the takeover). In (b) and (d) it did not fire:
+  the trajectory's minimum at the takeover was -1.57 and -0.03 (only `obstacle_stop` acts for
+  the UNKNOWN walker, with its stop point behind the ego), and the MRM came from autonomous
+  emergency braking, 0.2 s after its ERROR. In all three the emergency command reached -6.0
+  within 0.25 s of the takeover (it starts at -4.0 to -4.6 and ramps at -12 m/s^3).
+- G2 holds in all three: the gate's output reaches -6.00 (not -5.0), and the car itself passes
+  -5.0 m/s^2 0.25 to 0.30 s after the takeover. In (c) it peaked at -6.9 near the stop, with
+  the wheels at -0.37 slip; in (b) and (d) the impact came before the full -6.
+- G3 holds: (c) stopped without contact (at 26.35 s) and passed.
+- G4 and G5 fail: (d) and (b) still struck, at 2.23 and 2.32 m/s, against under 1 m/s and
+  under 1.5 m/s predicted. With the walker UNKNOWN nothing acts on it until AEB, 2.2 s after
+  the walk began, with 4.0 to 4.4 m/s left and too little distance even at -6. The contact
+  speed still fell by about a third against the runs before the fix.
+- G6 holds for normal driving, with one qualification. With the MRM normal and more than 0.5 s
+  from any change of its state, the gate's command peaked at 1.50 to 1.61 m/s^2 and, above
+  0.3 m/s, at 5.00 m/s^3 in (b) and (d) (the controller's own command peaks at 5.0) and 2.19
+  in (c): within the old ceiling. In the half second before the takeover, during the planner's
+  hard stop, the gate passed -6.5 m/s^3 in (b) and (c), which the old gate would have cut to
+  -5.0: the loosened ceiling acted there, on braking toward the walker.
+
+**What the fix does, in short.** The emergency stop now brakes at -6 within a quarter second,
+measured at the car. With the walker labelled PEDESTRIAN (c), that turns a 1.6 m/s contact
+into a stop. With it UNKNOWN, (b) and (d), the stop starts too late for any deceleration the
+MRM is allowed: the time is lost in perception and planning, before the MRM.
