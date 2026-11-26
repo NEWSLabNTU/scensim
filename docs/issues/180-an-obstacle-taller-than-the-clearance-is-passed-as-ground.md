@@ -272,3 +272,36 @@ Judged per setting: the first final-object range at the rock (as the validated r
 and less 3.4 m, both given), and the fraction of frames with a would-be final object elsewhere
 on the carriageway. A would-be final object is a validated object present in at least 3
 consecutive frames, which approximates the tracker. The replay cannot run the tracker itself.
+
+### A correction to step 1: another filter sits between the ground filter and the record (241, before the run)
+
+Step 1 read `/perception/obstacle_segmentation/pointcloud` as the ground filter's output. It is
+not. The profile runs the time-series outlier filter (`use_obstacle_segmentation_time_series_filter`
+true in its tier4_perception_component.launch.xml, as autoware_launch 1.5.0 does). So the ground
+filter publishes `/perception/obstacle_segmentation/single_frame/pointcloud`, and the occupancy
+grid outlier filter turns that into the recorded topic. That filter keeps a point whose
+occupancy-grid cell costs at least 45. Otherwise, with `use_radius_search_2d_filter`, it keeps a
+point only when at least clamp(400/d, 4, 70) other points lie within 1 m of it. At 21.7 m that
+is 18 neighbours, which a 15 cm rock does not have.
+
+So step 1 found that the rock is dropped at the first recorded stage, which is the ground filter
+and the outlier filter together. It did not find which of the two drops it. Its conclusion is
+amended. Predictions 1 to 3 held for "the ground filter and the outlier filter", and prediction 4
+(the compare-map filter drops the one kept point) stands.
+
+For step 2, the run now also records:
+- the ground filter's own output, `/perception/obstacle_segmentation/single_frame/pointcloud`;
+- the occupancy grid (`/perception/occupancy_grid_map/map`), the outlier filter's other input;
+- `/tf` and `/tf_static`, for the outlier filter's map frame.
+
+They are added to the NAS staging's topics.txt and README, and its SHA256SUMS is rewritten. The
+grid gains the outlier filter on and off. Its stages are then the ground filter, the outlier
+filter, the compare-map filter, the clustering and the validator.
+
+One more prediction, before the run:
+
+8. The ground filter's own output has at least one rock point in at least 30 % of the frames
+   within 25 m. Its local-slope test (13 deg) catches the rock's sides even though the top is
+   under 0.20 m. The outlier filter removes at least 80 % of those points. So of the two, the
+   outlier filter does most of the dropping. If this holds, the grid's "outlier filter off"
+   column matters as much as the thresholds.
