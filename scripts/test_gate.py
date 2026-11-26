@@ -380,3 +380,134 @@ def test_gate_clean_dir_refuses_a_directory_that_is_no_worktree(tmp_path):
     p = clean(r, root, sha, "--dir", str(stray))
     assert p.returncode == 1 and "is not a worktree of this repository: refused" in p.stdout
     assert (stray / "keep.txt").read_text() == "mine\n"
+
+
+# --- gate_clean.sh: a gate stopped early, and an unlanded gate (issue 191's sixth follow-up) --
+
+def bare_with(tmp_path, name, files, sub=None):
+    """A bare origin `name`.git whose main holds `files` (and `sub`, an origin, at deps/inner)."""
+    origin = tmp_path / f"{name}.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
+    w = tmp_path / f"{name}work"
+    subprocess.run(["git", "clone", "-q", str(origin), str(w)], check=True, capture_output=True)
+    git(w, "checkout", "-q", "-b", "main")
+    for f in files:
+        commit(w, f, f + "\n")
+    if sub:
+        git_f(w, "submodule", "add", "-q", str(sub), "deps/inner")
+        git(w, "commit", "-qm", "inner")
+    git(w, "push", "-q", "origin", "main")
+    return origin, w
+
+
+def repo_with_nested(tmp_path):
+    """A superproject pinning `mid`, which pins its own submodule deps/inner (as acb does)."""
+    inner, _ = bare_with(tmp_path, "inner", ["x.txt"])
+    mid, _ = bare_with(tmp_path, "mid", [".envrc", "m.txt"], sub=inner)
+    r, root = landed_repo(tmp_path)
+    git_f(r, "submodule", "add", "-q", str(mid), "mid")
+    git(r, "commit", "-qm", "mid")
+    git(r, "push", "-q", "origin", "main")
+    return r, root, git(r, "rev-parse", "HEAD")
+
+
+def empty_index(sub, *gone):
+    """A checkout stopped after its clone wrote HEAD: no index, and `gone` not on disk."""
+    (Path(git(sub, "rev-parse", "--absolute-git-dir")) / "index").unlink()
+    for f in gone:
+        (sub / f).unlink()
+
+
+def test_gate_clean_removes_a_nested_submodule_whose_checkout_was_cut_short(tmp_path):
+    r, root, sha = repo_with_nested(tmp_path)
+    d = sub_gate(r, root, sha)
+    empty_index(d / "mid", ".envrc", "m.txt")
+    p = clean(r, root, sha)
+    assert p.returncode == 0, p.stdout + p.stderr
+    pin = git(r, "ls-tree", sha, "mid").split()[2]
+    assert f"mid: an interrupted checkout at {pin[:8]}" in p.stdout
+    assert not d.exists()
+
+
+def test_gate_clean_keeps_a_nested_submodule_with_an_edit(tmp_path):
+    r, root, sha = repo_with_nested(tmp_path)
+    d = sub_gate(r, root, sha)
+    (d / "mid" / "m.txt").write_text("edited\n")
+    p = clean(r, root, sha)
+    assert p.returncode == 1 and "mid/m.txt: a tracked change ( M): kept" in p.stdout
+    assert d.exists()
+
+
+def test_gate_clean_removes_a_submodule_left_on_its_clones_branch(tmp_path):
+    r, root, sha = repo_with_submodule(tmp_path)
+    s = tmp_path / "subwork"
+    commit(s, "three.txt", "3\n")                    # the origin moves on past the pin
+    git(s, "push", "-q", "origin", "main")
+    d = sub_gate(r, root, sha)
+    git_f(d / "sub", "fetch", "-q", "origin")
+    git(d / "sub", "checkout", "-q", "origin/main")   # where a clone stands before its pin
+    p = clean(r, root, sha)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "sub: an interrupted checkout" in p.stdout and "on origin" in p.stdout
+    assert not d.exists()
+
+
+def test_gate_clean_still_keeps_a_submodule_at_a_local_commit(tmp_path):
+    r, root, sha = repo_with_submodule(tmp_path)
+    d = sub_gate(r, root, sha)
+    commit(d / "sub", "three.txt", "3\n")
+    p = clean(r, root, sha)
+    assert p.returncode == 1 and "not its pin" in p.stdout and d.exists()
+
+
+def unlanded_gate(tmp_path, keep_branch):
+    r, root = landed_repo(tmp_path)
+    git(r, "checkout", "-q", "-b", "topic")
+    sha = commit(r, "b.txt", "b\n")
+    git(r, "checkout", "-q", "main")
+    if not keep_branch:
+        git(r, "branch", "-q", "-D", "topic")
+    return r, root, sha, gate_tree(r, root, sha)
+
+
+def test_gate_clean_unlanded_removes_a_gate_whose_sha_a_branch_keeps(tmp_path):
+    r, root, sha, d = unlanded_gate(tmp_path, keep_branch=True)
+    p = clean(r, root, sha, "--unlanded")
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "refs/heads/topic" in p.stdout and not d.exists()
+    assert git(r, "tag", "-l") == ""
+
+
+def test_gate_clean_unlanded_keeps_a_gate_whose_sha_only_it_holds(tmp_path):
+    r, root, sha, d = unlanded_gate(tmp_path, keep_branch=False)
+    p = clean(r, root, sha, "--unlanded")
+    assert p.returncode == 1 and "no local branch or tag" in p.stdout and d.exists()
+
+
+def test_gate_clean_without_unlanded_names_the_flag(tmp_path):
+    r, root, sha, d = unlanded_gate(tmp_path, keep_branch=True)
+    p = clean(r, root, sha)
+    assert p.returncode == 1 and "unlanded=true" in p.stdout and d.exists()
+
+
+def test_gate_clean_keeps_a_branch_head_submodule_with_an_untracked_file(tmp_path):
+    # 133's condition (a): on its clone's branch, only deletions count as interrupted
+    r, root, sha = repo_with_submodule(tmp_path)
+    s = tmp_path / "subwork"
+    commit(s, "three.txt", "3\n")
+    git(s, "push", "-q", "origin", "main")
+    d = sub_gate(r, root, sha)
+    git_f(d / "sub", "fetch", "-q", "origin")
+    git(d / "sub", "checkout", "-q", "origin/main")
+    (d / "sub" / "one.txt").unlink()
+    (d / "sub" / "mine.txt").write_text("someone's\n")
+    p = clean(r, root, sha)
+    assert p.returncode == 1 and "sub/mine.txt: untracked: kept" in p.stdout and d.exists()
+
+
+def test_gate_clean_unlanded_does_not_count_a_gate_tag(tmp_path):
+    # 133's condition (c): gate-clean's own gate/* tags never make an unlanded SHA safe
+    r, root, sha, d = unlanded_gate(tmp_path, keep_branch=False)
+    git(r, "tag", f"gate/gate-{sha[:8]}", sha)
+    p = clean(r, root, sha, "--unlanded")
+    assert p.returncode == 1 and "no local branch or tag" in p.stdout and d.exists()
