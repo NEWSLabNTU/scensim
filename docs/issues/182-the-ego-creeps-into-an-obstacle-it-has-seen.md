@@ -338,3 +338,38 @@ come with or without the change. 2b does not separate the two, and the record sa
 How sure: the stopping gap about 60 %, the hold about 50 %. If obstacle_stop does not hold a stop
 whose point is behind the ego, the planner asks to move after the MRM cancels. The creep then
 starts from 4 to 5 m: AEB fires again, and the cycle repeats short of the boulder.
+
+**2b as two runs (133, 2026-11-27; before either run).** To separate 181's profile change from
+the rest, 118 runs C6e3's c6b twice, with the same scenario (r1's, starting at x 320; not
+fixture_c6b_down's x 20, which meets the rocks at 100, 200 and 300 first, as b1 did) and the same
+topics:
+- **run A** on scensim main as it stands after 177 lands: the -6 m/s^2 MRM, the stock validator
+  (UNKNOWN threshold 10);
+- **run B** on the i181 pins: the same, plus the validator's UNKNOWN threshold 5.
+
+Predictions per run, written before either:
+
+| | run A (stock validator) | run B (threshold 5) |
+|---|---|---|
+| AEB raises the MRM at | 11 to 13 m base_link | the same |
+| the boulder first validated | 9.6 ± 1.5 m | 12.1 ± 1.5 m |
+| first in the final objects | 8 to 9.5 m | 11 to 12.5 m |
+| bumper gap at the stop | 3.5 to 6 m | the same, within 1 m of run A's |
+| strike | none | none |
+| the boulder an object while stopped | in at least 60 % of the frames | in at least 90 % |
+| obstacle_stop's factor while stopped | in at least 60 % | in at least 90 % |
+| moves again (over 0.05 m/s) after stopping | no | no |
+| MRM operations | a few at most | a few at most |
+
+For run A's "while stopped" figures:
+- the stop at about 8.6 m base_link lies in the band where r1's stock validator kept the boulder
+  in 22 of 30 frames (5 to 10 m);
+- at threshold 5, the replay validated it in every frame from 12.5 m.
+
+**What the pair tells the user:**
+- *181's change earns its place here* if run A loses the boulder while stopped (under 60 %), and
+  then restarts or cycles, while run B holds.
+- *It does not change the outcome here* if both hold the same. AEB's earlier stop on points then
+  does the work, and the change only adds margin: 2.5 m more of validated range, and more frames
+  with the object while stopped.
+- Either way, the first validated range shows the change's direct effect.
