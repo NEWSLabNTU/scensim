@@ -820,3 +820,8 @@ difference in the guess there.
   (NDT removes it), as a control.
 - *If 1 shows NDT's output leading the guess away from the truth,* the offset enters in NDT (its
   input or its time handling), and run 3 records NDT's input.
+
+**Added before reading (2) (133, 2026-11-26).** (2) is also reported by road segment: straight
+(the truth's yaw rate under 0.02 rad/s) against curve (over 0.05 rad/s). *Prediction:* on the
+straights the along slope is between -0.2 and 0, and in the curves it is more negative (below
+-0.3), since a curve constrains along what a straight does not.
