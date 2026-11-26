@@ -517,3 +517,54 @@ Predictions:
 
 If prediction 1 fails and 2 lands near 46, the PR's number is lanelet2's line. 133 then takes a
 correction to the user.
+
+### The count (2026-11-27)
+
+Town05 at df499322 has 585 joins (A, B). The scripts `joins1919.py` and `joins1919b.py` are on
+the NAS in `home/2026-11-27 issue 166 on SSv2's line (241)/`.
+
+- **The port is checked first.** On the PR's own example (points on the x axis, 0 to 1.26):
+  - the old spline: length 1.308, 11.9 mm backward;
+  - the new spline: length 1.260, nothing backward.
+  Both are the PR's numbers.
+- **What SSv2 joins.** At 237 of the 585 joins, A's last point and B's first are not
+  bit-equal, though they differ by only 7e-15 to 2e-14 m: SSv2's resampling of the shared
+  bound ends rounds differently on each side. So `std::unique` keeps both points, and the
+  route's points hold a segment of about 1e-14 m between segments of up to 2 m. On lanelet2's
+  raw line every join point is bit-equal (585 of 585) and is removed.
+
+Joins with a reversed curve at the join:
+
+| line | the old spline (166's rule: tangent against the curve's chord) | the old spline, backward against the route's direction | the new spline (PR #1919) |
+|---|---|---|---|
+| SSv2's points, as SSv2 joins them | **227** | 245 at 1 mm or more, 243 at 10 cm or more | **0** by 166's rule. 3 against the route's direction, all at the three corner joins (110937 to 91332, 6611 to 113157, 119197 to 27766), where the route itself turns by more than 90 deg |
+| lanelet2's raw line | 180 | 164 at 1 mm or more, 78 at 1 cm, 3 at 10 cm | 0 by 166's rule; the same 3 corners |
+
+- On SSv2's points the old spline makes a loop over each kept 1e-14 m segment, because the
+  cubic takes the neighbours' tangents (about 1 m) over a chord of almost nothing. The joined
+  route there runs about 0.19 m backward, and the curves around the join are up to 0.47 m
+  longer than their chords. The new spline's interval for such a segment is sqrt(1e-14) =
+  1e-7, so its tangent there is near zero and nothing loops.
+- On lanelet2's line the old spline's reversals at joins are millimetres to centimetres
+  (0.25 m segments next to 0.015 m ones), except at the three corners.
+
+**Against the predictions.**
+
+1. FAILED. On SSv2's points the old spline gives 227 joins, not 40 to 52.
+2. Held. lanelet2's line gives 180, more than 100.
+3. Held. The new spline leaves at most 6 (0 by 166's rule; only the three corner joins against
+   the route's direction).
+4. Held, in its first form. 219 of the 227 are joins where `std::unique` kept a near-duplicate
+   point. 12 involve a lanelet under 0.3 m.
+
+**What this says about the PR's sentence.** "On CARLA's Town05, 46 joins have a reversed
+heading", "dropping from 46 to 6", reproduces on neither line. Counted on what SSv2 joins, the
+old spline has 227 such joins by the same rule, or 245 by the route's direction. The fix leaves
+0 by the rule, or 3 at the corners. So the PR understates the problem about fivefold and
+overstates what remains.
+
+Its mechanism also needs one correction. On SSv2's own line the short segment at a join is
+nearly always a duplicate point that `std::unique` misses by 1e-14 m, not a short stretch of
+road. That second cause is SSv2's too: an exact-equality dedupe of points that are equal only
+to rounding. The PR's fix hides it (the loop vanishes), but does not remove the duplicate. How
+the 46 was counted is not known here, so it is not reproduced; 133 holds the PR's probe.
