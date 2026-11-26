@@ -299,3 +299,68 @@ at most.
     133's and the user's call.
 - 118's issue 177 run records both filtered clouds. That checks the replay's per-stage counts
   directly, with no replay.
+
+## Step 3: the validator at a lower min_cluster_size, and the extra clusters judged (241, 2026-11-27; plan and predictions, before any replay)
+
+133 asked, CPU only:
+- (a) from what range the boulder survives to the validator's output with `min_cluster_size` 3
+  and 5;
+- (b) for each setting, which of the extra whole-cloud clusters are spurious, and where they sit
+  relative to the ego's path ("a lower min_cluster_size that brakes for road texture is no
+  fix").
+
+A profile change is the user's decision, after this step.
+
+**What the replay adds, from the 0.48.0 source:**
+- *Shape estimation for UNKNOWN* (`ConvexHullShapeModel`): the polygon is OpenCV's convex hull
+  of the cluster's points, in millimetres relative to their centroid.
+- *The validator, as the profile loads it* (autoware_launch's
+  `obstacle_pointcloud_based_validator.param.yaml`, `using_2d_validator: true`). It is
+  `Validator2D`:
+  - it takes the compare-map filtered cloud's points within the polygon's radius;
+  - it counts those inside the polygon by PCL's `CropHull` in 2D. The validator hands it one
+    polygon per prefix of the hull's vertices, and a point counts as inside if it is inside any
+    of them, by PCL's ray-crossing rule;
+  - it keeps the object only if that count is **greater than** clamp(round(800 / distance), 10,
+    10) = 10, so 11 points or more.
+- The replay drops the low-height crop box. The profile's `use_low_height_cropbox` is false
+  (`tier4_perception_component.launch.xml`), and step 2 applied it. It changed nothing at the
+  boulder, but it may change the whole-cloud counts.
+- The profile's compare-map filter loads its map statically (issue 029). `is_close_to_map` is
+  then `is_close_to_neighbor_voxels`, as replayed.
+
+**Ground truth.** The fixture's rocks are placed as r1's world placed them: scensim_isaac_world
+at 3a948eea (r1's), `road_layer.load` of the map's `road_detail.yaml`, then `rocks.place` per
+16 m tile over x 330 to 420 (NAS `gt181.py`, `gt_rocks.npy`).
+- There are 55 rocks. The boulder's top is at 0.317 m (map z).
+- The next largest are 0.14 m tops, at y -4.66, 4.65 and -4.55: shoulder, run-off and ditch.
+  No other rock is within 2 m of the lane's centre (y 1.625).
+- A cluster is *spurious* when no rock's centre is within 1.0 m of its centre in xy (133's
+  rule).
+- Where it sits: its lateral distance from the ego's path (y 1.625):
+  - *in the path*: under 1.2 m, half the car's width plus about 0.25 m;
+  - *beside it*: 1.2 to 3 m;
+  - *off the road*: beyond 3 m.
+
+**Fidelity first.** With the settings as run (`min_cluster_size` 10), the replayed validator must
+agree with r1's recorded `clustering/validation/objects` on whether the boulder has an object in
+at least 90 % of the frames from 40 m to 5 m. The record's first is 8.8 m by step 1's rule.
+Otherwise nothing below is read.
+
+**Predictions, before any replay:**
+- (a1) Fidelity holds, the first validated object at 8.8 ± 1.5 m.
+- (a2) Lowering `min_cluster_size` alone hardly moves the validated boulder. With 5 and with 3,
+  its first validated frame is within 2 m of the as-run one. The validator needs 11 points
+  inside the hull of the same filtered cloud, and points on the hull may not count, so it stays
+  the limit at about 9 to 11 m.
+- (b1) The extra clusters at 3 and 5 are mostly spurious: at least 80 % of the non-boulder
+  clusters have no rock within 1 m. They sit *off the road*, at the verges and the ditch's
+  slopes, not in the path. In the path, beside the boulder, there is at most 1 frame in 10 with
+  a spurious cluster.
+- (b2) The validator removes almost all of them, at least 90 % of the spurious clusters at 3,
+  because they hold under 11 points.
+- So lowering `min_cluster_size` alone is no fix, though not for 133's road-texture reason. The
+  validator would hold the boulder back about as now. A fix would have to move both thresholds,
+  and then (b) decides whether the road texture passes too.
+
+How sure: (a2) about 70 %, (b1) about 60 % (verge geometry is the doubt), (b2) about 70 %.
