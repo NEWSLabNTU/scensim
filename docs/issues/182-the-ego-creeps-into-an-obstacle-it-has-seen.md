@@ -181,3 +181,71 @@ pose and the EKF's innovation would settle it.
 **Next step (133, 2026-11-25; not now).** Why NDT's pose leaves the EKF's gate while the car is
 held: on a future fixture run, record NDT's pose (`/localization/pose_estimator/pose_with_covariance`)
 and the EKF's innovation, and read the pose's jump against the scan at those frames.
+
+## Step 2: why no stop holds, and the 181 change's live run as its test (241, 2026-11-27; a plan, before any run)
+
+133 handed 182 to 241 after 181's change (2026-11-27). 181's record so far:
+- the boulder is validated from 9.6 m (base_link to the rock), and in the final objects from
+  8.2 m;
+- with the profile's validator change (UNKNOWN threshold 5) it is validated from about 12.1 m;
+- at about 3 m, after the strike, no stage has it (at most 1 non-ground point a frame).
+
+**What reading the parameters and the car gives (no run):**
+- *obstacle_stop* (motion_velocity_planner, autoware_launch's `obstacle_stop.param.yaml`, the
+  profile's default):
+  - it stops `stop_margin` 5.0 m before an obstacle (`min_stop_margin` 3.0 m for UNKNOWN when
+    that cannot be had);
+  - it holds a stop while the ego is under 0.01 m/s and the stop point moves less than 0.3 m;
+  - it keeps a lost stop obstacle for `stop_obstacle_hold_time_threshold` 1.0 s.
+- *The lidar's near blind zone:* the spec's sensor kit puts the OS1 at x 0.9, z 2.0 (base_link),
+  the front bumper at x 3.72 (wheel base 2.875 plus front overhang 0.841).
+  - Isaac's OS1 REV7 sees down to -22.5 degrees, so the top of a 0.35 m rock is in view only
+    beyond 1.65 / tan 22.5 = 3.98 m of the lidar.
+  - That is 4.9 m from base_link, or **1.2 m ahead of the bumper**. Closer, it is in no scan.
+    The spec's CARLA figure of -25 degrees gives 4.4 m from base_link.
+- *So, H4 for 182:* r1 and b2 first had the boulder as an object only 4.3 to 4.5 m ahead of the
+  bumper, already inside the 5 m stop margin, too late to stop short. The car reached the
+  boulder, and there the boulder was in the blind zone, in no stage. obstacle_stop's 1 s hold
+  ran out, the planner asked to move (H2, held in step 1), and only the localization-driven MRM
+  (H3) ended each push.
+  - With the boulder seen early enough to stop more than 1.2 m short of the bumper, it would
+    stay in view, obstacle_stop would keep its stop, and nothing would creep.
+
+**Step 2a, CPU, from r1's record (before the live run).** The timeline near the boulder:
+- the final objects at the boulder, by base_link range;
+- obstacle_stop's planning factor (the 11 messages): when each came, and its stop distance;
+- the control command's velocity and acceleration;
+- the last frame with the object before the strike, and the first after.
+
+Predictions:
+- the planning factor appears only in frames where the final objects hold the boulder, within
+  0.2 s of them;
+- its stop point lies behind the ego, the margin already lost;
+- the last object frame before the strike is at a base_link range of 4.5 m or more, near the
+  blind zone's 4.9 m; after the strike, none.
+
+**Step 2b, the live run (118's run on the 181 change's pins, the same run as 181's
+confirmation; C6e3's c6b, started from x 320 as r1).** It records 182's topics as r1 did, plus
+the planning factor of obstacle_stop and `/planning/scenario_planning/trajectory`'s velocity.
+
+Predictions:
+- the boulder is in the final objects from about 11 to 12 m (validated 12.1 m, tracking's
+  confirmation after);
+- obstacle_stop's factor follows within 0.5 s, and the ego brakes;
+- **no strike.** The ego stops with its bumper 1.5 to 5 m short of the boulder: short of the
+  5 m margin, because 4.2 m/s over about 3 m needs more than obstacle_stop's deceleration, but
+  outside the 1.2 m blind zone;
+- stopped, the boulder stays in the final objects in at least 80 % of the frames, and
+  obstacle_stop's factor in at least 80 %;
+- the ego does not move again: the base_link speed stays under 0.05 m/s for the rest of the run;
+- the MRM operates at most a few times, not about once a second as in r1. With no contact
+  pushing the car, the EKF's gate has nothing to refuse (H3's loop needs the push).
+
+The least sure part is where it stops (about 50 %). If obstacle_stop cannot plan a stop that
+late and lets the car through, the strike comes at a lower speed, and H4's other half (the blind
+zone) is then tested by whether the object comes back once the car backs off. It cannot back
+off, so it would not come back.
+
+**Not in this step:** why NDT's pose leaves the EKF's gate while the car pushes (step 1's open
+question; 133: on a future fixture run, record NDT's pose and the EKF's innovation). If the
+live run has no push, the question does not arise there.
