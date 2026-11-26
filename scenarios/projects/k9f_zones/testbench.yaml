@@ -25,8 +25,12 @@ world:
       default: ice
 pilots:
   # max_velocity: autoware_launch's default caps every planner at 4.17 m/s (15 km/h), under which
-  # no stop on the zone asks more than ice gives (092 K9f-a, run 1); 11.11 m/s as demo
+  # no stop on the zone asks more than ice gives (092 K9f-a, run 1); 11.11 m/s as demo.
+  # lidar_detection_model: centerpoint (full CenterPoint), so the darting pedestrian is labelled
+  # PEDESTRIAN: with the default clustering it is UNKNOWN, and the ego still strikes it at about
+  # 2.3 m/s even with the -6 m/s^2 emergency stop (scensim issue 190). Needs TensorRT 10.8.0 for
+  # its cached engines (the host setting autoware.tensorrt_lib; CLAUDE.md).
   ego: {kind: autoware, autoware_profile: scensim, vehicle: tesla_model3,
-        args: {max_velocity: 11.11}}
+        args: {max_velocity: 11.11, lidar_detection_model: centerpoint}}
 logging: {capture: standard, gap_trace: true, keep: {passed: full, failed: full, error: full}}
 default: both

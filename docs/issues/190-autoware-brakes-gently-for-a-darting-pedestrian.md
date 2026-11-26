@@ -758,3 +758,14 @@ Against the predictions:
 measured at the car. With the walker labelled PEDESTRIAN (c), that turns a 1.6 m/s contact
 into a stop. With it UNKNOWN, (b) and (d), the stop starts too late for any deceleration the
 MRM is allowed: the time is lost in perception and planning, before the MRM.
+
+## Closing the fix: the project runs CenterPoint (the user's decision, 2026-11-27; 243)
+
+The user closed the fix at the -6 m/s^2 emergency stop and chose CenterPoint for pedestrians.
+This scenario needs a detector that labels the walker a pedestrian: with the default clustering
+the walker is UNKNOWN, only `obstacle_stop` and, late, autonomous emergency braking act on it,
+and even with the -6 m/s^2 emergency stop the ego still strikes it at 2.2 to 2.3 m/s ((b) and
+(d) above). So the k9f project (`scenarios/projects/k9f_zones/testbench.yaml`) now sets
+`lidar_detection_model: centerpoint` for its ego, beside `max_velocity: 11.11`, as a project
+setting. The profile's default detector is unchanged. CenterPoint's cached engines need
+TensorRT 10.8.0 (the host setting `autoware.tensorrt_lib`), and the card about 2 GB more.
