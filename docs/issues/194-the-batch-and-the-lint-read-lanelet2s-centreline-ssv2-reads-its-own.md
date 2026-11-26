@@ -290,3 +290,32 @@ main's (checked against eb93b387's hashes), so only the anchors files change for
 
 The locks taking no anchors file (c2b, e2, s5 on Town03; speed_ladder on town05_ring_110kmh)
 stay. K2.4's recompute waits for 139's seats runs.
+
+**Step 8, K2.4's agreement recomputed.**
+- The seats runs are 139's, kept: follow_to_goal 2026-11-21T22-30-49 and npc_stops_for_ego
+  2026-11-22T00-03-32, copied to the NAS (`2026-11-26 K2.4 seats runs for 194 (139)`).
+- The batch side was replayed with `agreement_run.py --ego-from-truth`: the seats ego's truth
+  played back, so no engine and no Isaac.
+  - It ran twice: the v2 export with the code before the fix (main 6690f884), and the v3
+    export with the fix.
+  - The v3 side reads the new resolved anchors from a scratch copy of Town01. With the
+    dataset's own v1 file, the fix refused, as designed.
+  - K2.4's published rows ran engine A, with the ego in PhysX, which needs a GPU and Isaac. This
+    mode isolates the NPCs, and the v2 side reproduces the published row: 2.81 cm.
+
+| row | NPC | v2 (lanelet2's line) | v3 (SSv2's line) |
+|---|---|---|---|
+| follow_to_goal | lead | max 2.81 cm, RMS 1.37 cm, yaw 0.0345 rad; 270 steps over 2 cm (976 to 1262) | max **3.96 cm**, RMS **0.99 cm**, yaw 0.0280 rad; **20 steps** over 2 cm (885 to 1010) |
+| k24_npc_stops_for_ego | follower | max 2.46 cm, RMS 2.28 cm | max 2.46 cm, RMS 2.28 cm (unchanged) |
+
+Both rows have their outcomes (passed/passed) and every storyboard element's step unchanged.
+- The prediction **failed in part**. The lead's RMS fell by 28 %, and the steps over 2 cm fell from
+  270 to 20. But its maximum rose, from 2.81 to 3.96 cm. The follower's row held (unchanged, on
+  6583).
+- The new maximum is at step 1000, where the lead leaves the turn: lanelet 42664's end and
+  32582's start, by the junction's exit (88.39, -142.51).
+- *Hypothesis, untested:* the batch's route follows a Catmull-Rom cubic on samples 2.5 m apart
+  (K2.4's last fix, batch-executor.md section 8). That spacing was tuned against lanelet2's
+  dense line. On SSv2's sparser line (14 points on 42664, 24 on 32582), the route's samples
+  across the lanelet join no longer fall where SSv2's per-lanelet splines bend. That is a
+  batch-model detail, not the centreline. It is recorded here for 092 K2.4, not fixed in 194.
