@@ -190,3 +190,10 @@ issue 189's step 3.
 - Run from 241's landing worktree, which has no `.env`, with only ISAAC_ROOT of the
   allow-list set, its line ends `carried ISAAC_ROOT`.
 - The 14 tests of `scripts/test_gate.py` pass within `just test`.
+
+**The second and third follow-ups' outcome:** `just gate` on bec7d6a0 (on 4dacfd6f, issue 189
+step 3), run from its own worktree: `gate ok bec7d6a03d950c881261e14d146c907c81da2a47 tree
+a3c71b54 on newslab-server-241 2026-11-26T13:20:03+08:00: build test check clean; Isaac lane ran
+(942 tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29); carried
+ISAAC_ROOT`, 39 min. Every prediction held: the pass, 942 (241's Isaac venv lacks pytest),
+`carried ISAAC_ROOT`, and the 14 gate tests within `just test`.
