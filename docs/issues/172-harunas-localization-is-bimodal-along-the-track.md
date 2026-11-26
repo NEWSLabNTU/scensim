@@ -825,3 +825,57 @@ difference in the guess there.
 (the truth's yaw rate under 0.02 rad/s) against curve (over 0.05 rad/s). *Prediction:* on the
 straights the along slope is between -0.2 and 0, and in the curves it is more negative (below
 -0.3), since a curve constrains along what a straight does not.
+
+## Step 9's readings (1) and (2): the result (2026-11-26, offline; after the predictions above)
+
+Scripts `step9.py` and `ndt_start.py`, over the same 17 runs (8 behind, 9 level).
+
+**(1) The first 30 s of motion.** Each 2 s bin gives tau = -along / v for the guess (the EKF's pose
+at the scan's stamp) and for NDT's result:
+
+| | 0 to 2 s (about 1 m/s) | 2 to 4 s (2.8 m/s) | 4 to 6 s (4.2 m/s) | 8 to 16 s (cruise) |
+|---|---|---|---|---|
+| level runs, guess | 18.5 to 23.9 ms | 7.7 to 11.0 ms | -1.9 to +0.5 ms | -7.6 to +5.8 ms |
+| level runs, NDT | 1.6 to 15.6 ms | -4.7 to +0.4 ms | -4.9 to -1.4 ms | -6.2 to +8.9 ms |
+| behind runs, guess | 21.9 to 33.9 ms | 21.6 to 28.3 ms | 21.1 to 23.5 ms | 15.3 to 20.0 ms |
+| behind runs, NDT | 16.5 to 34.3 ms | 19.8 to 24.4 ms | 23.3 to 25.7 ms | 16.2 to 20.2 ms |
+
+- *The guess grows from 0 to about -24 ms x v in the behind runs, and the level runs stay within
+  2 ms x v:* **FAILED.** **Every** run's guess starts the motion about 20 to 34 ms behind, the
+  level runs included. In the level runs NDT pulls it in: it is below the guess from the first
+  bin, and the guess reaches about 0 by 4 to 6 s. In the behind runs NDT agrees with the late
+  guess from the first bin, and the lag stays. *NDT within 1 cm of the guess in the behind runs:*
+  **held.**
+- So the mode is decided in the first one to two seconds of motion: whether NDT corrects the
+  EKF's start-up lag or confirms it. Once confirmed, the loop holds it (the cruise reading above).
+- NDT's coverage and effort in the first 4 s are the same in both modes: 80 outputs for 80 scans
+  in every run, no gap over 50 ms, iterations p50 2 (max 3 to 5). It did not skip scans or run
+  short.
+
+**(2) NDT's correction against the guess's error**, the slope of NDT less guess on the guess's
+error, over the moving run:
+
+| | along, straights | along, curves | across, straights | across, curves |
+|---|---|---|---|---|
+| level runs | -0.13 to -0.15 | -0.03 to -0.08 | +0.03 to +0.05 | -0.02 to -0.04 |
+| behind runs | -0.16 to -0.21 | +0.01 to +0.03 | -0.01 to +0.01 | -0.05 to -0.06 |
+
+- *Along on the straights between -0.2 and 0:* **held**, except behind r5 at -0.213. NDT removes
+  13 to 21 % of an along error there.
+- *Along in the curves below -0.3:* **FAILED.** The curves correct less, not more.
+- *The control, across near -1:* **FAILED.** NDT does not correct the guess's across error either.
+  The guess's errors are small and smooth, NDT follows its guess in every direction, and the
+  slope does not measure observability. So reading (2) does not tell weak along observability
+  from NDT simply following its initial guess.
+
+**Where it stands.** The cloud is the same in both modes (step 8), and so is NDT's coverage and
+effort. The guess starts the motion equally late in both modes. Only NDT's first-seconds answer
+differs: it corrects the lag in level runs and confirms it in behind runs. Between aib's published
+cloud and NDT, the kit runs only the self crop box (`crop_box_filter_self`, base_link to base_link,
+a static transform) and localization's own crop and downsampling. **Hypothesis H-f (untested):**
+NDT's actual initial guess at those first scans differs from the header-interpolated one read here.
+NDT's pose buffer interpolates the EKF's poses as they have arrived when the scan is processed, and
+under contention which EKF poses have arrived differs. In the behind runs NDT starts from a guess
+lagged enough that it settles there. The record that settles it is NDT's own initial pose
+(`/localization/pose_estimator/initial_pose_with_covariance` or its debug name) and its execution
+time, in a behind and a level run: step 9's (3).
