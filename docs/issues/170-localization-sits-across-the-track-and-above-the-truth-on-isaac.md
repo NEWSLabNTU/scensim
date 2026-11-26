@@ -397,3 +397,30 @@ error between localization and the truth carries it as a car-fixed across part: 
 - T3: the along part of the offset (the body's centre ahead of the rear axle) is applied, so it
   makes no along error; if it were not applied, the runs would show an along error of about the
   wheelbase's half, 1.4 m, which they do not (their along errors are under 0.11 m).
+
+**Result, on paper (2026-11-27).** All three held; the truth's origin is not 170's car-fixed
+across part.
+- *What the truth carries.* `/scensim/truth` publishes each entity's simulator body pose, the
+  gap trace's `sim_pose` (`scenario_world_bridge/src/truth_topic.rs`), and
+  `/scensim/truth/entities` carries each entity's `origin_offset`, "body origin from entity
+  origin" (`scensim_interfaces/msg/TruthEntity.msg`).
+- *T1 held.* On Isaac the ego's `origin_offset` is (0, 0, 0)
+  (`scensim_isaac_world/catalogue.py`, `ego_body`): its body pose is base_link itself, "the rear
+  axle on the ground" (`vehicle_assets.py`: the ego's body "sits with its rear axle on
+  base_link"). The rig puts that point on the centreline: aib's `tesla_model3.rig.yaml` has
+  `box_center: [1.416, 0.0, 0.744]` and a symmetric `wheel_tread: 1.667`. So nothing lateral, and
+  whatever `ego.csv`'s extractor does with the offset, it has nothing to take off.
+- *T2 held:* the -0.037 m is not the truth's origin.
+- *T3 held:* there is no along offset to apply either, consistent with the runs' along errors
+  under 0.11 m.
+- *Not checked here:* which prim the world server reads the pose from at run time (the rig's
+  root, by the code above). A recorded frame against the same instant's `/tf` (base_link in the
+  map, from the truth) would settle it by numbers; the records are on 118's host.
+
+**What is left offline, and what needs a run.** The three open parts (the ~5 cm fixed map-frame
+vector, the car-fixed -0.037 m, the right hairpins' +0.13 m) have no offline candidate left in
+this record's list but two: whether the map's props (`props_points.npy`) are the USD's props
+(offline, Isaac's pxr on the CPU), and NDT's own estimate on this map's geometry (its score
+and iteration count against the error, from the runs' records if they hold NDT's topics). Both
+need C6e2's or 168's records here. The plan's step 4 (a fixture run on a straight, level,
+uncrowned course) needs the card.
