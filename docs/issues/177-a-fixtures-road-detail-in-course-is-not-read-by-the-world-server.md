@@ -110,7 +110,7 @@ Companion tests:
 
 ## The code (118, 2026-11-27; after the plan, test first)
 
-- **Commit:** siw 090dc0c on branch `issue-177`.
+- **Commits:** siw 090dc0c and 57ec772 on branch `issue-177`.
 - **Tests:** `test/test_issue_177.py`, 9 tests. Before the code: 7 failed and 2 passed. The two
   that passed hold today's behaviour: the course record unchanged, and nothing for a fixture
   without features. One test was then corrected, because it counted the random potholes
@@ -129,3 +129,10 @@ Companion tests:
 - **The warning.** It is `road_layer.course_record_unread(map dir, state)`. `world.py`'s
   `_load_road` logs it when the map file is missing. Features are any corridor key besides
   `stations`, `section_in_base`, `centreline`, `section`, `seed` and `base_drop`.
+- **Correction to the plan's base_drop point, written after the gate had started.** The plan
+  said the builder "cannot sample the base". That is wrong: `base_drop` is numpy and yaml only
+  (its own docstring says "no Isaac"), and it takes about 8 s on fixture_c6b. The record step
+  still leaves it out, so that a build, and the tests, stay fast and the step stays the
+  record's. The step now prints the exact command (`python3 -m scensim_isaac_world.base_drop
+  <map dir> --write`), and the map file's header names plain `python3`, not Isaac's Python.
+  This is siw 57ec772. The first gate (at 268fbf8b) was stopped for it.
