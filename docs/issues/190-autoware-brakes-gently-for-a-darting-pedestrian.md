@@ -489,3 +489,14 @@ speed.
 
 Whether this scenario can be passed at all needs that floor read: at -2.50 m/s^2 from 7 m/s the
 ego needs 9.8 m, and in (c) the first stop came with the walker 1.20 s into its walk.
+
+## Where the -2.50 m/s^2 comes from (243, 2026-11-26; read only)
+
+**Prediction, before reading any file or topic for it.** The floor is the planning stack's
+`limit.min_acc: -2.5` (Autoware's planning `common.param.yaml`), the velocity smoother's hard
+deceleration limit: the smoothed trajectory's acceleration is clipped there, and the
+controller's command follows it. If so, the trajectory's acceleration ahead of the ego holds
+-2.50 while the command does; stock Autoware, not ours. The other candidates
+(`vehicle_cmd_gate`'s `lon_acc_lim`, the longitudinal controller's limits, obstacle_stop's
+`limit.min_acc`, the profile's or acb's overrides) are read too, and the stage is named from
+the recorded topics: the trajectory, the trajectory follower's command and the gate's.
