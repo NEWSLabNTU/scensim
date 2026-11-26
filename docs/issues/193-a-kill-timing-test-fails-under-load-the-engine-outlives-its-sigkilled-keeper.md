@@ -129,6 +129,63 @@ load, before the load is raised.
 `times_t815.txt`, `times_t732.txt` and `times_t703.txt`, with one pytest output per run in
 `t815/`, `t732/` and `t703/` (the aborted attempt in `t815-aborted-noload/`).
 
+## Hypothesis 3, the reading (118, 2026-11-26; read-only, at main a4388a35, before any run of it)
+
+**What the code does** (`src/scensim/scensim/simulator.py`):
+- `Carla.start()` starts the launcher in a new session with `_carla_child` as its `preexec_fn`,
+  which sets `PR_SET_PDEATHSIG` to SIGTERM. It then calls `start_reaper(pid)`.
+- `start_reaper()` starts `python3 -m scensim.simulator reap <pid> --parent <keeper>`, also in a
+  new session, also with `preexec_fn=_die_with_parent`. So the reaper too gets **SIGTERM when the
+  keeper dies**.
+- `reap()` does, in this order:
+  1. `members = _Members(pid)`;
+  2. `members.scan()`, which lists `/proc`, opens a pidfd on each member of CARLA's group and keeps
+     the live ones;
+  3. **only then** `signal.signal(SIGTERM, <set gone>)`;
+  4. the loop that waits while `os.getppid() == parent`, then SIGTERM, the grace, SIGKILL.
+- The engine runs under the launcher (`CarlaUE4.sh` forks it), and a fork clears the
+  parent-death signal. So when the keeper dies, only the launcher and the reaper get SIGTERM from
+  the kernel. Only the reaper ends the engine.
+
+**The window this leaves.** From the first `pidfd_open` in step 2 to the end of step 3, the
+reaper holds a pidfd, but its SIGTERM disposition is still the default (terminate). A keeper that
+dies in that window makes the kernel SIGTERM the reaper, and **the reaper dies without signalling
+anything**. The launcher dies of its own parent-death signal. The engine, whose parent-death
+signal the fork cleared, is orphaned and lives on with nothing to end it. That fits both sightings
+exactly: the engine was still alive at the 15 s assertion and still about 5 s later at teardown.
+A reaper that is only slow would have ended it within the 20 s grace.
+
+**Why the tests can hit it.** Both `:815` and `:732` treat "the reaper holds a pidfd" (an
+`anon_inode:[pidfd]` in `/proc/<reaper>/fd`, polled every 50 ms) as "the reaper is watching", then
+SIGKILL the keeper. `:732`'s own comment records that a fixed 1 s sleep "raced a loaded host"
+before this check replaced it. The check narrows the race but does not close it, because the
+pidfd appears before the handler is set. The window's length is:
+- the rest of the first scan after the first member's pidfd, which is a `/proc/<pid>/stat` read
+  for every process on the host (802 pids on 118 now; a full-suite run adds its own churn);
+- plus any preemption there.
+
+`:815` also needs the engine's `started.json` to be present at that poll. So the race can only
+bite when the engine is up before the reaper's first scan ends, which is more likely when the
+reaper's Python start (importing `scensim.simulator`) is slow. The 120 single-test runs above
+gave a short scan and a quick reaper on a fairly idle process table, which is consistent with
+0 failures.
+
+**Predictions (written before the full-suite arm, CPU only, not yet run).**
+- *If H3 is the cause:* failures, if any, appear in both arms at rates that are not clearly
+  different (setsid does not touch the window). The failure is this test's assertion with its
+  teardown error naming the same engine, as in 193's sighting.
+- *If setsid itself matters (H1):* the setsid arm fails 3 or more of 5 more than the plain arm.
+- *With 5 runs per arm,* 0 failures in both arms is likely even if H3 is right (the gate saw one
+  in two runs of the suite, at best). It does not count against H3. A direct test of H3 is to
+  widen the window on purpose: delay the reaper between its first scan and its handler (for
+  example with a test-only hook), and see whether the engine then survives every time. That needs
+  a code change, which is for 243 to decide.
+- *The fix this reading implies, for 243 (not made here):* set the SIGTERM handler (or block
+  SIGTERM) in the reaper before it opens any pidfd, so a keeper's death at any moment reaches
+  the loop. Better still, arm the parent-death signal only after the handler is set. The test's
+  "watching" signal could then be a file the reaper writes after arming, rather than the
+  pidfd's presence.
+
 ## The fix (243, 2026-11-26; assigned by 133 on 118's reading of hypothesis 3)
 
 118 read the reaper (its section, "Hypothesis 1, 118, 2026-11-26", and the hypothesis 3
