@@ -879,3 +879,35 @@ under contention which EKF poses have arrived differs. In the behind runs NDT st
 lagged enough that it settles there. The record that settles it is NDT's own initial pose
 (`/localization/pose_estimator/initial_pose_with_covariance` or its debug name) and its execution
 time, in a behind and a level run: step 9's (3).
+
+## Step 9 (3)'s plan: a behind and a level run with NDT's own guess (written 2026-11-26, before any run; 133)
+
+**The runs.** Step 5's configuration (0291abb3, siw 4706ff9, burn.py at 24 workers, GPU0 quiet,
+the other-user check) with **aib's probe off** (no `AIB_LOG_RENDER_AGE`; step 8 cleared the
+cloud, and the probe's load is gone). aib is b354ab9 as built, with the switch off. **The stop
+rule, stated now:** run until there is at least one behind and one level run, and stop at the
+first complete pair, at most 4 runs. Each run's mode is read (`startup172.py`) before the next
+starts. The record adds, with the names checked on a live stack between runs:
+`/localization/pose_estimator/initial_pose_with_covariance`, `.../initial_to_result_distance`,
+`.../exe_time_ms`, `/localization/twist_estimator/twist_with_covariance` (the EKF's twist input),
+`/localization/pose_twist_fusion_filter/twist_with_covariance`, `/tf` and `/tf_static`.
+
+**Where the common start-up lag comes from (a guess, labelled; for the reading, not tested
+yet).** At the start of motion the EKF predicts with its own velocity, which comes from the
+twist input (the vehicle's wheel speed through the velocity converter, and the gyro odometer).
+That input reaches the EKF later than the car moves, and the EKF does not shift it in time. So
+during the acceleration its position runs behind by about that delay times v. The common 20 to
+34 ms would then be the twist pipeline's delay. The record above can read it: the twist input's
+speed against the truth's speed, aligned by a time shift, over the acceleration.
+
+**Predictions (before any run).**
+- *H-f:* at the first moving scans (the first 2 s of motion), NDT's own logged initial pose
+  (`initial_pose_with_covariance`) is more lagged in the behind run than in the level run, by at
+  least 10 ms x v. In the behind run it is also more lagged than the header-interpolated guess of
+  step 9 (1) for the same scans, by at least 5 ms x v.
+- *H-f's falsifier (133):* if NDT's logged initial pose at the first moving scans is the same in
+  the behind and the level run (within 5 ms x v), H-f FAILS.
+- *A consequence:* in the level run `initial_to_result_distance` at the first moving scans is
+  larger (NDT moves the pose by a few cm) than in the behind run (it barely moves it).
+- *The common lag (the guess above):* the twist input's speed lags the truth's by 20 to 34 ms
+  during the acceleration, in both runs alike.
