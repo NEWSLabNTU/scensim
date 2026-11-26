@@ -566,3 +566,43 @@ CenterPoint, recording in addition (names from (c)'s live topic list):
   distance to the nearest obstacle point on its path, and that point is the walker.
 - If E1 fails, the other sources read are the control validator, the operation mode's
   availability and the topic state monitors, through the same diagnostics.
+
+**Result (the run `2026-11-27T00-01-20_goal_stop_goal_surface-asphalt_r0`, 00:01 to 00:03; on
+the NAS, `home/2026-11-26 190 mrm trigger run (243)/` with SHA256SUMS, the decoder
+`mrm190.py` and its output). E1 fails: the MRM is raised by the planning validator, not by
+AEB.** The run failed as (c) did (an undeclared contact with `ped`, 1839.3 N*s, first at 26.6 s).
+The chain, in sim seconds:
+
+| time | what |
+|---|---|
+| 24.40 | the published trajectory's minimum acceleration is -3.22 m/s^2 |
+| 24.50 | it is -11.18 (point 44); `/diagnostics`: `planning_validator: trajectory_validation_deceleration` goes to ERROR, "deceleration is too large" |
+| 24.55 | `control_validator: control_validation_will_overrun_stop_point` goes to ERROR |
+| 24.60 | the diagnostics graph: `/autoware/planning/trajectory_validation/deceleration`, then `/autoware/planning/trajectory_validation`, `/autoware/planning` and `/autoware/modes/autonomous` go to ERROR; `/system/operation_mode/availability` autonomous false; the hazard status emergency |
+| 24.70 | `/system/fail_safe/mrm_state` MRM_OPERATING, behaviour EMERGENCY_STOP; `/system/emergency/control_cmd` jerk -1.5, -2.50 |
+| 24.80 | the gate's output is the emergency stop's (-2.50, the open-loop velocity) |
+| 25.20 | `autonomous_emergency_braking: aeb_emergency_stop` goes to ERROR (RSS distance 9.56 m) |
+| 26.80 | `mrm_state` MRM_SUCCEEDED; 27.60 back to NORMAL |
+
+- **The node and why.** The planning validator's trajectory checker
+  (`min_lon_accel.threshold: -9.8`, `autoware_launch/config/planning/scenario_planning/common/planning_validator/trajectory_checker.param.yaml`)
+  judged the planner's own stop trajectory invalid when it asked for more than 1 g. Its ERROR is
+  linked through the graph into the autonomous mode's availability
+  (`/autoware/modes/autonomous` takes `/autoware/planning`, which takes the trajectory
+  validation), so the mode became unavailable and the MRM handler ran the emergency stop.
+  `default_handling_type: 0`: the trajectory itself still went out; only the diagnostic acted.
+- **The time.** From the validator's ERROR (24.50) to the emergency command (24.70) is 0.20 s; to
+  the gate's output being the emergency stop (24.80), 0.30 s. E2's 0.2 s bound was about AEB.
+- **E3** is moot as the trigger: AEB's ERROR came 0.6 s after the takeover and changed nothing
+  (the command was already the emergency stop's).
+- **Stock or ours.** Every link is stock Autoware 1.5.0: the checker's threshold, the
+  validator's diagnostic, the graph's links (`autoware_launch/config/system/diagnostics/planning.yaml`
+  and `autoware-main.yaml`; the profile's graph, `PROF/config/system/diagnostics/autoware-sim.yaml`,
+  carries the same links), and the emergency stop's -2.5. Ours in the chain: the profile's
+  MRM handler with the comfortable stop off, which picks the emergency stop over a softer one.
+
+So in this scenario the safety chain inverts itself: the planner asks for a hard stop, the
+validator calls the hard stop invalid, and the fail-safe that follows brakes at -2.50, below what
+the controller was already commanding (-2.9 at 24.70). Nothing is changed here; the -2.5, the
+validator's threshold and whether its deceleration check should end autonomous mode are the
+user's call through 133.
