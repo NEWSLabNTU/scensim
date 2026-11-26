@@ -249,3 +249,73 @@ so no module can see the crossing coming. These would change that:
 Each would be its own step with its own predictions, not part of this issue. The first changes
 Autoware's behaviour for every UNKNOWN object in every scensim run, so it needs a decision on the
 profile, not only on this scenario.
+
+## Correction, 2026-11-26 (243): the pedestrian wears a walker
+
+Step (a) above says the pedestrian is "a 0.6 x 0.6 x 1.8 m box ... not a person mesh". That is
+wrong for what the lidar sees. The gap trace's `asset: isaac:box` names the collider. The Isaac
+world server dresses every pedestrian in a CARLA walker (roadmap 044 C,
+`scensim_isaac_world/world.py`, `walker_gait.pick`; `vehicle_assets.add_walker_body`) and makes
+the box invisible. Run (b)'s world server log says so: `first bp_walker_male_eurow_owv_v2 in this
+world server: rendered in 3.7 s`. So the lidar saw a person-shaped, animated mesh, and
+`clustering` still labelled it UNKNOWN. Euclidean clustering with shape estimation gives no class
+from shape. Step (b)'s conclusions stand, since they rest on the label and on the zero velocity,
+not on the shape.
+
+## Plan, steps (c) and (d), 2026-11-26 (243): before any run
+
+The user's choice, through 133: measure both changes separately on the same case (goal_stop,
+asphalt), with run (b) `2026-11-26T13-20-19_goal_stop_goal_surface-asphalt_r0` as the baseline,
+then decide.
+
+**What is recorded.** The same topics as (b), with the three empty ones replaced:
+- the motion_velocity_planner's debug markers recorded under both patterns its libraries' strings
+  allow (`<node>/debug/<module>/debug_markers` and `<node>/<module>/debug_markers`);
+- `/perception/object_recognition/detection/objects`, kept;
+- `/perception/object_recognition/detection/centerpoint/objects` for (c).
+A `ros2 topic list` of the ego's domain is taken once the pilot is ready, so the right names are on
+record for the next run.
+
+**Step (c): stock Autoware, a pedestrian perception labels PEDESTRIAN.** The cheaper route, a
+person-shaped asset, is already in place (the correction above) and does not change the label. So
+(c) is `lidar_detection_model:=centerpoint` (full CenterPoint, the profile's choice for it) on the
+same walker. It is set as the pilot's argument in a copy of the testbench, beside
+`max_velocity: 11.11`. TensorRT 10.8.0 is at `/var/tmp/aeon/tensorrt-10.8.0/lib`, set as
+`autoware.tensorrt_lib` in that copy's host settings; its two engines are on the host
+(`~/autoware_data/lidar_centerpoint/`). The card floor and the guard are as in (b);
+CenterPoint adds about 600 MiB at peak.
+
+Predictions for (c):
+- C1: CenterPoint labels the walker PEDESTRIAN (highest probability) for most of its walk, from
+  within 0.5 s of its first movement. This is the least certain of the four: CenterPoint was not
+  trained on Isaac's RTX lidar returns from a CARLA walker.
+- C2: its tracked velocity is non-zero and within 0.5 m/s of its 1.5 m/s walk while it walks, and
+  its predicted path crosses the ego's lane.
+- C3: `run_out` publishes a stop or slowdown factor for it before it reaches the ego's side line
+  (in (b), at about 25.65 s, 1.4 s after it starts walking).
+- C4: the ego stops without contact. This is less sure than C3. At the walk's start the bumper is
+  about 16 m away at 7.4 m/s. A stop at -2.5 needs 10.9 m, plus `run_out`'s 2.5 m distance buffer
+  and about 0.6 s of on-time buffer and tracking, about 17.8 m in all. So a contact at low speed
+  (under 2 m/s) is about as likely as none.
+
+**Step (d): the tracker publishes an UNKNOWN object's motion.** `enable_unknown_object_motion_output:
+true`, with clustering kept, for this testbench only and not as the profile's default. On Autoware
+1.5.0 the profile passes the tracker its parameter file as a fixed value
+(`PROF/launch/components/tier4_perception_component.launch.xml:230-231`), so no run-time argument
+reaches it today. The narrow route is a profile launch argument for that file, its default
+unchanged, which the testbench sets to a copy with the one value changed. That is a change to
+`autoware_sim_vehicle` (its own commit, pins, `just gate`), so it waits for 133's go.
+
+Predictions for (d):
+- D1: the walker stays UNKNOWN, and its tracked velocity is non-zero (about 1.5 m/s across the
+  lane) from within 1 s of its first movement.
+- D2: `dynamic_obstacle_stop` publishes a stop factor for it before `obstacle_stop`'s first one,
+  and before it reaches the ego's side line.
+- D3: `run_out` publishes no factor for it (UNKNOWN is not in its `target_labels`).
+- D4: contact is no less likely than in (c). `dynamic_obstacle_stop` needs 0.5 s of continuous
+  detection and drops collisions it judges unavoidable (`dynamic_obstacle_stop.param.yaml:9,12`),
+  so it may act and then let go.
+
+**The comparison** for the user, after both: per run, the label, the velocity, which module
+stopped and when (relative to the walk's start), the peak commanded deceleration, the speed at
+contact or the stop distance, and the verdict, against (b).
