@@ -608,3 +608,12 @@ right hairpins' residual +0.133 to +0.189 m).
   NDT is given differs from what the map predicts at the true pose. That points at the scan's
   side (where the lidar's points are put relative to base_link, and when), which step 4's fixture
   runs measure with no bends, crown or props. Not tested here.
+
+**The vehicle, set before R1 (243, 2026-11-27).** The as-built note above had R1 to R3 in
+drift_mustang (the courses project's car). C6e2's and 168's runs, where the car-fixed -0.037 m
+comes from, drove the Tesla Model 3 (their `resolved.yaml`: no vehicle override,
+`vehicle_model:=tesla_model3`, aib's default rig). G2 compares the fixture with those runs, so a
+different car (its own sensor kit and rig mount) would mix the vehicle into the answer. Before
+any run: the three scenarios' ego is `tesla_model3`, the testbench has no vehicle override and no
+rig file (aib's default Tesla), the asset take is `vehicles/vehicle.tesla.model3`, and the fixture
+is a `path:` asset (`scensim testbench check`: ok). `max_velocity` stays the spec's 11.11.
