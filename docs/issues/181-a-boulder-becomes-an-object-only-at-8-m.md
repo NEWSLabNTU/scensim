@@ -157,3 +157,68 @@ Against the predictions:
 
 So the boulder's first stage under 10 m is the clustering, with the validator a second, smaller
 delay (from 12.3 m to 8.8 m). Which parameter does it is the replay plan's question.
+
+## Step 2: the clustering's input, read from the source, and a CPU replay (241, 2026-11-27; plan and predictions, before any replay)
+
+133 assigned step 2 to 241: name the filter, CPU only first. 118's live C6e3 c6b run for 177 may
+add the topics named below.
+
+**What the clustering actually reads.** Reading Autoware 1.5.0's launch files and the 0.48.0
+source (autoware_universe, `perception/autoware_compare_map_segmentation` and
+`perception/autoware_euclidean_cluster`) shows that the clustering's input is not the non-ground
+cloud that b2 and r1 measured. `detection.launch.xml` feeds it
+`pointcloud_map_filtered/pointcloud`, which is the non-ground cloud after two filters
+(`pointcloud_map_filter.launch.py`, `use_pointcloud_map` true by default):
+1. `VoxelGridDownsampleFilter`, 0.1 m voxels (`down_sample_voxel_size`), one centroid per
+   voxel;
+2. `VoxelBasedCompareMapFilter` against `/map/pointcloud_map`:
+   - the map is voxelised at 0.5 x 0.5 x 0.3 m (`distance_threshold` 0.5,
+     `downsize_ratio_z_axis` 0.6), one centroid per voxel;
+   - a point is dropped as "map" when its own voxel, or any of the 26 neighbours at ±0.5 m in x
+     and y and ±0.3 m in z, has a centroid within |dx| < 0.5, |dy| < 0.5 and |dz| < 0.3 of it
+     (`is_close_to_neighbor_voxels`, `is_in_voxel`).
+
+Then `VoxelGridBasedEuclideanCluster` clusters the 2D centroids of 0.3 m columns (z ignored)
+with 0.7 m tolerance, and keeps a cluster only with at least `min_cluster_size` **10 points** of
+its input.
+
+So on mapped road, every boulder point less than about 0.3 m above the road's map centroids is
+removed as map. Of a 0.35 m boulder, only roughly its top 5 cm can reach the clustering, and those
+points are first merged into 0.1 m voxels.
+
+**Hypothesis H3:** the compare-map filter's vertical tolerance (0.3 m) removes all but the
+boulder's top. The surviving 0.1 m voxels stay under 10, so under `min_cluster_size`, until about
+12 m.
+
+**The replay (CPU, no GPU).** In Python, on r1's record (NAS, 118's step 1 run), per frame of
+`/perception/obstacle_segmentation/pointcloud`:
+- put the cloud into the map frame by `/localization/kinematic_state`, nearest in time;
+- apply the three steps above as the source does them, against Town01's `pointcloud_map.pcd`
+  at the run's dataset revision. The dynamic map loading is not reproduced: its 150 m radius
+  holds the boulder's surroundings at all times;
+- count the boulder's points after each step (within 1.0 m of x 400, y 1.625, as step 1 did),
+  and whether a cluster of at least 10 points forms there.
+
+The fidelity check comes first: the replayed clustering must agree with the recorded
+`clustering/clusters` on whether the boulder has a cluster in at least 90 % of the frames from
+40 m to 5 m. Otherwise the replay is not faithful, and nothing below is read from it.
+
+**Predictions, before any replay:**
+- (a) Fidelity holds: at least 90 % frame agreement, and the replay's first cluster at 12.3 ±
+  1.0 m.
+- (b) H3, the compare-map filter: from 31 m to 12 m it removes at least 70 % of the boulder's
+  downsampled points. Every point that survives is at least 0.25 m above the road (the map's
+  centroid z at that spot).
+- (c) The count that fails is `min_cluster_size`. Beyond 12 m, the surviving points number under
+  10 in every frame, and from 10.8 m at least 10 in every frame.
+- (d) Counterfactuals, in the replay only (no stack changed):
+  - with the compare-map filter off (the downsample alone), the first cluster comes at 20 m or
+    more;
+  - with `downsize_ratio_z_axis` 0.3 (a 0.15 m vertical tolerance), at 20 m or more;
+  - with `min_cluster_size` 3 and the filter as it is, between 12 and 20 m.
+- How sure: about 60 % for (b) and (c) together. The other candidates: the map's road centroids
+  sit higher or lower than Isaac's road, so the cut is not 0.3 m above the true surface; or the
+  boulder stands where the map has no road voxel at all, and then H3 is wrong.
+
+The validator's second delay (from 12.3 m to 8.8 m) is not in this step. It is read after,
+from the same replay's clusters, as its own prediction.
