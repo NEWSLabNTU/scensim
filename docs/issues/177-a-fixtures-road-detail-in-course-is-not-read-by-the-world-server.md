@@ -110,7 +110,7 @@ Companion tests:
 
 ## The code (118, 2026-11-27; after the plan, test first)
 
-- **Commits:** siw 090dc0c and 57ec772 on branch `issue-177`.
+- **Commits:** siw 090dc0c, 57ec772 and e763170 on branch `issue-177`.
 - **Tests:** `test/test_issue_177.py`, 9 tests. Before the code: 7 failed and 2 passed. The two
   that passed hold today's behaviour: the course record unchanged, and nothing for a fixture
   without features. One test was then corrected, because it counted the random potholes
@@ -136,3 +136,14 @@ Companion tests:
   record's. The step now prints the exact command (`python3 -m scensim_isaac_world.base_drop
   <map dir> --write`), and the map file's header names plain `python3`, not Isaac's Python.
   This is siw 57ec772. The first gate (at 268fbf8b) was stopped for it.
+- **The first full gate FAILED (043e94b8, 02:11:40 to 02:42:13, rc=1).** The Isaac-Python lane
+  errored on all 9 new tests, with `No module named 'pyproj'`. The builder's `main` projects
+  with pyproj (`centreline.Frame`), and Isaac's venv lacks it (issues 090, 149). Every other
+  lane passed, including the system lane's 543 tests. The fix is to the tests only (siw
+  e763170):
+  - the 7 builder tests skip without pyproj, as `test_course_maps_c5d` and `test_course_closed`
+    do;
+  - the 2 warning tests build the course record from `fixture` and `record` directly, so they
+    run in both lanes.
+
+  The result is 9 passed in the system Python, and 2 passed with 7 skipped in Isaac's.
