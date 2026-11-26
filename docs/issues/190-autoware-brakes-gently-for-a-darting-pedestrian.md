@@ -606,3 +606,60 @@ validator calls the hard stop invalid, and the fail-safe that follows brakes at 
 the controller was already commanding (-2.9 at 24.70). Nothing is changed here; the -2.5, the
 validator's threshold and whether its deceleration check should end autonomous mode are the
 user's call through 133.
+
+## Draft upstream report (243, 2026-11-27; for the user to read before anything is posted)
+
+Not posted. Proposed for autowarefoundation/autoware_universe (or autoware_launch, if the
+maintainers place the configuration there). Facts from the runs above; the measurements come
+from a simulator (Isaac Sim with scensim), stated as such.
+
+> **Title:** A trajectory that brakes harder than `min_lon_accel` triggers an MRM emergency stop
+> that brakes softer than the trajectory and the controller
+>
+> **Version:** Autoware 1.5.0 (autoware_universe 0.48.0), autoware_launch's default
+> configuration for the files below.
+>
+> **What happens.** When the motion velocity planner inserts a stop for an object that enters
+> the path at short range, the smoothed trajectory's deceleration can exceed
+> `trajectory_checker.min_lon_accel.threshold` (-9.8 m/s^2). The chain that follows:
+> 1. `planning_validator` publishes `trajectory_validation_deceleration` at ERROR
+>    ("deceleration is too large").
+> 2. The diagnostic graph links it to `/autoware/planning`, which `/autoware/modes/autonomous`
+>    requires, so the autonomous mode becomes unavailable.
+> 3. The MRM handler selects the emergency stop, and `mrm_emergency_stop_operator` publishes
+>    `target_acceleration: -2.5`, `target_jerk: -1.5`.
+> 4. `vehicle_cmd_gate` passes the emergency command instead of the controller's.
+>
+> The controller was commanding -2.9 m/s^2 and falling (its stop state holds -3.4), and the
+> trajectory asked for -9 to -13 m/s^2. After the switch the vehicle is braked at -2.5 m/s^2
+> until it stops. A hard stop is judged invalid, and the fail-safe that replaces it brakes
+> softer than the stop it replaced.
+>
+> **Observed (simulation, one run, sim seconds).** Trajectory minimum acceleration -3.22 at
+> 24.40 s and -11.18 at 24.50 s. `trajectory_validation_deceleration` ERROR at 24.50 s, the
+> autonomous mode unavailable at 24.60 s, `mrm_state` MRM_OPERATING / EMERGENCY_STOP at 24.70 s,
+> the gate's output the emergency stop's at 24.80 s. `autonomous_emergency_braking` reached
+> ERROR at 25.20 s, after the switch. The vehicle struck the pedestrian (in an earlier run of
+> the same scenario with the same chain, at 1.58 m/s).
+>
+> **Files (autoware_launch 1.5.0 unless stated).**
+> - `config/planning/scenario_planning/common/planning_validator/trajectory_checker.param.yaml`:
+>   `min_lon_accel.threshold: -9.8`
+> - `config/planning/scenario_planning/common/planning_validator/planning_validator.param.yaml`:
+>   `default_handling_type: 0`, `diag_error_count_threshold: 0`
+> - `config/system/diagnostics/planning.yaml`: `/autoware/planning/trajectory_validation/deceleration`
+>   under `/autoware/planning`; `config/system/diagnostics/autoware-main.yaml`:
+>   `/autoware/modes/autonomous` requires `/autoware/planning`
+> - `config/system/mrm_emergency_stop_operator/mrm_emergency_stop_operator.param.yaml`:
+>   `target_acceleration: -2.5`, `target_jerk: -1.5`
+> - `config/control/vehicle_cmd_gate/vehicle_cmd_gate.param.yaml`: `enable_cmd_limit_filter:
+>   true`, `nominal.lon_acc_lim_for_lon_vel: [5.0, 5.0, 5.0, 4.0]`,
+>   `nominal.lon_jerk_lim_for_lon_acc: [80.0, 5.0, 5.0, 4.0]`; the gate applies this filter to
+>   the emergency command as well (`vehicle_cmd_gate.cpp`, `publishControlCommands`), so an
+>   emergency stop target below -5.0 m/s^2 is not reachable with the default gate parameters.
+>
+> **Question.** Is it intended that a trajectory braking harder than the checker's threshold
+> ends the autonomous mode, and that the resulting MRM brakes at -2.5 m/s^2? If not, options
+> include: not linking the deceleration check to mode availability (or linking it only when the
+> trajectory is otherwise invalid), handling it with the last valid trajectory, or an MRM that
+> does not brake softer than the current command.
