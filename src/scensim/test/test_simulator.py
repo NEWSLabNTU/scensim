@@ -776,6 +776,68 @@ def test_a_carla_deaf_to_sigterm_is_killed_after_its_keeper(tmp_path):
     raise AssertionError("a CARLA that ignores SIGTERM outlived its SIGKILLed keeper")
 
 
+def _keeper_killed_while_the_reaper_arms(tmp_path, where):
+    """Issue 193: a keeper SIGKILLed while its reaper is still arming (held at ``where`` by the
+    test-only pause): the reaper must still end CARLA. The stand-in CARLA has no parent-death
+    signal of its own, as the engine under CarlaUE4.sh has none."""
+    import subprocess as sp
+    pause = 3.0
+    pidfile, rfile = tmp_path / "carla.pid", tmp_path / "reaper.pid"
+    script = tmp_path / "keeper.py"
+    script.write_text(textwrap.dedent(f"""
+        import subprocess, sys, time
+        from scensim import simulator
+        p = subprocess.Popen([sys.executable, "-c",
+                              "import os, time; open({str(pidfile)!r}, 'w').write(str(os.getpid())); time.sleep(120)"],
+                             start_new_session=True)
+        r = simulator.start_reaper(p.pid, grace=1.0)
+        open({str(rfile)!r}, "w").write(str(r.pid))
+        time.sleep(120)
+    """))
+    root = str(Path(sim.__file__).resolve().parents[1])
+    keeper = sp.Popen([sys.executable, str(script)],
+                      env=dict(os.environ, SCENSIM_TEST_REAPER_PAUSE=f"{where}:{pause}",
+                               PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", "")))
+    ended = False
+    try:
+        deadline = time.time() + ceiling()
+        while time.time() < deadline:
+            if rfile.exists() and rfile.read_text() and pidfile.exists() and pidfile.read_text():
+                if where == "startup":
+                    break
+                try:   # "scan": the reaper holds CARLA's pidfd, paused before it goes on
+                    if any(os.readlink(f) == "anon_inode:[pidfd]"
+                           for f in Path(f"/proc/{rfile.read_text()}/fd").iterdir()):
+                        break
+                except OSError:
+                    pass
+            time.sleep(0.01)
+        else:
+            raise AssertionError(f"the reaper never reached {where}")
+        keeper.kill()
+        keeper.wait()
+        # an orphan: a zombie counts as gone (issue 153)
+        ended = gone(int(pidfile.read_text()), within=15 + pause)
+        assert ended, (f"CARLA outlived a keeper SIGKILLed while its reaper was at {where} "
+                       "(issue 193)")
+    finally:
+        keeper.kill()
+        keeper.wait()
+        if not ended and pidfile.exists() and pidfile.read_text():
+            try:
+                os.kill(int(pidfile.read_text()), 9)
+            except ProcessLookupError:
+                pass
+
+
+def test_a_keeper_killed_while_its_reaper_starts_still_ends_carla(tmp_path):
+    _keeper_killed_while_the_reaper_arms(tmp_path, "startup")
+
+
+def test_a_keeper_killed_during_the_reapers_first_scan_still_ends_carla(tmp_path):
+    _keeper_killed_while_the_reaper_arms(tmp_path, "scan")
+
+
 def _fake_carlas():
     """pids of fake CARLA engines (fake_carla.py) alive on this host, zombies aside."""
     out = set()

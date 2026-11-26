@@ -937,6 +937,15 @@ class _Members:
         self.fds = {}
 
 
+def _test_pause(where):
+    """Tests only (issue 193): ``SCENSIM_TEST_REAPER_PAUSE=<where>:<seconds>`` holds the reaper
+    at ``where`` (``startup``, before reap(); ``scan``, after its first scan) so a test can kill
+    the keeper there. Nothing outside the tests sets it."""
+    where_, _, seconds = os.environ.get("SCENSIM_TEST_REAPER_PAUSE", "").partition(":")
+    if where_ == where and seconds:
+        time.sleep(float(seconds))
+
+
 def reap(pid: int, parent: int, grace: float = REAP_GRACE, poll: float = 1.0) -> int:
     """Wait while ``parent`` (the keeper) lives; then SIGTERM every process of CARLA's group
     (``pid``'s), wait ``grace`` seconds, SIGKILL those left. Each held by a pidfd (_Members):
@@ -947,6 +956,7 @@ def reap(pid: int, parent: int, grace: float = REAP_GRACE, poll: float = 1.0) ->
     try:
         if not members.scan():
             return 0
+        _test_pause("scan")
         gone = {"now": False}
         signal.signal(signal.SIGTERM, lambda *_: gone.update(now=True))
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -1007,6 +1017,7 @@ def main(argv=None) -> int:
     r.add_argument("--parent", type=int, required=True)
     r.add_argument("--grace", type=float, default=REAP_GRACE)
     a = ap.parse_args(argv)
+    _test_pause("startup")
     return reap(a.pid, a.parent, a.grace)
 
 
