@@ -244,3 +244,14 @@ def test_a_map_that_does_not_load_is_a_host_finding_and_a_warning_never_a_refusa
     out = io.StringIO()
     run.check_layouts(spec, d, out)
     assert "map Town01 does not load" in out.getvalue()
+
+
+def test_a_run_without_layouts_keeps_its_source_unchanged(tmp_path):
+    """Issue 189: every run keeps the scenario it ran beside contacts/."""
+    src = tmp_path / "s.xosc"
+    src.write_bytes(b"<OpenSCENARIO/>\n")
+    (tmp_path / "run").mkdir()
+    copy = L.keep_source(src, tmp_path / "run")
+    assert (tmp_path / "run" / "scenario.xosc").read_bytes() == src.read_bytes()
+    assert copy == {"path": str(tmp_path / "run" / "scenario.xosc"),
+                    "sha256": L.sha256(src.read_bytes()), "layouts": []}

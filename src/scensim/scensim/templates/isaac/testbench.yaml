@@ -7,3 +7,11 @@ assets:
     take: [Town01, vehicles]
 pilots:
   ego: {kind: autoware, vehicle: tesla_model3}
+# The contact judge (issue 189) runs by default, before the verdict; it is listed here so a
+# reader sees it. An undeclared contact above 10 N*s fails the run; a scenario that means to
+# touch declares csbExpectedContacts. Edit the entry to change it; to turn it off, replace it
+# with {name: physical_verdict, off: true, why: "<the reason>"}.
+judges:
+  - name: physical_verdict
+    run: [ros2, run, scensim_launch, physical_verdict, "{run_dir}/junit.xml",
+          --scenario, "{run_dir}/scenario.xosc", --min-impulse, "10"]

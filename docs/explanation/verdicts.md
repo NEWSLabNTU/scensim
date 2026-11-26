@@ -43,17 +43,23 @@ the run's verdict. Its limits are known:
 - a car whose simulator body is larger than its declared box can touch the ego without
   SSv2's boxes meeting.
 
-## CARLA's contacts beside it
+## The simulator's contacts
 
-The bridge records what CARLA's contact sensor saw for every ego run. The
-`physical_verdict` judge reads that record and adds a `carla_contact` verdict beside
-SSv2's ([Tutorial 5](../tutorials/05-suites.md#3-add-a-judge)):
+The bridge records what the simulator's contacts were for every ego run, on CARLA and on
+Isaac. The `physical_verdict` judge reads that record and adds a `carla_contact` testcase
+to the run's JUnit ([Tutorial 5](../tutorials/05-suites.md#3-the-contact-judge)). It runs
+in every project, before the verdict (issue 189), so its failure fails the run:
 
 | `carla_contact` | When |
 |---|---|
-| passed | no contact, or only contacts the scenario declares |
-| failed | CARLA saw the ego touch something else; the message names it, the frame and the impulse |
-| error | no contact report for the run |
+| passed | no contact above the floor (10 N*s), or only contacts the scenario declares |
+| failed | the ego touched something else; the reason names it, its impulse and the floor |
+| error | the contact record was cut short (a simulator restart mid-run) |
+
+A run without a contact report (the world's `contact_report_dir` off) is not judged.
+`judges/physical_verdict.json` then says `off` and why. The floor keeps the ego's
+resting contact with a soil mesh (0 N*s) and a graze of a road rock (about 1 N*s) from
+failing a run. Every collision in the kept runs was above 4000 N*s, on both simulators.
 
 A scenario that is *meant* to make contact declares with whom (SSv2 ignores the
 parameter); `static` allows contact with the static world:
@@ -63,8 +69,8 @@ parameter); `static` allows contact with the static world:
                       value="npc_rear" />
 ```
 
-When the two disagree (SSv2 passed, `carla_contact` failed), the scenario passed only
-because SSv2 did not see what CARLA did.
+When the two disagree (SSv2's testcase passed, `carla_contact` failed), the run fails:
+SSv2 did not see what the simulator did.
 
 The bridge gives every NPC the CARLA body closest in size to its declared box. When CARLA
 has nothing close (a 12 m truck: the longest CARLA truck is 8.5 m), the judge's output

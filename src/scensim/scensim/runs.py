@@ -24,7 +24,7 @@ LEVELS = ("result", "standard", "full", "debug")
 LEVEL_KEEPS = {
     "result": {"result.json", "resolved.yaml", "junit.xml", "timeline.jsonl", "judges",
                "contacts", "sample.json",    # sample.json: what --replay runs (092 K3)
-               "scenario.xosc"},   # the run's copy with a layout's props: what SSv2 ran (K9f-b)
+               "scenario.xosc"},   # what SSv2 ran: the source, or with props and zones (K9f-b, 189)
     "standard": {"logs", "gap_trace", "context.jsonl", "attachments"},   # attachments: 092 K4
     "full": {"record", "host.json"},
     "debug": None,  # everything

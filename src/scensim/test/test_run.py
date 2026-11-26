@@ -471,7 +471,7 @@ def test_keep_prunes_a_passed_run(live, where):
     r = api.run_one(d, "scenarios/three_pilots.xosc", {"scenario_command": fake(where)})
     run_dir = where["tmp"] / "logs" / "proj" / "runs" / r.run_id
     assert sorted(x.name for x in run_dir.iterdir()) == [
-        "junit.xml", "resolved.yaml", "result.json", "timeline.jsonl"]
+        "judges", "junit.xml", "resolved.yaml", "result.json", "scenario.xosc", "timeline.jsonl"]
 
 
 def test_error_when_ssv2_writes_nothing(live, where):
@@ -1315,7 +1315,9 @@ FAKE_SSV2_TRACED = textwrap.dedent('''\
         f.write(window.format(s=1, p="0.2/0.3/0.4") + "\\n")
         f.write(window.format(s=2, p="0.2/1.8/2.5") + "\\n")
     (traces / "20261115T000000Z_7.jsonl").write_text(trace.read_text())
-    (contacts / "20261115T000000Z_e7.json").write_text(json.dumps({"contacts": []}))
+    (contacts / "20261115T000000Z_e7.json").write_text(json.dumps(
+        {"schema": 1, "episode": 7, "ego": "ego", "start_unix": 1.0, "complete": True,
+         "contacts": []}))
     j = run_dir / "logs" / "ssv2" / "scenario_test_runner" / "result.junit.xml"
     j.parent.mkdir(parents=True, exist_ok=True)
     j.write_text('<testsuites><testsuite name="s"><testcase name="three_pilots"/>'
@@ -1351,6 +1353,10 @@ def test_gap_trace_per_run_judged_and_frame_metrics(where, maps_hub, monkeypatch
         "20261115T000000Z_7.jsonl"]
     assert (run_dir / "contacts" / "20261115T000000Z_e7.json").is_file()
     assert not list(Path(p.record["episodes"]["gap_trace"]).iterdir())   # moved, not copied
+    # issue 189: the contact judge ran by default, before the verdict, on the run's report
+    contact = json.loads((run_dir / "judges" / "physical_verdict.json").read_text())
+    assert contact["verdict"] == "passed", contact
+    assert 'name="carla_contact"' in (run_dir / "junit.xml").read_text()
     judged = json.loads((run_dir / "judges" / "gap.json").read_text())
     assert judged["verdict"] == "passed" and judged["traces"][0]["g4"] == "agree"
     m = results.RunResult.read(run_dir / "result.json").metrics

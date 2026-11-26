@@ -1687,11 +1687,14 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
     except ValueError as e:   # zones.ZoneError; expand refused it already, unless it changed
         shutil.rmtree(run_dir, ignore_errors=True)
         raise Refused(f"{Path(spec.scenario).name}: {e}") from None
-    copy = None
+    from scensim import layouts as layoutsmod   # noqa: PLC0415
     if lays or zone_runs:
-        from scensim import layouts as layoutsmod   # noqa: PLC0415
         copy = layoutsmod.write_copy(Path(spec.scenario), lays, run_dir, zone_runs)
         scenario_file = Path(copy["path"])
+    else:
+        # issue 189: every run keeps its scenario beside contacts/, for the contact judge and
+        # whoever judges the run again; SSv2 still runs the source (its relative paths)
+        copy = layoutsmod.keep_source(Path(spec.scenario), run_dir)
     ssv2_argv = (ctx.scenario_command or scenario_argv)(rec, spec, run_dir, scenario_file)
     resolved = {
         "run_id": run_id,
@@ -1989,6 +1992,19 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                                "ok": not why})
         if why:
             infra.append(results.Infra("knob_mismatch", why))
+    # issue 189: the contact judge before the verdict, so an undeclared contact fails the run
+    # (as run_suite's --physical-verdict did, roadmap 021); the other judges come after it
+    judge_list = config.project_settings(project).get("judges")
+    contact = None
+    if ssv2 is not None:
+        contact = judgesmod.run_contact(judge_list, run_dir, project)
+        if contact is not None:
+            run_events.append({"t_wall": time.time(), "event": "contact.judged",
+                               "verdict": contact["verdict"]})
+            if contact["verdict"] == results.ERROR and contact.get("exit_code") not in (0, 1):
+                infra.append(results.Infra(
+                    "contact_judge", f"{judgesmod.CONTACT} did not judge the run: "
+                    f"{contact.get('message') or 'no message'}"))
     verdict, reason = results.verdict_from(
         junit if junit.is_file() else None, infra,
         hint="" if junit.is_file() else results.ssv2_hint(logs / "scenario"))
@@ -2072,8 +2088,8 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
         error=results.error_block(verdict, infra, reason), clock=clock_block,
         commands=commands_block)
     result.write(run_dir / "result.json")
-    judge_list = config.project_settings(project).get("judges")
-    judged = judgesmod.run_all(judge_list, run_dir, project, verdict)
+    judged = ([contact] if contact else []) + judgesmod.run_all(
+        judgesmod.after_verdict(judge_list), run_dir, project, verdict)
     if capture == "result":
         runsmod.downgrade(run_dir, "result")
     runsmod.apply_keep(run_dir, verdict, lg.get("keep") or {},

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Join CARLA's contacts into a scenario's JUnit verdict (roadmap 021).
+"""Join the simulator's contacts into a scenario's JUnit verdict (roadmap 021).
 
     ros2 run scensim_launch physical_verdict <result.junit.xml> [--scenario FILE]
         [--contacts DIR] [--since T] [--until T] [--min-impulse N]
@@ -11,7 +11,9 @@ writes each ego run's CARLA contacts to `<contact_report_dir>` (default
 place, next to SSv2's own testcases (which are never edited):
 
   - pass:    every report in the window is complete and has no unexpected contact
-  - failure: a contact the scenario did not declare (entity, first frame, max impulse)
+  - failure: a contact the scenario did not declare (entity, first frame, max impulse);
+             the message's first line names each one, its impulse and the floor:
+             `'ped' (pedestrian) 5470.5 N*s (floor 10 N*s): 1 contact(s) ...`
   - error:   no report in the window, or one cut short by a CARLA restart
 
 The window is [--since, --until] on each report's ego spawn time (Unix seconds or ISO 8601);
@@ -47,7 +49,8 @@ from pathlib import Path
 from typing import List, Optional, Set, Tuple
 
 SCHEMA = 1
-TESTCASE = "carla_contact"
+TESTCASE = "carla_contact"   # the name stays: gap_campaign and readers key on it
+TYPE = "UndeclaredContact"
 EXPECTED_PARAM = "csbExpectedContacts"
 STATIC = "static"
 
@@ -173,7 +176,7 @@ def judge(reports: List[dict], expected: Set[str] = frozenset(), min_impulse: fl
         return ("error", "NoContactReport",
                 "no contact report from the bridge in the run window (contact_report_dir "
                 "off, collision_monitor off, or a different bridge?)")
-    lines = []
+    lines, heads = [], []
     for i, r in enumerate(reports, 1):
         where = f"run {i}/{len(reports)} (ego '{r.get('ego')}' spawned {_clock(r.get('start_unix', 0))})"
         for c in r.get("contacts", []):
@@ -189,14 +192,17 @@ def judge(reports: List[dict], expected: Set[str] = frozenset(), min_impulse: fl
                 who = f"'{name}' ({c.get('type') or '?'})"
             else:
                 who = f"unknown actor {c.get('other_id')} ({c.get('type') or '?'})"
+            heads.append(f"{who} {c.get('max_impulse', 0.0):.1f} N*s")
             lines.append(
                 f"{where}: ego hit {who} at SSv2 frame {c.get('first_ssv2_frame')} "
                 f"(t={c.get('first_sim_time', 0.0):.2f} s), {c.get('count')} contact(s), "
                 f"max impulse {c.get('max_impulse', 0.0):.1f} N*s")
     if lines:
-        return ("failure", "CarlaContact",
-                f"CARLA saw {len(lines)} contact(s) the scenario did not declare:\n"
-                + "\n".join(lines))
+        # the first line is what a run's verdict line shows (issue 189): who, how hard, the floor
+        floor = f" (floor {min_impulse:g} N*s)" if min_impulse > 0 else ""
+        return ("failure", TYPE,
+                f"{', '.join(heads)}{floor}: {len(lines)} contact(s) the scenario did not "
+                "declare\n" + "\n".join(lines))
     incomplete = [r for r in reports if not r.get("complete", True)]
     if incomplete:
         return ("error", "IncompleteContactReport",

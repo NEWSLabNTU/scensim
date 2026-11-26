@@ -90,35 +90,39 @@ runs and prints their paths; the table has one row per run, with the columns
 `judges` and `path`. The suite's own table, under `<logs>/my_first_drive/suites/follow/`,
 covers its runs; `runs summary` covers every run of the testbench.
 
-## 3. Add a judge
+## 3. The contact judge
 
 SSv2 judges collisions in its own world: the declared boxes, in 2D, with no static
-objects. The ego can therefore clip a pole, a curb, or a car whose CARLA body is larger
-than its declared box, and SSv2 still passes the run. The bridge records what CARLA's
-contact sensor detected in every run, and the `physical_verdict` judge evaluates that
-record. Add it to `testbench.yaml`:
+objects. The ego can therefore clip a pole, a curb, or a car whose simulator body is larger
+than its declared box, and SSv2 still passes the run. The bridge records what the
+simulator's contacts were in every run, and the `physical_verdict` judge evaluates that
+record. It runs in every project, and the template lists it in `testbench.yaml` so you see
+it:
 
 ```yaml
 judges:
   - name: physical_verdict
     run: [ros2, run, scensim_launch, physical_verdict, "{run_dir}/junit.xml",
-          --scenario, "{scenario}"]
+          --scenario, "{run_dir}/scenario.xosc", --min-impulse, "10"]
 ```
 
-A **judge** is a program run after each passed or failed run.
-`{run_dir}` and `{scenario}` in its `run` are replaced by the run directory and the
-scenario file; without them, the run directory is appended as the last argument. It prints one JSON object, and its exit code
-(0 passed, 1 failed) or the object's own `verdict` is the judge's verdict.
-
-Stop the stack, since `testbench.yaml` changed (`scensim stack my_first_drive --stop`);
-the next run starts it again:
+A **judge** is a program run over a finished run. `{run_dir}` and `{scenario}` in its
+`run` are replaced by the run directory and the scenario file. Without them, the run
+directory is appended as the last argument. It prints one JSON object, and its exit code
+(0 passed, 1 failed) or the object's own `verdict` is the judge's verdict. Other judges
+run after the verdict and are recorded beside it. This one runs before it (issue 189): a
+contact the scenario does not declare, above 10 N*s, fails the run. A scenario that means
+to touch declares it (`csbExpectedContacts`, [Verdicts](../explanation/verdicts.md)). A
+project turns the judge off only by name and with a reason:
+`{name: physical_verdict, off: true, why: "..."}`.
 
 ```bash
 scensim run my_first_drive/follow
 ```
 
-**What you see**: each run line ends with `judges: physical_verdict=passed` (or
-`failed`, naming what CARLA saw the ego touch).
+**What you see**: each run line shows `judges: physical_verdict=passed`. A failed one
+fails the run, and the reason names the contact, its impulse and the floor, such as
+`UndeclaredContact: 'ped' (pedestrian) 5470.5 N*s (floor 10 N*s)`.
 
 **Check**:
 

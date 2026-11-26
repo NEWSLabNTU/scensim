@@ -285,6 +285,16 @@ def for_run(project: Path, scenario: Path, parameters: dict, world_knobs: dict, 
     return out
 
 
+def keep_source(source: Path, run_dir: Path) -> dict:
+    """The source's bytes unchanged at <run_dir>/scenario.xosc (issue 189: every run keeps
+    the scenario it ran): resolved.yaml's `copy` ({path, sha256, layouts: []}), its sha256
+    the source's."""
+    data = Path(source).read_bytes()
+    out = Path(run_dir) / COPY
+    out.write_bytes(data)
+    return {"path": str(out), "sha256": sha256(data), "layouts": []}
+
+
 def write_copy(source: Path, layouts: list, run_dir: Path, zones=()) -> dict:
     """The run's copy of `source` with every layout's props and every knob's zones
     (scensim.zones.for_run's), at <run_dir>/scenario.xosc: resolved.yaml's `copy` ({path,

@@ -30,6 +30,24 @@ too (issue 080: s5's judge read ``coop_a.jsonl``, which only ``debug`` kept).
 
 A judge that exits other than 0 or 1, prints JSON that is not an object, or overruns records
 ``verdict: error`` with the reason; the run itself is unaffected.
+
+**The contact judge is the exception** (issue 189). ``physical_verdict`` (roadmap 021) runs in
+every project, unlisted, and **before** the verdict: wherever the run directory holds the
+bridge's contact reports (``contacts/``), it adds its ``carla_contact`` testcase to the run's
+``junit.xml``, and an undeclared contact above ``CONTACT_FLOOR`` (N*s) fails the run as any
+JUnit failure does, its first line the reason: ``UndeclaredContact: 'ped' (pedestrian) 5470.5
+N*s (floor 10 N*s): ...``. A scenario that means to touch declares it (``csbExpectedContacts``);
+a project lists the judge only to change it::
+
+    judges:
+      - name: physical_verdict            # its own arguments in place of the default's
+        run: [ros2, run, scensim_launch, physical_verdict, "{run_dir}/junit.xml",
+              --scenario, "{run_dir}/scenario.xosc", --min-impulse, "50"]
+      - name: physical_verdict            # or: off, by name, and only with a reason
+        off: true
+        why: "drives over rocks on purpose; judged by its own oracle"
+
+Either way it runs once, before the verdict. ``off`` and ``why`` are refused on any other judge.
 """
 import json
 import os
@@ -43,7 +61,14 @@ from scensim import results
 
 DEFAULT_ON = (results.PASSED, results.FAILED)
 DEFAULT_TIMEOUT = 120.0
-KEYS = ("name", "run", "version", "on", "timeout", "needs", "reads")
+KEYS = ("name", "run", "version", "on", "timeout", "needs", "reads", "off", "why")
+CONTACT = "physical_verdict"
+CONTACT_FLOOR = 10.0   # N*s; issue 189's calibration, Isaac's and CARLA's kept reports
+CONTACT_DEFAULT = {
+    "name": CONTACT, "version": "default",
+    "run": ["ros2", "run", "scensim_launch", "physical_verdict", "{run_dir}/junit.xml",
+            "--scenario", "{run_dir}/scenario.xosc", "--min-impulse", f"{CONTACT_FLOOR:g}"],
+}
 NEEDS = ("gap_trace", "context")
 JUDGE_VERDICTS = (results.PASSED, results.FAILED, results.ERROR)
 
@@ -70,6 +95,20 @@ def problems(judges) -> list:
             out.append((w, f"name: {name} twice"))
         else:
             names.add(name)
+        off, why = j.get("off"), j.get("why")
+        if ("off" in j or "why" in j) and name != CONTACT:
+            out.append((w, f"off/why: only the contact judge ({CONTACT}) is on by default "
+                           "and can be turned off"))
+        elif "off" in j and off is not True:
+            out.append((w, "off: true, or leave it out"))
+        elif off is True and not (isinstance(why, str) and why.strip()):
+            out.append((w, f"why: turning {CONTACT} off needs a reason (issue 189)"))
+        elif "why" in j and off is not True:
+            out.append((w, "why: goes with off: true"))
+        if off is True and name == CONTACT:
+            if "run" in j:
+                out.append((w, "run: an entry that turns the judge off runs nothing"))
+            continue
         run = j.get("run")
         if not (isinstance(run, list) and run and all(isinstance(a, (str, int, float))
                                                       for a in run)):
@@ -90,6 +129,47 @@ def problems(judges) -> list:
         if t is not None and (isinstance(t, bool) or not isinstance(t, (int, float)) or t <= 0):
             out.append((w, "timeout: a positive number of seconds"))
     return out
+
+
+def contact_judge(judges):
+    """``(judge, why_off)``: the contact judge a project runs before the verdict, the
+    default unless it lists its own; ``(None, why)`` when it turns it off."""
+    for j in judges if isinstance(judges, list) else []:
+        if isinstance(j, dict) and j.get("name") == CONTACT:
+            if j.get("off") is True:
+                return None, str(j.get("why") or "").strip()
+            return j, ""
+    return dict(CONTACT_DEFAULT), ""
+
+
+def after_verdict(judges) -> list:
+    """The project's judges that run after the verdict: every one but the contact judge."""
+    return [j for j in judges if not (isinstance(j, dict) and j.get("name") == CONTACT)] \
+        if isinstance(judges, list) else []
+
+
+def run_contact(judges, run_dir: Path, project: Path, env=None):
+    """The contact judge over ``run_dir``, before the verdict (issue 189): its record, or
+    None when there is nothing to judge (no ``junit.xml``, no report in ``contacts/``) or the
+    project turned it off. Either of those is written to ``judges/<name>.json`` with
+    ``verdict: off`` and why, so a reader sees the run was not judged."""
+    run_dir = Path(run_dir)
+    j, why_off = contact_judge(judges)
+    why = (f"off in testbench.yaml: {why_off}" if j is None else
+           "no junit.xml" if not (run_dir / "junit.xml").is_file() else
+           "no contact report in contacts/ (the world's contact_report_dir is off or the "
+           "user's, or the bridge wrote none)"
+           if not any((run_dir / "contacts").glob("*.json")) else "")
+    if why:
+        out = run_dir / "judges"
+        out.mkdir(exist_ok=True)
+        rec = {"name": CONTACT, "version": "", "verdict": "off", "message": why}
+        (out / f"{CONTACT}.json").write_text(json.dumps(rec, indent=2) + "\n")
+        _timeline(run_dir, rec)
+        return None
+    rec = run_one(j, run_dir, project, env)
+    _timeline(run_dir, rec)
+    return rec
 
 
 def needed(judges) -> set:

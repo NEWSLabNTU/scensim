@@ -111,3 +111,82 @@ def test_budget_check(tmp_path):
     (tmp_path / "r1" / "f").write_bytes(b"x" * 1000)
     (tmp_path / "link").symlink_to(tmp_path / "r1")
     assert budget.dir_size(tmp_path) == 1000
+
+
+# --- issue 189: the contact judge, on by default and before the verdict -------------------
+
+def test_the_contact_judge_is_off_only_by_name_and_with_a_reason():
+    ok = [{"name": "physical_verdict", "off": True, "why": "drives over rocks on purpose"}]
+    assert judges.problems(ok) == []
+    assert judges.contact_judge(ok) == (None, "drives over rocks on purpose")
+    for bad, part in (
+            ([{"name": "physical_verdict", "off": True}], "needs a reason"),
+            ([{"name": "physical_verdict", "off": True, "why": "  "}], "needs a reason"),
+            ([{"name": "comfort", "off": True, "why": "x"}], "only the contact judge"),
+            ([{"name": "comfort", "run": ["true"], "why": "x"}], "only the contact judge"),
+            ([{"name": "physical_verdict", "off": "yes", "why": "x"}], "off: true"),
+            ([{"name": "physical_verdict", "run": ["true"], "why": "x"}], "goes with off"),
+            ([{"name": "physical_verdict", "off": True, "why": "x", "run": ["true"]}],
+             "runs nothing")):
+        msgs = " | ".join(m for _, m in judges.problems(bad))
+        assert part in msgs, (bad, msgs)
+
+
+def test_the_default_contact_judge_and_a_listed_one_replacing_it():
+    j, why = judges.contact_judge(None)
+    assert why == "" and j["name"] == "physical_verdict"
+    assert j["run"][-2:] == ["--min-impulse", "10"]
+    assert "{run_dir}/scenario.xosc" in j["run"]
+    own = {"name": "physical_verdict", "run": ["true"]}
+    other = {"name": "comfort", "run": ["true"]}
+    assert judges.contact_judge([other, own]) == (own, "")
+    assert judges.after_verdict([other, own]) == [other]   # it runs once, before the verdict
+
+
+def contact_run(tmp_path, report=True):
+    d = run_dir(tmp_path)
+    (d / "junit.xml").write_text('<testsuites><testsuite name="s" tests="1"><testcase '
+                                 'name="sc"/></testsuite></testsuites>')
+    (d / "contacts").mkdir()
+    if report:
+        (d / "contacts" / "r_e1.json").write_text("{}")
+    return d
+
+
+FAILS_THE_JUNIT = """import sys, xml.etree.ElementTree as ET
+p = sys.argv[1] + "/junit.xml"
+t = ET.parse(p); s = t.getroot().find("testsuite")
+c = ET.SubElement(s, "testcase", name="carla_contact")
+ET.SubElement(c, "failure", type="UndeclaredContact",
+              message="'ped' (pedestrian) 5470.5 N*s (floor 10 N*s): 1 contact(s)")
+t.write(p)
+print("[physical_verdict] carla_contact: FAILURE")
+sys.exit(1)
+"""
+
+
+def test_an_undeclared_contact_fails_the_run_naming_it(tmp_path):
+    from scensim import results  # noqa: PLC0415
+    d = contact_run(tmp_path)
+    pv = judge(tmp_path, FAILS_THE_JUNIT, name="physical_verdict")
+    rec = judges.run_contact([pv], d, tmp_path)
+    assert rec["verdict"] == "failed"
+    assert json.loads((d / "judges" / "physical_verdict.json").read_text())["verdict"] == "failed"
+    verdict, reason = results.verdict_from(d / "junit.xml")
+    assert verdict == "failed"
+    assert reason.startswith("UndeclaredContact: 'ped' (pedestrian) 5470.5 N*s (floor 10 N*s)")
+
+
+def test_the_contact_judge_off_or_without_a_report_records_why(tmp_path):
+    d = contact_run(tmp_path, report=False)
+    pv = judge(tmp_path, FAILS_THE_JUNIT, name="physical_verdict")
+    assert judges.run_contact([pv], d, tmp_path) is None
+    rec = json.loads((d / "judges" / "physical_verdict.json").read_text())
+    assert rec["verdict"] == "off" and "no contact report" in rec["message"]
+    assert "carla_contact" not in (d / "junit.xml").read_text()
+    d2 = contact_run(tmp_path / "b")
+    off = [{"name": "physical_verdict", "off": True, "why": "its own oracle"}]
+    assert judges.run_contact(off, d2, tmp_path) is None
+    rec = json.loads((d2 / "judges" / "physical_verdict.json").read_text())
+    assert rec == {"name": "physical_verdict", "version": "", "verdict": "off",
+                   "message": "off in testbench.yaml: its own oracle"}

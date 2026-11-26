@@ -139,7 +139,7 @@ class Judge(unittest.TestCase):
 
     def test_an_undeclared_contact_fails_and_names_it(self):
         kind, type_, msg = pv.judge([report(1.0, [contact()])])
-        self.assertEqual((kind, type_), ("failure", "CarlaContact"))
+        self.assertEqual((kind, type_), ("failure", "UndeclaredContact"))
         self.assertIn("'npc_rear'", msg)
         self.assertIn("SSv2 frame 412", msg)
         self.assertIn("1843.2", msg)
@@ -153,6 +153,12 @@ class Judge(unittest.TestCase):
         self.assertEqual(pv.judge(r, expected={"npc_rear"})[0], "failure")
         self.assertIn("static world", pv.judge(r)[2])
         self.assertEqual(pv.judge(r, expected={"static"})[0], "pass")
+
+    def test_the_first_line_names_the_contact_its_impulse_and_the_floor(self):
+        _, _, msg = pv.judge([report(1.0, [contact(impulse=5470.54)])], min_impulse=10.0)
+        self.assertTrue(msg.splitlines()[0].startswith(
+            "'npc_rear' (vehicle.tesla.model3) 5470.5 N*s (floor 10 N*s): 1 contact(s)"),
+            msg.splitlines()[0])
 
     def test_min_impulse_filters(self):
         r = [report(1.0, [contact(impulse=5.0)])]
