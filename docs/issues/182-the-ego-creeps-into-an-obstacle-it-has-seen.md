@@ -249,3 +249,37 @@ off, so it would not come back.
 **Not in this step:** why NDT's pose leaves the EKF's gate while the car pushes (step 1's open
 question; 133: on a future fixture run, record NDT's pose and the EKF's innovation). If the
 live run has no push, the question does not arise there.
+
+### Step 2a's result (241, 2026-11-27, after the predictions above)
+
+`s2a182.py` on r1's record (NAS `home/2026-11-27 issue 181 replay (241)/`). Times are relative
+to the strike (base_link at x 396.5). The gap is bumper to rock (base_link range less 3.72 m).
+
+| time | base_link range | gap | ego speed | |
+|---|---|---|---|---|
+| -3.95 s | 8.18 m | 4.47 m | 3.88 m/s | the boulder first in the final objects; obstacle_stop's first factor |
+| -3.95 to -2.95 s | | | 3.88 to 2.14 | 11 factors, STOP, the stop point at x 390.7 to 391.0, 1.3 to 4.1 m **behind** the ego |
+| -2.95 s | 5.06 m | 1.35 m | 2.25 m/s | the last frame with the object, and the last factor |
+| -2.95 to 0 s | | | | no object, no factor; the 1 s hold runs out |
+| 0 s | | | | the strike |
+
+- The control command's acceleration went down to -2.50 m/s^2 before the strike, the planner's
+  floor.
+- After the strike, it asked for 0.25 m/s at +0.51 m/s^2 (median).
+- The stop point is the boulder less the 5 m margin less the front: 400 - 5.0 - 3.72 = 391.3.
+  It is behind the ego from its first message.
+
+**Against the predictions:**
+- The factor appears only with the object, within 0.2 s: **held**, 11 of 11.
+- Its stop point lies behind the ego: **held**, by 1.3 m at the first message and 4.1 m at the
+  last.
+- The last object frame before the strike is at 4.5 m or more, near the blind zone's 4.9 m:
+  **held**, 5.06 m (gap 1.35 m, against the 1.2 m computed). None after the strike: **held**.
+
+So r1 shows H4's mechanism:
+- the boulder was an object for 1.0 s, while the ego braked at the planner's -2.5 m/s^2 floor
+  from 3.9 to 2.1 m/s;
+- it left every stage at the blind zone's edge;
+- obstacle_stop's hold ended, and the ego rolled on into it.
+
+Step 2b tests the other half: seen early enough, it stops short and holds.
