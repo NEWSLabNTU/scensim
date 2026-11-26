@@ -107,3 +107,25 @@ Companion tests:
   scenario on a map rebuilt by the new `record` step, not on the hand copies, logs `road
   detail .../fixture_c6b/road_detail.yaml: 1 corridor(s)` and issue 168's line, as the copies
   did.
+
+## The code (118, 2026-11-27; after the plan, test first)
+
+- **Commit:** siw 090dc0c on branch `issue-177`.
+- **Tests:** `test/test_issue_177.py`, 9 tests. Before the code: 7 failed and 2 passed. The two
+  that passed hold today's behaviour: the course record unchanged, and nothing for a fixture
+  without features. One test was then corrected, because it counted the random potholes
+  (`_holes`) rather than the fixed ones. It now compares the map file's corridor with the
+  course record's, feature height for feature height, and still fails before the code on the
+  missing file. After the code: 9 passed.
+- **133's addition.** The record step writes its own map file again: the header line `#
+  scensim course record step: course <name>` identifies it. A file with no such line, or with
+  another course's name, is refused, with the path and the owner named, and left untouched.
+  Both cases are tested.
+- **A second gap, found on the plan's path.** Running the `record` step alone on a fixture
+  (which the plan gives as the way to fix existing maps) went through `write_record`, which
+  wrote the course record without the fixture's features. A rebuilt map would have lost them
+  even from `course/`. `write_record` and `main_fixture` now share one function
+  (`write_fixture_record`). This is tested.
+- **The warning.** It is `road_layer.course_record_unread(map dir, state)`. `world.py`'s
+  `_load_road` logs it when the map file is missing. Features are any corridor key besides
+  `stations`, `section_in_base`, `centreline`, `section`, `seed` and `base_drop`.
