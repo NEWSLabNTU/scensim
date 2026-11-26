@@ -186,6 +186,33 @@ gave a short scan and a quick reaper on a fairly idle process table, which is co
   "watching" signal could then be a file the reaper writes after arming, rather than the
   pidfd's presence.
 
+## Arm (a): the full suite under load, before and after the fix (118, 2026-11-26 and 27)
+
+**The arm** (133): all of `src/scensim/test`, 5 runs under 243's `memguard.sh` (setsid) and 5
+plain, interleaved, under burn.py's 30 workers on 118's 48 cores, run by the same runner as
+hypothesis 1 (`h1.sh`, with `-rfE` so that failing tests are named).
+
+**Baseline, before the fix** (main 7a9dc61c, which has the reaper as read in hypothesis 3; run
+from 22:36:20 to 23:47:47, after that section's predictions):
+
+| arm | runs | failures | tests per run | load average (1 min) |
+|---|---|---|---|---|
+| setsid | 5 | 0 | 879 passed, 5 skipped | about 31 to 35 |
+| plain | 5 | 0 | 879 passed, 5 skipped | about 31 to 35 |
+
+Against hypothesis 3's predictions: 0 of 10 was the likely outcome even with the window real.
+So the window is real (the code shows it, and 243's tests below force it), but it is rare under
+this load, about 31 on 48 cores. It was not reproduced here. Hypothesis 1 (setsid itself) has no
+support: 0 failures in 70 setsid runs over this section and hypothesis 1's.
+
+**The regression check, on the fix** (main a02e9dc6, rebuilt in gate-c5c at 23:48; the same arm,
+from 23:48:07). *Predictions, labelled: written at 00:20, with 4 of the 10 runs already read
+(all passed), before the other 6.* Every run passes, both arms, including 243's two new tests
+that kill the keeper while its reaper arms. Any failure of `:815`, `:732` or the new tests would
+count against the fix.
+
+RESULT_PLACEHOLDER
+
 ## The fix (243, 2026-11-26; assigned by 133 on 118's reading of hypothesis 3)
 
 118 read the reaper (its section, "Hypothesis 1, 118, 2026-11-26", and the hypothesis 3
