@@ -265,3 +265,8 @@ custom directory is `gate/<its basename>`.
 133 approved it as written (2026-11-26). 243 had already cleaned its interrupted gate by hand,
 so the 7 fixture tests are the evidence. `scripts/gate_clean.sh` now takes `--notag` and `--dir
 <path>` as flags; the recipe passes `notag=true` and `dir=` through.
+
+**The fifth follow-up's outcome:** `gate ok cb9916f5a51562ba67cd4d0bdaf8214e7f578ff1 tree c7fd8f82
+on newslab-server-241 2026-11-26T17:00:21+08:00: build test check clean; Isaac lane ran (947
+tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29); carried
+ISAAC_ROOT`. Held: the 7 new tests and the 16 before (23) passed within `just test`.
