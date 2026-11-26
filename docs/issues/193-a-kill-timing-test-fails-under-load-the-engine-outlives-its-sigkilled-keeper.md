@@ -211,7 +211,21 @@ from 23:48:07). *Predictions, labelled: written at 00:20, with 4 of the 10 runs 
 that kill the keeper while its reaper arms. Any failure of `:815`, `:732` or the new tests would
 count against the fix.
 
-RESULT_PLACEHOLDER
+**Result (to 01:01:17):**
+
+| arm | runs | failures | tests per run | load average (1 min) |
+|---|---|---|---|---|
+| setsid | 5 | 0 | 881 passed, 5 skipped | about 31 to 41 |
+| plain | 5 | 0 | 881 passed, 5 skipped | about 31 to 35 |
+
+The predictions held: every run passed in both arms, with 243's two new tests (881 against
+879). The burn group was verified empty after each set. Like the baseline, this arm cannot tell
+the fix from no fix on its own; that is what 243's forcing tests do. It shows that the fix
+brings no new failure to the suite under this load, with or without setsid.
+
+**Logs.** On 118, in `/mnt/renegade/aeon/isaac-ex/i193/`: `times_tsuite.txt` (baseline),
+`times_tsuitefix.txt` and `times_tsuite_fix.txt` (the regression check and its build), with one
+pytest output per run in `tsuite/` and `tsuitefix/`, and `fixarm.sh`.
 
 ## The fix (243, 2026-11-26; assigned by 133 on 118's reading of hypothesis 3)
 
