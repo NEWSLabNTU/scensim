@@ -502,3 +502,27 @@ fixture_c5's builder does not make today: one more generated scenario file, or a
   its centreline, so the lane changes only the sign of y in the map, not the geometry NDT sees;
   kept as built, and the across errors are reported in the car's frame (+ left of the truth's
   heading), so R1 and R2 compare as the spec's sum and difference.
+
+**A standstill window (133, 2026-11-27, before R1).** In 118's run A (fixture_c6b, Isaac, stopped
+for 150 s) the kinematic state's x drifted 0.36 m along the track while the truth held within
+1 mm, and ekf_localizer warned "mahalanobis distance of pose topic is large" before each of 72
+MRMs. 241's untested guess: NDT is weakly constrained along a featureless straight. R1 and R3 now
+end 45 s after the ego first comes within 5 m of the goal (`reach_goal`'s `delay="45"`, which
+SSv2's interpreter honours: the condition's value 45 s earlier), so each stands still for 30 s or
+more at x about 570; R2 is unchanged. The window is the samples with the truth's speed under
+0.01 m/s after the stop.
+
+*Predictions, before R1.* fixture_c170 is flat and straight with no props: along the track NDT
+has nothing but the road's ends, which are 550 m or more behind and 30 m ahead (beyond the
+scan's useful range behind, within it ahead). So:
+- S1 (241's guess holds here): over the window the kinematic state's along position moves
+  0.1 m or more while the truth moves under 1 mm; across and z move under 0.01 m; NDT's
+  along position wanders more than its across (its sd along over 3 times its sd across); the
+  mahalanobis WARN appears in ekf_localizer's log in the window.
+- S2, what tells it apart: if NDT's along estimate holds within 0.02 m over the window, the
+  straight's lack of features does not move a stopped car's pose by itself, and run A's drift
+  needs another cause (its stop place, its features, or a moving input such as the twist).
+- Moving, for the same reason: NDT's along error has a larger spread than its across one over
+  the drive (sd along over 2 times sd across), whatever its across level is (G2).
+I expect S1 at the smaller end: with the goal 30 m from the road's end, the end wall of points
+is inside the scan, so some along constraint exists; the drift, if any, is under run A's 0.36 m.
