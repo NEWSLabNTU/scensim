@@ -15,6 +15,9 @@
 #         colcon-cargo-ros2 <v>; rustfmt <v>
 #     gate FAILED <sha> at <step>: <reason>
 #
+# A failed step's reason quotes its last line and, when there is one, its first rustfmt `Diff
+# in` or compiler `error` line, which names the file.
+#
 # GATE_JUST (default `just`) and GATE_STEPS (default "build test check") are for the gate's
 # own tests (scripts/test_gate.py), which run it against a stub.
 set -euo pipefail
@@ -65,7 +68,13 @@ for step in $STEPS; do
     out="$dir/gate-$step.out"
     # streamed into gate.log as it runs, so a long build can be watched (tail -f)
     if ! "${clean[@]}" "$JUST" "$step" 2>&1 | tee -a "$log" > "$out"; then
-        fail "$step" "\`just $step\` exited non-zero (last line: $(tail -1 "$out"))"
+        # the first rustfmt `Diff in` or compiler `error` line names the file, the last
+        # line is usually just's own `error: Recipe ... failed` (issue 191's follow-up)
+        last=$(tail -1 "$out")
+        first=$(grep -m1 -E '^(Diff in |error(\[E[0-9]+\])?: )' "$out" | sed "s|$dir/||g" || true)
+        why="last line: $last"
+        [ -n "$first" ] && [ "$first" != "$last" ] && why="$why; first: $first"
+        fail "$step" "\`just $step\` exited non-zero ($why)"
     fi
     status_clean "$step"
     if [ "$step" = test ]; then

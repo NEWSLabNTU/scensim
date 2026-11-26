@@ -7,9 +7,10 @@ GATE = Path(__file__).resolve().parent / "gate.sh"
 
 STUB = """#!/bin/bash
 # a stub `just`: STUB_FAIL=<step> fails that step, STUB_DIRTY=<step> changes a tracked file,
+# STUB_FIRST=<line> prints that line before a failing step's last one,
 # STUB_LANE=ran|skipped picks `just test`'s last line
 step=$1
-[ "${STUB_FAIL:-}" = "$step" ] && { echo "$step broke"; exit 3; }
+[ "${STUB_FAIL:-}" = "$step" ] && { [ -n "${STUB_FIRST:-}" ] && echo "$STUB_FIRST"; echo "$step broke"; exit 3; }
 [ "${STUB_DIRTY:-}" = "$step" ] && echo dirt >> tracked.txt
 if [ "$step" = test ]; then
     if [ "${STUB_LANE:-ran}" = ran ]; then
@@ -95,6 +96,16 @@ def test_a_failing_step_fails_the_gate(tmp_path):
     p, _ = gate(r, stub, tmp_path, STUB_FAIL="check")
     assert p.returncode == 1
     assert "at check: `just check` exited non-zero (last line: check broke)" in p.stderr
+    assert "first:" not in p.stderr
+
+
+def test_a_failing_step_quotes_its_first_diff_line(tmp_path):
+    r, stub = repo(tmp_path)
+    p, _ = gate(r, stub, tmp_path, STUB_FAIL="check",
+                STUB_FIRST="'Diff in src/profiles.rs:521:'")
+    assert p.returncode == 1
+    assert ("(last line: check broke; first: Diff in src/profiles.rs:521:)"
+            in p.stderr), p.stderr
 
 
 def test_an_existing_directory_is_refused(tmp_path):

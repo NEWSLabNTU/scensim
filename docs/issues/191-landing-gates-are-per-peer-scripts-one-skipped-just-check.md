@@ -126,3 +126,15 @@ error: recipe \`check\` failed with exit code 1)`. Build and test passed with cl
   instead: a miss. A summary naming the first `Diff in` or `error` line of the failing step is
   a small follow-up.
 - The stub tests (7) pass in `just test`: held.
+
+## The follow-up: the summary quotes the failing step's first error (241, 2026-11-26)
+
+On rebasing onto a6d8b2a4 (243's K9f-a), a failed step's reason keeps its last line and adds
+the step's first rustfmt `Diff in` or compiler `error` line (`error:` or `error[E...]:`), the
+worktree's path cut off, when it differs from the last line. A stub test covers it (8 tests).
+
+**Predictions, before the runs:**
+- `just gate` on this commit passes on 241 in 35 to 45 min, with the Isaac lane run; 243's
+  K9f-a adds tests, so the lane's count may be above 937.
+- `GATE_STEPS=check` on 550a8b41 fails at check, its summary line ending `first: Diff in
+  src/scenario_world_bridge/src/backend/remote/profiles.rs:521:)`.
