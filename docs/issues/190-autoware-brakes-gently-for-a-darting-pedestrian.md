@@ -663,3 +663,51 @@ from a simulator (Isaac Sim with scensim), stated as such.
 > include: not linking the deceleration check to mode availability (or linking it only when the
 > trajectory is otherwise invalid), handling it with the last valid trajectory, or an MRM that
 > does not brake softer than the current command.
+
+## The fix: a -6 m/s^2 emergency stop (the user's choice (b), 2026-11-27; 243)
+
+**What changes** (autoware_sim_vehicle 9254db7, not yet pushed; then the pins). On Autoware
+1.5.0 the profile ships two copies of upstream files and makes each a launch argument:
+- `mrm_emergency_stop_operator_param_path` (new) defaults to
+  `PROF/config/system/mrm_emergency_stop_operator/mrm_emergency_stop_operator.param.yaml`:
+  `target_acceleration: -6.0` (upstream -2.5), `target_jerk: -12.0` (upstream -1.5).
+- `vehicle_cmd_gate_param_path` (already an argument) defaults to
+  `PROF/config/control/vehicle_cmd_gate/vehicle_cmd_gate.param.yaml`:
+  `nominal.lon_acc_lim_for_lon_vel: [6.0, 6.0, 6.0, 4.0]` (upstream [5.0, 5.0, 5.0, 4.0]) and
+  `nominal.lon_jerk_lim_for_lon_acc: [80.0, 12.0, 12.0, 4.0]` (upstream [80.0, 5.0, 5.0, 4.0]),
+  at the reference speeds [0.1, 0.3, 20, 30] m/s. Everything else is upstream's.
+
+On 2.x both arguments keep upstream's files (the copies are 1.5.0's). Checked with `ros2 launch`
+on a file holding the same `let`s and arguments: under 1.5.0 they resolve to the profile's
+copies, under 2.1.0 to `autoware_control_config`'s gate file and `autoware_launch`'s operator
+file, as before. The trajectory checker stays stock: the validator still ends the autonomous
+mode on a stop past -9.8 m/s^2; what follows now brakes hard.
+
+**Why the gate too.** The gate replaces the controller's command with the emergency one and
+then still applies its limit filter to it (`vehicle_cmd_gate.cpp`, `publishControlCommands`,
+`enable_cmd_limit_filter: true`). With upstream's gate, a -6.0 target would leave it as -5.0,
+rising at 5 m/s^3. **The gate's filter bounds normal driving as well**, so its ceiling rises
+from 5.0 m/s^2 and 5 m/s^3 to 6.0 and 12 below 20 m/s. The planner's own limits (the velocity
+smoother's) still bound normal driving; the reruns check that its peaks stay under the old
+ceiling.
+
+**The jerk.** At -1.5 m/s^3 the operator would take 4 s to reach -6. At -12 it takes 0.5 s from
+0, and 0.26 s from the -2.9 the controller was commanding in (c) at the takeover. Production
+automatic emergency braking reaches full braking (about -9 m/s^2) in roughly 0.2 to 0.4 s, 20
+to 40 m/s^3, so -12 is on the gentle side of that.
+
+**Predictions for the reruns, (b), (c) and (d) on the fix** (the same testbenches, with the
+system topics recorded as in the trigger run; written before any of them runs):
+- G1: in each, the MRM is raised by the planning validator's deceleration check, as before, and
+  the emergency command goes to -6.0 within 0.3 s of the takeover.
+- G2: the gate's output follows it (-6.0, not -5.0), and the deceleration measured at the car
+  (the derivative of `/vehicle/status/velocity_status`, and of the wheel speeds in
+  `/scensim/wheels`) passes -5.0 m/s^2 within 0.5 s of the takeover.
+- G3, (c): no contact. At (c)'s takeover the ego was at 5.5 m/s with about 5.5 m to the walker
+  (from the -2.50 run: 5.5 to 1.58 m/s); at -6.0 after a 0.26 s ramp it stops in about 3 m.
+- G4, (d): at best a stop just short; more likely a contact under 1 m/s. Its takeover came at
+  4.84 m/s with about 2.2 m to the walker, and a -6.0 stop needs about 2.2 m.
+- G5, (b): a contact under 1.5 m/s, or a stop just short; its takeover came 0.55 s before the
+  contact, at about 3.4 m/s.
+- G6: outside the emergency, the gate's command never exceeds 5.0 m/s^2 nor 5 m/s^3 in any of
+  the three runs (normal driving stays under the old ceiling).
