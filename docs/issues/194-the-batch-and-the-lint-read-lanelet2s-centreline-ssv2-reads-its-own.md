@@ -345,3 +345,40 @@ Predictions, before any run:
   route.
 - I lean to the second (55 %). At 2.5 m the Catmull-Rom error on a curve of 8.8 m radius is well
   under a millimetre, too little for 1.15 cm.
+
+The result (2026-11-26; the lead in follow_to_goal; NAS `2026-11-26 194 review (241)/step9/`):
+
+| route points (spacing) | v2 max, at step | v2 RMS | v3 max, at step | v3 RMS | v3 steps over 2 cm |
+|---|---|---|---|---|---|
+| 121 (2.5 m), step 8's | 2.81 cm, 1094 | 1.37 cm | 3.96 cm, 1000 | 0.99 cm | 20 |
+| 151 (2.0 m) | 3.32 cm, 1219 | 1.36 cm | 3.96 cm, 1000 | 0.96 cm | 12 |
+| 301 (1.0 m) | 3.32 cm, 1220 | 1.36 cm | 4.09 cm, 998 | 0.96 cm | 12 |
+| 601 (0.5 m) | 3.32 cm, 1220 | 1.36 cm | 3.96 cm, 1000 | 0.96 cm | 18 |
+
+The control (121) reproduces step 8 to the digit. Every row's outcome was passed/passed.
+
+**The predictions:**
+- **Failed:** the hypothesis. v3's maximum does not fall with the spacing; it is 3.96 cm at
+  0.5 m. The route's sampling is not the cause.
+- **Held:** the follower stays at 2.46 cm at every spacing.
+- **Failed:** "v2 moves less". v2's maximum rises from 2.81 to 3.32 cm once the samples are 2 m
+  apart or closer. Its 2.81 cm at 2.5 m was partly the sampling's luck.
+- So, on sampling-converged routes, the comparison is v2 3.32 cm against v3 3.96 cm (RMS 1.36
+  against 0.96), not 2.81 against 3.96.
+
+**The error is along the route, not across it.** At 0.5 m, in the seats lead's frame:
+- lateral: +0.44 cm on both exports, through and after the turn;
+- along-track: v2 lags by a steady 2.77 cm from step 998 on;
+- along-track, v3: lags 0.54 cm at step 990, then 2.02, 2.89 and 3.93 cm (step 1000, the
+  42664 → 32582 join), then recovers to 1.74 cm by step 1010. A transient of about 2 cm at the
+  lanelet change.
+
+That points at arc-length bookkeeping at the lanelet change:
+- SSv2 carries an entity's `s` from one lanelet's own spline onto the next one's;
+- the batch advances along one spline joined over the route's lanelets, whose length near the
+  joint differs from the two per-lanelet lengths.
+
+This is the second prediction's mechanism, made along-track. It is not measured yet. The next
+cheap test (CPU only): the per-lanelet spline lengths of 42664 and 32582 on the v3 line against
+the joined spline's arc length between the same points. If the difference is about 2 cm, it is
+the transient. Still a batch-model detail for 092 K2.4; 194's line is not the cause.
