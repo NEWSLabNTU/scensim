@@ -729,3 +729,50 @@ Two readings, on c1 (behind) and c2 (level), 30 or so dumped revolutions each.
 - *The sector test:* level c2 flat within 0.02 m. Behind c1 shows a step (stitch) or a ramp
   (in-cloud motion), or is flat with its whole revolution shifted by about -0.1 m if the render
   pose lags as a whole.
+
+## Step 8's result (2026-11-26, offline; after the predictions above)
+
+Read on step 7's dumps: c1 (behind, 32 revolutions from 60 s) and c2 (level, 33). Scripts
+`render_pose.py` and `sectors.py`.
+
+**1. The render pose against the truth at the stamp.** Over the revolutions above 3.5 m/s, the render
+pose's along offset from the truth (base_link at the stamp plus the mount) was:
+
+| run | mode | along, p50 | as a time | across | z |
+|---|---|---|---|---|---|
+| c1 | behind | +0.1213 m | 29.4 ms ahead | +0.0003 m | -0.059 m |
+| c2 | level | +0.1228 m | 29.5 ms ahead | +0.0001 m | -0.060 m |
+
+- *The offset in the render pose (c1 minus c2 about -0.1 m):* **FAILED.** c1 minus c2 is
+  -0.0015 m. The render pose stands in the same place against the stamp in both modes.
+- Both are 0.12 m ahead of my truth reference, which the level mode's NDT (about -0.008 m) does not
+  show. So my reference (the ego trace's body point, and the mount on it) is off by a constant. It
+  is the same in both runs and does not bear on the comparison. It is not resolved here.
+
+**2. The sector test.** The along shift of each sector that best fits the map, the median over the
+revolutions, by firing-time sector 1 to 16:
+
+- c1 (behind): +0.01 +0.005 0.00 -0.01 0.00 +0.01 -0.01 -0.03 -0.05 -0.08 -0.035 0.00 +0.01 +0.01
+  +0.01 +0.02 (whole: 0.00)
+- c2 (level): +0.01 +0.01 +0.01 +0.01 0.00 -0.04 -0.04 -0.04 -0.04 -0.05 -0.03 +0.01 +0.01 +0.01
+  0.00 +0.01 (whole: -0.01)
+
+Against the predictions:
+- *Level c2 flat within 0.02 m:* **mostly held.** Sectors 6 to 11 dip by -0.03 to -0.05 m. The
+  same dip is in c1, so it belongs to the scene's geometry in those directions, not to a mode.
+- *Behind c1 shows a step of about 0.21 m (a stitch) or a ramp across the revolution (in-cloud
+  motion):* **both FAILED.** c1 is flat like c2. Its dip at sectors 8 to 10 (-0.05 to -0.08 m) is a
+  little deeper than c2's, with quartiles that overlap.
+- *So the third branch, as written before the reading:* the cloud aib publishes fits the map at its
+  render pose in both modes, and the render pose stands the same against the stamp in both. **The
+  offset is downstream of aib's published cloud**, in what Autoware does with it. H-e (the stitch)
+  FAILED, and the in-cloud motion alternative FAILED.
+
+**The limits.** This is one behind run and one level run. The dumps start at 60 s, after the mode
+is set, which suits a mode held for the whole run. The probe was costly in both runs, and equally.
+
+**Next (to plan with 133).** The offset is between aib's published cloud and NDT's output. Its
+candidates are the preprocessing (the crop box, the downsampling, the transform to base_link at
+the stamp) and NDT's own use of time (the initial guess's interpolation, and the pose it stamps).
+The record to take, in a pair of runs: the cloud NDT gets (the downsampled, preprocessed cloud),
+NDT's initial pose and its debug outputs, and the TF it uses, in one behind run and one level run.
