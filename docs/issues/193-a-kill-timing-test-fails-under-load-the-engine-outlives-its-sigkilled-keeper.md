@@ -1,7 +1,7 @@
 # 193: a kill-timing test fails under load: the engine outlives its SIGKILLed keeper
 
-**Status:** open (243; numbered by 133, 2026-11-26); recorded, not investigated. The first
-hypothesis is planned below; it runs after 190 (d)'s pin landing, CPU only.
+**Status:** open (243; numbered by 133, 2026-11-26). Cause found (hypothesis 3, the reaper's
+handover order) and fixed on branch `i193-fix`, which is gating; see "The fix" below.
 **Severity:** a gate failure on code the change did not touch; it stops a landing (issue 166's
 rule for this class). Whether CARLA's engine can really outlive a killed keeper in use is open.
 **Found:** 2026-11-26, scensim 243, `just gate` on b48261bd (190 (d)'s pins, R4).
@@ -126,3 +126,14 @@ imports and the whole first scan. Both tests (`:732` and `:815`) take "a pidfd i
 - P3. After the change, `test_simulator.py` passes whole, `:732` and `:815` included, now
   waiting on the ready file.
 - P4. `just gate` on the fix passes.
+
+**Results (243, 2026-11-26, newslab-server243; scensim's tests in a clean environment with the
+9ed62536 install sourced for the car packages).**
+- P1 and P2: held. On the reaper before the change (commit 1d209a65, the pause and the two
+  tests), both new tests failed 3 of 3, each with "CARLA outlived a keeper SIGKILLed while its
+  reaper was at startup" (and "at scan"). After the change, both passed 3 of 3, as did every
+  reaper and keeper test in `test_simulator.py` (11 passed, 3 runs). No test process was left
+  behind by any run.
+- P3: held. `test_simulator.py` whole: 47 passed, 2 skipped, twice. The two skips are the
+  existing ones (`:574`, no carla-1.0 catalog in this sim_vehicle_spec).
+- P4: the gate is recorded below when it ends.

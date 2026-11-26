@@ -754,7 +754,9 @@ class Carla:
                                              preexec_fn=_carla_child)
             finally:
                 fh.close()
-            self.reaper = start_reaper(self.proc.pid)
+            ready = self.proc_dir / REAPER_READY
+            ready.unlink(missing_ok=True)   # a respawn's reaper is not armed until it says so
+            self.reaper = start_reaper(self.proc.pid, ready=ready)
         self.t_start = time.time()
         self.next_probe = 0.0
         self.due = None
@@ -848,20 +850,32 @@ def _carla_child():
 
 
 REAP_GRACE = 20.0   # a CARLA whose keeper died: SIGTERM, this long, then SIGKILL
+REAPER_READY = Path("simulator") / "carla.reaper.ready"   # beside LOG: the reaper is armed (193)
 
 
-def start_reaper(pid, grace=REAP_GRACE):
+def _reaper_child():
+    """The reaper before exec: SIGTERM blocked, then SIGTERM when the keeper dies. The blocked
+    mask survives exec, so a keeper that dies while the reaper starts leaves its SIGTERM
+    pending until reap() has a handler for it, instead of killing the reaper (issue 193)."""
+    signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM})
+    _die_with_parent()
+
+
+def start_reaper(pid, grace=REAP_GRACE, ready=None):
     """A watcher for the CARLA at ``pid`` that ends it when the keeper dies. The parent-death
     signal reaches only the launcher (CarlaUE4.sh runs the engine as its child, and a fork
     clears that signal), UE's graceful exit can hang, and play_launch SIGKILLs the keeper
     seconds after SIGTERM, before its own SIGKILL to CARLA: the watcher, in its own session
     (play_launch's stop does not reach it), ends every process of CARLA's group instead (issue
-    133). None if it cannot start (CARLA then has only its parent-death signal)."""
+    133). With ``ready``, the reaper writes that file once it is armed (issue 193). None if it
+    cannot start (CARLA then has only its parent-death signal)."""
+    argv = [sys.executable, "-m", "scensim.simulator", "reap", str(pid),
+            "--grace", str(grace), "--parent", str(os.getpid())]
+    if ready is not None:
+        argv += ["--ready", str(ready)]
     try:
-        return subprocess.Popen([sys.executable, "-m", "scensim.simulator", "reap", str(pid),
-                                 "--grace", str(grace), "--parent", str(os.getpid())],
-                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                start_new_session=True, preexec_fn=_die_with_parent)
+        return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                start_new_session=True, preexec_fn=_reaper_child)
     except OSError:
         return None
 
@@ -946,20 +960,36 @@ def _test_pause(where):
         time.sleep(float(seconds))
 
 
-def reap(pid: int, parent: int, grace: float = REAP_GRACE, poll: float = 1.0) -> int:
+def _write_ready(path):
+    if path is None:
+        return
+    tmp = Path(f"{path}.tmp")
+    tmp.write_text(f"{os.getpid()}\n")
+    os.replace(tmp, path)
+
+
+def reap(pid: int, parent: int, grace: float = REAP_GRACE, poll: float = 1.0,
+         ready=None) -> int:
     """Wait while ``parent`` (the keeper) lives; then SIGTERM every process of CARLA's group
     (``pid``'s), wait ``grace`` seconds, SIGKILL those left. Each held by a pidfd (_Members):
     a pid or group id used again is never signalled. Returns at once when CARLA's group ends
     first (its keeper stopped it), though its launcher ending alone is not that (issue 133:
-    the launcher dies of the parent-death signal before the engine under it)."""
+    the launcher dies of the parent-death signal before the engine under it).
+
+    The SIGTERM handler is in place, and SIGTERM unblocked (start_reaper blocks it), before
+    the first pidfd is opened: a keeper that died while the reaper started or scanned has
+    its parent-death SIGTERM delivered here, not at the default disposition (issue 193).
+    Then ``ready``, when given, is written. The handlers and the mask are put back on return."""
+    gone = {"now": False}
+    old_term = signal.signal(signal.SIGTERM, lambda *_: gone.update(now=True))
+    old_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    old_mask = signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGTERM})
     members = _Members(pid)
     try:
         if not members.scan():
             return 0
         _test_pause("scan")
-        gone = {"now": False}
-        signal.signal(signal.SIGTERM, lambda *_: gone.update(now=True))
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        _write_ready(ready)
         while not gone["now"] and os.getppid() == parent:
             members.wait(poll)
             if not members.scan():
@@ -976,6 +1006,9 @@ def reap(pid: int, parent: int, grace: float = REAP_GRACE, poll: float = 1.0) ->
         return 0
     finally:
         members.close()
+        signal.signal(signal.SIGTERM, old_term)
+        signal.signal(signal.SIGINT, old_int)
+        signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
 
 
 def _exit_pending(proc) -> bool:
@@ -1016,9 +1049,10 @@ def main(argv=None) -> int:
     r.add_argument("pid", type=int)
     r.add_argument("--parent", type=int, required=True)
     r.add_argument("--grace", type=float, default=REAP_GRACE)
+    r.add_argument("--ready", help="a file written once the reaper is armed (issue 193)")
     a = ap.parse_args(argv)
     _test_pause("startup")
-    return reap(a.pid, a.parent, a.grace)
+    return reap(a.pid, a.parent, a.grace, ready=a.ready)
 
 
 if __name__ == "__main__":

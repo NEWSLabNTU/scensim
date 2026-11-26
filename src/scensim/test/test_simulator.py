@@ -741,8 +741,7 @@ def test_a_carla_deaf_to_sigterm_is_killed_after_its_keeper(tmp_path):
                               "import os, signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
                               "open({str(pidfile)!r}, 'w').write(str(os.getpid())); time.sleep(120)"],
                              start_new_session=True, preexec_fn=simulator._die_with_parent)
-        r = simulator.start_reaper(p.pid, grace=1.0)
-        open({str(pidfile)!r} + ".reaper", "w").write(str(r.pid))
+        r = simulator.start_reaper(p.pid, grace=1.0, ready={str(pidfile)!r} + ".ready")
         time.sleep(120)
     """))
     root = str(Path(sim.__file__).resolve().parents[1])
@@ -753,21 +752,15 @@ def test_a_carla_deaf_to_sigterm_is_killed_after_its_keeper(tmp_path):
         time.sleep(0.05)
     assert pidfile.exists(), "the stand-in CARLA never started"
     child = int(pidfile.read_text())
-    # the reaper is up once it holds CARLA's pidfd: a fixed 1 s raced a loaded host, whose
-    # keeper was killed before the reaper watched
-    rfile = Path(str(pidfile) + ".reaper")
+    # the reaper is up once it says it is armed (issue 193): a fixed 1 s raced a loaded host,
+    # and a pidfd in its /proc fd list came before its SIGTERM handler
+    ready = Path(str(pidfile) + ".ready")
     deadline = time.time() + 30
-    while time.time() < deadline:
-        if rfile.exists() and rfile.read_text():
-            fds = Path(f"/proc/{int(rfile.read_text())}/fd")
-            try:
-                if any(os.readlink(f) == "anon_inode:[pidfd]" for f in fds.iterdir()):
-                    break
-            except OSError:
-                pass
+    while time.time() < deadline and not ready.exists():
         time.sleep(0.05)
-    else:
-        raise AssertionError("the reaper never watched the stand-in CARLA")
+    if not ready.exists():
+        keeper.kill()
+        raise AssertionError("the reaper never said it was armed")
     keeper.kill()
     keeper.wait()
     if gone(child, within=15):   # an orphan: a zombie counts as gone (issue 153)
@@ -887,26 +880,20 @@ def test_the_engine_under_the_launcher_dies_with_a_sigkilled_keeper(tmp_path):
         c = simulator.Carla({{"root": {str(root)!r}, "host": "127.0.0.1",
                               "port": {free_port()}}}, {str(tmp_path / "proc")!r})
         c.start()
-        open({str(tmp_path / "reaper")!r}, "w").write(str(c.reaper.pid))
         time.sleep(120)
     """))
     src = str(Path(sim.__file__).resolve().parents[1])
     keeper = sp.Popen([sys.executable, str(script)],
                       env=dict(os.environ, PYTHONPATH=src + os.pathsep + os.environ.get("PYTHONPATH", "")))
-    started, rfile = root / "started.json", tmp_path / "reaper"
+    started, ready = root / "started.json", tmp_path / "proc" / sim.REAPER_READY
     deadline = time.time() + ceiling()
-    while time.time() < deadline:   # the engine up, and the reaper watching it
-        if started.exists() and rfile.exists() and rfile.read_text():
-            try:
-                fds = [os.readlink(f) for f in Path(f"/proc/{rfile.read_text()}/fd").iterdir()]
-            except OSError:
-                fds = []
-            if "anon_inode:[pidfd]" in fds:
-                break
+    while time.time() < deadline:   # the engine up, and the reaper armed (issue 193)
+        if started.exists() and ready.exists():
+            break
         time.sleep(0.05)
     else:
         keeper.kill()
-        raise AssertionError("the fake CARLA never started under a watching reaper")
+        raise AssertionError("the fake CARLA never started under an armed reaper")
     engine = json.loads(started.read_text())["pid"]
     keeper.kill()
     keeper.wait()
