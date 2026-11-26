@@ -476,3 +476,22 @@ today), or a new one here. Each run: Isaac Sim 6.2 with the world (the fixture's
 about 12 GB free on the card held for 2 minutes, about 10 to 15 minutes of card time; three runs.
 The scenario's second direction (R2) needs the `scenario` step's route in the other lane, which
 fixture_c5's builder does not make today: one more generated scenario file, or a hand-written one.
+
+**G1's scope, and the build (2026-11-27, before any run; 133's approval and notes).**
+- *Which prim each side reads.* The world server's truth for the ego is aib's `Ego.state`
+  (`scensim_isaac_world/world.py`, the ego's `state.position` and `state.quat` in each step's
+  reply), and aib's GNSS is computed from the same `state` (`aib/isaac/sensors.py`, `Gnss`,
+  `gnss_reading(state, ...)`). Both read the same PhysX body through the same object. So G1
+  checks the transforms between them (the GNSS antenna's lever, the projector to latitude and
+  longitude and back, gnss_poser), not which prim the truth is. G1 is kept as that check.
+- *As built (kept off main and off the NAS datasets).* The course yaml is
+  `/var/tmp/aeon/170/fixture_c170.yaml`: fixture_c5's datum and road, `plan: [{straight: 600.0}]`,
+  `grade: 0.0`, `terrain_below: 0.30`, `crown: 0.0`, every section term 0. Built by
+  `python3 -m scensim_isaac_world.course fixture_c170.yaml <map dir> centreline geometry record`,
+  then `$ISAAC_ROOT/venv/bin/python -m scensim_isaac_world.course.usd fixture_c170.yaml <map dir>`,
+  then the `maps` and `scenario` steps: 600 m, lanelets 6 along and 6 back, 801,548 map points.
+  R1 and R3 use the builder's scenario (start x 20, y +1.62, the left lane, heading 0, to x 570);
+  R2 is a copy with start x 580, y -1.62, heading pi, to x 30. The project is a copy of
+  `scenarios/projects/courses` (drift_mustang under Autoware, aib's drift_mustang rig, as the
+  Haruna runs) with the fixture linked as `assets/maps/fixture_c170`, no judges, and the topics
+  above. The install is a clean build of main fcc01e50 (acb's workspace, then scensim's).
