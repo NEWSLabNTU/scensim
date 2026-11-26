@@ -702,3 +702,30 @@ expected.
 - dump_c1 (behind) and dump_c2 (level) hold the revolutions from the 1200th on: about 124,000
   points each in the sensor frame, with the per-point time, azimuth and tick, and the render
   transform.
+
+## Step 8's plan, offline on step 7's dumps (written 2026-11-26, before any reading; 133)
+
+Two readings, on c1 (behind) and c2 (level), 30 or so dumped revolutions each.
+
+1. **The render pose against the truth (133's direct check, first).** Each dump's render
+   transform (the sensor's world pose the annotator traced from) against the truth for the scan
+   it is published as. The truth is the ego trace's base_link pose with the rig's lidar mount
+   (0.9, 0, 2.0 m) at the published stamp. That stamp is the clock of the frame `latency` frames
+   (2, 0.100 s) before the read. Read along and across the truth's heading, and divide the along
+   offset by the truth's speed to give a time.
+2. **The sector test.** Each revolution is split into 16 sectors by firing time. Each sector's
+   points are placed with the render transform. Its along-track shift against the Haruna map near
+   the car is found by a 1-D search over +/-0.4 m that minimises the median nearest-neighbour
+   distance. Read the shift against firing time.
+
+**Predictions (before any reading).**
+- *If the offset is in the render pose:* c1's render pose lags the truth at its stamp by about
+  24 ms x v (about 0.10 m at cruise), and c2's lags by under 5 ms x v (under 0.02 m). The along
+  difference c1 minus c2 is -0.08 to -0.12 m at cruise.
+- *If the render poses agree (both within 0.02 m of the truth):* the offset is not in where the
+  render was traced from. Then the sector test decides. A step between sectors means a stitch, a
+  ramp means motion in the cloud, and flat in both runs means the cloud is right and the offset
+  is downstream of aib's published cloud (NDT's or the EKF's use of it).
+- *The sector test:* level c2 flat within 0.02 m. Behind c1 shows a step (stitch) or a ramp
+  (in-cloud motion), or is flat with its whole revolution shifted by about -0.1 m if the render
+  pose lags as a whole.
