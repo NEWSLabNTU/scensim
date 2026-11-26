@@ -507,3 +507,41 @@ pose for the scan's stamp) is late or extrapolated when the car starts. NDT then
 neighbouring minimum about 0.09 m behind, and the EKF, fed by it, holds it. The test reads NDT's
 initial guess and its result at the first moving scans, against the truth, in this set's records
 (`pose_with_covariance`, the EKF's pose, `/initialpose3d`, all recorded), before any new run.
+
+## Step 6's plan, H-d offline (written 2026-11-26, before any reading; for 133)
+
+No runs. Read from the records already taken: step 5's ten runs (6 behind, 4 level) and step 2's
+r3 to r9 (2 behind, 5 level; r1 and r2 recorded no NDT pose). Each has NDT's
+`pose_with_covariance`, the EKF's pose (`/localization/pose_twist_fusion_filter/pose`),
+`/localization/kinematic_state`, `/initialpose3d`, and the truth trace (ego_trace).
+
+**The readings.**
+1. *The initial guess at the first moving scans.* NDT's initial guess for a scan is the EKF's pose
+   for the scan's stamp. For each NDT output in the 3 s after the car starts to move (truth speed
+   over 0.2 m/s):
+   - the EKF's pose interpolated at the scan's stamp, against the truth at that stamp (the guess's
+     along error);
+   - NDT's result against the truth (its along error);
+   - the guess's staleness: the scan's stamp less the newest EKF pose stamp the record had
+     received before NDT's output was received (bag receive time), as near as the record allows.
+2. *Offset against speed, the whole run.* In each behind run, NDT's along error against the
+   truth's speed, fitted as along = a + b v. A time offset gives a near 0 and b near -0.019 s. A
+   position offset gives b near 0 and a near -0.09 m.
+3. *The size of the step.* The truth's speed at the first moving scan whose result is behind,
+   times the scan period (0.050 s), against the offset. The ND voxel resolution (2.0 m, the
+   profile's `ndt_scan_matcher` resolution) for comparison.
+
+**Predictions (before any reading).**
+- *H-d:* in the behind runs, the first moving scans' guess is stale by at least one scan period
+  (50 ms or more) and its along error is -0.05 m or worse. In the level runs it is fresher (under
+  50 ms) and within -0.03 m. NDT's result is behind from that scan on.
+- *The falsifier (133):* if the level runs show the same initial-guess error and staleness at the
+  first moving scans as the behind runs, H-d **fails**.
+- *Which step is predicted:* **the scan-period step at start speed**, not a voxel. The offset
+  (0.085 to 0.095 m) is 4 to 5 % of the 2.0 m voxel, so no voxel step is predicted. One scan
+  period at the speed of the first stale guess is predicted: 0.09 m at 1.8 m/s. If the readings
+  put that speed at 1.5 to 2.2 m/s, the step matches.
+- *Reading 2:* H-d, a neighbouring minimum that NDT and the EKF then hold, predicts a **position**
+  offset: b within 0.005 s of 0, and a within 0.02 m of the run's along median. If instead b is
+  near -0.019 s and a near 0, the offset is a time offset (step 2's first reading). H-d's "held
+  minimum" then fails, and the mode is a lag held in the EKF.
