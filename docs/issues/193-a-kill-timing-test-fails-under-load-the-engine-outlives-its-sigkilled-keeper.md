@@ -136,4 +136,12 @@ imports and the whole first scan. Both tests (`:732` and `:815`) take "a pidfd i
   behind by any run.
 - P3: held. `test_simulator.py` whole: 47 passed, 2 skipped, twice. The two skips are the
   existing ones (`:574`, no carla-1.0 catalog in this sim_vehicle_spec).
+- The block is not inherited (133's check). Only the reaper's own `preexec_fn`
+  (`_reaper_child`) blocks SIGTERM; CARLA's launcher keeps its own (`_carla_child`, no
+  block), and the keeper's mask is never touched. The reaper starts no process: it only
+  signals through pidfds. And `reap()` unblocks SIGTERM before anything else. `:815` now
+  asserts it from `/proc/<pid>/status` SigBlk: SIGTERM is not blocked in the armed reaper, nor
+  in the engine under the launcher. The helper was checked once by hand to see a blocked
+  child as blocked. The reaper and keeper tests: 11 passed, 3 runs; the file: 47 passed,
+  2 skipped.
 - P4: the gate is recorded below when it ends.

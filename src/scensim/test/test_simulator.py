@@ -4,6 +4,7 @@ No CARLA runs here: a fake CarlaUE4.sh (a shell launcher with a Python child, as
 has) answers msgpack-rpc ``version`` on its -carla-rpc-port."""
 import json
 import os
+import signal
 import socket
 import stat
 import sys
@@ -895,9 +896,20 @@ def test_the_engine_under_the_launcher_dies_with_a_sigkilled_keeper(tmp_path):
         keeper.kill()
         raise AssertionError("the fake CARLA never started under an armed reaper")
     engine = json.loads(started.read_text())["pid"]
+    # issue 193: the reaper starts with SIGTERM blocked; the armed reaper has unblocked it, and
+    # nothing CARLA runs inherits the block (it would survive the reaper's SIGTERM)
+    assert not _sigterm_blocked(int(ready.read_text())), "the armed reaper still blocks SIGTERM"
+    assert not _sigterm_blocked(engine), "the engine was started with SIGTERM blocked"
     keeper.kill()
     keeper.wait()
     assert gone(engine, within=15), "the engine outlived its SIGKILLed keeper (issue 133)"
+
+
+def _sigterm_blocked(pid) -> bool:
+    for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+        if line.startswith("SigBlk:"):
+            return bool(int(line.split()[1], 16) & (1 << (signal.SIGTERM - 1)))
+    raise AssertionError(f"/proc/{pid}/status has no SigBlk")
 
 
 def test_a_group_whose_members_ended_is_never_signalled(monkeypatch):
