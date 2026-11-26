@@ -976,3 +976,75 @@ mode is set in. That is a small load added where the latch forms, recorded here 
   fit displaced by that much, or as a per-point difference of that size where the truth agrees.
 - *If they do not (and 172 is parked, 133):* (i) and (ii) agree between the runs within 5 ms x v
   in every bin of the first 4 s, and (iii) gives a median per-point difference under 0.01 m.
+
+## Step 9 (a)'s result, partial (2026-11-26, 118, GPU0, 14:34:32 to 15:12:21; codec told)
+
+**The runs.** Three runs, all rc=0, burn.py 24, aib 3a4f265 with the probe on and 276 dumps
+each: r1 level (NDT along -0.0003 m), r2 level (-0.0015), r3 behind (-0.0917). The pair was
+complete after r3. The GPU logger saw a foreign process at the r1 and r2 starts, but it was on
+GPU1 (094's), not GPU0.
+
+**Reading (iii) as planned: FAILED (a design failure).** The behind run r3 started moving
+0.75 s earlier than the level run r2 (t_move 1010.05 s against 1010.80 s, speed over 0.2 m/s). At
+the same revolution index the two cars' truth positions therefore differ from revolution 194 on,
+by up to 3.07 m. The 0.01 m condition holds only at the stand (revolutions 150 to 192). There the
+two clouds are identical: NN median 0.0000 to 0.0001 m, best along shift 0.000 m, render poses
+0.0000 m apart. That says nothing about motion.
+
+**Amendment, written after the result above (133's OK).** Each behind revolution is paired with
+the level revolution whose render position is nearest (`cmp9a_world.py`). Both clouds are put
+into the world frame through their own render transforms. The reading is the shift along the
+sensor's x axis (-0.30 to +0.30 m in 0.005 m steps) that best fits behind's cloud onto level's,
+together with the NN median. If each cloud is rendered where its transform says it is, the shift
+is 0 whatever the two poses are. 20,000 points are sampled per cloud, from 4 to 50 m. Every 2nd
+behind dump was used, 135 pairs.
+
+| phase (behind's revolutions) | pairs | shift median (m) | shift range (m) | NN median (m) | pair distance median (m) |
+|---|---|---|---|---|---|
+| stand (150 to 194) | 12 | -0.0075 | -0.020 to +0.015 | 0.0827 | 0.0000 |
+| first 4 s of motion (196 to 274) | 20 | -0.0025 | -0.020 to +0.015 | 0.0843 | 0.0461 |
+| after (276 to 688) | 103 | -0.0050 | -0.040 to +0.040 | 0.1065 | 0.0704 |
+
+The shift's noise floor at the stand is ±0.02 m, which is 10 ms x 2 m/s. So this resolves the
+predicted 10 ms x v only above about 2 m/s, which is the second half of the first 4 s. In that
+range, and at cruise (24 ms x 4.2 m/s = 0.10 m), no shift reaches the size predicted for the
+behind mode. Read against the predictions: the behind run's clouds sit where their render
+transforms put them, as the level run's do, to within the floor. Readings (i) (render pose
+against truth) and (ii) (sector test) have not been run yet. The NN median grows with speed in
+both comparisons alike (motion smear), with no step between the phases.
+
+**Order (labelled).** This amended reading was run before 133's next request (step 10 below)
+arrived, which had asked for step 10 to come first.
+
+## Step 10's plan: motion start against localization readiness (written 2026-11-26, before any reading; 133)
+
+**The question (133).** The behind run began moving 0.75 s earlier than the level one. Does
+the behind mode go with the car starting to move sooner after localization starts, or before
+NDT's first converged result? A latch formed by "motion began before localization settled" fits
+everything so far. Contention delays localization's start-up, and the scenario's start trigger
+does not wait for it.
+
+**The runs.** Every run of this testbench whose record has the localization topics: from
+2026-11-25T19-24-58 on, steps 3, 4, 5, 7, 9 (3) and 9 (a). The two earliest (19-05-33 and
+19-14-40) have no NDT pose and are left out. Each run's mode is the start-up script's
+(`startup172.py`: NDT along in the first 30 s of motion < -0.05 m means behind), as in
+`run_all9`.
+
+**Readings, per run, in sim time.**
+- t_init: the first `/initialpose3d`;
+- the `/localization/initialization_state` change to INITIALIZED;
+- the first NDT pose (`pose_estimator/pose_with_covariance`), and the first NDT pose whose
+  `iteration_num` is under 10 with NVTL at least 2.3 (converged);
+- the first EKF pose;
+- t_move: the first trace sample over 0.2 m/s.
+
+From these: t_move minus each of them, and the number of NDT outputs before t_move.
+
+**Predictions (before any reading).**
+- *If the latch is "motion began before localization settled":* every behind run has a
+  smaller gap (t_move less the first converged NDT pose, or less INITIALIZED) than every level
+  run, or a negative one, with no overlap. Or, failing a clean split, a threshold on the gap
+  sorts at least 90 % of runs into their mode.
+- *If not:* the gaps of the two modes overlap, and no threshold sorts more than 75 % of runs.
+- *Guess (labelled, not a prediction):* the gap is of order 1 s or more in every run, because the
+  car stood 7.5 s or more before moving in step 9 (a).
