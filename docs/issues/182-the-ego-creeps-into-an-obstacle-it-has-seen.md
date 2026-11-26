@@ -519,3 +519,50 @@ either way.
   draw. Repeats are proposed to 133: 3 runs of B at e6a34fd5, and 3 of A' at the same e6a34fd5
   with `obstacle_pointcloud_based_validator_param_path` set to autoware_launch's file, which
   isolates the change at identical code.
+
+### Step 2c: three runs each of A' and B at the same code (133, 2026-11-27; predictions before any run)
+
+**The runs.**
+- All six at scensim e6a34fd5, the scenario `fixture_c6b_r181.xosc` (from x 320), run B's full
+  topic set, on 118's GPU0, alternating **A', B, A', B, A', B** so the host's drift does not
+  line up with the arm. Each starts its own stack, so each draws its own start heading.
+- **B** is the testbench as run B had it: the profile's validator, UNKNOWN 5.
+- **A'** is the same testbench with one launch argument on the ego pilot, the one 181's change
+  added. It is stock Autoware's validator, UNKNOWN 10, at otherwise identical code:
+  ```
+  pilots:
+    ego:
+      args:
+        obstacle_pointcloud_based_validator_param_path: /opt/autoware/1.5.0/share/autoware_launch/config/perception/object_recognition/detection/detected_object_validation/obstacle_pointcloud_based_validator.param.yaml
+  ```
+  The path is absolute: a launch argument given as name:=value is not substituted.
+- Each run is read with `valrange182.py` (ranges in the truth's frame), `run182.py`,
+  `excur182.py` and `drift182.py`. The start heading error is NDT's and the EKF's yaw less the
+  truth's while standing at x 320.
+
+**Predictions, before any run:**
+- First validated, truth frame:
+  - every A' at 9.5 ± 1.5 m, every B at 13.4 ± 1.5 m;
+  - every B above every A';
+  - B's mean at least 2.5 m above A''s.
+- First in the final objects:
+  - A' at 8.2 ± 1.5 m, B at 10.0 ± 1.5 m;
+  - B's mean 1 to 3 m above A''s.
+- First cluster: the same in both arms, 13.5 ± 1.0 m. The arm does not touch the clustering.
+- AEB's first ERROR: 11 to 13 m in every run, and the arms' means within 1 m. AEB reads points,
+  not the validator.
+- The boulder:
+  - no strike in any run;
+  - every run stops short and holds (no motion over 0.05 m/s after the stop);
+  - while stopped, the boulder an object in at least 90 % of the frames in B and at least 60 %
+    in A'.
+- The start heading error:
+  - in every run between 0.02 and 0.2 rad in size, either sign, not tied to the arm;
+  - a run with an error over 0.1 rad swerves more than 1 m from the lane centre before x 360.
+  It may then touch verge rocks, which would fail physical_verdict for localization's reason,
+  not the arm's.
+- The MRM's operations while stopped number in the tens in runs where the EKF ends with a yaw
+  error over 0.02 rad, whatever the arm.
+
+How sure: the validated ranges about 80 %, the final objects about 60 % (tracking varies), the
+start heading's spread about 50 % (two draws so far: +0.071 and -0.142 rad).

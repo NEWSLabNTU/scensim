@@ -565,3 +565,22 @@ An earlier summary to 133 named only `min_points_num`; that was imprecise.
 **Live confirmation (118, after its 177 check):** C6e3's c6b on the new pins. Prediction: the
 boulder's first validated range is about 12.1 m (±1.5 m), against r1's 8.8 m by step 1's rule
 (9.6 m by step 3's).
+
+## The change, live (241, 2026-11-27; from issue 182's runs A and B)
+
+Issue 182's runs A (scensim 7716891b, the stock validator) and B (e6a34fd5, this issue's change),
+both C6e3's c6b from x 320, on r1's map. Ranges are the truth's base_link to the boulder, with
+objects placed by the truth's pose (`valrange182.py`; the EKF's pose was off by up to 0.4 m and
+0.05 rad in B):
+
+| | run A (UNKNOWN 10) | run B (UNKNOWN 5) | gain |
+|---|---|---|---|
+| first cluster | 13.47 m | 13.63 m | 0.2 m (not the change's) |
+| first validated | 9.51 m | 13.41 m | **3.9 m** |
+| first final object | 8.20 m | 9.99 m | 1.8 m |
+
+- The prediction for this change, about 12.1 ± 1.5 m validated, **held**: 13.41 m.
+- The replay's 9.6 m for the stock validator held too: run A gave 9.51 m.
+- The final objects gain less, 1.8 m: tracking's confirmation takes part of it.
+- One run each. Issue 182's step 2c repeats both arms three times at the same code, with the
+  stock file through the change's launch argument, to put a spread on these numbers.
