@@ -195,11 +195,14 @@ used them.
    points in SSv2's load frame.
    - (a) *The algorithm:* the port fed SSv2's own bound points against SSv2's line.
      **Prediction:** equal to 1e-9 m on every lanelet.
-   - (b) *The frame:* the export's line, from its map-frame bounds, against SSv2's. SSv2
-     resamples in its projector's frame (`map_projector_info.yaml`; a TransverseMercator scale
-     of 0.9996), and the export in the map frame. **Prediction:** after the frames' rigid
-     offset, equal to 1 mm, since the towns' local frames differ by a translation. If they do
-     not, the difference is reported as the frame's, measured, not taken for a port bug.
+   - (b) *The frame:* the export's line, from its map-frame bounds, against SSv2's, with
+     **no offset applied and nothing fitted** (243). Both frames come from the same
+     `map_projector_info.yaml`: TransverseMercator, origin (0, 0), scale 1.0. SSv2 loads
+     with lanelet2's `TransverseMercatorProjector` (`lanelet_loader.cpp` 50-100), the export
+     with `simple_route.map_frame_positions`' own TransverseMercator, on the same
+     latitudes and longitudes. Only the two implementations differ. **Prediction:** the raw
+     difference is at most 1 mm on every point of both towns. Its largest value is reported
+     as measured. Any frame difference is reported as the frame's, not taken for a port bug.
    If the fork's loader cannot be called that way, its gtest fixture (`test_lanelet_wrapper.hpp`)
    is the fallback, in a scratch build.
 8. *What reads the export, re-measured* (CPU only):
