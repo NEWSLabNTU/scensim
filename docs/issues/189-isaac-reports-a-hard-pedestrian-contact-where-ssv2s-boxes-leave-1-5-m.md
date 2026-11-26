@@ -1,6 +1,8 @@
 # 189: Isaac reports a hard ego-pedestrian contact where SSv2's boxes leave about 1.5 m
 
-**Status:** open, a record (243; numbered by 133, 2026-11-26); no investigation yet.
+**Status:** fixed by step 3, on scensim main 4dacfd6f (2026-11-26): the contact judge on by
+default, before the verdict. Open: the two fresh CARLA contact runs that measure CARLA's
+static impulses (step 3's calibration). Found by 243; numbered by 133, 2026-11-26.
 **Severity:** high. On Isaac a run can be judged `passed` over a real collision: the world
 server's physics stopped the ego dead against a pedestrian, with an impulse of 5.5 and 7.6
 kN s, while SSv2's `CollisionCondition`, which judges by the scenario's declared boxes, never
