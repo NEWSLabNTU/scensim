@@ -355,3 +355,7 @@ local checks and a full gate; a landing request to 133.
 5. **Every test** (the local follower and batch suites so far: 23 passed, 1 skipped); the full
    gate follows.
 
+
+**166's stretch counts were measured on lanelet2's raw centreline, which SSv2 replaces; see
+194** (2026-11-26). SSv2's `generateFineCenterline` line leaves no reversed stretch on a
+connected lanelet of Town01 or Town05.
