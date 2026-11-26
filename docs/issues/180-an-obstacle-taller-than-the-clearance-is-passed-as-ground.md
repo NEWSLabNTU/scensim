@@ -171,3 +171,61 @@ rock, so it cannot carry it. One c1 run recording the concatenated cloud is need
 128 x 1024 and 20 Hz is about 131,000 points a scan. At 16 to 32 bytes a point that is 40 to
 85 MB/s, and c1 ran to its 604 s time-out: 25 to 50 GB. So record only the window around the
 rock (x 60 to 110, about 12 s at 4.17 m/s, under 1 GB), not the whole run.
+
+## Step 2: the cost of seeing it, plan and predictions (241, 2026-11-27, before the run)
+
+133's choice: one run on 118's GPU0 after 243's R1 to R3, of a variant that ends by itself.
+`fixture_c6b_r180.xosc` is c1's scenario with three changes: the start is x 60, success is
+reaching x 112 within 2 m, and the time-out is 60 s. The goal stays at x 490, so the speed at
+the rock is c1's. The run records c1's topics plus `/sensing/lidar/concatenated/pointcloud`
+(the ground filter's input) and NDT's pose. It is staged for 118 on the NAS in
+`home/2026-11-27 issue 180 step 2 run (241)/`, with SHA256SUMS. Expected size is 1 to 2 GB.
+
+The replay, on the CPU:
+
+- the ground filter by Autoware's own `ScanGroundFilterComponent` (and the crop box before
+  it), fed the recorded cloud through `ros2 bag play`, once per setting;
+- the 0.1 m downsampling, the compare-map filter and the clustering by 181's replay
+  (replay181g.py), with the car placed by the truth pose. That replay was checked against the
+  record's own stages in 181.
+
+The settings:
+
+- the ground threshold g (`non_ground_height_threshold` and `split_height_distance` together):
+  0.20 (as run), 0.15, 0.12, 0.10, 0.08 and 0.05 m;
+- the compare-map dz: 0.3 (as run), 0.2, 0.1 and 0.05 m;
+- `min_cluster_size`: 10 (as run), 5 and 3.
+
+Measured per setting, from 30 m ahead to the strike:
+
+- the rock: its points after each stage, and the first range at which a cluster forms on it;
+- false obstacles on the carriageway: the fraction of frames with a cluster within the lane
+  (|y - 1.62| < 1.75 m) and more than 1 m from the rock;
+- off the carriageway: clusters on the shoulder, where the loose rocks are (0.07 to 0.10 m,
+  y about +-4.7 m), counted apart, since they are real.
+
+Predictions:
+
+1. Fidelity: at the as-run setting, the replayed ground filter's output matches the record's
+   `/perception/obstacle_segmentation/pointcloud`. The per-frame median fraction of the
+   record's points within 0.05 m of a replayed point is at least 0.98.
+2. As run (0.20, 0.3, 10): 0 to 2 rock points per frame after the ground filter, none after the
+   compare-map filter, no cluster. Step 1 again, on the new run.
+3. g 0.10 with dz 0.3: the ground filter keeps at least 3 rock points in most frames within
+   20 m. The compare-map filter drops them all: no cluster at the rock.
+4. g 0.10 with dz 0.1 and `min_cluster_size` 10: still no cluster at the rock beyond 3 m. Only
+   the top 5 cm of the rock is more than 0.10 m above the road, and it gives fewer than ten 0.1
+   m voxels. With `min_cluster_size` 3, a cluster forms from about 10 m.
+5. False obstacles at g 0.10, dz 0.1, `min_cluster_size` 3: a cluster on the carriageway in
+   under 5 % of frames.
+6. At g 0.05 with dz 0.05: the rock clusters at `min_cluster_size` 10 from about 8 m. The road
+   gives a cluster on the carriageway in more than 20 % of frames. The map's road band is 0.11
+   m thick here (step 1), and the crown tilts the road 1.15 deg across the lane.
+7. The shoulder's loose rocks become clusters from g 0.08.
+
+What this decides: whether some setting makes the 15 cm rock an object soon enough to stop.
+Stopping from 4.17 m/s at the MRM's -6 m/s^2 takes 1.4 m, plus the stop margin, so the cluster
+has to form by about 7 m from the bumper. The setting must also keep false obstacles on the
+carriageway rare. If none does (predictions 4 to 6 say so), the options are the issue's second
+one (accept and document it), or a check made for the purpose: a height-above-map test on the
+lane only, not a global threshold.
