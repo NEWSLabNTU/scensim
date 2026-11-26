@@ -59,7 +59,17 @@ In the failed gate's tree, after it ended (14:46 to 14:50):
 So it does not reproduce alone or on an idle-ish host, with or without setsid.
 
 The landing went on with a second gate of the same commit without GATE_WRAP (133's ruling),
-memory watched by hand.
+memory watched by hand. It passed: `gate ok b48261bdac1366ea23739708da492d8d68c7e287 tree
+6010e18a on newslab-server243 2026-11-26T15:28:20+08:00: build test check clean; Isaac lane ran
+(942 tests)`. Test step 15:06:01 to 15:28:11. Memory did not fall below 25 GB available, and
+the load was sampled every 10 s. b48261bd is on main.
+
+**The evidence** is on the NAS, `home/2026-11-26 193 flake (243)/`, with SHA256SUMS. The
+gate worktrees themselves were removed after the copy.
+- From the failed gate: `gate.log`, `gate.txt` and `gate-test.out`.
+- The guard and the runner: `memguard.sh` and `gate-run.sh`.
+- From the passing gate: its summary, `gate-2.txt`, and its memory and load log,
+  `memlog-gate-2.txt`.
 
 ## Hypotheses
 
