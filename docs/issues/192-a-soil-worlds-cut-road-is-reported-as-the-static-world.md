@@ -70,3 +70,34 @@ road. That is a pair with contact points but no solver impulse. Reading the code
   town01_soil's route) are unchanged. The logged pair is the ego's chassis cube or plate against
   a kerb or verge face of the cut copy, with a separation within the contact offset (a few cm).
   This last part is my least sure prediction.
+
+## 133's check on raised soil features (2026-11-26, before any code)
+
+133 asked whether a soil zone could have a raised feature (a ridge between ruts, say) that a
+body could strike hard. If so, it would now count as ground, and a high floor would fit it
+better than a blanket exclusion. None can be struck. A soil zone's colliders are three
+(`soil_tiles`):
+- the `flat` box, level at the zone's `ground_z`, which other bodies stand on;
+- the wheel `plates`: a tyre's footprint each, under each ego wheel, fitted to the ruts there;
+- the `cut` copies of the world's road, which were ground before the cut.
+
+The ruts and ridges live only in the render meshes, which have no collision. So everything under
+`/World/soil` is ground, and no floor is needed.
+
+## The fix (241, 2026-11-26)
+
+siw 03876248, on siw main a1ae4b4c:
+- `contacts.py` (new, pure Python): `rows` is `_collect_contacts`' filter, which the method now
+  calls. `SOIL_ROOT` is `/World/soil`.
+- `IsaacWorld._make_tiles` adds `SOIL_ROOT` to the world's ground and clears the ground cache.
+- The first soil-ground pair of a load is logged once, with its colliders and smallest
+  separation.
+- `test/test_issue_192.py`, 5 tests on stub headers.
+
+siw's own check, in a fresh recursive clone at 03876248:
+- system Python (`just check`: the tests, then pyflakes): "Ran 534 tests", OK (skipped=47);
+- Isaac's Python: "Ran 535 tests", OK (skipped=19). That is 530 at a736c0b, plus the 5 new.
+
+The first prediction (the tests fail on today's filter and pass with the fix) is shown by the
+test that keeps today's ground: without a soil zone's root, the cut road gives its row. The live
+check (plan step 4) waits for a GPU.
