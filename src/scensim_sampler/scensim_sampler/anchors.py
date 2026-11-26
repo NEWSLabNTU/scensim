@@ -25,7 +25,8 @@ import re
 from pathlib import Path
 
 FORMAT = "scensim-anchors"
-VERSION = 1
+VERSION = 2       # 2: resolved on SSv2's own centreline (issue 194)
+LINE = "ssv2-fine-2.0"   # scensim_batch.map_export.LINE
 RESOLVED = "anchors.resolved.json"
 DIGEST_FILES = ("lanelet2_map.osm", "map_projector_info.yaml")   # scensim_batch.map_export's
 RESOLVED_KINDS = ("conflict", "curve", "region")
@@ -54,8 +55,17 @@ def load_resolved(path, map_dir=None):
     that map (its digest)."""
     path = Path(path)
     doc = json.loads(path.read_text())
-    if doc.get("format") != FORMAT or doc.get("version") != VERSION:
-        raise AnchorError(f"{path}: not a {FORMAT} v{VERSION} file")
+    if doc.get("format") != FORMAT:
+        raise AnchorError(f"{path}: not a {FORMAT} file")
+    if doc.get("version") == 1:
+        raise AnchorError(f"{path}: resolved on lanelet2's centreline (v1); SSv2 uses its own "
+                          "2 m line (issue 194): the maps dataset's newer revision has them "
+                          "resolved again (move the project's scensim.lock to it), or its "
+                          "author resolves them (python3 -m scensim_batch.anchors resolve)")
+    if doc.get("version") != VERSION or doc.get("centerline") != LINE:
+        raise AnchorError(f"{path}: a v{doc.get('version')} file on centre line "
+                          f"{doc.get('centerline')!r}, not v{VERSION} {LINE!r}: resolve it "
+                          "again (python3 -m scensim_batch.anchors resolve)")
     if map_dir is not None:
         want = map_digest(map_dir)
         if doc.get("map_sha256") != want:

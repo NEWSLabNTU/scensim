@@ -40,7 +40,8 @@ def _map(d):
                 "following": following, "previous": [], "left": None, "right": None,
                 "adjacent_left": None, "adjacent_right": None, "speed_limit": limit,
                 "speed_limit_tagged": True}
-    doc = {"format": map_export.FORMAT, "version": map_export.VERSION, "map": d.name,
+    doc = {"format": map_export.FORMAT, "version": map_export.VERSION,
+           "centerline": map_export.LINE, "use_custom_centerline": True, "map": d.name,
            "map_sha256": map_export.map_digest(d), "frame": "map",
            "lanelets": {"1": ll(straight, [2], 13.89), "2": ll(arc, [], 8.33),
                         "3": ll(apart, [], 13.89), "4": ll(across, [], 8.33)}}
@@ -102,6 +103,16 @@ class Resolve(unittest.TestCase):
                 self.assertLessEqual(err, doc["heading_max_error"] * 1.5 + 1e-12, s)
             with self.assertRaisesRegex(A.AnchorError, "outside the lane"):
                 heading(doc["anchors"]["exit_n"]["length"] + 1.0)
+            # issue 194: resolved on lanelet2's centreline (v1), or on another line: refused
+            self.assertEqual(doc["centerline"], A.LINE)
+            out.write_text(json.dumps(dict(doc, version=1)))
+            with self.assertRaisesRegex(A.AnchorError, "lanelet2's centreline .v1.; SSv2 uses "
+                                        "its own 2 m line .issue 194.: .*scensim.lock"):
+                A.load_resolved(out, map_dir=d)
+            out.write_text(json.dumps(dict(doc, centerline="other")))
+            with self.assertRaisesRegex(A.AnchorError, "on centre line 'other', not v2"):
+                A.load_resolved(out, map_dir=d)
+            out.write_text(json.dumps(doc))
             # the digest: another map's bytes refuse the file
             (d / "lanelet2_map.osm").write_text("<osm><!-- edited --></osm>")
             with self.assertRaisesRegex(A.AnchorError, "not the map in use"):

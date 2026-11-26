@@ -557,7 +557,7 @@ def test_a_lane_profile_carries_the_lanes_centreline(tmp_path):
             "speed_limit": 13.9, "start_x": 0.0, "start_y": 0.0, "end_x": 30.0, "end_y": 0.0,
             "heading_s": [0.0, 30.0], "heading": [0.0, 0.0], "heading_max_error": 0.0,
             "x": [0.0, 30.0], "y": [0.0, 0.0]}
-    doc = {"format": A.FORMAT, "version": A.VERSION, "map": "town_street",
+    doc = {"format": A.FORMAT, "version": A.VERSION, "centerline": A.LINE, "map": "town_street",
            "map_sha256": A.map_digest(md), "anchors": {"exit_n": lane}}
     (md / A.RESOLVED).write_text(json.dumps(doc))
     b = ProfileBridge()
@@ -784,7 +784,7 @@ def test_k9e_cs3_binds_the_same_on_carla_and_isaac(tmp_path):
                 "end_x": 101.42, "end_y": -129.41, "heading_s": [0.0, 224.22],
                 "heading": [3.1412, 3.1412], "heading_max_error": 0.0}
         (md / A.RESOLVED).write_text(json.dumps(
-            {"format": A.FORMAT, "version": A.VERSION, "map": "Town01",
+            {"format": A.FORMAT, "version": A.VERSION, "centerline": A.LINE, "map": "Town01",
              "map_sha256": A.map_digest(md), "anchors": {"west_street": lane}}))
         settings = yaml.safe_load((d / "testbench.yaml").read_text())
         specs, _ = run.expand(sc, d, params={"pm": ["current", "works"]})

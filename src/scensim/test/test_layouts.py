@@ -55,6 +55,7 @@ def _project(tmp_path, layout=LAYOUT, where="testbench", scen=SCEN, world=WORLD)
             "heading": [3.1412, 3.1412], "heading_max_error": 0.0,
             "x": [325.64, 101.42], "y": [-129.52, -129.41]}
     (md / A.RESOLVED).write_text(json.dumps({"format": A.FORMAT, "version": A.VERSION,
+                                             "centerline": A.LINE,
                                              "map": "Town01", "map_sha256": A.map_digest(md),
                                              "anchors": {"west_street": lane}}))
     if layout is not None:

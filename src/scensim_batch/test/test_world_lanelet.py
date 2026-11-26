@@ -200,7 +200,8 @@ class ExportFileTest(unittest.TestCase):
             (d / "map").mkdir()
             (d / "map" / "lanelet2_map.osm").write_text("<osm/>")
             digest = map_export.map_digest(d / "map")
-            doc = {"format": map_export.FORMAT, "version": map_export.VERSION, "map": "map",
+            doc = {"format": map_export.FORMAT, "version": map_export.VERSION,
+                   "centerline": map_export.LINE, "use_custom_centerline": True, "map": "map",
                    "map_sha256": digest, "frame": "map",
                    "lanelets": {"1": {"centerline": [[0, 0, 0], [1, 0, 0], [2, 0, 0]],
                                       "following": [], "turn_direction": "else"}}}
@@ -212,8 +213,15 @@ class ExportFileTest(unittest.TestCase):
                 W.LaneletWorld.load(f, map_dir=d / "map")
             W.LaneletWorld.load(f)                                       # no map: no check
             f.write_text(json.dumps(dict(doc, version=99)))
-            with self.assertRaisesRegex(ValueError,
-                                        f"not a scensim-batch-lanelet-map v{map_export.VERSION}"):
+            with self.assertRaisesRegex(ValueError, f"a v99 export .*not v{map_export.VERSION}"):
+                W.LaneletWorld.load(f)
+            # issue 194: an export on lanelet2's centreline is refused with its cause
+            f.write_text(json.dumps(dict(doc, version=2)))
+            with self.assertRaisesRegex(ValueError, "lanelet2's centreline .v2.; SSv2 uses its "
+                                        "own 2 m line .issue 194.: export it again"):
+                W.LaneletWorld.load(f)
+            f.write_text(json.dumps(dict(doc, use_custom_centerline=False)))
+            with self.assertRaisesRegex(ValueError, "use_custom_centerline False"):
                 W.LaneletWorld.load(f)
 
 

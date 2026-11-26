@@ -65,8 +65,19 @@ class LaneletWorld:
         """The export at `path`, refused unless its digest is the map's in use (`map_dir`, or
         the digest `map_sha256`) when either is given, and refused for another format."""
         doc = json.loads(Path(path).read_text())
-        if doc.get("format") != map_export.FORMAT or doc.get("version") != map_export.VERSION:
-            raise ValueError(f"{path}: not a {map_export.FORMAT} v{map_export.VERSION} export")
+        if doc.get("format") != map_export.FORMAT:
+            raise ValueError(f"{path}: not a {map_export.FORMAT} export")
+        if doc.get("version") in (1, 2):
+            raise ValueError(f"{path}: exported with lanelet2's centreline (v{doc['version']}); "
+                             "SSv2 uses its own 2 m line (issue 194): export it again "
+                             "(python3 -m scensim_batch.map_export)")
+        if (doc.get("version") != map_export.VERSION or doc.get("centerline") != map_export.LINE
+                or doc.get("use_custom_centerline") != map_export.USE_CUSTOM_CENTERLINE):
+            raise ValueError(f"{path}: a v{doc.get('version')} export with centre line "
+                             f"{doc.get('centerline')!r} (use_custom_centerline "
+                             f"{doc.get('use_custom_centerline')}), not v{map_export.VERSION} "
+                             f"{map_export.LINE!r} ({map_export.USE_CUSTOM_CENTERLINE}): export "
+                             "it again (python3 -m scensim_batch.map_export)")
         want = map_sha256 or (map_export.map_digest(map_dir) if map_dir is not None else None)
         if want is not None and doc["map_sha256"] != want:
             raise ValueError(f"{path}: exported from map {doc['map']} {doc['map_sha256'][:12]}, "

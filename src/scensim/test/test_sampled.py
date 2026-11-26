@@ -383,7 +383,7 @@ def test_a_maps_resolved_anchors_reach_the_sampler(tmp_path):
     md = tmp_path / "assets" / "maps" / "town_street"
     md.mkdir(parents=True)
     (md / "lanelet2_map.osm").write_text("<osm/>")
-    doc = {"format": A.FORMAT, "version": A.VERSION, "map": "town_street",
+    doc = {"format": A.FORMAT, "version": A.VERSION, "centerline": A.LINE, "map": "town_street",
            "map_sha256": A.map_digest(md), "heading_step": 0.5, "heading_max_error": 0.0,
            "anchors": {"exit_n": {"kind": "lane", "lanelets": [{"id": 7, "from_s": 0.0,
                                                                 "to_s": 30.0}],
@@ -455,7 +455,7 @@ def _cs7_on_a_resolved_exit(tmp_path, length=30.0):
     md.mkdir(parents=True)
     (md / "lanelet2_map.osm").write_text("<osm/>")
     half = length / 2
-    doc = {"format": A.FORMAT, "version": A.VERSION, "map": "town_street",
+    doc = {"format": A.FORMAT, "version": A.VERSION, "centerline": A.LINE, "map": "town_street",
            "map_sha256": A.map_digest(md), "heading_step": 0.5, "heading_max_error": 0.0,
            "anchors": {"exit_n": {"kind": "lane", "lanelets": [
                {"id": 7, "from_s": 0.0, "to_s": half}, {"id": 8, "from_s": half, "to_s": length}],

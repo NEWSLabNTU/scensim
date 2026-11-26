@@ -56,7 +56,7 @@ from . import map_export
 from .catmull import reversed_ts
 
 FORMAT = "scensim-anchors"
-VERSION = 1
+VERSION = 2   # 2: resolved on SSv2's own centreline (issue 194)
 DECLARATION = "anchors.yaml"
 RESOLVED = "anchors.resolved.json"
 HEADING_STEP = 0.5
@@ -407,7 +407,8 @@ def resolve(map_dir, export):
             if name in anchors:
                 raise AnchorError(f"{kind} {name}: another anchor has that name")
             anchors[name] = fn(world, name, spec, lanes)
-    return {"format": FORMAT, "version": VERSION, "map": map_dir.name,
+    return {"format": FORMAT, "version": VERSION, "centerline": map_export.LINE,
+            "map": map_dir.name,
             "map_sha256": map_export.map_digest(map_dir),
             "declaration_sha256": hashlib.sha256(decl.read_bytes()).hexdigest(),
             "heading_step": HEADING_STEP, "heading_tolerance": HEADING_TOLERANCE,
