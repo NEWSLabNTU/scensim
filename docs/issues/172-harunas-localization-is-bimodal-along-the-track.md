@@ -949,3 +949,30 @@ read). It corrects 14 ms in the first two seconds of a level run and about 6 ms 
 and from there the loop holds the result. What makes NDT's first answers differ is not found. The
 untested candidates: the cloud at the start of motion (the dumps begin at 60 s); and the EKF's
 internal step phase under the 50 ms clock, with its delay compensation.
+
+## Step 9 (a)'s plan: the clouds at the start of motion (written 2026-11-26, before any run; 133)
+
+**The code.** aib **3a4f265** (local `issue-172-age`). The revolution line gives the firing
+ticks' count, first and last only. `AIB_TIMING_DUMP_RANGE="first:last:every"` dumps a window of
+revolutions. Measured on a real step 7 dump (124,000 points, 1024 ticks): a logged revolution
+0.33 ms, a dump 4.5 ms (max 6.5), a skipped one under 0.02 ms.
+
+**The runs.** Step 9 (3)'s configuration and stop rule (the first complete pair, at most 4),
+with the probe on (`AIB_LOG_RENDER_AGE=1`) and dumps over revolutions 150 to 700, every 2nd. That
+is 7.5 s to 35 s of sim time, covering the stand and the first 20 s of motion: 276 dumps, about
+1.1 GB a run. The dumps cost about 4.5 ms every 100 ms, about 4.5 % of one core, in the window the
+mode is set in. That is a small load added where the latch forms, recorded here before the runs.
+
+**Readings.** For each dump in the first 4 s of motion:
+- (i) the render pose against the truth at its stamp (step 8's reading 1);
+- (ii) the sector test (step 8's reading 2);
+- (iii) between the two runs, the same revolution index (the same sim time): where the two cars'
+  truth positions agree within 0.01 m, the clouds compared point by point (same tick and channel)
+  in the sensor frame.
+
+**Predictions (before any run).**
+- *If the start-up clouds explain the mode:* in the behind run the clouds of the first 2 s of
+  motion stand off the level run's by at least 10 ms x v. That shows as a render pose or a sector
+  fit displaced by that much, or as a per-point difference of that size where the truth agrees.
+- *If they do not (and 172 is parked, 133):* (i) and (ii) agree between the runs within 5 ms x v
+  in every bin of the first 4 s, and (iii) gives a median per-point difference under 0.01 m.
