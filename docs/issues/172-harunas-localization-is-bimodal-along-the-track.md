@@ -673,3 +673,32 @@ aib **b354ab9** (local branch `issue-172-age`: 5a05a11 and 133's review on it).
   `/mnt/renegade/aeon/isaac-ex/i172/step7/dump_<run>` (NVMe), since the run's own log dir does not
   exist when the world server starts.
 - The probe's per-call time from one run is reported with the result.
+
+## Step 7's runs: stopped at calibration (2026-11-26, 118, GPU0, 10:27:04 to 11:03:28)
+
+The set stopped under 133's rule after c1 and c2. The clock lag p50 was 150.7 s at 24 workers
+(c1) and 123.4 s at 16 workers (c2), so both missed 65 to 110 s. The burner was verified gone
+after each run, and no foreign process was on GPU0.
+
+**The probe FAILED its own requirement (no added load). Mine, recorded as FAILED.** The
+annotator's per-point `tickId` is not a render frame. It is the lidar's firing tick: 1024 a
+revolution, 0 to 1023, about 49 us each. The per-tick summary looped over 1024 masks of about
+125,000 points. probe_us p50 was 179,745 us in c1 and 101,630 us in c2 (max 393 ms), on each of
+the first 100 revolutions and every 10th after, with log lines of about 28 KB. The benchmark
+before the runs had used a synthetic two-tick revolution (1.6 ms), and tickId's real
+cardinality was not checked. **So c1's and c2's lags are inflated by the probe, and they are not
+comparable with step 5's (88.4 s at 24 workers).** The dumps cost 3.6 to 11.3 ms each, as
+expected.
+
+**What the two runs still show.**
+- c1 was behind (NDT along -0.0914 m) and c2 level (-0.0004 m).
+- In both, every logged revolution's point times start exactly on the 50 ms grid (phase 0), span
+  50.000 ms, run from azimuth 0.00 to 0.35, and hold ticks 0 to 1023. The start-up revolutions
+  have the same form in the behind and the level run. *H-e's prediction for the point times
+  (behind: they cross a frame boundary): FAILED, as far as these times show.* By issue 169's
+  step 1, though, the annotator assigns these times per tick on the read frame's clock. They
+  are not taken from the render, so they may not show a stitch in the geometry. The sector test
+  on the dumps is the geometric reading.
+- dump_c1 (behind) and dump_c2 (level) hold the revolutions from the 1200th on: about 124,000
+  points each in the sensor frame, with the per-point time, azimuth and tick, and the render
+  transform.
