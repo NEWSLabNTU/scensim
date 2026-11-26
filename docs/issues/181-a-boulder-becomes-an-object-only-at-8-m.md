@@ -234,3 +234,68 @@ is 0.780 frame agreement against the 0.90 required. So nothing is read from it, 
 
 118 has been asked to put fixture_c6b's map (the version r1 used) on the NAS. The replay is run
 again on it, with the predictions above unchanged.
+
+## Step 2's result: the replay on fixture_c6b's map (241, 2026-11-27, after the predictions above)
+
+The map is r1's, unchanged: 118's NAS copy `home/2026-11-27 fixture_c6b map for 181 (118)/`, with
+SHA256SUMS checked. The scripts, the extracted window and every output are on the NAS:
+`home/2026-11-27 issue 181 replay (241)/` (`extract181.py`, `replay181.py`, `replay_out.txt`).
+It covered 173 frames from 40 m to 5 m, and each replay took about 3 s on CPU. Point counts are
+those within 1 m of the boulder in xy.
+
+| range | frames | non-ground (max) | after 0.1 m downsample (max, mean) | after compare-map (max, mean) | cluster, replay / recorded |
+|---|---|---|---|---|---|
+| 31 to 40 m | 43 | 2 | 2, 0.1 | 2, 0.1 | 0 / 0 |
+| 20 to 31 m | 53 | 8 | 8, 3.0 | 4, 1.7 | 0 / 0 |
+| 12 to 20 m | 38 | 19 | 16, 7.3 | 12, 6.1 | 4 / 4 |
+| 10 to 12 m | 9 | 22 | 18, 13.7 | 17, 13.1 | 8 / 8 |
+| 5 to 10 m | 30 | 128 | 42, 23.9 | 37, 21.4 | 26 / 26 |
+
+The counterfactuals change one parameter each, in the replay only:
+
+| setting | first cluster at the boulder | clusters a frame, whole cloud (mean, max) |
+|---|---|---|
+| as run (`min_cluster_size` 10, compare-map on) | 13.1 m | 0.3, 2 |
+| compare-map off | 14.6 m | |
+| `downsize_ratio_z_axis` 0.3 (0.15 m vertical) | 14.6 m | |
+| `min_cluster_size` 5 | 18.8 m | 2.1, 4 |
+| `min_cluster_size` 3 | 27.3 m (every frame from 20 m) | 4.5, 7 |
+| `min_cluster_size` 3, compare-map off | 27.9 m | |
+| `min_cluster_size` 1 | 31.7 m | 7.4, 13 |
+
+**Against the predictions:**
+- (a) Fidelity: **held**. The replay agrees with the recorded clusters in 173 of 173 frames
+  (1.000), and both have their first cluster at 13.1 m. (Step 1's 12.3 m used another nearness
+  rule.)
+- (b) H3, the compare-map filter: **FAILED**. From 31 m to 12 m it removes 0 to 43 % of the
+  boulder's downsampled points, not the 70 % or more predicted. With it off, the first cluster
+  moves only from 13.1 to 14.6 m. It is a small second factor, not the cause.
+- (c) The count that fails is `min_cluster_size`: **held, with exceptions**.
+  - Beyond 12 m, 4 of 134 frames reach 10 points (max 12), and those are exactly the 4
+    clustered frames from 12 to 20 m.
+  - From 10.8 m, 4 of 33 frames stay under 10.
+  - The binding limit is the boulder's lidar returns against 10 points. At 20 to 31 m it gets
+    3.0 downsampled points a frame on average, and the 0.1 m downsample barely matters there
+    (8 non-ground, 8 downsampled at most).
+- (d) Counterfactuals: **FAILED as predicted, the other way**.
+  - Compare-map off and the 0.15 m vertical tolerance give 14.6 m, not 20 m or more.
+  - `min_cluster_size` 3 gives 27.3 m, beyond the 12 to 20 m predicted.
+
+**Named:** `min_cluster_size: 10` of `voxel_grid_based_euclidean_cluster.param.yaml`, counted in
+points after the 0.1 m downsample and the compare-map filter. A 0.35 m boulder gets fewer than
+10 such points until about 12 m on this lidar. The compare-map filter takes off a further 1.5 m
+at most.
+
+**Not shown, and the next questions:**
+- *The validator.* It drops the cluster again from 12.3 m to 8.8 m. `min_points_num` 10 is
+  counted on the same compare-map filtered cloud. So lowering `min_cluster_size` alone would
+  likely move the limit to the validator, at about the same 12 m. That is a prediction for the
+  next step, not a finding.
+- *The cost.*
+  - The whole-cloud cluster counts above are on a fixture with a bare road. Which of the extra
+    clusters at 3 or 5 points are spurious is not judged here.
+  - Nor what tracking makes of them.
+  - Nor whether any change belongs in the scensim profile rather than stock Autoware. That is
+    133's and the user's call.
+- 118's issue 177 run records both filtered clouds. That checks the replay's per-stage counts
+  directly, with no replay.
