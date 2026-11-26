@@ -703,3 +703,14 @@ about 0.68 m in 6 s against the truth's 0.75 m. On Haruna's 18 runs the yaw erro
   order of 0.01 to 0.03 rad and a sideways walk of the truth of v sin δ, growing with distance,
   in R1, R2 and R3 alike.
 `err170.py` reports dyaw per topic; the truth's lateral position comes from the gap trace.
+
+**Where and on what build R1 to R3 run (2026-11-27, before any run).** 243's card stayed under the
+12 GB floor for hours, so 133 moved the runs to 118's GPU0. The package is on the NAS at
+`home/2026-11-27 issue 170 step 4 fixture (243)/` (SHA256SUMS): the project `fixture_c170_r1r3`
+with the map inside it (a relative `path:` asset; `scensim testbench check` ok on a copy), the
+course yaml, `err170.py`, this doc as committed, and the commands. 118 runs at main e6a34fd5, not
+fcc01e50. That does not matter here: between the two, issue 177 changes the course builder and
+the world server for a fixture *with* road features (fixture_c170 has none; every section term
+is 0, so its map and the world server's reading of it are the same at both), and issue 181 changes
+the obstacle-pointcloud validator (perception, upstream of nothing in localization). The map was
+built at fcc01e50 and is used as built.
