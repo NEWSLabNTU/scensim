@@ -1,6 +1,6 @@
 # 190: Autoware brakes only about 1 to 1.5 m/s^2 for a pedestrian darting into its lane
 
-**Status:** open (243; numbered by 133, 2026-11-26); offline reading done 2026-11-26, plan below.
+**Status:** open (243; numbered by 133, 2026-11-26); plan steps (a) and (b) done 2026-11-26: the pedestrian box is UNKNOWN and its motion is not published, see step (b) below. What to change is 133's call.
 **Severity:** to be judged. With room to stop, the Autoware ego kept a gentle deceleration
 until it struck the pedestrian (issue 189's contact).
 **Found:** 2026-11-26, scensim 243, 092 K9f-a's exit run 2 (k9f_zones, Isaac Sim 6.2).
@@ -165,3 +165,87 @@ One thing does not fit: the command reached -3.08 and held -2.5, beyond the -1.2
 
 A natural check of the label's effect is the same run with a person-shaped pedestrian or with
 `lidar_detection_model:=centerpoint`. That is a separate run for 133 to decide, after (b).
+
+## Plan step (b), 2026-11-26 (243): the recorded run, and what it shows
+
+**The run.** `2026-11-26T13-20-19_goal_stop_goal_surface-asphalt_r0`, 13:20 to 13:21 on
+newslab-server243, Isaac Sim 6.2. It used the K9f-a gate's install (scensim 91d3e9ab;
+91d3e9ab..f95ead0f is docs only), on a copy of k9f_zones with `logging.capture: full` and a
+`logging.topics` list, asphalt case only. The run directory, its bag, the decoder and its output
+are on the NAS, `home/2026-11-26 190 b run (243)/` (with SHA256SUMS). The decoder is `bag190.py`,
+run with Autoware 1.5.0 sourced.
+
+The verdict is failed: `SimulationFailure: ... "ego_hits_ped"`. This time SSv2's own collision
+condition fired, unlike run 2 (issue 189). The contact report holds one contact, `ped`
+(pedestrian), first at SSv2 frame 538, max impulse 6189.7 N*s. Under the contact judge on main
+since 4dacfd6f, an undeclared actor contact at any impulse, this run fails the same way. That is
+not a new failure.
+
+**Recorded and not.** The bag holds the objects (`/perception/object_recognition/objects`, 253
+messages), the tracked objects (253), and the planning factors of seven of the nine modules
+named (219 each). `obstacle_velocity_limiter` and `boundary_departure_prevention` published none.
+It also holds both trajectories, both control commands, the kinematic state and the vehicle
+status. Three things were not recorded:
+- `/perception/object_recognition/detection/objects`;
+- the motion_velocity_planner's `debug/markers` (0 messages);
+- the per-module `debug/<module>/debug_markers`.
+Those names were read from the libraries' strings and do not match the live ones. Nothing below
+depends on them.
+
+**Times.** Sim seconds from the episode's start; the bag's stamps minus the 1000 s base. The
+pedestrian appears at the trigger and is in the objects by 24.25 s. It first moves at frame 486
+(24.25 s) and walks from y -126.5 towards the lane at about 1.5 m/s. The ego's left side is at
+y -128.3.
+
+**The objects: P1 and P4 hold, P2 fails.** At every message from 24.25 s to the contact, the
+pedestrian box is one object labelled `UNKNOWN` with probability 1.00, its position tracking the
+truth (y -126.55 at 24.25 s, -127.89 at 25.65 s, -129.09 at 26.50 s). Its velocity is
+**(0.00, 0.00)** in both the tracked and the predicted objects throughout. So its one predicted
+path (confidence 1.00) stays where the object is: at 25.65 s it starts and ends at
+(112.0, -127.9). The predicted path never crosses the lane while the object is still outside it.
+
+The reason is in Autoware 1.5.0's tracker parameters
+(`AL/config/perception/object_recognition/tracking/multi_object_tracker/multi_object_tracker_node.param.yaml:18-19`):
+`enable_unknown_object_velocity_estimation: true` and `enable_unknown_object_motion_output: false`.
+The tracker estimates an UNKNOWN object's velocity but publishes it as zero. The profile's
+generated copy carries the same values
+(`PROF/config/perception/object_recognition/tracking/multi_object_tracker/multi_object_tracker_node.param.yaml:21-22`).
+
+**The planner: P3's second branch, and P5.** P2 failed, so the cause is perception: no module had a
+crossing to answer. Every module that names a stop condition sees a still object off the path:
+- `run_out` excludes UNKNOWN by label (`run_out.param.yaml:42`);
+- `dynamic_obstacle_stop` ignores objects slower than 0.5 m/s (`dynamic_obstacle_stop.param.yaml:5`),
+  and this one reads 0;
+- `obstacle_stop` checks UNKNOWN only inside the footprint (`obstacle_stop.param.yaml:58-60`).
+
+In the window from 23.0 s to 27.2 s, only `obstacle_stop` published a planning factor; the six
+others published empty factor lists. Its first factor is at 25.70 s (behaviour 3, a stop), with
+the stop point 0.9 m ahead of the ego. The object's centre is at y -127.89 to -128.08 then: its
+near face is inside the ego's left side plus the 0.3 m lateral margin (`:72`). From 25.80 s the
+stop point lies behind the ego (distance -0.0, then -0.7 to -4.9 m). The stop came from
+`obstacle_stop`, and `run_out` showed no decision, as P5 predicted.
+
+**The -3.08 misfit, resolved in part.** As in run 2, the command goes past `obstacle_stop`'s
+-1.2 limit for UNKNOWN: -1.23 at 25.75 s, -2.00 at 26.05 s, -3.00 at 26.25 to 26.30 s, then -2.50
+until the stop. Only `obstacle_stop` asked for a stop, so no other module explains it. The stop
+point it planned was already at or behind the ego from 25.80 s. A stop the -1.2 limit cannot
+reach in time is still planned (`abandon_to_stop: false`, `:41`), and the deceleration beyond
+-1.2 comes from downstream of the planner. Which stage sets -3.00 and then -2.50 (the velocity
+smoother's `limit.min_acc` -2.5, or the controller) is not in these topics.
+
+**Times against run 2.** The ego reached the trigger at 7.6 m/s and passed x 121 at 5.8 m/s,
+as in run 2. The first `obstacle_stop` factor (25.70 s) came 1.45 s after the pedestrian started
+walking (24.25 s); in run 2 the command changed 1.6 to 1.8 s after. Contact came at 26.9 s
+(frame 538).
+
+**What follows, for 133.** The pedestrian box is UNKNOWN, and UNKNOWN motion is not published,
+so no module can see the crossing coming. These would change that:
+- `enable_unknown_object_motion_output: true` in the profile. `dynamic_obstacle_stop` could then
+  see a 1.5 m/s object; `run_out` still could not, by label.
+- A pedestrian that perception labels PEDESTRIAN: a person-shaped asset, or
+  `lidar_detection_model:=centerpoint`. `run_out` and `map_based_prediction`'s pedestrian paths
+  then apply.
+
+Each would be its own step with its own predictions, not part of this issue. The first changes
+Autoware's behaviour for every UNKNOWN object in every scensim run, so it needs a decision on the
+profile, not only on this scenario.
