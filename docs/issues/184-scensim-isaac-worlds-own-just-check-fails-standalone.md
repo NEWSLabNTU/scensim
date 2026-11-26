@@ -1,6 +1,7 @@
 # 184: scensim_isaac_world's own `just check` fails standalone
 
-**Status:** open (243; numbered by 133 on 2026-11-25; the fix to be planned before any code).
+**Status:** closed (243, 2026-11-27). Fixed in scensim_isaac_world 055b628e, pinned by scensim in
+1757964e; checked again standalone on siw main 8f74a0a, below.
 **Severity:** low. The Isaac world server's suite passes where scensim runs it: scensim's `just
 test` runs it in two lanes, with scensim's install sourced and in Isaac's own Python, and both
 pass. But the repository's own gate, `just check` in a checkout of scensim_isaac_world with its
@@ -161,3 +162,22 @@ Measured in the same fresh recursive clone and clean environment (logs
 Still to come: scensim's full gate with the pin moved to the fix (`ISAAC_ROOT` passed), the
 Isaac lane `ran`, and the 7 `LaunchRefusals` shown running in the gate tree.
 
+
+## Closed (2026-11-27, 243)
+
+The fix landed on siw main as 055b628e and scensim pinned it in 1757964e. Since then siw main
+has moved (092 K9f-a, issue 192, and two `deps/` bumps for issue 190) to 8f74a0a, which
+scensim pins today (main fcc01e50). Checked again on it, in a fresh clone with every `deps/`
+submodule initialised recursively and a clean environment (`env -i`, nothing sourced; logs
+`/var/tmp/aeon/siw-184-now.logs/`):
+- the system Python, `just check`: `Ran 534 tests`, `OK (skipped=47)`, then pyflakes silent;
+  exit 0;
+- Isaac's Python (`ISAAC_ROOT=/var/tmp/aeon/isaac-sim-6.2`, `source scripts/isaac_env.sh`,
+  `PYTHONNOUSERSITE=1 python3 -m unittest discover -s test`): `Ran 535 tests`, `OK
+  (skipped=19)`.
+
+The item left open above, the `LaunchRefusals` running where ROS is sourced: in a build of
+scensim 9ed62536 (siw 03876248, which contains 055b628e), with Autoware and the install sourced,
+`python3 -m unittest discover -v -s test -p test_world_server_launch.py` ran 8 tests, OK, each
+`LaunchRefusals` test run, none skipped. scensim's full gate has passed with siw at or after the
+fix several times since (most recently fcc01e50, Isaac lane 959 tests).
