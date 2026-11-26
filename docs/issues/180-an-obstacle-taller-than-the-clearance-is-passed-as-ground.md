@@ -127,3 +127,47 @@ points a lower `non_ground_height_threshold` and a smaller compare-map dz would 
 there. That is the false-obstacle cost of any fix; it needs the raw cloud for the ground
 filter, so that part is a request to 118 for one run recording the concatenated cloud, sent
 through 133. No change is made before 133 has the plan and the step 1 result.
+
+## Step 1's result: the ground filter drops it, and the compare-map filter would too (241, 2026-11-27)
+
+The rock, by siw's own placement at e763170 (the c1 map's road_detail.yaml; no change to
+`rocks` since): x 100.00, y 2.42, plan radius 0.182 m, its top 0.150 m above the road under it.
+Over c1's 203 frames from 39.8 m out (truth base_link to the rock) to the strike, inside the
+rock's plan radius plus 0.1 m:
+
+| stage | frames with a point more than 0.05 m above base_link |
+|---|---|
+| ground filter's output (non-ground) | 1 of 203: one point, z 0.14 m, at 21.7 m |
+| after the 0.1 m downsampling | the same 1 |
+| compare-map filter's output | 0 |
+| clusters | 0 |
+| validated objects within 1 m | 0 |
+| final objects within 1 m | 0 |
+
+Against the predictions:
+
+1. Held. One point in one frame (at most 2 was predicted); none in 202 of 203.
+2. Held. No cluster, validated object or final object at the rock in any frame.
+3. Held. The map has 6 points over the footprint, the same as two rock-free spots on the same
+   wheel track (x 60 and x 140). One of them is 0.083 m above the local plane, and both
+   rock-free spots have two such points. The map's road band itself spans about 0.11 m in z
+   (residual sd 0.05 m around the plane), so the rock is not in it.
+4. Held on its one sample. The single point the ground filter kept, 0.14 m high, passed the
+   downsampling and was dropped by the compare-map filter, as the |dz| < 0.3 m rule says. One
+   point is a thin test; step 2 tests it properly.
+5. Not checkable from this record: it has no raw cloud, so how many returns the rock gave
+   the ground filter is unknown. One correction to the geometry: the rig is the OS1 REV7 128
+   channel, FOV +15 to -25 deg (aib's tesla_model3.rig.yaml), so with the 22.5 deg tilt
+   the lowest ring is 47.5 deg down. A point 0.15 m high is visible to within 1.7 m of the
+   lidar, not 1.9 m, and still inside the bumper.
+
+So the first stage that calls the rock ground is the ground filter (0.20 m threshold), and the
+compare-map filter behind it would drop what a lower threshold let through. A fix needs both,
+and its cost is false obstacles from the road's own relief: the map's road band is 0.11 m
+thick here.
+
+Step 2 needs the raw cloud. fixture_c6b_r181 (the 2c runs) starts at x 320 and meets no 15 cm
+rock, so it cannot carry it. One c1 run recording the concatenated cloud is needed. The OS1 at
+128 x 1024 and 20 Hz is about 131,000 points a scan. At 16 to 32 bytes a point that is 40 to
+85 MB/s, and c1 ran to its 604 s time-out: 25 to 50 GB. So record only the window around the
+rock (x 60 to 110, about 12 s at 4.17 m/s, under 1 GB), not the whole run.
