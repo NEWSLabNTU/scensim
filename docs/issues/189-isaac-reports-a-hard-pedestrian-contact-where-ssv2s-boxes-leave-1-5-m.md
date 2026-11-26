@@ -444,3 +444,29 @@ are in this commit:
 - Still to do: two fresh CARLA contact runs (a declared rear contact, a drive past a static
   object) to measure CARLA's static impulses. They wait for a GPU that is free without
   displacing anyone.
+
+## The default judge's coverage on Isaac: what it cannot see (241, 2026-11-26; from 176's step 1)
+
+Issue 176's step 1 read what the bridge's contact reports see on Isaac. The judge fails only what
+they report.
+- **Seen:** the ego's rigid body, which is aib's chassis cube and its skid plate, as one
+  reporter, against any non-ground prim. That covers rocks (`/World/RoadRocks/...`: C6e3's plate
+  strikes at 1961 to 8465 N*s, the boulder at 1537), pedestrians, vehicles and props.
+- **Not seen: a wheel striking anything.** The wheels are PhysX vehicle suspension line
+  queries (raycast or sweep), not shapes, so a tyre hitting a kerb, a pole's base or a rock is
+  no contact. A rock under a tyre (C6e3 b2's 15 cm and 8 cm loose rocks) gives none.
+- **Not seen: the road detail's own geometry.** The detail's collision tiles
+  (`/World/RoadCollision`: cleats, potholes) are ground by design (issue 033), so a plate
+  striking a cleat's face is not a contact.
+- **Wrongly seen: a soil zone's cut road.** `soil_tiles`' copy of the town's road is not in
+  the ground list, so the ego's contact with its own road there is reported (at 0.0 N*s so far;
+  the static floor hides it). It is proposed as its own issue in 176's step 2.
+
+**What would close the wheel gap (not done; 133, 2026-11-26: not in 176):** a wheel-strike
+signature from the vehicle's own state, judged alongside contacts. For example:
+- a suspension travel at its bump stop or a jounce rate above a bound;
+- a wheel's vertical force spike against its static load;
+- an impact the size of a kerb strike, read from the PhysX vehicle's per-wheel query results
+  (the hit distance's jump), with the prim hit when the query reports it.
+Each needs a calibration like this issue's step 3, on kerb and rock strikes known to be
+strikes, before it can fail a run.
