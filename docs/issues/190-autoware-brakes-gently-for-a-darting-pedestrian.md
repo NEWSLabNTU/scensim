@@ -658,6 +658,14 @@ from a simulator (Isaac Sim with scensim), stated as such.
 >   the emergency command as well (`vehicle_cmd_gate.cpp`, `publishControlCommands`), so an
 >   emergency stop target below -5.0 m/s^2 is not reachable with the default gate parameters.
 >
+> **With the emergency stop changed (simulation, same scenario).** With
+> `mrm_emergency_stop_operator`'s `target_acceleration: -6.0`, `target_jerk: -12.0` and the
+> gate's `nominal.lon_acc_lim_for_lon_vel` and `lon_jerk_lim_for_lon_acc` raised to 6.0 and 12.0
+> below 20 m/s (all else default), the same chain raised the MRM (validator ERROR at 25.10 s,
+> MRM at 25.30 s), the gate's output reached -6.0 at 25.60 s, the vehicle's measured
+> deceleration passed -5.0 m/s^2 0.30 s after the switch, and it stopped without contact. With
+> the default -2.5 it had struck the pedestrian at 1.58 m/s.
+>
 > **Question.** Is it intended that a trajectory braking harder than the checker's threshold
 > ends the autonomous mode, and that the resulting MRM brakes at -2.5 m/s^2? If not, options
 > include: not linking the deceleration check to mode availability (or linking it only when the
