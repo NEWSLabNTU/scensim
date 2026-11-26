@@ -234,4 +234,10 @@ judges it there):
 A (118)/`, 133 files, SHA256SUMS verified on the NAS. It holds both run directories, the runner's
 log, the scripts, the testbench, and the map's two road-detail files and `world.yaml`.
 
+**Both time-outs are the scenario's end condition, not a strike (133).** In c1 and in A the ego
+stopped short of the boulder (bumper 4.1 m and 3.51 m from its centre), never moved again, and
+the scenario timed out (600 s and 150 s) without reaching its goal at x 490. There was no
+contact with the boulder. Whether that stop is the right behaviour is 182's question, which 241
+judges there.
+
 177 is fixed: the map's road detail now reaches the world server from the record step alone.
