@@ -424,3 +424,55 @@ this record's list but two: whether the map's props (`props_points.npy`) are the
 and iteration count against the error, from the runs' records if they hold NDT's topics). Both
 need C6e2's or 168's records here. The plan's step 4 (a fixture run on a straight, level,
 uncrowned course) needs the card.
+
+## Step 4's spec: a straight, level, uncrowned fixture, both ways (243, 2026-11-27; for 133, before any run)
+
+**The course, `fixture_c170`.** Built by 086 C5b's fixture builder
+(`python3 -m scensim_isaac_world.course courses/fixture_c170.yaml <map dir>`: the
+`centreline`, `geometry`, `record`, `maps` and `scenario` steps, then the USD, all on the CPU),
+as fixture_c5 is, with every section term set to zero:
+- the same arbitrary datum as fixture_c5 (36.0, 140.0, alt 0), `map_origin` (0, 0, 0);
+- one straight, 600 m (`plan: [{straight: 600.0}]`), grade 0;
+- 2 lanes of 3.25 m, shoulders 0.75 m, crown 0 both sides, no bank, no crown offset, no lip;
+- the terrain flat, 0.30 m below the road (`terrain_below: 0.30`), as fixture_c5's, so the
+  road's edges are the only lateral relief NDT has; no props.
+
+**The runs** (Isaac Sim 6.2 and the ego stack, stock clustering, `max_velocity: 11.11`; the
+profile and every pin as main has them):
+- R1: the ego drives the right lane from s 20 to s 580 (east, heading 0), and stops.
+- R2: the same in the other lane from s 580 to s 20 (west, heading 180 deg).
+- R3: R1 again, for repeatability.
+
+Each records, besides the gap trace: `/localization/kinematic_state`,
+`/localization/pose_estimator/pose_with_covariance`, NDT's `transform_probability`,
+`nearest_voxel_transformation_likelihood` and `iteration_num`, `/sensing/gnss/pose_with_covariance`,
+`/sensing/gnss/gnss_link/nav_sat_fix`, `/tf` and `/tf_static`.
+
+**The ego prim's check, for free (133).** aib computes its GNSS fix from the PhysX vehicle's
+state, with no noise (`aib.sensing.gnss_reading`: the antenna at its rig lever from base_link),
+and Autoware's gnss_poser turns it back into base_link's pose in the map. That is an
+independent reading of the ego's state at run time, against the world server's `sim_pose` in the
+gap trace at the same sim time.
+
+**Predictions, written before any course is built.**
+- G1, the ego prim: the GNSS-derived base_link pose and the gap trace's `sim_pose` agree within
+  1 cm along and across, and 1e-3 rad in yaw, over each run above 1 m/s. If they do not, the
+  difference is the truth's own offset and is set against 170's numbers.
+- G2, the straight's across error, both ways: R1 and R2 both read about -0.037 m (within
+  0.015 m), localization right of the truth: the car-fixed part from Haruna, present with no
+  crown, bank, grade or curvature. The fixed map-frame vector is about 0 here (its across
+  projection under 0.01 m), since this map is the meshes by construction, as Haruna's was.
+  The two runs give it by sum and difference: car-fixed c = (R1 + R2) / 2, the map vector's
+  north component v = (R1 - R2) / 2.
+- G3, the alternative, stated so it can be told apart: if the across error is a property of
+  Haruna's geometry (its crown, its bends, its props), R1 and R2 both read within 0.01 m of 0.
+- G4, z: NDT's z within 5 mm of the truth's on this flat course (167's fix, and no crown or
+  grade to pull it).
+- G5, repeatability: R3 within 5 mm of R1 across.
+
+**What it needs, for 133's scheduling.** Building the course and its USD: CPU only, about
+20 minutes, Isaac's Python for the USD step. A project for it beside the c5 ones (on 118's host
+today), or a new one here. Each run: Isaac Sim 6.2 with the world (the fixture's world is small),
+about 12 GB free on the card held for 2 minutes, about 10 to 15 minutes of card time; three runs.
+The scenario's second direction (R2) needs the `scenario` step's route in the other lane, which
+fixture_c5's builder does not make today: one more generated scenario file, or a hand-written one.
