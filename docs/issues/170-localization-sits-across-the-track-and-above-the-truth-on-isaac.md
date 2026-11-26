@@ -714,3 +714,25 @@ the world server for a fixture *with* road features (fixture_c170 has none; ever
 is 0, so its map and the world server's reading of it are the same at both), and issue 181 changes
 the obstacle-pointcloud validator (perception, upstream of nothing in localization). The map was
 built at fcc01e50 and is used as built.
+
+**G7, the heading the ego starts with (2026-11-27, before R1; from 241's run B).** In run B
+(fixture_c6b, the Tesla, e6a34fd5) the car stood at x 320 before moving with NDT's yaw less the
+truth's -0.142 rad and the EKF's -0.143 rad (8.2 deg); run A started at +0.071 (the EKF). Driving
+then steered by it (the truth's yaw rose to +0.148, the car reached y 3.84 while the EKF read 1.4
+to 2.6), and NDT's yaw error shrank as the car moved (-0.087 at x 334, -0.018 by x 371).
+*Reading of the code, untested:* the vehicle agent initializes localization at the scenario's
+pose through `/api/localization/initialize`; Autoware's pose initializer has NDT align it, and
+the align searches yaw over the full circle (a TPE search, `initial_pose_estimation`
+`particles_num` 200, `n_startup_trials` 100; the given yaw is not its prior: "Since only yaw
+is uniformly sampled", autoware_core's `ndt_scan_matcher_core.cpp` as carried in the overlay;
+x, y, z, roll and pitch are drawn around the given pose by its covariance), keeping the best
+score. The agent accepts the result within `yaw_tolerance` 0.2 rad of the scenario's yaw
+(`scensim_agent/adapters/autoware.py`). On a flat, featureless straight the score changes little
+with yaw near the true one, so the align can stop 0.05 to 0.15 rad off and pass.
+- *G7:* in R1, R2 and R3 the EKF's and NDT's yaw less the truth's at the start, standing before
+  the first motion, is under 0.2 rad but over 0.01 rad in at least one of the three, and differs
+  between runs (the search is random); where it is over 0.01 rad, the car's lateral position
+  walks by about v sin of the current heading error as it drives, and NDT's yaw error shrinks
+  with distance. G6 then fails for the reason G7 gives, not for a steady bias.
+- *Not G7:* if all three start within 0.01 rad, the align is not the cause of runs A and B's
+  start heading, and G6 is read on its own.
