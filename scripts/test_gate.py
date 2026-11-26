@@ -228,7 +228,7 @@ def rebased_gate(tmp_path):
 def test_gate_clean_notag_keeps_a_rebased_gate_and_prints_the_tag_command(tmp_path):
     """118's user gives their own go for every tag: notag never tags."""
     r, root, sha, d = rebased_gate(tmp_path)
-    p = clean(r, root, sha, "--notag")
+    p = clean(r, root, sha, "notag:=true")
     assert p.returncode == 1, p.stdout + p.stderr
     assert d.exists() and git(r, "tag", "-l") == ""
     assert f"  git tag gate/gate-{sha[:8]} {sha} && just gate-clean {sha}" in p.stdout
@@ -239,7 +239,7 @@ def test_gate_clean_notag_still_removes_a_gate_on_origin(tmp_path):
     sha = commit(r, "b.txt", "b\n")
     d = gate_tree(r, root, sha)
     git(r, "push", "-q", "origin", "main")
-    p = clean(r, root, sha, "--notag")
+    p = clean(r, root, sha, "notag:=true")
     assert p.returncode == 0 and not d.exists(), p.stdout + p.stderr
 
 
@@ -359,7 +359,7 @@ def test_gate_clean_dir_removes_a_custom_named_gate(tmp_path):
     r, root, sha = repo_with_submodule(tmp_path)
     d = sub_gate(r, root, sha, name=f"gate-{sha[:8]}-2")
     assert clean(r, root, sha).returncode == 1          # not at the default path
-    p = clean(r, root, sha, "--dir", str(d))
+    p = clean(r, root, sha, f"dir:={d}")
     assert p.returncode == 0, p.stdout + p.stderr
     assert not d.exists()
 
@@ -368,7 +368,7 @@ def test_gate_clean_dir_refuses_a_worktree_at_another_commit(tmp_path):
     r, root, sha = repo_with_submodule(tmp_path)
     first = git(r, "rev-parse", "HEAD~1")
     d = sub_gate(r, root, first, name="gate-other")
-    p = clean(r, root, sha, "--dir", str(d))
+    p = clean(r, root, sha, f"dir:={d}")
     assert p.returncode == 1 and f"not {sha}: refused" in p.stdout and d.exists()
 
 
@@ -377,7 +377,7 @@ def test_gate_clean_dir_refuses_a_directory_that_is_no_worktree(tmp_path):
     stray = tmp_path / "stray"
     stray.mkdir()
     (stray / "keep.txt").write_text("mine\n")
-    p = clean(r, root, sha, "--dir", str(stray))
+    p = clean(r, root, sha, f"dir:={stray}")
     assert p.returncode == 1 and "is not a worktree of this repository: refused" in p.stdout
     assert (stray / "keep.txt").read_text() == "mine\n"
 
@@ -472,7 +472,7 @@ def unlanded_gate(tmp_path, keep_branch):
 
 def test_gate_clean_unlanded_removes_a_gate_whose_sha_a_branch_keeps(tmp_path):
     r, root, sha, d = unlanded_gate(tmp_path, keep_branch=True)
-    p = clean(r, root, sha, "--unlanded")
+    p = clean(r, root, sha, "unlanded:=true")
     assert p.returncode == 0, p.stdout + p.stderr
     assert "refs/heads/topic" in p.stdout and not d.exists()
     assert git(r, "tag", "-l") == ""
@@ -480,14 +480,14 @@ def test_gate_clean_unlanded_removes_a_gate_whose_sha_a_branch_keeps(tmp_path):
 
 def test_gate_clean_unlanded_keeps_a_gate_whose_sha_only_it_holds(tmp_path):
     r, root, sha, d = unlanded_gate(tmp_path, keep_branch=False)
-    p = clean(r, root, sha, "--unlanded")
+    p = clean(r, root, sha, "unlanded:=true")
     assert p.returncode == 1 and "no local branch or tag" in p.stdout and d.exists()
 
 
 def test_gate_clean_without_unlanded_names_the_flag(tmp_path):
     r, root, sha, d = unlanded_gate(tmp_path, keep_branch=True)
     p = clean(r, root, sha)
-    assert p.returncode == 1 and "unlanded=true" in p.stdout and d.exists()
+    assert p.returncode == 1 and "unlanded:=true" in p.stdout and d.exists()
 
 
 def test_gate_clean_keeps_a_branch_head_submodule_with_an_untracked_file(tmp_path):
@@ -509,5 +509,64 @@ def test_gate_clean_unlanded_does_not_count_a_gate_tag(tmp_path):
     # 133's condition (c): gate-clean's own gate/* tags never make an unlanded SHA safe
     r, root, sha, d = unlanded_gate(tmp_path, keep_branch=False)
     git(r, "tag", f"gate/gate-{sha[:8]}", sha)
-    p = clean(r, root, sha, "--unlanded")
+    p = clean(r, root, sha, "unlanded:=true")
     assert p.returncode == 1 and "no local branch or tag" in p.stdout and d.exists()
+
+
+# --- gate-clean's arguments by name, through the recipe (issue 191's seventh follow-up) -----
+
+JUSTFILE = Path(__file__).resolve().parent.parent / "justfile"
+
+
+def just_clean(r, root, sha, *args):
+    """`just gate-clean` as a user types it, run against the test's repository."""
+    return subprocess.run(["just", "--justfile", str(JUSTFILE), "--working-directory", str(r),
+                           "gate-clean", sha, *args], cwd=r, capture_output=True, text=True,
+                          env=dict(ENV, SCENSIM_GATE_ROOT=str(root)))
+
+
+def test_recipe_unlanded_by_name_removes_the_gate(tmp_path):
+    r, root, sha, d = unlanded_gate(tmp_path, keep_branch=True)
+    p = just_clean(r, root, sha, "unlanded:=true")
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "kept by refs/heads/topic" in p.stdout and not d.exists()
+
+
+def test_recipe_notag_by_name_tags_nothing(tmp_path):
+    r, root, sha, d = rebased_gate(tmp_path)
+    p = just_clean(r, root, sha, "notag:=true")
+    assert p.returncode == 1, p.stdout + p.stderr
+    assert "notag:=true" in p.stdout and d.exists() and git(r, "tag", "-l") == ""
+
+
+def refused(r, root, sha, d, arg, *want):
+    p = clean(r, root, sha, arg)
+    assert p.returncode == 2, p.stdout + p.stderr
+    for w in want:
+        assert w in p.stdout + p.stderr, p.stdout + p.stderr
+    assert d.exists() and git(r, "tag", "-l") == ""
+
+
+def test_a_bare_name_value_is_refused_naming_the_form(tmp_path):
+    r, root, sha, d = unlanded_gate(tmp_path, keep_branch=True)
+    refused(r, root, sha, d, "unlanded=true", "unlanded:=true")
+
+
+def test_an_old_flag_is_refused_naming_its_new_form(tmp_path):
+    r, root, sha, d = rebased_gate(tmp_path)
+    refused(r, root, sha, d, "--notag", "notag:=true")
+
+
+def test_an_unknown_name_is_refused(tmp_path):
+    r, root, sha, d = unlanded_gate(tmp_path, keep_branch=True)
+    refused(r, root, sha, d, "foo:=1", "unknown argument 'foo:=1'", "unlanded:=")
+
+
+def test_a_bad_value_is_refused(tmp_path):
+    r, root, sha, d = rebased_gate(tmp_path)
+    refused(r, root, sha, d, "notag:=yes", "notag:=true or notag:=false")
+
+
+def test_an_empty_dir_is_refused(tmp_path):
+    r, root, sha, d = unlanded_gate(tmp_path, keep_branch=True)
+    refused(r, root, sha, d, "dir:=", "dir:= needs a path")
