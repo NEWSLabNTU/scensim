@@ -687,3 +687,19 @@ A standstill drift (run A) comes from neither (2) nor a fixed extrinsic: both va
   bounded only at 0.06 m lateral at 40 m), and how NDT's voxel fit weighs a flat road's few
   lateral features. R1 to R3 on the straight fixture separate those: a level across error there,
   both ways, belongs to the render or to NDT on a flat road; none means the bends and the crown.
+
+**G6, heading on a featureless straight (2026-11-27, before R1; from 241's run A analysis).**
+In 118's run A (fixture_c6b, Isaac, the Tesla, main 7716891b) the EKF's yaw less the truth's was
+-0.0114 rad (median) while driving and -0.027 rad while stopped, and over the last 6 s before the
+stop the real car walked left across the lane (truth y 1.280 to 2.034 at 4.17 m/s) while the EKF
+held about the lane centre: across error +0.23 to -0.39 m. A heading error δ under a controller
+that tracks the EKF's lane centre walks the car sideways at v sin δ: 4.17 x 0.027 = 0.11 m/s,
+about 0.68 m in 6 s against the truth's 0.75 m. On Haruna's 18 runs the yaw error was -0.007 to
++0.089 deg (step 1): two orders smaller.
+- *G6 (the flat straight is not the cause):* on fixture_c170 (no props, no rocks) the EKF's and
+  NDT's yaw less the truth's have medians under 0.1 deg (1.7e-3 rad) while driving, and the truth
+  stays within 0.2 m of its lane's centre over the drive.
+- *The alternative (run A's mechanism, the straight's lack of features):* a yaw error of the
+  order of 0.01 to 0.03 rad and a sideways walk of the truth of v sin δ, growing with distance,
+  in R1, R2 and R3 alike.
+`err170.py` reports dyaw per topic; the truth's lateral position comes from the gap trace.
