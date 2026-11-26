@@ -653,3 +653,37 @@ and the chain as `/tf_static` publishes it at run time rather than as the files 
   v times that ago, an along error (0.4 to 1.1 m) and no across error on a straight. The runs'
   along errors (under 0.11 m) bound such a lag to about 10 ms at 11 m/s.
 A standstill drift (run A) comes from neither (2) nor a fixed extrinsic: both vanish at v = 0.
+
+## The scan side: results (243, 2026-11-27, from the code and the files at main fcc01e50)
+
+**(1) The extrinsic.**
+- *E1 held (files).* The kit (`tesla_model3_sensor_kit_description`): base_link to
+  sensor_kit_base_link (0.9, 0.0, 2.0), then to `velodyne_top_base_link` (0, 0, 0); aib's rig
+  (`tesla_model3.rig.yaml`, `sensors.top.translation`): (0.9, 0.0, 2.0). Equal, to the files'
+  precision (1 mm). With step 2's rotations (under 1e-6 rad), the kit and the rig agree in full.
+- *E2, the chain as `/tf_static` publishes it at run time:* not in the 18 records (they hold no
+  `/tf_static`); R1 records it, and it is checked there.
+
+**(2) Timing and motion distortion, for the Tesla the 18 runs drove.**
+- *D1 failed:* the corrector does not run. The kit's `sensing.launch.xml` and `lidar.launch.xml`
+  default `use_distortion_corrector` to false, and nothing in the profile sets it.
+- *D2 held, in effect:* the Tesla rig names no `point_format`, so aib uses `xyzirc`
+  (`isaac/sensors.py`, `Lidar.__init__`): no per-point times (`point_times` needs `xyzircaedt`)
+  and no simulated distortion (`motion_distortion` follows `point_times`). Each cloud is one
+  RTX render from one pose of the lidar prim (set to the mount's pose at the end of each substep,
+  `before_substep`), every point at the header's one stamp: the stamp of the frame it was
+  rendered in, `latency_frames` (2) frames back (`publish`, `_msg`).
+- *So nothing is distorted and nothing is corrected:* (2) gives no across error on the straights
+  at any speed. A wrong stamp would show as an along error of v times the lag (the runs' along
+  errors under 0.11 m bound it to about 10 ms at 11 m/s), and in a hairpin of radius R as an
+  across error of about (v lag)^2 / 2R: under 0.3 mm at 0.1 m and R 20 m. Neither the straights'
+  -0.08 m nor the hairpins' +0.13 m.
+- *The NTU card's limitation* ("lidar motion distortion not yet compensated in the Isaac sensor
+  kit") describes the same switch: off. On the Tesla it costs nothing, because aib renders no
+  distortion for it to undo; a rig that sets `xyzircaedt` (per-point times and simulated
+  distortion) without the corrector on would be distorted, which the 18 runs were not.
+- *What the scan side leaves:* not the mount, not the timing. Still unchecked: the render itself
+  (where RTX puts a return relative to the prim, at the 1 to 5 cm level, which 169's probe
+  bounded only at 0.06 m lateral at 40 m), and how NDT's voxel fit weighs a flat road's few
+  lateral features. R1 to R3 on the straight fixture separate those: a level across error there,
+  both ways, belongs to the render or to NDT on a flat road; none means the bends and the crown.
