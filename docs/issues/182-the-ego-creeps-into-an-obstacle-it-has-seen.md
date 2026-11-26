@@ -440,3 +440,15 @@ confirmed by its absence:
 
 So with the -6 MRM (190's change), the creep (182's title) is gone on this fixture even
 without 181's change. Run B shows what 181's change adds.
+
+**Cross-reference (133, 2026-11-27): issue 170.**
+- 170 measures a standing localization bias on Isaac across the track, -0.066 m on haruna_down,
+  and above the truth in z. Run A's drift is along the track: 0.36 m back over 150 s with the
+  car stopped, on a flat straight fixture.
+- They may be cousins: NDT weakly constrained in one direction of a feature-poor road. They may
+  also not be: 170's bias is steady, and this one grows while the car stands still.
+- For run B, 118 records NDT's pose, `transform_probability`, NVTL, `iteration_num` and
+  `exe_time_ms`, and the EKF's pose, biased pose, yaw bias, `diff_pose` and `stop_flag`. Autoware
+  1.5.0's EKF publishes no innovation, so it is read as NDT's pose less the EKF's at each NDT
+  stamp. Then the drift is measured, not guessed.
+- 243, who works 170, has run A's numbers.
