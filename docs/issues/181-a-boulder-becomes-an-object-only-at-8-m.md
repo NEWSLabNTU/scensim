@@ -364,3 +364,55 @@ Otherwise nothing below is read.
   and then (b) decides whether the road texture passes too.
 
 How sure: (a2) about 70 %, (b1) about 60 % (verge geometry is the doubt), (b2) about 70 %.
+
+## Step 3's result (241, 2026-11-27, after the predictions above)
+
+`replay181v.py` on `r1_window2.npz` (step 2's window, now with the recorded validator output),
+`gt_rocks.npy`, NAS `home/2026-11-27 issue 181 replay (241)/`. 173 frames from 40 m to 5 m. Each
+row below is the boulder's frames with a cluster / a validated object.
+
+| min_cluster_size | first cluster | cluster 20-31 / 12-20 / 10-12 / 5-10 m | first validated | validated 12-20 / 10-12 / 5-10 m |
+|---|---|---|---|---|
+| 10 (as run) | 13.1 m | 0/53, 4/38, 8/9, 26/30 | 9.6 m | 0/38, 0/9, 22/30 |
+| 5 | 18.8 m | 0/53, 24/38, 9/9, 26/30 | 9.6 m | 0/38, 0/9, 22/30 |
+| 3 | 27.3 m | 14/53, 38/38, 9/9, 26/30 | 9.6 m | 0/38, 0/9, 22/30 |
+
+The other clusters (not the boulder), each judged against the fixture's rocks:
+
+| min_cluster_size | clusters (a frame) | spurious (no rock within 1 m) | in the path / beside / off the road | validated |
+|---|---|---|---|---|
+| 10 | 0 | 0 | 0 / 0 / 0 | 0 |
+| 5 | 4 (0.02) | 0 | 0 / 0 / 4 | 0 |
+| 3 | 222 (1.28) | 141 (64 %), in 108 frames | 0 / 0 / 222 | 0 |
+
+**Against the predictions:**
+- (a1) Fidelity: **held**. The replayed validator agrees with the recorded
+  `clustering/validation/objects` in 173 of 173 frames (1.000), both first at 9.6 m. (Step 1's
+  8.8 m used its own nearness rule.)
+- (a2) The validator stays the limit: **held**. With `min_cluster_size` 5 and 3, the boulder is a
+  cluster from 18.8 m and 27.3 m, but its first validated frame stays at 9.6 m, in exactly the
+  same frames. The validator's count of more than 10 points inside the hull decides it.
+- (b1) The extra clusters at 3 and 5 are mostly spurious and off the road:
+  - **failed in part** on the share: 64 % spurious at 3, not 80 % or more. At 5, none of the 4
+    is spurious; each lies within 1 m of a shoulder or ditch rock;
+  - **held** on where they sit: all 226 are more than 3 m from the path, at the verges and
+    ditches, none in it or beside it.
+- (b2) The validator removes them: **held**. 0 of 226 are validated, the spurious ones included.
+
+**A correction to step 2.** Its whole-cloud cluster counts (0.3, 2.1, 4.5 and 7.4 a frame) were
+wrong. That replay applied the compare-map filter only within 15 m of the boulder, a shortcut
+for speed, so the rest of the cloud reached the clustering unfiltered. Step 3 filters everything
+within 60 m. The counts above replace those. Step 2's per-boulder results are unaffected,
+because the boulder was inside the 15 m.
+
+**So, for the decision (the user's, through 133):**
+- Lowering `min_cluster_size` alone does nothing for the stop: the validated object, and so
+  everything after it, is unchanged at 9.6 m.
+- Lowering both `min_cluster_size` and the validator's `min_points_num` / `max_points_num` for
+  UNKNOWN is the change that could move it. Its cost here is the 141 spurious off-road clusters
+  at `min_cluster_size` 3, if the validator lets them through.
+- Whether it does, at which validator threshold, is the next replay, and it is cheap. It is not
+  run here, because no prediction for it was committed first.
+- This is one fixture with a bare road and verge rocks. Road texture in the path did not make a
+  cluster at any setting, but the fixture's carriageway has roughness only (`gd0` 1e-12). A
+  rougher road may.
