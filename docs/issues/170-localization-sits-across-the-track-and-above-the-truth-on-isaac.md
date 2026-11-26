@@ -495,3 +495,10 @@ fixture_c5's builder does not make today: one more generated scenario file, or a
   `scenarios/projects/courses` (drift_mustang under Autoware, aib's drift_mustang rig, as the
   Haruna runs) with the fixture linked as `assets/maps/fixture_c170`, no judges, and the topics
   above. The install is a clean build of main fcc01e50 (acb's workspace, then scensim's).
+- *Two differences from the spec, settled before R1.* (1) Speed: the project first copied the
+  courses project's `max_velocity: 8`; set to the spec's 11.11 before any run started. (2) Lane:
+  the spec names the right lane eastbound; the builder's scenario starts in the left one
+  (y +1.62, heading 0), and R2 is its mirror (y -1.62, heading pi). The road is symmetric across
+  its centreline, so the lane changes only the sign of y in the map, not the geometry NDT sees;
+  kept as built, and the across errors are reported in the car's frame (+ left of the truth's
+  heading), so R1 and R2 compare as the spec's sum and difference.
