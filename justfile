@@ -348,11 +348,13 @@ gate commit="HEAD" dir="":
 # origin/main after a rebase: then tagged gate/<dir> locally) and nothing tracked changed
 # notag=true: never tag; a gate that landed rebased is kept, printing the tag command.
 # dir=<path>: a gate made with `just gate <commit> <dir>` (a registered worktree at <commit>)
-gate-clean commit notag="false" dir="":
+# unlanded=true: a commit on no origin branch, removed when a local branch or tag holds it
+gate-clean commit notag="false" dir="" unlanded="false":
     #!/usr/bin/env bash
     set -euo pipefail
     args=()
     [ "{{notag}}" = true ] && args+=(--notag)
+    [ "{{unlanded}}" = true ] && args+=(--unlanded)
     [ -z {{quote(dir)}} ] || args+=(--dir {{quote(dir)}})
     scripts/gate_clean.sh "{{commit}}" "${args[@]}"
 

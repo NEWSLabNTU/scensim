@@ -340,3 +340,35 @@ kept, with a pointer to `unlanded=true`. A landed or rebased commit ignores the 
   All 7 pass after the fix.
 - The 23 existing gate tests are unchanged.
 - `just gate` passes on 241, with the Isaac lane run.
+
+**133's conditions on rules 2 and 3 (2026-11-27, before the fix):**
+- (a) rule 2 allows deletions only: an untracked, modified or added file in that submodule
+  keeps the worktree. A test was added for it.
+- (b) rule 2's containment counts `refs/remotes/*` only.
+- (c) rule 3's counts the main repository's `refs/heads/*` and `refs/tags/*` only, never a
+  `gate/*` tag (gate-clean's own). A test was added for it.
+- (d) every removal under the new rules names the ref that made it safe.
+
+**Tests first** (f547ec26, before the fix): the 9 new tests (the 7 planned, plus 133's two) on
+main's `gate_clean.sh`. 7 failed and 2 passed:
+- the nested and branch-head removals failed, as predicted;
+- the three unlanded tests failed: removed, names the flag, and "no local branch or tag";
+- 133's two failed too: their kept messages ("untracked: kept", "no local branch or tag") are
+  new.
+
+The prediction was "4 fail, 3 pass" for the 7 planned, and it **failed**. "The SHA only the
+gate holds is kept" was predicted to pass, but today's script keeps it with another message,
+and the test asserts the new one.
+
+**The fix:**
+- `sub_ok <parent> <path> <pin> <prefix>` checks one submodule. Nested gitlinks are found in
+  the submodule's own HEAD tree and checked on their own.
+- `clean` keeps the superproject's rule and calls `sub_ok` per gitlink.
+- Rule 2 and `--unlanded` are as planned, under (a) to (d). The removal lines read:
+  - "sub: an interrupted checkout at <head8> (on origin: refs/remotes/origin/main), not its pin
+    <pin8>, N files missing";
+  - "removed <dir>: <sha> unlanded, kept by refs/heads/topic".
+- The recipe takes `unlanded=true`.
+
+**Result:** all 32 gate tests pass (`python3 -m pytest scripts/test_gate.py`): the 23 before,
+unchanged, and the 9 new.
