@@ -5,14 +5,17 @@
 #     scripts/gate.sh <commit> [<dir>]
 #
 # Steps: `just build`, `just test`, `just check`, each under `env -i` (HOME, USER, TERM, a fixed
-# PATH, and ISAAC_ROOT when the host sets it). After each, `git status --porcelain
+# PATH) plus the host's settings: the calling checkout's `.env` copied into the worktree (just's
+# dotenv-load reads it), and those of ISAAC_ROOT, SCENSIM_BUILD_JOBS, MAKEFLAGS,
+# CARGO_BUILD_JOBS and CUDA_VISIBLE_DEVICES the caller sets; the line names what it carried.
+# GATE_WRAP=<command> runs every step under that command (a memory guard, say). After each, `git status --porcelain
 # --untracked-files=no` (no --ignore-submodules) must be empty. With ISAAC_ROOT set, `just
 # test` must end saying the Isaac-Python lane ran (issue 186). The worktree is
 # `$SCENSIM_GATE_ROOT/gate-<sha8>` unless <dir> names one; an existing path is refused. The
 # output goes to <dir>/gate.log, and the summary line to stdout and <dir>/gate.txt:
 #
 #     gate ok <sha> tree <tree8> on <host> <time>: build test check clean; <Isaac lane>;
-#         colcon-cargo-ros2 <v>; rustfmt <v>
+#         colcon-cargo-ros2 <v>; rustfmt <v>; carried <.env and keys>[; under <GATE_WRAP>]
 #     gate FAILED <sha> at <step>: <reason>
 #
 # A failed step's reason quotes its last line and, when there is one, its first rustfmt `Diff
@@ -24,6 +27,7 @@ set -euo pipefail
 commit=${1:?usage: scripts/gate.sh <commit> [<dir>]}
 JUST=${GATE_JUST:-just}
 STEPS=${GATE_STEPS:-build test check}
+CARRY="ISAAC_ROOT SCENSIM_BUILD_JOBS MAKEFLAGS CARGO_BUILD_JOBS CUDA_VISIBLE_DEVICES"
 top=$(git rev-parse --show-toplevel)
 sha=$(git -C "$top" rev-parse --verify --quiet "$commit^{commit}") \
     || { echo "gate FAILED $commit at commit: not a commit here" >&2; exit 2; }
@@ -52,7 +56,22 @@ git submodule update -q --init --recursive >> "$log" 2>&1 || fail worktree "subm
 
 clean=(env -i "HOME=$HOME" "USER=${USER:-$(id -un)}" TERM=dumb
        "PATH=$HOME/.cargo/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin")
-[ -n "${ISAAC_ROOT:-}" ] && clean+=("ISAAC_ROOT=$ISAAC_ROOT")
+# the host's settings (CLAUDE.md: host settings are environment): the calling checkout's .env,
+# which just's dotenv-load reads in the worktree, and an allow-list from the caller's own
+carried=()
+if [ -f "$top/.env" ]; then
+    cp "$top/.env" "$dir/.env"
+    carried+=(.env)
+fi
+for k in $CARRY; do
+    if [ -n "${!k:-}" ]; then
+        clean+=("$k=${!k}")
+        carried+=("$k")
+    fi
+done
+# GATE_WRAP: a command every step runs under (a memory guard, say), word-split
+read -r -a wrap <<< "${GATE_WRAP:-}"
+echo "gate: carried ${carried[*]:-nothing}${wrap[*]:+; each step under: ${wrap[*]}}" | tee -a "$log"
 
 status_clean() {
     local s
@@ -67,7 +86,7 @@ for step in $STEPS; do
     echo "== $step $(date -Is)" >> "$log"
     out="$dir/gate-$step.out"
     # streamed into gate.log as it runs, so a long build can be watched (tail -f)
-    if ! "${clean[@]}" "$JUST" "$step" 2>&1 | tee -a "$log" > "$out"; then
+    if ! "${wrap[@]}" "${clean[@]}" "$JUST" "$step" 2>&1 | tee -a "$log" > "$out"; then
         # the first rustfmt `Diff in` or compiler `error` line names the file, the last
         # line is usually just's own `error: Recipe ... failed` (issue 191's follow-up)
         last=$(tail -1 "$out")
@@ -90,6 +109,6 @@ done
 
 ccr=$("${clean[@]}" python3 -c 'from importlib.metadata import version; print(version("colcon-cargo-ros2"))' 2>/dev/null || echo "?")
 fmt=$("${clean[@]}" rustfmt +nightly --version 2>/dev/null | sed 's/^rustfmt //' || echo "?")
-line="gate ok $sha tree ${tree:0:8} on $(hostname) $(date -Is): $STEPS clean; $lane; colcon-cargo-ros2 ${ccr:-?}; rustfmt ${fmt:-?}"
+line="gate ok $sha tree ${tree:0:8} on $(hostname) $(date -Is): $STEPS clean; $lane; colcon-cargo-ros2 ${ccr:-?}; rustfmt ${fmt:-?}; carried ${carried[*]:-nothing}${wrap[*]:+; under ${wrap[*]}}"
 echo "$line" | tee "$summary"
 echo "$line" >> "$log"

@@ -224,14 +224,18 @@ sides need no shared domain. Details: [architecture](design/architecture.md),
 - **The landing gate** (`just gate [commit:=HEAD]`, issue 191). Every change that lands is
   gated by it, whoever lands it. It makes a fresh worktree of the commit
   (`$SCENSIM_GATE_ROOT/gate-<sha8>`, a host setting, default `/var/tmp/$USER`) and runs
-  `just build`, `just test` and `just check` there from a clean environment, with `ISAAC_ROOT`
-  passed when the host sets it. After each step `git status --porcelain --untracked-files=no`
+  `just build`, `just test` and `just check` there from a clean environment. It carries the
+  host's settings: the calling checkout's `.env` is copied into the worktree, and of
+  `ISAAC_ROOT`, `SCENSIM_BUILD_JOBS`, `MAKEFLAGS`, `CARGO_BUILD_JOBS` and
+  `CUDA_VISIBLE_DEVICES`, those the caller sets are passed. Nothing else is. `GATE_WRAP=<command>`
+  runs every step under that command, a memory guard for example. After each step `git status --porcelain --untracked-files=no`
   must be empty. Where `ISAAC_ROOT` is set, the Isaac-Python lane must run. It ends with one
   line to quote when asking to land, for example:
 
   ```
   gate ok <sha> tree <tree8> on <host> <time>: build test check clean;
-      Isaac lane ran (937 tests); colcon-cargo-ros2 0.5.5; rustfmt <nightly>
+      Isaac lane ran (942 tests); colcon-cargo-ros2 0.5.5; rustfmt <nightly>;
+      carried .env MAKEFLAGS
   ```
 
   The full log is `<worktree>/gate.log`. `just gate-clean <commit>` removes the worktree once

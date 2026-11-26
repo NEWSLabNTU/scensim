@@ -10,6 +10,7 @@ STUB = """#!/bin/bash
 # STUB_FIRST=<line> prints that line before a failing step's last one,
 # STUB_LANE=ran|skipped picks `just test`'s last line
 step=$1
+echo "stub env: MAKEFLAGS=${MAKEFLAGS:-} CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-} PWD=$PWD"
 [ "${STUB_FAIL:-}" = "$step" ] && { [ -n "${STUB_FIRST:-}" ] && echo "$STUB_FIRST"; echo "$step broke"; exit 3; }
 [ "${STUB_DIRTY:-}" = "$step" ] && echo dirt >> tracked.txt
 if [ "$step" = test ]; then
@@ -38,13 +39,16 @@ def repo(tmp_path):
     return r, stub
 
 
-def gate(r, stub, tmp_path, dirname="g", isaac=None, **stub_env):
+def gate(r, stub, tmp_path, dirname="g", isaac=None, host=None, **stub_env):
     # the stub's own settings reach it through the clean environment's only door: a wrapper
     wrapper = tmp_path / f"just-{dirname}"
     exports = "".join(f"export {k}={v}\n" for k, v in stub_env.items())
     wrapper.write_text(f"#!/bin/bash\n{exports}exec {stub} \"$@\"\n")
     wrapper.chmod(0o755)
-    env = {k: v for k, v in os.environ.items() if k != "ISAAC_ROOT"}
+    carry = ("ISAAC_ROOT", "SCENSIM_BUILD_JOBS", "MAKEFLAGS", "CARGO_BUILD_JOBS",
+             "CUDA_VISIBLE_DEVICES", "GATE_WRAP")
+    env = {k: v for k, v in os.environ.items() if k not in carry}
+    env.update(host or {})
     env.update(GATE_JUST=str(wrapper), SCENSIM_GATE_ROOT=str(tmp_path / "gates"))
     if isaac:
         env["ISAAC_ROOT"] = isaac
@@ -121,6 +125,33 @@ def test_an_unknown_commit_is_refused(tmp_path):
     p = subprocess.run(["bash", str(GATE), "0" * 40], cwd=r, capture_output=True, text=True,
                        env=dict(os.environ, SCENSIM_GATE_ROOT=str(tmp_path / "gates")))
     assert p.returncode == 2 and "not a commit here" in p.stderr
+
+
+def test_the_gate_carries_the_hosts_settings_and_names_them(tmp_path):
+    """118's gap: .env and an allow-list of the caller's host settings reach the steps."""
+    r, stub = repo(tmp_path)
+    (r / ".env").write_text("SCENSIM_GATE_TEST=1\n")
+    p, d = gate(r, stub, tmp_path, host={"MAKEFLAGS": "-j3", "CARGO_BUILD_JOBS": "4",
+                                         "SOMETHING_ELSE": "x"})
+    assert p.returncode == 0, p.stderr
+    assert (d / ".env").read_text() == "SCENSIM_GATE_TEST=1\n"
+    log = (d / "gate.log").read_text()
+    assert "stub env: MAKEFLAGS=-j3 CARGO_BUILD_JOBS=4" in log
+    assert "SOMETHING_ELSE" not in log
+    line = p.stdout.strip().splitlines()[-1]
+    assert line.endswith("; carried .env MAKEFLAGS CARGO_BUILD_JOBS"), line
+
+
+def test_gate_wrap_runs_every_step_under_it(tmp_path):
+    r, stub = repo(tmp_path)
+    wrap = tmp_path / "wrap.sh"
+    marks = tmp_path / "wrapped.txt"
+    wrap.write_text(f"#!/bin/bash\necho \"$*\" >> {marks}\nexec \"$@\"\n")
+    wrap.chmod(0o755)
+    p, _ = gate(r, stub, tmp_path, host={"GATE_WRAP": str(wrap)})
+    assert p.returncode == 0, p.stderr
+    assert [ln.split()[-1] for ln in marks.read_text().splitlines()] == ["build", "test", "check"]
+    assert p.stdout.strip().splitlines()[-1].endswith(f"; carried nothing; under {wrap}")
 
 
 # --- scripts/gate_clean.sh: a landed gate's worktree goes, a rebased one's SHA is tagged ----

@@ -167,3 +167,26 @@ landed as is, landed rebased (tagged), not landed (kept), and tracked changes (k
 - `just gate` on this commit passes on 241 with the Isaac lane run (942 tests, or more if
   main moved), in 35 to 45 min.
 - The 12 tests of `scripts/test_gate.py` pass within `just test`.
+
+## The third follow-up: the host's settings reach the gate (241, 2026-11-26)
+
+118 could not use `just gate`. Its steps ran under `env -i` with only HOME, USER, TERM, PATH
+and ISAAC_ROOT, and a fresh worktree has no `.env` (it is gitignored). So the host settings
+CLAUDE.md puts in `.env` (SCENSIM_BUILD_JOBS, the ports, AUTOWARE_TENSORRT_LIB, ...) never
+reached the build, and neither did the caller's MAKEFLAGS or CARGO_BUILD_JOBS. Now:
+- the calling checkout's `.env` is copied into the worktree, where just's dotenv-load reads
+  it;
+- of an allow-list (ISAAC_ROOT, SCENSIM_BUILD_JOBS, MAKEFLAGS, CARGO_BUILD_JOBS,
+  CUDA_VISIBLE_DEVICES), those the caller sets are passed;
+- `GATE_WRAP=<command>` runs every step under that command;
+- the gate's line ends `carried <.env and keys>[; under <GATE_WRAP>]`.
+
+Two stub tests cover it. With the second follow-up it lands through one gate, rebased onto
+issue 189's step 3.
+
+**Predictions, before the gate:**
+- `just gate` on this commit passes on 241, with the Isaac lane run (942 on 241, whose Isaac
+  venv lacks pytest; issue 186's note).
+- Run from 241's landing worktree, which has no `.env`, with only ISAAC_ROOT of the
+  allow-list set, its line ends `carried ISAAC_ROOT`.
+- The 14 tests of `scripts/test_gate.py` pass within `just test`.

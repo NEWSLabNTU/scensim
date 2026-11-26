@@ -108,3 +108,12 @@ The status line: "Isaac-Python lane: ran (937 tests in 3 suites, OK)". No new fa
 issue. One cost, observed: `scensim_batch`'s suite took 2763 s on the CPU in Isaac's Python, so
 a full gate on a host with Isaac runs about 50 minutes longer than one that skipped the lane.
 
+
+**The lane's count differs by one between hosts (118 and 243, 2026-11-26; no code change).**
+`test_installed.py` imports pytest and raises `unittest.SkipTest` at import when it is
+missing. So on a host whose Isaac venv lacks pytest (243), it counts as one skipped module:
+scensim_isaac_world "Ran 530, skipped=19", lane total 942. On a host that has it (118, pytest
+9.2.0 in the venv) the module loads with no unittest cases: "Ran 529, skipped=18", total 941.
+The other 529 test ids match exactly between the two hosts (243's diff of the discovered ids,
+siw a736c0b0). A gate line's count is therefore per host. A difference of one between hosts
+is this, and not a lost test.
