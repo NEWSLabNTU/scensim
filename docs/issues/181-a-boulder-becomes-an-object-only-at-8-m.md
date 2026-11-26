@@ -466,3 +466,63 @@ That last part is the least sure (about 40 %). A cleat is a step across the road
 compare-map filter may or may not remove, depending on how high it stands over the map's road.
 
 How sure of the table: about 60 % for each cell's range.
+
+## Step 4's result (241, 2026-11-27, after the predictions above)
+
+`replay181g.py`, self-contained, the same chain as step 3 with the validator's threshold V as a
+parameter: an object is kept with more than V points inside its hull. The inputs:
+- fixture_c6b: r1's window, 173 frames, 40 to 5 m, judged against `gt_rocks.npy`;
+- fixture_c6a: C6e3's a1 run, the whole run (2909 frames; 118's NAS copy of the map, SHA256SUMS
+  checked).
+
+Outputs are in NAS `home/2026-11-27 issue 181 replay (241)/grid_out.txt`. The as-run cell
+reproduces step 3 (9.6 m). a1 recorded no validator output, so c6a has no fidelity check of its
+own.
+
+The boulder's first validated range, fixture_c6b:
+
+| min_cluster_size \ validator | 10 | 5 | 3 |
+|---|---|---|---|
+| 10 (as run) | 9.6 m | 12.1 m | 12.5 m |
+| 5 | 9.6 m | 12.1 m | 12.5 m |
+| 3 | 9.6 m | 12.1 m | 12.5 m |
+
+The validated spurious objects:
+
+| min_cluster_size / validator | fixture_c6b (path, beside, off) | fixture_c6a (path, beside, off) |
+|---|---|---|
+| 10 / 10 (as run) | 0 (0, 0, 0) | 11 (0, 0, 11) in 11 of 2909 frames |
+| 10 / 5, 10 / 3 | 0 | 17 (0, 0, 17) |
+| 5 / 10, 3 / 10 | 0 | 11 (0, 0, 11) |
+| 5 / 5, 3 / 5 | 0 | 29 (0, 0, 29) in 24 frames |
+| 5 / 3, 3 / 3 | 0 | 36 (0, 0, 36) in 28 frames |
+
+No setting validated an object in the path or beside it, on either fixture: not at the cleats,
+the pothole or the washboard. Every spurious object is more than 3 m from the path.
+
+**Against the predictions:**
+- The validator's column decides, and the rows do not matter: **held**. Every row is the same;
+  `min_cluster_size` never binds once the validator needs more points than it.
+- The ranges:
+  - validator 10: 9.6 m in every row, **held**;
+  - validator 5: 12.1 m, inside the 12 to 13.1 and 11 to 15 m predicted, **held**;
+  - validator 3: 12.5 m, **FAILED** against 13.1 (row 10) and 13 to 19 m (rows 5 and 3).
+- The boulder's points are too few and too spread for a hull to hold more than 3 of them
+  inside before about 12.5 m. No cell reaches 13 m, against the 27.3 m at which it first
+  clusters.
+- fixture_c6b's spurious objects: **held**. There are none at any setting. Step 3's 141
+  spurious clusters at `min_cluster_size` 3 hold 3 points inside their hulls at most.
+- fixture_c6a:
+  - as run, no validated object: **FAILED in its letter**. The replay validates 11 objects at
+    this stage, all off the road, and C6e3's "no object" was read from the final objects,
+    after the lanelet filter and tracking. In the path: none, as C6e3 saw;
+  - at 3 / 3, objects in the path at the 10 and 15 cm cleats: **FAILED**. No object in the path
+    at any feature, at any setting.
+
+**For the decision:**
+- The two thresholds together move the boulder's first validated range from 9.6 m to at most
+  12.5 m. At r1's 4.2 m/s that is 2.9 m, about 0.7 s more, with no spurious object in the path
+  on either fixture.
+- They cannot reach the 27 to 31 m at which the boulder's points first appear: the hull rule
+  and the lidar's few returns on a 0.35 m rock set the limit, not the thresholds.
+- Whether 0.7 s is enough to stop is 182's question, not this one.
