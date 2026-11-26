@@ -1,6 +1,6 @@
 # 190: Autoware brakes only about 1 to 1.5 m/s^2 for a pedestrian darting into its lane
 
-**Status:** open (243; numbered by 133, 2026-11-26); plan steps (a), (b) and (c) done 2026-11-26. In (b) the pedestrian is UNKNOWN with no published motion; in (c), with full CenterPoint, it is PEDESTRIAN with its motion and four modules stop for it, but the ego still meets it at 1.6 m/s (step (c) below). (d) is next; what to change is the user's call through 133.
+**Status:** open (243; numbered by 133, 2026-11-26); plan steps (a) to (d) done 2026-11-26, compared at the end. Full CenterPoint (c) labels the walker PEDESTRIAN, four modules stop for it, and the contact falls to 1.6 m/s; the tracker's UNKNOWN motion (d) changes nothing, since no module acting on motion considers an UNKNOWN object. All three runs fail. What to change is the user's call through 133.
 **Severity:** to be judged. With room to stop, the Autoware ego kept a gentle deceleration
 until it struck the pedestrian (issue 189's contact).
 **Found:** 2026-11-26, scensim 243, 092 K9f-a's exit run 2 (k9f_zones, Isaac Sim 6.2).
@@ -411,3 +411,81 @@ time. CenterPoint did not hold the walker until 1.05 s after it moved, where clu
 before it moved. And the deceleration stays at -2.50 (as in (b), set downstream of the planner)
 once the stop is planned. (d), the tracker's UNKNOWN motion with clustering, runs next on the
 same install.
+
+## Plan step (d), 2026-11-26 (243): the tracker's UNKNOWN motion, the recorded run
+
+**The run.** `2026-11-26T23-38-53_goal_stop_goal_surface-asphalt_r0`, 23:38 to 23:40 on
+newslab-server243, the same install as (c) (main 9ed62536), with clustering and the pilot
+argument `multi_object_tracker_node_param_path` set to a copy of the profile's tracker file that
+differs in one line, `enable_unknown_object_motion_output: true`. The tracker loaded it: its
+parameter file in the stack's node log holds `enable_unknown_object_motion_output: true`. The
+run directory, the bag, the decoder's output, the tracker's command line and parameter files,
+and the runner are on the NAS, `home/2026-11-26 190 d run (243)/` (with SHA256SUMS).
+
+The verdict is failed: `SimulationFailure: ... "ego_hits_ped"` (SSv2's own collision
+condition, as in (b)). The contact report: `ped`, first at SSv2 frame 516 (25.80 s), max impulse
+5855.5 N*s.
+
+**Times.** The pedestrian first moves at frame 459 (22.90 s), with the ego at 7.66 m/s. It is in
+the objects from 23.20 s.
+
+**D1 holds in part.** The walker is `UNKNOWN` (1.00) throughout, and its motion is now
+published: 0.35 m/s at 23.80 s (0.9 s after the walk began), 1.0 m/s at 24.50 s, 1.33 to
+1.38 m/s from 25.00 s. "About 1.5 m/s from within 1 s" does not hold: it is non-zero within 1 s
+but reaches 1.0 m/s only after 1.6 s, and peaks at 1.38. The velocity lies along the object's
+own y axis (x about 0, y up to 1.38), since an UNKNOWN object's heading is not its direction of
+motion. Its predicted path (confidence 1.00) crosses the lane from about 23.9 s.
+
+**D2 fails, and could not have held.** `dynamic_obstacle_stop` published no factor and drew no
+debug marker in the window. Its object filter (autoware_universe 0.48.0, the version Autoware
+1.5.0 pins: `autoware_motion_velocity_dynamic_obstacle_stop_module/src/object_filtering.cpp`,
+`filter_predicted_objects` and `is_vehicle`) keeps only objects with a vehicle label (CAR, BUS,
+TRUCK, TRAILER, MOTORCYCLE, BICYCLE) and a longitudinal speed `twist.linear.x` of at least
+0.5 m/s. An UNKNOWN object is excluded by its label, and this one also by its speed's direction.
+A PEDESTRIAN would be excluded too.
+
+**Correction to step (b)'s "What follows".** It said that with the motion output on
+"`dynamic_obstacle_stop` could then see a 1.5 m/s object". That is wrong: the module never
+considers a pedestrian or an UNKNOWN object, whatever its motion. D2's premise was the same
+error.
+
+**D3 holds.** `run_out` published nothing (UNKNOWN is not in its target labels).
+
+**D4 holds.** Only `obstacle_stop` acted, as in (b): its first stop factor at 24.60 s (1.70 s
+after the walk began; the walker's centre at y -127.93), the stop point behind the ego from
+24.80 s. The command went to -1.49 at 24.70 s, -2.34 at 25.00 s, peaked at -3.34 at 25.20 s,
+then held -2.50. The ego was at 5.83 m/s at 24.60 s and 3.34 m/s at the contact.
+
+## The comparison (b), (c), (d), 2026-11-26 (243)
+
+| | (b) clustering, stock | (c) full CenterPoint | (d) clustering, UNKNOWN motion on |
+|---|---|---|---|
+| walk starts | 24.25 s | 23.80 s | 22.90 s |
+| in the objects, after the walk began | at once | 1.05 s | 0.30 s |
+| label | UNKNOWN | PEDESTRIAN | UNKNOWN |
+| tracked speed | 0 | up to 1.47 m/s | up to 1.38 m/s |
+| predicted path crosses the lane | no | yes | yes |
+| modules that stop for it | `obstacle_stop` | `road_user_stop`, `obstacle_stop`, `obstacle_slow_down`, `run_out` | `obstacle_stop` |
+| first stop factor, after the walk began | 1.45 s | 1.20 s | 1.70 s |
+| peak commanded deceleration, then | -3.00, then -2.50 | -2.82, then -2.50 | -3.34, then -2.50 |
+| ego speed at contact | about 3.5 m/s | 1.58 m/s | 3.34 m/s |
+| max impulse | 6189.7 N*s | 2215.9 N*s | 5855.5 N*s |
+| verdict | failed | failed | failed |
+
+**What each option changes.** Only a PEDESTRIAN label brings Autoware's pedestrian modules to the
+walker (`road_user_stop` first, then `run_out`), and only (c) cut the contact speed (by more than
+half). The tracker parameter alone, (d), publishes the motion but no module that would act on
+an UNKNOWN object's motion uses it: the result is (b)'s, one module and a contact at the same
+speed.
+
+**Where the time goes, separately.**
+- *The pickup.* CenterPoint held the walker only 1.05 s after it began to walk; clustering held
+  it at once in (b) and after 0.30 s in (d). The tracker parameter does not touch detection, so
+  it cannot change this; in (c) it is CenterPoint's own delay.
+- *The deceleration floor.* In all three runs the command holds -2.50 m/s^2 once the stop is
+  planned (after a brief peak of -2.8 to -3.3). That is set downstream of the planner (the velocity
+  smoother's minimum acceleration or the controller; which one is not in these topics), so
+  neither the detector nor the tracker parameter can change it.
+
+Whether this scenario can be passed at all needs that floor read: at -2.50 m/s^2 from 7 m/s the
+ego needs 9.8 m, and in (c) the first stop came with the walker 1.20 s into its walk.
