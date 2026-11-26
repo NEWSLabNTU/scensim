@@ -319,3 +319,29 @@ Both rows have their outcomes (passed/passed) and every storyboard element's ste
   dense line. On SSv2's sparser line (14 points on 42664, 24 on 32582), the route's samples
   across the lanelet join no longer fall where SSv2's per-lanelet splines bend. That is a
   batch-model detail, not the centreline. It is recorded here for 092 K2.4, not fixed in 194.
+
+**Step 9, the sampling hypothesis tested (133's ask, CPU only).**
+
+The plan:
+- Replay K2.4's two rows exactly as in step 8 (`--ego-from-truth`, the same seats runs and
+  exports, v2 and v3), changing only `--route-points`: the samples on each NPC's 300 m route.
+- Step 8 used the default, 121 (2.5 m apart). The variants:
+  - 151 (2.0 m, SSv2's nominal spacing; not aligned to its points);
+  - 301 (1.0 m);
+  - 601 (0.5 m), where the Catmull-Rom interpolation between samples is nearly the sampled
+    spline itself.
+- Knots placed at the lanelet join need a code change. They are not tried unless the dense
+  runs point there.
+
+Predictions, before any run:
+- If the hypothesis holds, v3's lead maximum falls with the spacing, to 2.8 cm or less at 601,
+  and its step-1000 peak shrinks most. v2's maximum moves less, because lanelet2's dense line
+  is sampled the same at every spacing.
+- If it fails, the 601 maximum stays near 3.96 cm. The excess then comes from the joined spline
+  the route samples (`Spline` over all of the route's lanelets' points), not from the sampling:
+  SSv2's entity follows each lanelet's own spline, which differs from the joined one near the
+  joint.
+- The follower's row (npc_stops_for_ego, 2.46 cm) does not move at any spacing: it is a straight
+  route.
+- I lean to the second (55 %). At 2.5 m the Catmull-Rom error on a curve of 8.8 m radius is well
+  under a millimetre, too little for 1.15 cm.
