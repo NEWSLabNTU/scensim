@@ -88,6 +88,47 @@ gate worktrees themselves were removed after the copy.
    watch on the keeper when the keeper dies. Read `scensim.simulator`'s reaper for the order of
    those two steps before any fix.
 
+## Hypothesis 1, 118, 2026-11-26 (scensim 118 for 243, assigned by 133; after the predictions above)
+
+**Setup.**
+- Host: newslab-server118, 48 cores.
+- Tree: scensim main 7a9dc61c (gate-c5c, built and gated at that commit).
+- Load: burn.py, 30 workers (243's 20 on 32 cores, scaled to 48), in their own process group,
+  started 5 s before the first run and checked at 31 processes. Each workload's group was
+  verified empty after it.
+- The setsid arm runs `pytest` under 243's `memguard.sh`, the failed gate's `GATE_WRAP`. The
+  plain arm runs it directly. Both run under `env -i` with `install/setup.bash` sourced,
+  `OMP_NUM_THREADS=4`, and `-p no:cacheprovider`.
+- 20 runs per arm, interleaved (setsid first on odd runs, plain first on even ones).
+- A setsid run takes at least 5 s, because memguard polls every 5 s.
+
+| test | arm | runs | failures | load average (1 min) over the runs |
+|---|---|---|---|---|
+| `:815` engine under the launcher, SIGKILLed keeper | setsid | 20 | 0 | 8.2 to 31.9 |
+| | plain | 20 | 0 | 8.2 to 31.8 |
+| `:732` CARLA deaf to SIGTERM (166's first sighting) | setsid | 20 | 0 | 32.0 to 73.8 |
+| | plain | 20 | 0 | 32.2 to 74.5 |
+| `:703` started CARLA dies with its killed keeper | setsid | 20 | 0 | 34.4 to 41.8 |
+| | plain | 20 | 0 | 34.5 to 41.4 |
+
+The load average rose over the `:815` set as the workers started. Other users' work added to it
+during `:732`.
+
+**An aborted first attempt (not counted).** burn.py refused to start (its BLAS-threads
+assertion), so 2 setsid and 2 plain runs of `:815` ran with no load. All passed. The runner was
+stopped by its process group. The fix sets the BLAS variables, and a check now refuses to run
+with fewer than W+1 burn processes.
+
+**Against the predictions.** Neither arm failed on any of the three tests, 0 of 120 runs. That is
+the third branch, as written: 30 workers on 48 cores are not the gate's load, and nothing is
+concluded about setsid or load alone yet. The next arm, as 243 suggests, is the whole of
+`test_simulator.py`, or of `src/scensim/test` where the failure came, under setsid and the same
+load, before the load is raised.
+
+**Logs.** On 118, in `/mnt/renegade/aeon/isaac-ex/i193/`: `h1.sh`, `memguard.sh`, `burn.py`,
+`times_t815.txt`, `times_t732.txt` and `times_t703.txt`, with one pytest output per run in
+`t815/`, `t732/` and `t703/` (the aborted attempt in `t815-aborted-noload/`).
+
 ## The fix (243, 2026-11-26; assigned by 133 on 118's reading of hypothesis 3)
 
 118 read the reaper (its section, "Hypothesis 1, 118, 2026-11-26", and the hypothesis 3
