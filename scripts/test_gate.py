@@ -121,3 +121,98 @@ def test_an_unknown_commit_is_refused(tmp_path):
     p = subprocess.run(["bash", str(GATE), "0" * 40], cwd=r, capture_output=True, text=True,
                        env=dict(os.environ, SCENSIM_GATE_ROOT=str(tmp_path / "gates")))
     assert p.returncode == 2 and "not a commit here" in p.stderr
+
+
+# --- scripts/gate_clean.sh: a landed gate's worktree goes, a rebased one's SHA is tagged ----
+
+CLEAN = Path(__file__).resolve().parent / "gate_clean.sh"
+ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com",
+           GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
+
+
+def git(r, *a):
+    return subprocess.run(["git", "-C", str(r), *a], check=True, capture_output=True,
+                          text=True, env=ENV).stdout.strip()
+
+
+def commit(r, name, text):
+    (r / name).write_text(text)
+    git(r, "add", name)
+    git(r, "commit", "-qm", name)
+    return git(r, "rev-parse", "HEAD")
+
+
+def landed_repo(tmp_path):
+    """A clone of a bare origin with one commit on main, and a gate worktree root."""
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
+    r = tmp_path / "work"
+    subprocess.run(["git", "clone", "-q", str(origin), str(r)], check=True,
+                   capture_output=True)
+    git(r, "checkout", "-q", "-b", "main")
+    commit(r, "a.txt", "a\n")
+    git(r, "push", "-q", "origin", "main")
+    return r, tmp_path / "gates"
+
+
+def gate_tree(r, root, sha):
+    d = root / f"gate-{sha[:8]}"
+    git(r, "worktree", "add", "-q", "--detach", str(d), sha)
+    return d
+
+
+def clean(r, root, sha):
+    return subprocess.run(["bash", str(CLEAN), sha], cwd=r, capture_output=True, text=True,
+                          env=dict(ENV, SCENSIM_GATE_ROOT=str(root)))
+
+
+def test_gate_clean_removes_a_worktree_whose_commit_is_on_origin(tmp_path):
+    r, root = landed_repo(tmp_path)
+    sha = commit(r, "b.txt", "b\n")
+    d = gate_tree(r, root, sha)
+    git(r, "push", "-q", "origin", "main")
+    p = clean(r, root, sha)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert not d.exists() and "tag" not in p.stdout
+    assert git(r, "tag", "-l") == ""
+
+
+def test_gate_clean_tags_a_gate_that_landed_rebased(tmp_path):
+    r, root = landed_repo(tmp_path)
+    git(r, "checkout", "-q", "-b", "topic")
+    sha = commit(r, "b.txt", "b\n")
+    d = gate_tree(r, root, sha)
+    git(r, "checkout", "-q", "main")
+    commit(r, "c.txt", "c\n")                         # main moved while the gate ran
+    git(r, "push", "-q", "origin", "main")
+    git(r, "checkout", "-q", "topic")
+    git(r, "rebase", "-q", "main")                    # the rebased commit is what lands
+    git(r, "push", "-q", "origin", "topic:main")
+    git(r, "checkout", "-q", "main")
+    git(r, "branch", "-q", "-f", "topic", "main")     # nothing local holds the gated SHA
+    p = clean(r, root, sha)
+    assert p.returncode == 0, p.stdout + p.stderr
+    tag = f"gate/gate-{sha[:8]}"
+    assert f"tag {tag} -> {sha}" in p.stdout
+    assert git(r, "rev-parse", f"{tag}^{{commit}}") == sha
+    assert not d.exists()
+
+
+def test_gate_clean_keeps_a_gate_whose_commit_has_not_landed(tmp_path):
+    r, root = landed_repo(tmp_path)
+    sha = commit(r, "b.txt", "b\n")
+    d = gate_tree(r, root, sha)
+    p = clean(r, root, sha)
+    assert p.returncode == 1 and "kept" in p.stdout
+    assert d.exists() and git(r, "tag", "-l") == ""
+
+
+def test_gate_clean_keeps_a_worktree_with_tracked_changes(tmp_path):
+    r, root = landed_repo(tmp_path)
+    sha = commit(r, "b.txt", "b\n")
+    git(r, "push", "-q", "origin", "main")
+    d = gate_tree(r, root, sha)
+    (d / "b.txt").write_text("changed\n")
+    p = clean(r, root, sha)
+    assert p.returncode == 1 and "has tracked changes: kept" in p.stdout
+    assert d.exists()

@@ -151,3 +151,19 @@ worktree's path cut off, when it differs from the last line. A stub test covers 
   line: error: recipe \`check\` failed with exit code 1; first: Diff in
   src/scenario_world_bridge/src/backend/remote/profiles.rs:521:)`. Held: the summary line
   now names the file.
+
+## The second follow-up: `gate-clean` after a rebase (241, 2026-11-26)
+
+Landing 969c5f27 needed a rebase after its gate, so the gated SHAs (c34124da, 7ede1183,
+b8defc88) were on no origin branch, and `gate-clean` refused them, as written. 133 asked that
+it also accept a gate whose every commit is patch-equivalent on origin/main (`git cherry`, all
+`-`). In that case it first sets the local tag `gate/<worktree name>` on the gated SHA and
+prints it, because the issue's record cites that SHA. The three were tagged by hand the same
+way: `gate/gate-c34124da`, `gate/gate-7ede1183`, `gate/gate-b8defc88`. The recipe now runs
+`scripts/gate_clean.sh`, and `scripts/test_gate.py` covers it with 4 tests on a bare origin:
+landed as is, landed rebased (tagged), not landed (kept), and tracked changes (kept).
+
+**Predictions, before the gate:**
+- `just gate` on this commit passes on 241 with the Isaac lane run (942 tests, or more if
+  main moved), in 35 to 45 min.
+- The 12 tests of `scripts/test_gate.py` pass within `just test`.

@@ -235,8 +235,10 @@ sides need no shared domain. Details: [architecture](design/architecture.md),
   ```
 
   The full log is `<worktree>/gate.log`. `just gate-clean <commit>` removes the worktree once
-  the commit is on origin. A docs-only change needs only `scripts/check_docs.py` and
-  `scripts/check_pins.py`.
+  the commit is on origin. A commit gated and then rebased before landing counts too, when
+  every commit of it is patch-equivalent on origin/main (`git cherry`). It first gets the
+  local tag `gate/gate-<sha8>`, so the SHA the gate's line cites stays reachable. A
+  docs-only change needs only `scripts/check_docs.py` and `scripts/check_pins.py`.
 
 ## Design documents
 

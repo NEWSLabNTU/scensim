@@ -344,19 +344,12 @@ gate commit="HEAD" dir="":
     set -euo pipefail
     scripts/gate.sh "{{commit}}" {{ if dir == "" { "" } else { quote(dir) } }}
 
-# Remove a gate's worktree once its commit is on origin and nothing tracked changed in it.
+# Remove a gate's worktree once its commit landed (on origin, or patch-equivalent on
+# origin/main after a rebase: then tagged gate/<dir> locally) and nothing tracked changed
 gate-clean commit:
     #!/usr/bin/env bash
     set -euo pipefail
-    sha=$(git rev-parse --verify "{{commit}}^{commit}")
-    dir="${SCENSIM_GATE_ROOT:-/var/tmp/$USER}/gate-${sha:0:8}"
-    [ -d "$dir" ] || { echo "no gate worktree at $dir"; exit 1; }
-    git fetch -q origin
-    [ -n "$(git branch -r --contains "$sha")" ] || { echo "$sha is on no origin branch: kept"; exit 1; }
-    [ -z "$(git -C "$dir" status --porcelain --untracked-files=no)" ] || { echo "$dir has tracked changes: kept"; exit 1; }
-    git worktree remove --force "$dir"
-    git worktree prune
-    echo "removed $dir"
+    scripts/gate_clean.sh "{{commit}}"
 
 # Run format check and clippy
 check:
