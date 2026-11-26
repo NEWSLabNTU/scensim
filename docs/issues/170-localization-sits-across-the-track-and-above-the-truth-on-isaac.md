@@ -617,3 +617,39 @@ different car (its own sensor kit and rig mount) would mix the vehicle into the 
 any run: the three scenarios' ego is `tesla_model3`, the testbench has no vehicle override and no
 rig file (aib's default Tesla), the asset take is `vehicles/vehicle.tesla.model3`, and the fixture
 is a `path:` asset (`scensim testbench check`: ok). `max_velocity` stays the spec's 11.11.
+
+## The scan side, on the CPU (133, 2026-11-27): predictions before reading
+
+After (a) and (b) the map is the world and NDT converges; what is left is the scan NDT is given.
+Two checks, for the Tesla the 18 runs drove.
+
+**(1) The extrinsic.** Step 2 compared the rotations (the kit's chain against aib's mount, to
+under 1e-6 rad) and the render against the mount (169's probe). Still open: the translation,
+and the chain as `/tf_static` publishes it at run time rather than as the files give it.
+- *E1:* the kit's base_link to the top lidar translation equals aib's rig mount position within
+  1 mm in each axis. A few cm off would give a fixed car-frame offset of that size; it would
+  appear across only if its y part is off, by the same amount.
+- *E2:* the rotation as published equals the files' (step 2) within 1e-4 rad. A yaw error of
+  0.1 deg puts points at 20 m off by 3.5 cm sideways, but NDT absorbs a pure yaw error as a yaw
+  error of the pose, not as a sideways shift at base_link (the levers give under 2 mm).
+
+**(2) Timing and motion distortion.** What decides it: whether Autoware's
+`distortion_corrector` runs on the Isaac kit's top lidar, which time the cloud's header carries
+(the scan's start, middle or end), and whether aib's points carry per-point times.
+- *D1:* the corrector runs (it is in Autoware's standard sensing chain for the top lidar).
+- *D2:* aib renders each scan at one simulation step and gives every point the same time (no
+  per-point offsets, or all zero), so the cloud has no distortion and the corrector moves nothing.
+  Then (2) predicts no error at any speed, and the 18 runs' errors are not from it.
+- *If D2 fails* (per-point times spread over the scan's period, 0.1 s, on a cloud rendered at one
+  instant): the corrector moves each point by the car's motion over its time offset, a
+  distortion that was never there. At speed v the cloud is moved along by about v times the mean
+  offset (0.4 to 1.1 m at 4 to 11 m/s with a 0.1 s scan, against the runs' along errors under
+  0.11 m: it would be seen), and in a bend turned by the yaw rate times the mean offset, which
+  changes sign with the bend (opposite in left and right hairpins) and is 0 on the straights. So
+  even then it could not give the straights' -0.08 m across; it could give an antisymmetric part
+  of the bends.
+- *The header stamp:* if it is the scan's end while the points are rendered at its start (or the
+  other way), the cloud is late or early by up to 0.1 s; the EKF then places it where the car was
+  v times that ago, an along error (0.4 to 1.1 m) and no across error on a straight. The runs'
+  along errors (under 0.11 m) bound such a lag to about 10 ms at 11 m/s.
+A standstill drift (run A) comes from neither (2) nor a fixed extrinsic: both vanish at v = 0.
