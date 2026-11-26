@@ -87,3 +87,42 @@ gate worktrees themselves were removed after the copy.
 3. **A race in the reaper's handover.** The pidfd is open but the reaper has not yet armed its
    watch on the keeper when the keeper dies. Read `scensim.simulator`'s reaper for the order of
    those two steps before any fix.
+
+## The fix (243, 2026-11-26; assigned by 133 on 118's reading of hypothesis 3)
+
+118 read the reaper (its section, "Hypothesis 1, 118, 2026-11-26", and the hypothesis 3
+reading). `start_reaper` arms the reaper's parent-death signal (SIGTERM) in its `preexec_fn`,
+but `reap()` installs its SIGTERM handler only after the first `members.scan()`, which opens
+the pidfds. A keeper that dies before the handler is installed sends the reaper SIGTERM at
+the default disposition: the reaper dies without signalling anything, the launcher dies of its
+own parent-death signal, and the engine (whose parent-death signal the launcher's fork
+cleared) is orphaned for good. That matches the failed gate: the engine alive at the 15 s
+assertion and again at teardown, over 20 s after the keeper died. The window is wider than the
+scan: it runs from the `prctl` in `preexec_fn` through the interpreter's start-up, its
+imports and the whole first scan. Both tests (`:732` and `:815`) take "a pidfd in
+`/proc/<reaper>/fd`" as the reaper watching, which falls inside that window.
+
+**The change.**
+- The reaper's `preexec_fn` blocks SIGTERM before it arms the parent-death signal. A blocked
+  mask survives `exec`, so a keeper's death during start-up leaves SIGTERM pending, not fatal.
+- `reap()` installs its SIGTERM handler, then unblocks SIGTERM, before any `pidfd_open`. A
+  pending SIGTERM then reaches the handler and the reaper ends CARLA's group as it would have.
+  `reap()` puts the previous handlers and mask back when it returns (it is also called
+  in-process by a test).
+- The reaper says it is armed: `reap --ready <file>` writes the file (atomically) after the
+  handler is in place and the first scan holds CARLA. `Carla.start` passes
+  `<proc dir>/carla.reaper.ready` and removes a stale one first. The two tests wait for that
+  file instead of a pidfd.
+- A test-only pause, `SCENSIM_TEST_REAPER_PAUSE=<where>:<seconds>` (`startup`: before
+  `reap()` starts; `scan`: after the first scan), holds the reaper inside the window so a test
+  can kill the keeper there. Nothing outside the tests sets it.
+
+**Predictions (written before the runs).**
+- P1. A new test kills the keeper while the reaper is paused at `startup`. Before the change it
+  fails: the engine is alive after 15 s. After the change it passes.
+- P2. A new test kills the keeper while the reaper is paused at `scan`, as soon as the reaper
+  holds a pidfd (the old readiness sign). Before the change it fails the same way; after, it
+  passes.
+- P3. After the change, `test_simulator.py` passes whole, `:732` and `:815` included, now
+  waiting on the ready file.
+- P4. `just gate` on the fix passes.
