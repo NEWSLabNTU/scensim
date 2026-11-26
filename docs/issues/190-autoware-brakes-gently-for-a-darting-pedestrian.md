@@ -1,6 +1,6 @@
 # 190: Autoware brakes only about 1 to 1.5 m/s^2 for a pedestrian darting into its lane
 
-**Status:** open (243; numbered by 133, 2026-11-26); plan steps (a) and (b) done 2026-11-26: the pedestrian box is UNKNOWN and its motion is not published, see step (b) below. What to change is 133's call.
+**Status:** open (243; numbered by 133, 2026-11-26); plan steps (a), (b) and (c) done 2026-11-26. In (b) the pedestrian is UNKNOWN with no published motion; in (c), with full CenterPoint, it is PEDESTRIAN with its motion and four modules stop for it, but the ego still meets it at 1.6 m/s (step (c) below). (d) is next; what to change is the user's call through 133.
 **Severity:** to be judged. With room to stop, the Autoware ego kept a gentle deceleration
 until it struck the pedestrian (issue 189's contact).
 **Found:** 2026-11-26, scensim 243, 092 K9f-a's exit run 2 (k9f_zones, Isaac Sim 6.2).
@@ -331,3 +331,83 @@ clustering's UNKNOWN is not a fallback. Hence:
 - C1, stated more fully: the walker is in the objects, labelled PEDESTRIAN, for most of its walk.
 Full CenterPoint needs about 2.05 GB of VRAM at peak against tiny's 1.46 (CLAUDE.md), so (c)'s
 card floor is 14336 MiB, 2048 above (b)'s 12288.
+
+## Plan step (c), 2026-11-26 (243): full CenterPoint, the recorded run
+
+**The run.** `2026-11-26T23-31-45_goal_stop_goal_surface-asphalt_r0`, 23:31 to 23:33 on
+newslab-server243, Isaac Sim 6.2, asphalt case only. It ran from a clean install of main
+9ed62536 (`wt-190d`, the acb workspace then scensim, built 16:35 to 16:55), on a copy of
+k9f_zones with `lidar_detection_model: centerpoint` beside `max_velocity: 11.11`, TensorRT 10.8.0
+from the host settings, and the same recording as (b) plus the CenterPoint detections and the
+debug markers. The waiter held from 14:06 until the card had 14336 MiB free for 2 minutes; the
+card peaked at 25440 MiB used during the run. The run directory, its bag, the decoder
+(`bag190c.py`, (b)'s with the CenterPoint topic added) and its output, the runner and the live
+topic list are on the NAS, `home/2026-11-26 190 c run (243)/` (with SHA256SUMS).
+
+The verdict is failed: `UndeclaredContact: 'ped' (pedestrian) 2215.9 N*s`, first at SSv2 frame
+543 (27.15 s), 125 contact frames.
+
+**The live topic names.** The per-module debug markers are
+`<motion_velocity_planner>/<module>/debug_markers` (recorded: 369 messages each);
+`<motion_velocity_planner>/debug/markers` exists and published nothing. CenterPoint publishes
+`/perception/object_recognition/detection/centerpoint/objects` (757 messages) in the sensor
+frame, which the decoder's map-frame filter does not select; the labels below are the tracked
+and predicted objects'.
+
+**Times.** Sim seconds from the episode's start. The pedestrian first moves at frame 477
+(23.80 s; (b): 24.25 s), from y -126.5. The ego is then at x 133.2 and 7.7 m/s.
+
+**C0 does not arise; C1 holds in its label and fails in its timing.** The pedestrian is in the
+tracked and predicted objects at every message from 24.85 s to the end of the run, as one object
+labelled `PEDESTRIAN` with probability 1.00. It was not in them while it stood (6.45 s to
+23.80 s) nor for its first 1.05 s of walking: C1's "from within 0.5 s of its first movement"
+fails. It was labelled for 2.3 s of the 3.35 s from its first movement to the contact (69 %),
+so "for most of its walk" holds.
+
+**C2 holds after a 0.3 s ramp.** Its tracked velocity is 0.13 m/s at 24.85 s, 0.90 at 25.15 s,
+1.14 to 1.47 m/s from 25.25 s to 26.25 s, then falls as it is stopped by the car (0.70 at
+27.15 s). From 25.15 s its best predicted path (confidence 1.00) crosses the lane: its point at
+index 10 lies at y -132 to -136, past the ego's line (y -129.4).
+
+**C3 holds, at the margin; and `run_out` is not first.** The factors, by first appearance:
+
+| time | module | factor |
+|---|---|---|
+| 25.00 s | `road_user_stop` | stop, 8.2 m ahead |
+| 25.20 s | `obstacle_stop` | stop, 2.4 m ahead |
+| 25.30 s | `obstacle_slow_down` | slow to 5.3 m/s in 3.9 m, stop in 7.7 m |
+| 25.40 s | `run_out` | slow down to 4.47 m/s in 4.6 m |
+| 25.60 s | `run_out` | stop, 3.4 m ahead |
+
+The pedestrian's centre crosses the ego's left side line (y -128.3) at about 25.6 s, so
+`run_out`'s slowdown comes before it and its stop at it. `road_user_stop` (Autoware 1.5.0's stop
+for road users such as pedestrians) was first, 1.20 s after the walk began; in (b) the first
+factor (`obstacle_stop`) came 1.45 s after. `dynamic_obstacle_stop` and `out_of_lane` published
+none in that window. `obstacle_stop`'s stop point was behind the ego from 25.60 s, as in (b).
+
+**C4 fails: a low-speed contact.** The command went to -1.82 m/s^2 at 25.20 s, peaked at -2.82
+at 25.40 s, and held -2.50 from 25.60 s until the stop. The ego was at 7.19 m/s at 24.25 s,
+6.39 at 25.00 s, 4.35 at 26.00 s, 1.91 at 27.00 s and 1.58 m/s at 27.15 s, when the contact
+began; it was stopped at 27.25 s (x 116.12, its base_link). C4 had put a contact under 2 m/s
+about as likely as none; this is that branch.
+
+**(b) and (c) side by side.**
+
+| | (b) clustering | (c) full CenterPoint |
+|---|---|---|
+| walk starts | 24.25 s | 23.80 s |
+| label | UNKNOWN 1.00 | PEDESTRIAN 1.00, from 1.05 s after the walk began |
+| tracked velocity | 0.00 throughout | up to 1.47 m/s, about 1.4 m/s across the lane |
+| predicted path | static | crosses the lane |
+| first module, and when after the walk began | `obstacle_stop`, 1.45 s | `road_user_stop`, 1.20 s; then `obstacle_stop`, `obstacle_slow_down`, `run_out` |
+| peak commanded deceleration | -3.00 | -2.82, then -2.50 |
+| ego speed at contact | about 3.5 m/s (26.9 s) | 1.58 m/s (27.15 s) |
+| contact, max impulse | 6189.7 N*s | 2215.9 N*s |
+| verdict | failed | failed |
+
+So a pedestrian labelled PEDESTRIAN with its motion brings four modules to it, and the contact
+speed falls by more than half, but the ego still does not stop in time. Two things cost the
+time. CenterPoint did not hold the walker until 1.05 s after it moved, where clustering held it
+before it moved. And the deceleration stays at -2.50 (as in (b), set downstream of the planner)
+once the stop is planned. (d), the tracker's UNKNOWN motion with clustering, runs next on the
+same install.
