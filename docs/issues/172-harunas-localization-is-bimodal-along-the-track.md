@@ -776,3 +776,47 @@ candidates are the preprocessing (the crop box, the downsampling, the transform 
 the stamp) and NDT's own use of time (the initial guess's interpolation, and the pose it stamps).
 The record to take, in a pair of runs: the cloud NDT gets (the downsampled, preprocessed cloud),
 NDT's initial pose and its debug outputs, and the TF it uses, in one behind run and one level run.
+
+## A reading taken before step 9's predictions (labelled: no prediction was written for it)
+
+While the docs gate ran, `guess_cruise.py` read, for the 17 runs of step 6, NDT's initial guess at
+cruise (the EKF's pose interpolated at the scan's stamp, by header stamps; over 4.0 m/s) and NDT's
+result, both along the truth's heading:
+
+| runs | the guess, along (p50) | NDT, along (p50) | NDT's correction (result less guess): p50, p05 to p95 |
+|---|---|---|---|
+| 8 behind | -0.093 to -0.099 m | -0.099 to -0.105 m | -0.003 to -0.005 m; -0.048 to +0.037 |
+| 9 level | -0.001 to -0.005 m | -0.007 to -0.009 m | -0.005 to -0.006 m; -0.052 to +0.035 |
+
+At cruise, NDT does not pull the guess toward the truth along the track in either mode. Its
+correction is the same few millimetres in both, with the same spread, and its result follows the
+guess. So the behind mode at cruise is carried by the guess, the EKF's pose. NDT, feeding the EKF,
+does not remove it: the along direction is weakly held by NDT on Haruna's road, or NDT is biased
+to its guess. That is a loop that can hold whatever along offset it is given. This fits a latch,
+but it does not say where the offset enters at start-up. Step 6's first moving scans showed no
+difference in the guess there.
+
+## Step 9's plan (written 2026-11-26, after the reading above, before any code or run; for 133)
+
+**Ordered by cost (133's candidates, with the reading above).**
+1. *Offline, now:* the EKF's pose against the truth over the first 30 s of motion, scan by scan, in
+   the 8 behind and 9 level runs. It locates when the guess leaves the truth in a behind run, and
+   whether NDT's output leads it or follows it there.
+2. *Offline, now:* NDT's along observability on Haruna. Take NDT's correction against the guess's
+   own error, over the moving run. A weak along gives a slope near 0: corrections that do not track
+   the guess's error.
+3. *A run pair (one behind, one level, under burn.py), only if 1 and 2 do not place it:* recording
+   NDT's initial pose (`/localization/pose_estimator/initial_pose_with_covariance` or its debug
+   equivalent, checked on a live stack), the cloud NDT receives (downsampled), the EKF's debug
+   (its delay compensation, if published), `/tf` and `/tf_static`. The probe is fixed first: the
+   tick count and the min and max only, its cost measured on a real step 7 dump.
+
+**Predictions (before 1 and 2).**
+- *1:* in each behind run the guess's along error grows from about 0 to about -24 ms x v during the
+  acceleration, in step with the speed (a time offset from the start). NDT's output does not lead
+  it: within 1 cm of the guess throughout. In the level runs both stay within 2 ms x v.
+- *2:* the slope of NDT's along correction on the guess's along error is between -0.2 and 0 in
+  both modes (NDT removes under 20 % of an along error). Across the track the same slope is near -1
+  (NDT removes it), as a control.
+- *If 1 shows NDT's output leading the guess away from the truth,* the offset enters in NDT (its
+  input or its time handling), and run 3 records NDT's input.
