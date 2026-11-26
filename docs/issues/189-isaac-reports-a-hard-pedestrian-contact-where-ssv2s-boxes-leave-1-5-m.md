@@ -517,3 +517,29 @@ The runs:
 - Run 3: a static contact (a pole, kerb or building), its impulse above 10 N*s and in the
   hundreds or more. The judge fails it as UndeclaredContact with the static world. If 3 tries
   give no static contact, that is recorded as such.
+
+**The CARLA calibration runs' results (241, 2026-11-26, 20:23 to 20:30).**
+- Setup: 241's GPU1, **shared with another user's training job** (thsxw's, steady at
+  10258 MiB). CARLA took 2.7 GB of it, and GPU1 stayed at 19 GB free or more.
+- A guard stopped our run below 4 GB free; it never fired. It was attached about 20 s into run
+  1, after a quoting bug in it was fixed. CARLA had not loaded by then (21.6 GB free).
+- scensim main 6690f884, a clean build, the simple pilot. The run directories are under 241's
+  `swb-logs/calib189/runs/`.
+
+| run | scenario | contacts (CARLA's collision sensor) | judge | verdict |
+|---|---|---|---|---|
+| 1 | town01_rear_contact | `npc_rear` (vehicle, declared): 16 counts, max **7965.2 N*s**; no static contact | passed | passed |
+| 2a | drive_to_goal (simple_drive) | **none** | passed | passed |
+| 2b | turn_to_goal (simple_drive) | **none** | passed | passed |
+| 3 (the first try) | town01_rear_contact, pushing on | `npc_rear` 8072.4 N*s (declared); **the static world** (`static.static`), 1 count, **13025.3 N*s** at SSv2 frame 347 | failed: `UndeclaredContact: static world 13025.3 N*s (static floor 10 N*s)` | failed |
+
+Every prediction **held**:
+- Run 1's contact is in the thousands, like 243's 7955 N*s.
+- Run 2, the false-failure check, saw no contact at all on two normal drives, so nothing came
+  near the floor.
+- Run 3's static hit is three orders of magnitude above the floor, and the judge names it.
+
+Across both simulators, then, every real hit measured is above 1500 N*s (Isaac's boulder
+1537). Every harmless static touch is under 1.2 N*s (Isaac's soil 0.0, now issue 192, and a
+rock graze 1.1). CARLA's normal drives reported none. The 10 N*s static floor sits in that
+gap. Step 3's calibration is complete.
