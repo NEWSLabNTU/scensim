@@ -85,13 +85,23 @@ class Port(unittest.TestCase):
         with self.assertRaisesRegex(M.ExportError, "lanelet 7: its left bound has 1 point"):
             M.ssv2_centerline([(0, 1, 0)], good, "lanelet 7")
         for bad, k in (([(0, 1, 0), (0, 1, 0), (3, 1, 0)], 0),            # at the start
-                       ([(0, 1, 0), (1, 1, 0), (1, 1, 0), (3, 1, 0)], 1),  # in the middle
                        ([(0, 1, 0), (3, 1, 0), (3, 1, 0)], 1)):           # at the end
             with self.assertRaisesRegex(M.ExportError,
                                         f"lanelet 7: its left bound repeats point {k} at {k + 1}"):
                 M.ssv2_centerline(bad, good, "lanelet 7")
             with self.assertRaisesRegex(M.ExportError, "its right bound repeats"):
                 M.ssv2_centerline(good, bad, "lanelet 7")
+
+    def test_a_duplicate_in_the_middle_is_allowed_as_ssv2_allows_it(self):
+        # the segment before the duplicate wins the tie, so SSv2 never selects the zero one
+        mid = [(0, 1, 0), (1, 1, 0), (1, 1, 0), (3, 1, 0)]
+        c = M.ssv2_centerline(mid, [(0, -1, 0), (3, -1, 0)], "lanelet 7")
+        close(self, c, [[0, 0, 0], [1.5, 0, 0], [3, 0, 0]])
+
+    def test_no_segment_holding_t_is_a_named_error(self):
+        with self.assertRaisesRegex(M.ExportError, "lanelet 7 left: no segment holds"):
+            M._resample([(0, 0, 0), (1, 0, 0), (float("nan"), 0, 0), (3, 0, 0)], 2,
+                        "lanelet 7 left")
 
 
 def lanelet(i, left, right, centre=()):

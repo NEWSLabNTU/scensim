@@ -148,11 +148,15 @@ used them.
      `acc[i-1] <= t <= acc[i]`, so a tie takes the earlier segment);
    - the point `back + dir * (t - back_len) / seg_len`;
    - the pairwise average of left and right, z included.
-2. *What SSv2 cannot resample is refused, never skipped.* A bound with fewer than 2 points
-   (SSv2's `acc.at(1)` throws) and a bound with consecutive duplicate points (SSv2 can select
-   that zero-length segment and get NaN) are refused. The refusal names the lanelet and the
-   bound. The survey reports how many bounds of Town01 and Town05 are like that, predicted
-   none.
+2. *What SSv2 cannot resample is refused, never skipped; nothing else is (243, 133).* Refused,
+   naming the lanelet and the bound, and counted:
+   - a bound with fewer than 2 points (SSv2's `acc.at(1)` throws);
+   - a bound whose first or last segment has zero length. SSv2 selects the first at t = 0, and
+     the last when t lands past the one before it, and gets NaN.
+   A duplicate point in the middle is accepted, as SSv2 accepts it: the segment before it wins
+   the tie, so the zero-length one is never selected. A search that finds no segment (only a
+   NaN t) is an error naming the lanelet, as SSv2's `findNearestIndexPair` throws. Both towns
+   export with none refused.
 3. *A custom centreline is kept, as SSv2 keeps it.* SSv2's test is lanelet2's
    `hasCustomCenterline()`: a relation member with role `centerline`. The Python binding does
    not expose it (checked 2026-11-26: `Lanelet` has only `centerline`), so `map_export` reads
@@ -220,5 +224,15 @@ used them.
      that move are listed here.
 10. *Kept:* 166's lint, 174's check, the follower's workaround. *Not here:* simple_route and czp
     (a separate follow-up).
-11. *Gate:* `just gate`, then the push request with its line. 243 reviews the code before the
+11. *One landing, in this order (243's review; 133's ruling).* From this code on, the sampler
+    refuses every v1 `anchors.resolved.json`, so main must never pin a dataset revision the
+    sampler refuses. The order:
+    1. step 7(a) at 1e-9 on every lanelet of both towns, the six degenerate ones included;
+    2. the K2.4 recompute;
+    3. the re-resolve diff;
+    4. the dataset commit on HF, after 133's OK on its diff summary;
+    5. one scensim landing: the code, every project's `scensim.lock` bump to that revision, and
+       this record, gated by `just gate`.
+    The gate exercises at least one project that reads resolved anchors, or a named test that
+    loads the new revision's files, so a missed lock fails it. 243 reviews the code before the
     push.

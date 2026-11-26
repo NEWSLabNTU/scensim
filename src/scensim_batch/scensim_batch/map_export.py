@@ -76,7 +76,10 @@ def _resample(points, n, where):
         elif t > acc[N - 2]:
             j = N - 2
         else:
-            j = next(k - 1 for k in range(1, N) if acc[k - 1] <= t <= acc[k])
+            k = next((k for k in range(1, N) if acc[k - 1] <= t <= acc[k]), None)
+            if k is None:   # SSv2's findNearestIndexPair throws here (only a NaN t gets here)
+                raise ExportError(f"{where}: no segment holds arc length {t!r} of {total!r}")
+            j = k - 1
         back, front = points[j], points[j + 1]
         seg = acc[j + 1] - acc[j]
         if seg == 0.0:   # unreachable after the refusals below; SSv2 would divide 0 by 0
@@ -88,18 +91,21 @@ def _resample(points, n, where):
 def ssv2_centerline(left, right, where="lanelet"):
     """SSv2's generateFineCenterline: both bounds resampled into max(ceil(longer / 2.0), 1)
     equal 3D segments, averaged pairwise, z included. Refused (ExportError, naming `where` and
-    the bound) where SSv2 cannot resample: a bound of fewer than 2 points (SSv2 throws) or with
-    consecutive duplicate points (SSv2 can pick that zero-length segment: NaN)."""
+    the bound) where SSv2 cannot resample: a bound of fewer than 2 points (SSv2 throws), or one
+    whose first or last segment has zero length. SSv2 selects the first segment at t = 0 and
+    the last when t lands past the one before it (an ulp suffices), dividing 0 by 0 (NaN). A
+    zero-length segment in the middle is never selected (the one before it wins the tie), so
+    it is allowed, as SSv2 allows it (243's review)."""
     bounds = {"left": [tuple(map(float, p)) for p in left],
               "right": [tuple(map(float, p)) for p in right]}
     for side, pts in bounds.items():
         if len(pts) < 2:
             raise ExportError(f"{where}: its {side} bound has {len(pts)} point(s); SSv2 "
                               "needs 2 (it throws)")
-        for k, (a, b) in enumerate(zip(pts, pts[1:])):
-            if a == b:
+        for k in (0, len(pts) - 2):
+            if pts[k] == pts[k + 1]:
                 raise ExportError(f"{where}: its {side} bound repeats point {k} at {k + 1}; "
-                                  "SSv2 would resample a zero-length segment (NaN)")
+                                  "SSv2 would resample that zero-length end segment (NaN)")
     longer = max(_accumulated(bounds["left"])[-1], _accumulated(bounds["right"])[-1])
     n = max(int(math.ceil(longer / RESOLUTION)), 1)
     lft = _resample(bounds["left"], n, f"{where} left")
