@@ -592,3 +592,66 @@ stamp. In the level mode it does not. Which mode applies is decided at the start
 The difference measured is 22 ms, not 25 ms; the hypothesis must account for that. The test needs
 the raw cloud (not recorded in these runs): the two-wall probe of issue 169, or the cloud's seam
 in a recorded run, behind against level.
+
+## Step 7's plan, H-e (written 2026-11-26, before any code or run; for 133)
+
+**What was read first.**
+- *Issue 169's state:* step 1 done, step 2 planned and not started. With motion BVH on, the RTX
+  lidar renders each point from the moving sensor (k 0.996), and production's `xyzirc` cloud
+  carries that motion with no point times. 086 C6e2 measured localization **ahead** by 0.107 to
+  0.109 m at 4.5 m/s with BVH on: 24 ms, half a revolution.
+- *The runs of steps 2 to 5 set no motion BVH:* no `raytracingMotion` setting in their world
+  server's source or console, so it is Kit's default. C6e2 had to turn it on with Kit
+  arguments. *133's latch candidates on the corrector do not apply here:* the Model 3's kit
+  runs no distortion corrector (`use_distortion_corrector` false and used nowhere, as 169's
+  step 2 plan found). aib's own `motion_distort` is off for `xyzirc`. No step in these runs
+  removes or adds in-revolution motion after the render.
+- *The behind mode is the mirror of C6e2's BVH offset:* the same size (24 ms, about 0.1 m at
+  cruise), the opposite sign. So **H-e is restated before any run.** It is not motion BVH. It
+  is the revolution's **stitch**. The annotator hands "the last finished revolution" (aib's
+  `ScanGate`). At 20 Hz rotation and 20 Hz frames, a revolution that is not aligned with the
+  frames is assembled from two frames' renders, each from that frame's single pose (BVH off). So
+  part of the cloud is a frame (50 ms) older than the rest. NDT on that cloud lands between the
+  two poses, behind by the older part's share of 50 ms. The share is set by the phase between
+  the lidar's revolution start and the frame boundaries. That phase is fixed when the sensor
+  starts, so it holds for the whole run, which is the latch. A starved start-up (dropped or
+  stretched first frames) can set a different phase.
+- *22 against 25 ms (133).* The behind runs' absolute tau is 23.8 to 25.2 ms, which is half a
+  revolution within 1.2 ms. The level runs' 1.7 to 2.2 ms is a lag present in both modes. If
+  the two simply added, behind would be about 27 ms, and it is not. So the 22 ms difference is
+  not claimed as half a revolution. What is claimed is the behind runs' own 24 ms against a
+  share of 0.5. A stitch at a share s gives s x 50 ms, so the share is a measured quantity, not
+  an assumption.
+
+**The code (aib's local branch `issue-172-age`, behind the same switch; the diff to 133 before
+any run).**
+1. The timing line gains the annotator's point times for the published revolution: their min
+   and max, as offsets from the clock; their span; and the azimuth of the earliest and the latest
+   point.
+2. Every 200th published revolution, the cloud and its point times go to an `.npz` under the
+   run's log dir (about 2 MB each; about 40 a run), for the sector test. The raw cloud is not
+   added to the bag, which would be about 15 GB a run.
+
+**The runs.** Nine smooth haruna_down runs as in step 5 (0291abb3, siw 4706ff9, the branch's aib,
+burn.py at 24 workers, the quiet rule on GPU0, the other-user check, the load at each start),
+so that behind runs are likely.
+
+**Readings.**
+- (a) Each run's mode, as before.
+- (b) The phase: the point times' min against the frame grid (the clock in 50 ms steps), and the
+  span. Constant within a run, if it is a latch.
+- (c) The sector test on the saved clouds. Split each revolution into 16 azimuth sectors by
+  firing time. Register each sector against the Haruna map at the truth pose for the
+  revolution's stamp. Read each sector's along offset against its firing time.
+
+**Predictions (before any code or run).**
+- *H-e (the stitch):* in level runs the revolution lies in one frame (its point times' min on the
+  frame grid, within 2 ms). The sector offsets are flat (within 0.02 m) across the revolution.
+  In behind runs the point times cross a frame boundary, and the sector offsets show a **step** of
+  about v x 50 ms (0.21 m at cruise) between the older sectors and the newer ones. The older
+  share s matches tau / 50 ms (about 0.48 at 24 ms) within 0.1.
+- *Against H-e:* a **ramp** across the sectors (k about 1, as in 169's case C) instead of a step
+  means the cloud carries continuous motion (motion BVH or alike), not a stitch. A flat profile
+  in the behind runs means the offset is not in the cloud, and H-e fails.
+- *The latch:* the phase in (b) is constant within every run. It differs between the behind
+  and the level runs. It is set by the first revolutions after the stack starts.
