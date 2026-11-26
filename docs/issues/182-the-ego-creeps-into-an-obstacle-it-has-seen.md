@@ -283,3 +283,58 @@ So r1 shows H4's mechanism:
 - obstacle_stop's hold ended, and the ego rolled on into it.
 
 Step 2b tests the other half: seen early enough, it stops short and holds.
+
+### Step 2a corrected: the MRM braked, raised by AEB, not the planner (133's question; 2026-11-27, before 2b's run)
+
+133 asked whether the -2.5 m/s^2 above was the planner or, as in 190, the MRM's emergency stop.
+It was the MRM. r1's record (`brake182.py`, `diag182.py`, NAS), times relative to the strike:
+
+| time | base_link range | ego speed | |
+|---|---|---|---|
+| -4.85 s | about 11.8 m | 4.17 m/s | `/diagnostics`: `autonomous_emergency_braking: aeb_emergency_stop` ERROR "[AEB]: Emergency Brake" |
+| -4.65 s | 11.03 m | 4.17 m/s | `mrm_state` OPERATING, EMERGENCY_STOP; the gate's `emergency_cmd` true; `control_cmd` is the emergency command from here on |
+| -4.65 to -3.00 s | | | the command's acceleration ramps from 0 to -2.50 m/s^2, then holds (r1 predates 5cad4e9b: the MRM's stop was stock -2.5) |
+| -3.95 s | 8.18 m | 3.88 m/s | the boulder first in the final objects; obstacle_stop's first factor (step 2a) |
+| -2.15 s | 4.11 m | 0.00 m/s | the commanded velocity reaches 0; the car stands still, bumper gap **0.39 m**, inside the 1.2 m blind zone |
+| -2.05 s | 4.11 m | 0.00 m/s | `mrm_state` SUCCEEDED |
+| -1.75 s | 4.10 m | 0.00 m/s | `mrm_state` NORMAL, the gate's emergency false; `control_cmd` 0.25 m/s at +0.42 m/s^2 |
+| -1.00 s | 4.04 m | 0.19 m/s | rolling |
+| 0 s | 3.49 m | 0.91 m/s | the strike |
+
+**What this changes in the reading of step 2a:**
+- The braking before the strike was AEB's, through the MRM. AEB reads the obstacle points, not
+  the objects, so it saw the boulder at about 11.8 m, 2 m before the objects did and 2.3 m
+  before the validator.
+- "The planner's -2.5 m/s^2 floor" in 2a's result is wrong; it was the MRM's stop. obstacle_stop's
+  factor came while the MRM already braked.
+- The ego *did* stop short, 0.39 m short. There the boulder was in the blind zone: AEB cleared,
+  the MRM cancelled after 0.4 s, and the planner, with no obstacle left, asked for 0.25 m/s.
+- So H4 stands, refined: the stop came, from AEB, but so close that the boulder left the lidar's
+  view, and with it every source of a stop. The creep followed.
+
+**2b's predictions, amended before the run.** 2b runs on pins after 5cad4e9b: the MRM's stop is
+-6.0 m/s^2 at -12 m/s^3, and the gate passes 6.0 and 12. If AEB fires at about 11.8 m again:
+- the 0.2 s from AEB to the MRM is about 0.8 m;
+- the 0.5 s jerk ramp to -6 is about 1.8 m;
+- the rest, from about 2.7 m/s, is about 0.6 m;
+- in all, about 3.2 m: the car stops at about 8.6 m base_link range, a **bumper gap of about
+  4.9 m**, against r1's 0.39 m.
+
+**Replacing 2b's predictions above:**
+- AEB raises the MRM at 11 to 13 m. The braking is the MRM's at -6.
+- The ego stops with a bumper gap of 3.5 to 6 m. No strike.
+- There the boulder stays in view, an object in at least 80 % of the frames. That is outside
+  the blind zone, and validated with 181's change; it would be at that range even without it.
+- Once stopped, AEB clears and the MRM cancels (as in r1, within about 1 s). obstacle_stop then
+  holds the stop: the boulder is inside its 5 m margin, its stop point behind the ego, and its
+  hold rule keeps a stopped ego stopped. The ego does not move again (under 0.05 m/s).
+- The MRM operates a few times at most, not about once a second.
+
+**What 181's change adds:** the first stop no longer needs it. AEB brakes first, on points. The
+hold does, if the gap ends near 4 to 5 m: at r1's validation rule, the boulder would be
+validated only from 9.6 m base_link (gap 5.9 m), and at a gap of 4.9 m it is. So the hold may
+come with or without the change. 2b does not separate the two, and the record says so.
+
+How sure: the stopping gap about 60 %, the hold about 50 %. If obstacle_stop does not hold a stop
+whose point is behind the ego, the planner asks to move after the MRM cancels. The creep then
+starts from 4 to 5 m: AEB fires again, and the cycle repeats short of the boulder.
