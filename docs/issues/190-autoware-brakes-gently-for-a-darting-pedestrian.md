@@ -483,9 +483,9 @@ speed.
   it at once in (b) and after 0.30 s in (d). The tracker parameter does not touch detection, so
   it cannot change this; in (c) it is CenterPoint's own delay.
 - *The deceleration floor.* In all three runs the command holds -2.50 m/s^2 once the stop is
-  planned (after a brief peak of -2.8 to -3.3). That is set downstream of the planner (the velocity
-  smoother's minimum acceleration or the controller; which one is not in these topics), so
-  neither the detector nor the tracker parameter can change it.
+  planned (after a brief peak of -2.8 to -3.3). That is the MRM emergency stop taking the
+  command over (the next section), downstream of the planner, so neither the detector nor the
+  tracker parameter can change it.
 
 Whether this scenario can be passed at all needs that floor read: at -2.50 m/s^2 from 7 m/s the
 ego needs 9.8 m, and in (c) the first stop came with the walker 1.20 s into its walk.
@@ -500,3 +500,45 @@ controller's command follows it. If so, the trajectory's acceleration ahead of t
 (`vehicle_cmd_gate`'s `lon_acc_lim`, the longitudinal controller's limits, obstacle_stop's
 `limit.min_acc`, the profile's or acb's overrides) are read too, and the stage is named from
 the recorded topics: the trajectory, the trajectory follower's command and the gate's.
+
+**Result: the prediction fails. The -2.50 is the MRM emergency stop's target, which took the
+command over from the controller.** Read from (c)'s bag, then confirmed in (b)'s and (d)'s:
+- The smoothed trajectory did not stop at -2.5. Its acceleration at the ego's point was -1.79 at
+  25.20 s and -9.45 at 25.40 s, with -6.6 to -13.3 m/s^2 just ahead, and from 25.60 s it
+  asked for a stop where the ego stood.
+- The controller (`/control/trajectory_follower/control_cmd`) followed it down to -3.47, then
+  held -3.40, its stop-state acceleration (`stopped_acc` and `smooth_stop_strong_stop_acc`,
+  -3.4 in the longitudinal controller's `pid.param.yaml`).
+- The gate's output (`/control/command/control_cmd`) left the controller's at 25.45 s. From
+  then on it carries jerk -1.5 at the switch, then a flat -2.50, a velocity that falls by
+  exactly 0.125 m/s per 0.05 s step (2.5 m/s^2, open loop: 5.523, 5.398, 5.273 ...), and the
+  steering frozen at 0.007 rad, while the controller asks for -3.40 and velocity 0. That is the
+  MRM emergency stop operator's command, which the gate selects in an emergency.
+- Its parameters: `target_acceleration: -2.5`, `target_jerk: -1.5`
+  (`autoware_launch/config/system/mrm_emergency_stop_operator/mrm_emergency_stop_operator.param.yaml`,
+  Autoware 1.5.0's, which the profile passes unchanged, `PROF/launch/autoware.launch.xml:515`).
+- The same takeover, jerk -1.5 then -2.50, is in (b) from 26.35 s and in (d) from 25.25 s.
+
+**Stock or ours.** The value is stock Autoware. Ours, read alongside it:
+- the profile's `mrm_handler.param.yaml` differs from stock: `use_comfortable_stop: false`
+  (stock true) and longer timeouts (`timeout_operation_mode_availability` 30.0 against 0.5,
+  `timeout_call_mrm_behavior` and `timeout_cancel_mrm_behavior` 5.0 against 0.01). With the
+  comfortable stop off, any MRM here is the emergency stop; with it on, it could have been a
+  softer one, not a harder one;
+- the profile's `pid.param.yaml` differs from stock only in `max_pitch_rad`/`min_pitch_rad`;
+- the gate's parameters are stock (`lon_acc_lim_for_lon_vel` 5.0; `emergency_acceleration`
+  -2.4, which is not the -2.50 seen).
+
+**What raised the MRM is not recorded.** The bag holds no `/system` topic, and no node logged
+it. *Hypothesis, untested:* Autoware's autonomous emergency braking (pointcloud based, enabled,
+`a_ego_min: -3.0`) saw the walker and raised the emergency. A rerun recording
+`/system/fail_safe/mrm_state`, `/diagnostics` and the AEB's debug output would show it.
+
+**The effect.** The emergency stop made the braking weaker, not stronger: the controller was
+asking for -3.40 and the trajectory for far more when the MRM capped the command at -2.50. From
+(c)'s 5.5 m/s at the takeover, -2.50 needs 6.1 m to stop, -3.40 needs 4.5 m, and -8 needs
+1.9 m (estimates without jerk or actuator delay). A production car's AEB brakes at about -6 to
+-10 m/s^2 in full braking on dry asphalt (Euro NCAP's AEB tests run cars to full braking; a
+Model 3's limit is about -9 to -10). So against an AEB-level stop the -2.50 is a quarter to
+two fifths of it. Nothing is changed here; whether the MRM's target or the AEB's role should
+change is the user's call through 133.
