@@ -2979,3 +2979,32 @@ landed on main in between), their own 175 and 183 rows the same.
 **Check 4: held.** The search ran end to end in the batch and reported its estimate and interval;
 the prediction was written before it (0e6f4e4b). Batch numbers, not seats numbers; no CARLA
 claim.
+
+## K2.4 follow-up: the route across a lanelet joint (filed 2026-11-26, 241; from issue 194, not fixed)
+
+Issue 194 moved the batch onto SSv2's own centreline (2 m points). K2.4's follow_to_goal lead
+then showed an along-track error of about 2 cm, a transient, at the change from lanelet 42664 to
+32582 (issue 194, step 9).
+
+**What to compare.** Use the two lines with the route's sampling converged (0.5 to 2 m samples,
+where neither moves any more), not step 8's 2.5 m figure:
+- lead maximum: **v2 3.32 cm against v3 3.96 cm**;
+- RMS: 1.36 against 0.96 cm.
+
+At 2.5 m, v2 read 2.81 cm, partly by the sampling's luck. Sideways, the error is 0.44 cm on
+both.
+
+**The cause, measured.** `world_lanelet._route` builds one Catmull-Rom spline over all of the
+route's lanelets' points. SSv2's entity follows each lanelet's own spline and carries `s` across
+the joint.
+- The total lengths agree (0.15 cm apart).
+- At the same `s` within 4 m of the joint, the two splines' poses differ:
+  - **2.10 cm** on SSv2's 14 and 24 points, almost all along the route;
+  - **0.00 cm** on lanelet2's 73 and 177 points.
+
+**The follow-up, not done:**
+- the route follows per-lanelet splines across joints, as SSv2 does;
+- then K2.4's two rows are replayed (`agreement_run.py --ego-from-truth`, as in 194 step 8) at
+  converged sampling, with the prediction written first that the 2 cm transient goes.
+
+Until then, K2.4's NPC bound stands as published (2.8 cm), with this excess recorded against it.

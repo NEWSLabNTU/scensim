@@ -402,3 +402,26 @@ measured as a pose difference rather than a length.
 
 Where a fix would go is not decided, and not in 194: the batch's route would follow per-lanelet
 splines across the joint, as SSv2's entity does (`world_lanelet._route`). That is 092 K2.4's.
+
+**Filed, not fixed (133, 2026-11-26).** The per-lanelet route is a 092 K2.4 follow-up (roadmap
+092, "K2.4 follow-up: the route across a lanelet joint"). This issue's maximum reads **v2 3.32
+cm (converged) against v3 3.96 cm**. Step 8's 2.81 cm was v2 at 2.5 m samples.
+
+With that cause recorded, the user's condition for the upload was met ("upload once max <= 2.8
+cm OR the cause is recorded"), and 133 approved it.
+
+**The dataset commit (2026-11-26):** df499322639f279f588ff5f6fd661169027eb7a8 on
+jerry73204/carla-town-autoware-maps, its parent eb93b387, message "anchors resolved on SSv2's own
+centreline (scensim issue 194)". It holds three files:
+- `Town01/anchors.resolved.json` (sha256 84e60a47...);
+- `Town05/anchors.resolved.json` (a47872b0...);
+- the root `SHA256SUMS`, changed in those two lines only.
+
+The manifest was not in the plan's two files. `scensim assets fetch` checks every file against
+it, so leaving it out would have broken every bumped lock; 133 approved the third file. A fetch
+with `--verify` at df499322 passed.
+
+**The locks.** The 27 listed above move to df499322: in each, the commit line and the
+anchors lines changed, nothing else. Every one of them passes `scensim assets fetch --verify`
+and `scensim assets check`. The dataset's newest tag (v2026.11g) is not at df499322, so a
+`--update` would not reach it; each lock names the commit.
