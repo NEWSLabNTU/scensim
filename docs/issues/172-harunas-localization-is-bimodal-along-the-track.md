@@ -655,3 +655,21 @@ so that behind runs are likely.
   in the behind runs means the offset is not in the cloud, and H-e fails.
 - *The latch:* the phase in (b) is constant within every run. It differs between the behind
   and the level runs. It is set by the first revolutions after the stack starts.
+
+**Amended before the runs (2026-11-26, 133's review of the diff; not after a result).** The code is
+aib **b354ab9** (local branch `issue-172-age`: 5a05a11 and 133's review on it).
+- The revolution line is written after the ScanGate's decision and says whether the revolution was
+  published or dropped. The stitch is read from published revolutions only.
+- The annotator's per-point `tickId` names the render ticks a revolution is made of. Each line
+  lists each tick's point count and time span. A stitch shows as two ticks. The annotator's
+  `transform` is one per revolution, so the two render poses come from the ticks' times on aib's
+  track.
+- Every revolution is logged for the first 20, marked "(start-up)" (the latch). The time
+  conversion and the rest run only on revolutions that log or dump. Each line carries the probe's
+  own time (probe_us). Measured here at 126,600 points: 1.6 ms a logged revolution, 0.9 us a
+  skipped one.
+- The dumps are uncompressed (6.3 ms each, 4.1 MB, against 177 ms compressed). They are every
+  200th revolution from the 1200th (60 s), so the start-up carries no dump's stall. They go to
+  `/mnt/renegade/aeon/isaac-ex/i172/step7/dump_<run>` (NVMe), since the run's own log dir does not
+  exist when the world server starts.
+- The probe's per-call time from one run is reported with the result.
