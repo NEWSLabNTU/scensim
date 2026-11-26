@@ -1,6 +1,6 @@
 # 166: SSv2's spline heading reverses where a centreline's point spacing changes
 
-**Status:** open (241; numbered by 133, 2026-11-25); the gap-in-s fix in code and tests (2026-11-25; checks 2b and 4 FAILED as worded). **Severity:** to judge: a lane position's
+**Status:** closed (2026-11-27, 241, on 133's rule): on SSv2's own centreline (issue 194) no connected lanelet of Town01 or Town05 has a reversed stretch, and every check below holds there; see the last section. Before that: open (241; numbered by 133, 2026-11-25); the gap-in-s fix in code and tests (2026-11-25; checks 2b and 4 FAILED as worded). **Severity:** to judge: a lane position's
 heading 180 degrees off over a few centimetres, on many lanelets of Town05 and some of Town01.
 **Found:** 2026-11-25, scensim 241, resolving a Town05 lane anchor for 092 K13's first search
 (`west_avenue`: lanelets 105401 to 3337, maps dataset v2026.11f): the resolve reported a heading
@@ -416,3 +416,64 @@ What is recomputed, with each prediction:
   comes from the joined spline's end conditions, not from a reversal. It stays with 092 K2.4's
   follow-up, and 166 does not narrow to it.
 - If R1 or R3 finds a stretch on a connected lanelet, 166 stays open, narrowed to those lanelets.
+
+### The results (2026-11-27)
+
+Run at scensim main 5fb073c2 (194's export v3, the follower at c2bc1b91), maps at dataset
+df499322. Scripts and outputs are on the NAS, `home/2026-11-27 issue 166 on SSv2's line (241)/`.
+
+| check | on lanelet2's line (166) | on SSv2's line | prediction |
+|---|---|---|---|
+| R1: lanelets with a >90 deg step, sampled every 5 mm | Town01 37 of 300, Town05 350 of 1018 | **0** on both towns, connected and isolated | held |
+| R2: Town01 `west_street` `reversed` | none | none (`heading_max_error` 7.8e-7 rad) | held |
+| R2: Town05 `west_avenue` | 18 stretches; error outside them 0.0213 rad | none; `heading_max_error` 0.00057 rad, the same with nothing left out | held |
+| R3: stretches, connected lanelets | Town01 8 (0.185 m), Town05 696 (10.9 m) | **0** on both | held |
+| R3: stretches, isolated lanelets | Town01 137 (247.9 m), Town05 411 (363.2 m) | Town01 9 on 4 (0.160 m, the longest 0.066 m), Town05 1 (0.020 m) | held, 194's table to the digit |
+| R4: impact (K13, K2.4, K11) | 0 frames | 0, by R3 | held |
+| R5: the lint over the repository's scenarios | 0 refused, 0 warned | 0 refused, 0 warned | held |
+| R6: `west_avenue` polyline arc against s | 0.0935 m short over the lane; 0.025868 m from M to L | 2.3e-5 m over the lane; 1.34e-5 m from M to each L | held |
+| R7(a): follower s minus placement s | within 4.0e-5 m | within 8.7e-11 m | held |
+| R7(b): follower x/y against the world's at s | FAILED: 0.0122 m within 2 m of a stretch | **0.00044 m** at most, over all 3722 points, none left out | held |
+| R8: M's acceleration at t = 0, 36 slots | 7.4e-8 m/s^2 | 9.6e-11 m/s^2 | held |
+
+Notes:
+
+- **R1's harness check.** The same 5 mm sampler on lanelet2's raw `centerline()` of
+  df499322's Town01 gives 37 of 300, 166's count. So the 0 is the line's doing, not the
+  sampler's.
+- **R1 also finds 0 on the 5 isolated lanelets that keep a stretch** (R3). Their stretches
+  are on curves, where the tangent turns through 180 deg over a few centimetres rather than
+  flipping. No 5 mm step there exceeds 90 deg. "At most 4 and at most 1" held with room to spare.
+- **R4.** Every lanelet those runs used is connected and has no stretch on SSv2's line:
+  Town01 6583, 32582, 41199, 42451 and 42664, and Town05 `west_avenue`'s ten lanelets
+  (105401 to 3337).
+- **R5.** The repository now has 117 tracked scenarios. 23 hold 159 LanePositions, 129 of
+  them on dataset maps (Town01 125, Town05 4). 30 are on the sampler's test maps, which are
+  not checked. The count differs from 166's (152 and 122) because scenarios were added since.
+- **R7.** Even the old polyline-arc resampling of the follower is now within 1.34e-5 m of the
+  gap in s. There is no loop left for the gap-in-s fix to correct on this lane. The fix stays
+  as written; it is harmless and exact.
+- **Check 4** (the onset sweep) was not re-run, as planned. Its jumps are 092's question.
+
+**The decision (the rule set with the predictions): 166 closes.**
+
+- SSv2's uniform Catmull-Rom does reverse on unevenly spaced points (166's probe: bit for bit
+  the port's).
+- SSv2 never feeds it lanelet2's line. Its own 2 m line has no stretch on any lanelet a
+  vehicle is routed over in Town01 or Town05.
+- What is left are 10 stretches on isolated lanelets (walkways, kerb lines), at most 6.6 cm
+  long. The lint still names any LanePosition placed in one.
+
+What stays:
+
+- the lint (166) and 174's layout check;
+- the resolver's `reversed` field;
+- the follower's gap in s.
+
+The upstream report is not needed for these maps. A map whose own line SSv2 does not replace (a
+custom centreline, or `use_custom_centerline`'s default turning false) would bring the question
+back. The lint would then name it.
+
+194's 2.10 cm transient at the 42664 to 32582 joint is not this defect: it comes from the joined
+spline's end conditions, not a reversal. It stays with 092 K2.4's follow-up, and 166 does not
+narrow to it.
