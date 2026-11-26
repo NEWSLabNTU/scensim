@@ -416,3 +416,53 @@ because the boulder was inside the 15 m.
 - This is one fixture with a bare road and verge rocks. Road texture in the path did not make a
   cluster at any setting, but the fixture's carriageway has roughness only (`gd0` 1e-12). A
   rougher road may.
+
+## Step 4: both thresholds, a grid, and a road with features (241, 2026-11-27; plan and predictions, before any replay)
+
+133 asked for a grid: `min_cluster_size` {10, 5, 3} × the validator's UNKNOWN `min_points_num`
+{10, 5, 3}, with `max_points_num` set equal, since the threshold is clamp(round(800 / d), min,
+max). For each cell: the boulder's first validated range, and the validated spurious objects
+(count, and distance from the path). Then a row on a rough road, if a cheap one exists.
+
+**The rough-road row.** No record of a road with `gd0` > 0 holds the non-ground cloud. C6d's
+Haruna runs record only the final objects. C6e3's a1 run on `fixture_c6a` does: the non-ground
+cloud and the state, 5 MB (NAS, C6e3's folder). Its carriageway is smooth too (`gd0` 1e-12), but
+it carries the features 133 named:
+- cleats of 5, 10 and 15 cm;
+- an 8 cm pothole;
+- 30 m of washboard;
+- no rocks.
+
+So on c6a every validated object is spurious: a stop for the road itself. Its map
+(`pointcloud_map.pcd`) is on 118's host. 118 has been asked to put it on the NAS, and the row
+waits for it.
+
+**Predictions, before any replay.** The boulder's filtered points per frame, mean (max), were:
+1.7 (4) at 20 to 31 m, 6.1 (12) at 12 to 20 m, 13.1 (17) at 10 to 12 m. The validator needs more
+than `min_points_num` of them strictly inside the hull, and the hull's own vertices tend not to
+count. So:
+
+| first validated (m) | validator 10 | validator 5 | validator 3 |
+|---|---|---|---|
+| min_cluster_size 10 | 9.6 (as run) | 12 to 13.1 | 13.1 (the cluster's own limit) |
+| min_cluster_size 5 | 9.6 | 11 to 15 | 13 to 19 |
+| min_cluster_size 3 | 9.6 | 11 to 15 | 13 to 19 |
+
+The validator's column decides each row except where the cluster's own minimum is the stricter
+one. No cell reaches the 27.3 m at which the boulder first clusters at 3.
+
+Spurious validated objects on fixture_c6b:
+- none at `min_cluster_size` 10 or 5, whatever the validator;
+- at 3, with validator 5, at most 5;
+- at 3, with validator 3, at most 30 % of step 3's 141 spurious clusters;
+- every one more than 3 m from the path.
+
+fixture_c6a (as soon as its map is there):
+- with the settings as run, no validated object, as C6e3 saw;
+- at `min_cluster_size` 3 with validator 3, validated objects in the path at the 10 and 15 cm
+  cleats, and none at the washboard or the pothole.
+
+That last part is the least sure (about 40 %). A cleat is a step across the road whose top the
+compare-map filter may or may not remove, depending on how high it stands over the map's road.
+
+How sure of the table: about 60 % for each cell's range.
