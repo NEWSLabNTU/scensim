@@ -210,3 +210,8 @@ Three more stub tests (16 in all).
 
 **Predictions, before the gate:** `just gate` passes on 241 with the Isaac lane run (942), its
 line ending `carried ISAAC_ROOT`, and the 16 tests pass within `just test`.
+
+**The fourth follow-up's outcome:** `gate ok 7b51bb4a23c7b76108793f0e581af9a523ce4e5f tree d0f227eb
+on newslab-server-241 2026-11-26T14:04:32+08:00: build test check clean; Isaac lane ran (942
+tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29); carried
+ISAAC_ROOT`. Every prediction held. It was rebased onto 6df260e3 (docs only) before landing.
