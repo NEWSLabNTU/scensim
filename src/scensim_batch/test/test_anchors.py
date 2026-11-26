@@ -107,7 +107,8 @@ class Resolve(unittest.TestCase):
             self.assertEqual(doc["centerline"], A.LINE)
             out.write_text(json.dumps(dict(doc, version=1)))
             with self.assertRaisesRegex(A.AnchorError, "lanelet2's centreline .v1.; SSv2 uses "
-                                        "its own 2 m line .issue 194.: .*scensim.lock"):
+                                        "its own 2 m line .issue 194.: .*v2026.11h.*"
+                                        "scensim.lock.*scensim assets fetch --update"):
                 A.load_resolved(out, map_dir=d)
             out.write_text(json.dumps(dict(doc, centerline="other")))
             with self.assertRaisesRegex(A.AnchorError, "on centre line 'other', not v2"):

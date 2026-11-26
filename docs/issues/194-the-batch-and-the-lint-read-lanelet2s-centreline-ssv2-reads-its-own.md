@@ -417,6 +417,12 @@ centreline (scensim issue 194)". It holds three files:
 - `Town05/anchors.resolved.json` (a47872b0...);
 - the root `SHA256SUMS`, changed in those two lines only.
 
+What the new files carry besides the new line (243's review):
+- the same `map_sha256`, `declaration_sha256` and anchor names as the old ones;
+- Town01's also has the key `heading_max_error_reversed`. That key comes from issue 166's
+  existing resolver code, and the old file was written before that code existed. It is not
+  new in 194.
+
 The manifest was not in the plan's two files. `scensim assets fetch` checks every file against
 it, so leaving it out would have broken every bumped lock; 133 approved the third file. A fetch
 with `--verify` at df499322 passed.

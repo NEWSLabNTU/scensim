@@ -59,9 +59,10 @@ def load_resolved(path, map_dir=None):
         raise AnchorError(f"{path}: not a {FORMAT} file")
     if doc.get("version") == 1:
         raise AnchorError(f"{path}: resolved on lanelet2's centreline (v1); SSv2 uses its own "
-                          "2 m line (issue 194): the maps dataset's newer revision has them "
-                          "resolved again (move the project's scensim.lock to it), or its "
-                          "author resolves them (python3 -m scensim_batch.anchors resolve)")
+                          "2 m line (issue 194): carla-town-autoware-maps has them resolved "
+                          "again from tag v2026.11h on (move the project's scensim.lock to "
+                          "it: scensim assets fetch --update), or its author resolves them "
+                          "(python3 -m scensim_batch.anchors resolve)")
     if doc.get("version") != VERSION or doc.get("centerline") != LINE:
         raise AnchorError(f"{path}: a v{doc.get('version')} file on centre line "
                           f"{doc.get('centerline')!r}, not v{VERSION} {LINE!r}: resolve it "
