@@ -229,3 +229,46 @@ has to form by about 7 m from the bumper. The setting must also keep false obsta
 carriageway rare. If none does (predictions 4 to 6 say so), the options are the issue's second
 one (accept and document it), or a check made for the purpose: a height-above-map test on the
 lane only, not a global threshold.
+
+### Step 2 amended: judged at the final objects, with the validator in the grid (133, before the run)
+
+133's correction: in 181 the validator decided, not the clustering. So each setting is judged
+at the final objects, and the validator's UNKNOWN threshold joins the grid, as
+`min_points_num` = `max_points_num`: 5 (the profile's since asv b269c4a) and 3. With
+`use_pointcloud_map` true, the validator counts the compare-map filter's output inside each
+object's hull (detection.launch.xml in tier4_perception_launch 1.5.0). So it sees the same
+thinned points the clustering did, not the ground filter's. The tracker's confirmation then
+delays the final object. In 181 the final objects came 1.3 m (run A) and 3.4 m (run B) after
+the first validated object. The replay stops at the validator, so a final object's range is
+the validated range less that lag, 1.3 to 3.4 m.
+
+The bar, in the bumper's distance to the rock's near side (base_link range less 3.716 m and
+the rock's 0.18 m radius):
+
+- an emergency stop: AEB through the MRM at -6 m/s^2 from 4.17 m/s needs 1.45 m, plus about
+  0.3 s of reaction (1.25 m). A final object later than 3 m means a strike at any setting.
+- a planned stop: obstacle_stop's minimum margin of 3 m plus its braking. The final object has
+  to come by about 7 m, as step 2 said.
+
+Predictions (4) to (6), replaced; (1) to (3) and (7) stand:
+
+4. g 0.10 with dz 0.1. Only the top 5 cm of the rock is more than 0.10 m above the road, so few
+   points pass:
+   - with `min_cluster_size` 10 there is no cluster beyond 3 m, so no validated or final object
+     before the strike, whatever the validator's threshold;
+   - with `min_cluster_size` 3 a cluster forms from about 10 m. With the validator at 5 it is
+     validated from about 6 m; at 3, from about 9 m;
+   - final objects (less the tracker's 1.3 to 3.4 m): 3 to 5 m with the validator at 5, and 5 to
+     8 m at 3, from the bumper. That is at the emergency bar, and short of the planned one
+     except at its best.
+5. At that setting (g 0.10, dz 0.1, `min_cluster_size` 3, validator 3), a final object on the
+   carriageway more than 1 m from the rock in under 2 % of frames. The tracker needs repeated
+   detections, so single-frame road clusters seldom survive it.
+6. g 0.05 with dz 0.05, `min_cluster_size` 10, validator 5: the rock's final object comes by
+   about 5 m from the bumper. Final objects on the carriageway away from the rock are in more
+   than 10 % of frames.
+
+Judged per setting: the first final-object range at the rock (as the validated range less 1.3
+and less 3.4 m, both given), and the fraction of frames with a would-be final object elsewhere
+on the carriageway. A would-be final object is a validated object present in at least 3
+consecutive frames, which approximates the tracker. The replay cannot run the tracker itself.
