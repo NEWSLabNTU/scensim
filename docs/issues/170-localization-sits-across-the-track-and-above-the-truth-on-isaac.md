@@ -561,3 +561,50 @@ joined with the nearest NVTL and iteration count in time.
   hairpins, where the across error reaches +0.13 m, the median NVTL is within 0.1 of the
   straights'; (b3) iteration_num at the limit (30) in under 1 % of samples. If (b1) or (b2) fails,
   NDT's convergence on this map's geometry is implicated, and where it fails says where.
+
+## (a) and (b): results (243, 2026-11-27, offline)
+
+Scripts and outputs: `/var/tmp/aeon/170/a/` (`props_vs_usd.py`, `props_vs_usd2.py`, their json)
+and `/var/tmp/aeon/170/b/` (`ndt170.py`, `ndt170.jsonl`) on 243's host.
+
+**(a) The map's props are the USD's props.**
+- Composed: 120 guardrail meshes; tree kinds 0 to 3, 1,661 of 3,131 instances (those within 60 m
+  of the road); kind 4 is missing from this host's asset set. 81.8 M samples of the composed
+  triangles.
+- *Forward,* 400,000 map prop points (left out: 5.49 M within 6 m of a kind-4 trunk, 4.90 M
+  beyond 55 m of the road): |distance to the nearest composed triangle's plane| p50 **1.08 mm**
+  (predicted under 1 mm: just over, by sampling; per kind 0.39 to 1.17 mm), mean offset
+  (+0.11, +0.07, -0.26) mm (**held**, under 1 cm).
+- *The guardrails, every map point* (2,315, about 19 a segment, as 6 per m^2 of the asset gives):
+  |plane distance| p50 0.23 mm, signed (+ away from the road) p5 -16 mm, p50 0.0 mm, p95 +17 mm;
+  per segment with 20 points or more (7) the median is -0.01 to +14 mm; z against the composed
+  rail -0.1 mm.
+- *Reverse,* 400,000 composed samples within 40 m of the road: 0.055 % more than 1 m from a map
+  point (**held**, under 1 %); guardrails 0.0 %.
+- *The forward far points* (3.65 % with no composed sample within 0.3 m): 0.55 % of map points
+  have neither a composed trunk within 8 m nor a rail; they sit 6 to 17 m (p5 to p95) from a
+  kind-4 trunk, the maples' canopies beyond the 6 m left out. Not a mismatch.
+- *So:* the map holds the rendered props, in place to about a millimetre. The props do not
+  explain the ~5 cm fixed vector or the hairpin part. With the ground (`rebuild170.py`) this
+  closes the map: the point cloud NDT matches against is the world the lidar renders.
+
+**(b) NDT converges, uniformly, where the error is large.** Per run (`ndt170.jsonl`), the across
+error and its residual reproduce step 1 and the bend split (straights -0.078 to -0.086 m, the
+right hairpins' residual +0.133 to +0.189 m).
+
+| over 18 runs | r(across, NVTL) | r(abs residual, NVTL) | NVTL straights | NVTL right hairpins | NVTL p5 | iterations median, p99 | at 30 or more |
+|---|---|---|---|---|---|---|---|
+| range | +0.11 to +0.21 | +0.04 to +0.14 | 3.155 to 3.158 | 3.151 to 3.155 | 3.118 to 3.120 | 2 to 3, 5 | 0 to 0.03 % (168's 12) |
+
+- (b1) |r| under 0.3 in every run: **held.**
+- (b2) The right hairpins' NVTL within 0.1 of the straights': **held** (0.002 to 0.007 below).
+- (b3) iteration_num at 30 or more in under 1 %: **held**, with a note: the largest values are
+  36 and 60 (in 5 runs, one to three messages each), so 30 is not the limit these runs had; the
+  check stands as a share of high counts, not of hits at the limit.
+- *So:* NDT's score and its iterations are the same on the straights and in the right hairpins,
+  where the error is 0.13 to 0.19 m larger, and they do not follow the error. NDT reaches the same
+  quality of fit at a pose off the truth: the error is where NDT's optimum is, not a failure to
+  reach it. With the map equal to the world ((a) and step 3), the optimum is off because the scan
+  NDT is given differs from what the map predicts at the true pose. That points at the scan's
+  side (where the lidar's points are put relative to base_link, and when), which step 4's fixture
+  runs measure with no bends, crown or props. Not tested here.
