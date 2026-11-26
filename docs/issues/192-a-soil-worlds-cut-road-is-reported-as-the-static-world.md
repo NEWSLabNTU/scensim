@@ -108,3 +108,43 @@ newslab-server-241 2026-11-26T16:16:33+08:00: build test check clean; Isaac lane
 tests); colcon-cargo-ros2 0.5.5; rustfmt 1.10.0-nightly (fd7ed57dfd 2026-08-29); carried
 ISAAC_ROOT`. Held: 947 is 942 plus the 5 new tests. Rebased onto 7b7abfe6 (docs only) before
 landing.
+
+## The live check (241, 2026-11-26, 20:33 to 20:38)
+
+**Setup.**
+- 241's GPU1, **shared with another user's training job** (thsxw's, steady at 10258 MiB).
+- GPU1's free memory went from 21861 MiB to 14273 MiB at its lowest. A guard stopped our run
+  below 4096 MiB free; it never fired.
+- The build was scensim main 6690f884619bc89fb122c838e48ebe294bd0e4c7, with siw 03876248, built
+  clean.
+- The project was a copy of `isaac_soil`, with its own lock and assets at the lock's
+  revisions. The run was town01_soil, alone.
+- The run directory is 241's
+  `swb-logs/soil192/runs/2026-11-26T20-35-41_town01_soil_r0`.
+
+**Result:** the run passed, and so did `physical_verdict` ("no unexpected contact").
+
+**The predictions:**
+- **Held:** `contacts/` lists no `/World/soil/...` prim. Its one episode record is
+  `complete: true`, with `contacts: []` and `npc_contacts: []`, as predicted (none on this
+  route).
+- **Failed:** the logged pair. The world server logged it once:
+  ```
+  issue 192: /World/entities/e2 touches the soil zones' ground /World/soil/dirt_road/cut/m0
+  (dropped as ground): colliders /World/entities/e2/body and /World/soil/dirt_road/cut/m0,
+  12 point(s), smallest separation 0.4984 m
+  ```
+  `e2` is the NPC `lead` (a tracked box, 4.5 x 2.1 x 1.8 m, its base at the road), spawned
+  0.27 s before. It is not the ego's chassis cube or plate. The pair was the lead's box
+  against the dirt zone's cut road, not a kerb or verge face. The separation is 0.50 m, not
+  within a few cm. The ego reported no soil contact at all.
+
+**Unexplained:** a reported pair whose smallest separation is half a metre. Two readings are
+possible:
+- PhysX reports contact points out to the sum of the two shapes' contact offsets, and the
+  tracked body's offset may be that large;
+- the box sits on the cut copy's sunken faces inside the zone, which the cut lowered under the
+  soil grid.
+
+Neither was measured. It needs no change: the row is ground, as the fix intends, and the
+lead's body went down 0.023 m at most on the soil ("off the soil" line). Step 4 is done.
