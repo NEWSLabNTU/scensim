@@ -423,5 +423,12 @@ with `--verify` at df499322 passed.
 
 **The locks.** The 27 listed above move to df499322: in each, the commit line and the
 anchors lines changed, nothing else. Every one of them passes `scensim assets fetch --verify`
-and `scensim assets check`. The dataset's newest tag (v2026.11g) is not at df499322, so a
-`--update` would not reach it; each lock names the commit.
+and `scensim assets check`.
+
+**The tag (user's approval via 133, 2026-11-26):**
+- `v2026.11h` on df499322. Before it, the newest tag (v2026.11g) was not at df499322, so a
+  `--update` would not have reached it.
+- In a scratch copy of k13_platoon locked at eb93b387, `scensim assets fetch --update --verify`
+  said "eb93b387f96e -> df499322639f, 0 new file(s)".
+- The lock it wrote is byte for byte the hand-bumped one in this landing, and `assets check`
+  says ok.
