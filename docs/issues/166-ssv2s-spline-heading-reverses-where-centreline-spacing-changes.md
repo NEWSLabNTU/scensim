@@ -477,3 +477,43 @@ back. The lint would then name it.
 194's 2.10 cm transient at the 42664 to 32582 joint is not this defect: it comes from the joined
 spline's end conditions, not a reversal. It stays with 092 K2.4's follow-up, and 166 does not
 narrow to it.
+
+## A follow-up after closing: PR #1919's "46 joins" (133's ask, 2026-11-27; predictions before any count)
+
+Our upstream PR tier4/scenario_simulator_v2#1919 (centripetal Catmull-Rom) says: "on CARLA's
+Town05, 46 joins have a reversed heading", falling to 6 with the fix. A join is where two lane
+centrelines are joined into one route spline. 133 asks: was the 46 counted on the points SSv2
+joins, or on lanelet2's raw line?
+
+What SSv2 joins: `lanelet_map::centerPoints(ids)` (traffic_simulator `lanelet_map.cpp` 170-185
+at the fork's pin) concatenates each lanelet's cached centre points and removes consecutive
+exact duplicates (`std::unique`). With `use_custom_centerline` true and no custom line in these
+maps, each lanelet's points are SSv2's fine 2 m line.
+
+The count:
+
+- Joins are every (A, B) with B following A on Town05 (export v3's `following`).
+- Points: SSv2's own `centerPoints` for A, then B, exactly as dumped by 194's step 7 program
+  (`%.17g`, the NAS `2026-11-26 194 review (241)/step7/`), with exact consecutive duplicates
+  removed.
+- Two splines over them:
+  - the old: SSv2's uniform one (`scensim_batch.catmull`, 166's bit-for-bit port);
+  - the new: PR #1919's centripetal one, ported from its diff term for term.
+- A join counts when a curve of the joined spline that touches the join (the last two of A's
+  curves and the first two of B's) has a reversed stretch by 166's rule.
+- The same count on lanelet2's raw `centerline()`, joined the same way, for comparison.
+
+Predictions:
+
+1. On SSv2's points, the old spline: 40 to 52 Town05 joins. I lean (60 %) to the PR having
+   counted on SSv2's line: its "2 m segment next to a short one" describes the fine line.
+2. On lanelet2's raw line, the old spline: more than 100 joins. Its dense, uneven points make
+   short segments at many joins.
+3. On SSv2's points, the new spline: at most 6. Each remaining one is at points that turn back
+   (a heading change of more than 90 deg between consecutive chords).
+4. The mechanism on SSv2's points: A's last point and B's first are not bit-equal at those
+   joins, so `std::unique` keeps both, and a segment under 1 mm sits between 2 m ones. Or a
+   lanelet under 0.3 m long gives one short segment.
+
+If prediction 1 fails and 2 lands near 46, the PR's number is lanelet2's line. 133 then takes a
+correction to the user.
