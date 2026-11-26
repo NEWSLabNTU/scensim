@@ -374,3 +374,26 @@ and their conclusion, that the map sits 5 to 10 cm off the world, is **withdrawn
   "fixed vector plus car-fixed" model left 0.035 m rms unexplained, so it may be the wrong
   model. The next candidate is NDT's own estimate (its convergence on this map's geometry), to be
   planned with 133.
+
+## The truth's origin against base_link, by numbers (243, 2026-11-27; predictions before reading)
+
+Taken up by 243 on 133's assignment. The records the steps above used (C6e2's six runs, 168's
+twelve, `isaac-ex/i170/`) are on 118's host. This first check needs none of them: it reads the
+code and the car's spec.
+
+*The question.* What point of the car the truth stream (`ego.csv`, `scensim/truth`) reports.
+`scensim.truth` already takes an `origin_offset` off the world server's body pose to give
+base_link (the rear axle's middle on the ground). If that offset, or the body pose it is taken
+from, has a lateral part for tesla_model3, the truth sits that far across from base_link, and the
+error between localization and the truth carries it as a car-fixed across part: the
+"car-fixed -0.037 m" above.
+
+*Predictions, before reading:*
+- T1: the offset `scensim.truth` applies for tesla_model3 has no lateral component (|y| under
+  1 mm). The spec's body is symmetric about the car's centreline, and base_link is on it.
+- T2: so the truth's origin is not the car-fixed -0.037 m. If T1 fails, its y is compared with
+  -0.037 m directly: the truth to the left of base_link by d gives localization (at base_link)
+  d to the right of the truth, an across error of -d.
+- T3: the along part of the offset (the body's centre ahead of the rear axle) is applied, so it
+  makes no along error; if it were not applied, the runs would show an along error of about the
+  wheelbase's half, 1.4 m, which they do not (their along errors are under 0.11 m).
