@@ -760,3 +760,64 @@ the per-scan along pull p5 to p95 -0.031 to +0.031 (N1), -0.016 to +0.052 (N2), 
 +0.052 (N3), -0.103 to +0.066 m (N4), medians 0.0002 or less. The EKF's Mahalanobis gate
 rejects 48 of 2533 (N1), 23 of 847 (N2), 99 of 2521 (N3) and 10 of 844 (N4) NDT poses after
 the stop (none before the first motion); the distance's median 1.9, 0.9, 5.0 and 3.2.
+
+## The NDT trace, baseline: the reading (243, 2026-11-27)
+
+*The answer to the user's question: it depends on the axis.* Yaw and height are inherited from
+the initialization; the across and along errors are made by the tracking, and so is the
+standstill drift, which is a wander, not a creep.
+
+- **Yaw: inherited, then corrected by driving.** The winning particle's yaw error is the start's
+  (+0.039 and +0.041 rad on fixture_c6b, -0.0003 and +0.016 on fixture_c170), and it holds while
+  the car stands (within 0.004 rad). Once the car moves, small pulls of one sign take it away:
+  on fixture_c6b from +0.036 to +0.009 rad over the 20 s drive, and to +0.003 to +0.007 at the
+  stop; on fixture_c170 from +0.014 to +0.002. A start's heading error therefore matters for
+  the first tens of metres (B2's 1 m swerve, issue 182), not for the run.
+- **Height: inherited and never corrected.** -0.024 m on fixture_c6b and -0.012 to -0.014 m on
+  fixture_c170, the same at the winning particle and at every scan, pulls zero. A constant
+  offset the matcher keeps is what a map whose ground is low would give: issue 198's terrain
+  under the road (13 cm below it in 72 % of fixture_c6b's lane cells) is the candidate, to be
+  checked on the rebuilt maps.
+- **Across: made while driving.** On fixture_c170 the winner is 0.003 and 0.010 m across, yet the
+  drive's median is +0.22 and +0.15 m (170's +0.19 m car-fixed offset) and falls back to +0.12 and
+  +0.06 m standing. On fixture_c6b the drive runs +0.14 m and the stand after it -0.22 and -0.26
+  m. The init does not carry it; the scans while moving do (the map's surface, issue 198, and
+  the stamp, issue 196, are the two causes in reach).
+- **Along: made, by the stamp while driving.** The drive's along error is -v tau with tau 33 to
+  36 ms on N4 and 27 to 33 ms on fixture_c6b (196's two substeps), the estimate behind the
+  truth; N2 reads 47 to 58 ms, an extra -0.1 m to explain. The pulls do not carry it: it is in
+  the scan's stamp, as 196 found.
+- **The standstill drift: made by tracking, a wander.** With the truth still (under 3 mm), NDT's
+  along estimate wanders 0.4 to 0.8 m peak to peak in 30 to 120 s, at -0.48 to +0.22 m/min of
+  either sign, through per-scan jumps of 3 to 10 cm (p5 to p95), and the EKF follows it. The
+  matcher's along direction is barely constrained on a featureless straight, and a stationary
+  car gives it no new geometry. The EKF's gate rejects 10 to 99 of those poses per stand,
+  none before the first motion: its covariance has shrunk at a standstill, so the jumps look
+  large to it.
+- **The EKF learns a yaw bias on fixture_c6b**: -0.018 rad over the drive (+0.005 and -0.003 on
+  fixture_c170), so after the drive its heading is 0.015 to 0.018 rad off NDT's, which is
+  closer to the truth. A sideways drift of the NDT track while driving (the across error above)
+  is what such a bias absorbs. Not shown; a question for L3.
+
+*Against the predictions.*
+- N1 (the init: the winner's yaw is the start's, position under 0.1 m, scores not ordering yaw
+  on fixture_c6b): the first two hold (+0.039/+0.041 and -0.0003/+0.016 rad; position at most
+  0.093 m). The third fails as written: near the truth, a higher score goes with a smaller yaw
+  error (rho -0.59 and -0.76 on fixture_c6b), but the top is too flat to choose. The particles at
+  -0.011 and -0.002 rad scored 0.020 and 0.006 below the winner at +0.04, and in N1 the second
+  best was the car turned round (dyaw -3.106 rad, 1.4 m across) at 0.017 below the winner.
+- N2 (yaw inherited, within 0.005 rad standing and driving): holds standing, fails driving.
+- N3 (170's across is the winner's): fails; it is made while driving.
+- N4 (along follows speed through the stamp, not the pulls): holds (N4 33 to 36 ms, fixture_c6b
+  27 to 33 ms; pulls near zero); N2's 47 to 58 ms is the exception.
+- N5 (the standstill drift made by tracking through small pulls of one sign, under 1 mm a scan,
+  all passing the gate): made by tracking, yes; the rest fails. The pulls are 3 to 10 cm and of
+  both signs, the drift wanders either way, and the gate rejects some.
+
+*What it means for batch L.* L1's pose-free start cannot do better on yaw than this align does;
+its first metres carry the start's yaw error until driving removes it, so L3 should measure the
+first 100 m. L2's stamp fix should remove the drive's along error (N4's prediction for L3).
+The across error and the height belong with issue 198's maps: L3 on the rebuilt maps, against
+this baseline on the old ones, separates them. The standstill wander is the matcher's own on a
+featureless straight; the rebuilt maps and L2 may narrow it, and the EKF gate's rejections
+show the EKF already distrusts it.
