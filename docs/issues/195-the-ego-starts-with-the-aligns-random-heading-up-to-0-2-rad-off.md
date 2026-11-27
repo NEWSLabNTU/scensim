@@ -993,3 +993,23 @@ L3's T, S and H wait for it; F finishes on the current main.
   Town01, under 0.02 rad on fixture_c170, 0.02 to 0.08 rad (median) on fixture_c6b. A c6b start
   within 0.01 rad would need the align to use the heading, which is a separate change
   (the initializer's yaw covariance or the align's sampling), not part of L1b.
+
+## L3 TW, a pre-L1b sample on CARLA (241, 2026-11-27; not the TW set)
+
+Five runs of town01_ego_drive at scensim main a89027a2, before L1b. 133 held the set after run
+4 until L1b lands, and run 5 had already started. Kept for the reading: CARLA's pose-free starts
+passed despite the GNSS noise. The NAS copy is `autoveh/logs/2026 SSv2 on CARLA/2026-11-27
+issue 195 L3 TW (241)/pre-L1b sample/`.
+
+- All 5 passed. Each start was pose-free, by Autoware's own initialization; the agent made no
+  initialize call.
+- The align's error against the truth (base_link): along -0.036 to -0.057 m, across -0.016 to
+  -0.046 m, dyaw +0.0009 to +0.0013 rad. Inside P1's bounds (0.01 rad, 0.15 m) in all 5.
+- NDT over the first 20 m: |dyaw| at most 0.0014 to 0.0029 rad, |across| at most 0.050 to
+  0.060 m.
+- P2 as written cannot hold on this scenario, by its layout, not by localization (243's
+  error in writing it, recorded as such). The ego is spawned 0.645 m off its lanelet's centre
+  in every run, the goal is 0.3 m off, and the drive is 66 m. So (a), the max |offset| over
+  the drive, is 0.645 to 0.646.
+- (b), POST HOC (chosen after run 1, not a prediction result): the max |offset| from 20 m to
+  6 m before the goal is 0.053 to 0.056 m.
