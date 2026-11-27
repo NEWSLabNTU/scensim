@@ -56,3 +56,35 @@ def test_a_stock_pilot_with_its_own_autoware_args_passes(host):
     d = make(host["tmp"], tb("{kind: autoware, vehicle: tesla_model3, "
                              "args: {lidar_detection_model: centerpoint}}"))
     assert not [w for w in whats(scenario_checks(d)) if "lidar_detection_model" in w]
+
+
+# --- the other ways a pilot gets args: a suite's pilot_args, and run_one's override (243) ---------
+
+def test_a_suites_pilot_args_on_a_stock_pilot_are_refused_by_name(host):
+    d = make(host["tmp"], tb("{kind: autoware, vehicle: tesla_model3}"))
+    (d / "suites").mkdir()
+    (d / "suites" / "s.yaml").write_text("scenarios: [scenarios/drive.xosc]\n"
+                                         "pilot_args: {ego: {compare_map_z_ratio: 0.2}}\n")
+    [f] = [f for f in scenario_checks(d) if "compare_map_z_ratio" in f.what]
+    assert f.file == "suites/s.yaml" and f.what.startswith("pilot_args.ego.compare_map_z_ratio:")
+    assert "autoware_profile: scensim" in f.fix
+
+
+def test_a_suites_pilot_args_on_a_scensim_pilot_pass(host):
+    d = make(host["tmp"], tb("{kind: autoware, vehicle: tesla_model3, autoware_profile: scensim}"))
+    (d / "suites").mkdir()
+    (d / "suites" / "s.yaml").write_text("scenarios: [scenarios/drive.xosc]\n"
+                                         "pilot_args: {ego: {compare_map_z_ratio: 0.2}}\n")
+    assert not [w for w in whats(scenario_checks(d)) if "compare_map_z_ratio" in w]
+
+
+def test_the_pilots_launch_entry_refuses_one_however_it_came(tmp_path):
+    """A pilot's launch entry is made after every merge (a suite's or run_one's pilot_args): a
+    stock pilot's entry with a scensim-profile arg is refused there too."""
+    from scensim import stack
+    b = stack.Bound("ego", "ego", {"kind": "autoware", "args": {"lane_height_check": "true"}}, 1)
+    with pytest.raises(stack.StackRefused, match=r"lane_height_check.*autoware_profile: scensim"):
+        stack.pilot_entry(b, tmp_path, {"seed": 0})
+    b = stack.Bound("ego", "ego", {"kind": "autoware", "autoware_profile": "scensim",
+                                   "args": {"lane_height_check": "true"}}, 1)
+    assert stack.pilot_entry(b, tmp_path, {"seed": 0})["args"]["lane_height_check"] == "true"
