@@ -736,3 +736,29 @@ with yaw near the true one, so the align can stop 0.05 to 0.15 rad off and pass.
   with distance. G6 then fails for the reason G7 gives, not for a steady bias.
 - *Not G7:* if all three start within 0.01 rad, the align is not the cause of runs A and B's
   start heading, and G6 is read on its own.
+
+## Step 4's runs: raw numbers, before any reading (243, 2026-11-27)
+
+**R1** ran on host 243 (its card freed first; 118 was told and ran none), from wt-170's install
+(main fcc01e50 plus docs; built 03:31 by `build.sh`, env -i, acb then scensim), started 08:35:53,
+run `2026-11-27T08-36-30_fixture_c170_down_hold_r0`, passed (no judges, the scenario's end).
+The testbench as committed above, plus `/diagnostics` (asked of 118 for G7 before any run).
+Readers: `err170.py` (errors against the gap trace's `sim_pose`, origin_offset (0, 0, 0); x 60 to
+540, |v| > 1 m/s; along + ahead, across + left of the truth's heading) and `start170.py`.
+
+| R1, x 60 to 540, n | along median (sd) | across median (sd), p5 to p95 | dz median | dyaw median, p5 to p95 |
+|---|---|---|---|---|
+| EKF, 880 | -0.2912 (0.0337) m | +0.1793 (0.1619), -0.1086 to +0.4191 m | -0.0109 m | -0.058, -0.539 to +0.358 deg |
+| NDT, 880 | -0.2898 (0.0692) m | +0.1708 (0.1567), -0.1076 to +0.4032 m | -0.0114 m | +0.133, -0.279 to +0.523 deg |
+| GNSS pose, 440 | +0.0273 (0.0013) m | -0.0270 (0.0002) m | -0.0116 m | +2.085 (sd 0.011) deg |
+
+- *Standstill* (the truth under 0.01 m/s after the last sample above 1 m/s): 42.5 s at x 569.7;
+  the truth moved 74.4 mm over it. Change first to last, along / across / z: EKF +0.049 /
+  +0.052 / -0.006 m (sd along 0.041, across 0.015); NDT +0.072 / +0.231 / -0.013 m (sd 0.058,
+  0.077); GNSS +0.790 / -0.665 / -0.004 m (sd 0.413, 0.642).
+- *Start (G7)*, before the truth first exceeds 0.05 m/s (sim 1005.9 s), the truth at (20.00,
+  1.62), yaw 0: EKF yaw less the truth's +0.0275 rad at its first sample (1003.35), +0.0277 at
+  its last; NDT +0.0287, +0.0273. y less the truth's: EKF +0.009 then +0.040 m, NDT -0.020 then
+  +0.044 m. The align's best_particle_score 3.380 (one align, at 1002.35).
+- *The truth's track (G6):* its y less the lane's (1.62) over the drive: min -0.929 m (at x 56.8),
+  median -0.152, max +0.218.
