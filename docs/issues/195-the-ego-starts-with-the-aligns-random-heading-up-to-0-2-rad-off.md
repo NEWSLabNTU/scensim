@@ -1176,3 +1176,9 @@ sensor's own world location, inverting the projector the map declares (type, ori
 same test vectors as aib's (118's file): every CARLA town to 20 m past its corners, a course
 fixture, a declared-scale map and an MGRS square, 0.01 m. aib's TM-at-(0, 0) path, also
 spherical (118: 0.92 m at (190.8, -130.1)), is 118's.
+
+## Open item: no pose-free start on indoor or Local maps (133, 2026-11-27)
+
+Indoor or Local maps (golf-cart basements): no pose-free start yet. GNSS on such a map is refused
+at start (aib 14ebf4c on Isaac; acb's equivalent from 241); such a map needs another start
+source.

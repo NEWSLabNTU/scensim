@@ -118,6 +118,10 @@ ordinary receiver; with it a guess 1.6 m along a straight road can win the align
 map does not fix the position along the road. A pilot's `gnss_particle_variance` sets the
 variance directly. Only the scensim Autoware profile reads it.
 
+A map with a `Local` projector (an indoor map, with no place on the Earth) has no GNSS, and a
+pilot that uses GNSS on it is refused at start: Autoware cannot yet start on such a map without
+a pose from the scenario, and another source of the start pose is needed.
+
 An `autoware` pilot's `args` (and a suite's `pilot_args` for it) are checked by the
 Autoware profile's own argument check when `testbench check` runs, and so before the stack
 starts: a renamed argument (`carla_control`, now `sim_control`), a value outside its
