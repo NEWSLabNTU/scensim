@@ -112,3 +112,31 @@ runner went on). The runner steps 20 Hz frames in three physics substeps of 1/60
   differ.
 - *So:* step 1 cannot locate the lag; step 2 (the scan's geometry against the fixture at the
   stamp and around it, while moving) has to, as planned. Nothing changed in code.
+
+## Step 2: where a scan's points put a fixed target, while moving (243, 2026-11-27, before the run)
+
+Approved by 133 as a measurement only. On the straight nothing lies along the road for the lidar
+to range against, so the probe adds targets: R1's scenario (`fixture_c170_down_hold.xosc`, the
+full stack as the runs, the Tesla, `max_velocity` 11.11) with two parked `tesla_model3` entities
+off the road, at (60, -6.0) and (540, -6.0), heading 0, z 0 (2 m beyond the road's 4.0 m edge,
+outside every lanelet), so their rear faces look at the ego as it comes. The raw cloud
+(`/sensing/lidar/top/pointcloud_before_sync`, the runs' `xyzirc`) is recorded with everything
+the runs recorded; the testbench's only other change.
+
+*The measure.* Each scan's points, through the recorded `/tf_static` (top to base_link) and the
+truth's pose (the gap trace's `sim_pose`, interpolated) at the scan's stamp, into the map. A
+target's rear face is the points within 0.15 m of the nearest point in x, in a box around the
+target; X(stamp) is their median x. Points rendered from the sensor at time t_r and placed with
+the pose at the stamp land at the true face plus v (stamp - t_r) in x. So with X_0 the face's x
+measured while the ego stands at the start (v = 0, no time dependence),
+tau = (X(stamp) - X_0) / v for each moving scan, the target at x 60 from the start's
+acceleration, the one at x 540 at cruise and in the braking.
+
+*Predictions:*
+- Q1: tau from the faces is 30 to 37 ms (the speed split's), constant with v: the scan's stamp
+  is that much later than the pose it was rendered from, and the lag is in the cloud's stamp.
+- Q2, the alternative: tau from the faces under 5 ms. Then the cloud's stamp is right, and the
+  along error the runs show comes from the other side of the comparison: the truth (the gap
+  trace's `sim_pose` stamped 30 to 37 ms early for the pose it holds) or from NDT and the EKF
+  after the scan.
+- Q3: the same tau at x 60 (accelerating, 1 to 8 m/s) and x 540 (11 m/s and braking).
