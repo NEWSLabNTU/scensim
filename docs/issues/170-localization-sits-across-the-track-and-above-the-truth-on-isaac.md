@@ -951,3 +951,28 @@ hold no RTX render time, so the wall period is the only load measure).
   then what differs is the fixture (its course, its map) or the build (Haruna's ran at main
   c5c on 118's host, the fixture at fcc01e50 on 243's).
 Prediction: K1. The stamp logic is the same code and the 0.05 s step is the same.
+
+## The lag on Haruna's 18 runs: result (243, 2026-11-27)
+
+`lagall.sh` (`speed170.py`, `wallperiod170.py`; `speed170_all.jsonl`, `wall170.jsonl` in
+`/var/tmp/aeon/170/`). The EKF's along error against the truth's speed.
+
+- *The premise was wrong:* Haruna's runs are slower than the 4 to 8 m/s assumed above. Their
+  samples fall in 1 to 5 m/s only (four bins; about 6,000 a run at 4 to 5 m/s, 1,200 at 3 to 4).
+  So a 33 ms lag would give -0.05 to -0.15 m there, not -0.13 to -0.27, and the along errors
+  "under 0.11 m" do not by themselves argue against it.
+- *Per run* the fitted tau scatters from -38 to +31 ms (intercepts -0.04 to +0.14 m) over a 3 m/s
+  range with bends in it: too noisy to tell K1 from K3 run by run.
+- *Pooled* (the median of the 18 runs' bin medians): 1.5 m/s -0.027, 2.5 m/s +0.054, 3.5 m/s
+  +0.027, 4.5 m/s -0.004 m. From 2.5 to 4.5 m/s the slope is -0.029 m per m/s, **tau about 29 ms,
+  intercept about +0.13 m**: K1's form (the same lag, offset by an along offset of the other
+  sign), with the 1.5 m/s bin (the start, about 22 samples a run) off the line. **K1 held, weakly**
+  (pooled, three bins); K3 is not excluded run by run.
+- *Wall frame period* (median / p90 / p99 after the ego moves): fixture_c170 50.0 / 53 / 56 ms in
+  all three; Haruna 51 to 73 / 57 to 89 / 89 to 137 ms (slower than real time, the heavier world).
+  **K2 is not resolvable:** the per-run tau is too noisy to follow the period, and the pooled
+  tau (29 ms) is within the fixture's (29 to 37 ms) though Haruna's frames ran up to 45 % slower.
+  So the lag looks fixed in simulation time (a fraction of the 0.05 s step), not set by load;
+  a run at a different step time is the test.
+- *Haruna's along intercept* (+0.13 m) against the fixture's (+0.02 to +0.09 m) is a separate
+  along offset, not studied here.
