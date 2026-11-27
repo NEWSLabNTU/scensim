@@ -1128,3 +1128,51 @@ the car facing north at x 396.4 from y -250 to -180, and south at x 392.4 from y
   acb's fix, not in gnss_poser's lever arm.
 - If G1 or G2 fails (the error turns with the car, or does not scale with y), the hypothesis is
   wrong and the cause is car-fixed: the lever arm or the sensor's mount.
+
+## CARLA's GNSS offset: the results (241, 2026-11-27)
+
+Two runs at L1b's code (2c83fa71), project `i195_gnss`, the raw fix and `/tf` recorded: the car
+facing north at x 396.4 from y -250 to -190, and facing south at x 392.4 from y -100 to -160.
+Both passed. A third, at heading pi (TW's start, 190.8, -130.1), recorded the raw fix too.
+`g3_195.py` projects the raw fix as Autoware's projector does (pyproj WGS84 TM, origin 0, 0, the
+declared scale 1.0) against the truth antenna, base_link + R (0.8, 0, 1.8).
+
+| run | map x | map y | raw fix dx | raw fix dy | gnss_poser dx | gnss_poser dy | exact model dx / dy |
+|---|---|---|---|---|---|---|---|
+| west (pi) | 190.8 | -130 | +0.075 | +0.815 | +0.072 | +0.818 | +0.076 / +0.819 |
+| north | 396.4 | -250 | +0.155 | +1.566 | +0.159 | +1.569 | +0.160 / +1.574 |
+| north | 396.4 | -220 | +0.150 | +1.385 | +0.156 | +1.387 | +0.160 / +1.385 |
+| north | 396.4 | -190 | +0.159 | +1.190 | +0.160 | +1.186 | +0.160 / +1.196 |
+| south | 392.4 | -100 | +0.161 | +0.637 | +0.159 | +0.635 | +0.158 / +0.629 |
+| south | 392.4 | -130 | +0.157 | +0.823 | +0.153 | +0.827 | +0.158 / +0.818 |
+| south | 392.4 | -160 | +0.160 | +1.002 | +0.156 | +1.003 | +0.158 / +1.007 |
+
+The exact model is CARLA's own geolocation (queried live on Town01: lat 0, lon 0 at (0, 0); its
+lat/lon is a sphere of about 6375570 m) projected by WGS84 TM at scale 1.0. It matches every row
+within 0.01 m. The first-order e^2 |y| of the hypothesis was too crude: it gave y only, and too
+much of it (0.0067 |y| against the exact 0.0063 |y|), and no x term (0.0004 x).
+
+**Against the predictions, as written.**
+- G1 FAILED as written. The error is along map y and world-fixed, as G1 said: facing north or
+  south it lies along the car, facing west across it, with the same map dy at the same y. But
+  |dx| is 0.15 to 0.16 m at x 392 to 396, not under 0.1 m: the x term the first-order model left
+  out.
+- G2 FAILED as written, at one point of seven per run. The error scales with |y| as predicted,
+  but at y -250 it is 1.566, 0.108 m under e^2 |y| (bar 0.1 m); the other 13 points are within
+  0.04 to 0.10 m.
+- G3 held: the raw fix is off the truth antenna by the same amount as gnss_poser's pose is off
+  base_link (within 0.007 m), so the error is in acb's fix, not in gnss_poser's lever arm.
+- The 0.05 m residual noted at y -130 is explained: it was the first-order model's, not the
+  data's.
+
+**The scale.** Autoware reads the declared `scale_factor`: with 1.0 (every CARLA town in
+carla-town-autoware-maps at the pinned df499322) the measured dx matches k = 1 and not 0.9996
+(which would give dx about 0 at x 190.8). A map file without the key (the course fixtures)
+projects with Autoware's default, 0.9996 (118's 1 mm on Isaac).
+
+**The fix** (next, test-first in acb, on L1c's acb main 2358180): build the fix from the GNSS
+sensor's own world location, inverting the projector the map declares (type, origin, scale;
+0.9996 when the scale is absent) exactly, instead of negating CARLA's spherical latitude. The
+same test vectors as aib's (118's file): every CARLA town to 20 m past its corners, a course
+fixture, a declared-scale map and an MGRS square, 0.01 m. aib's TM-at-(0, 0) path, also
+spherical (118: 0.92 m at (190.8, -130.1)), is 118's.
