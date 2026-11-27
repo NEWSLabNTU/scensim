@@ -55,6 +55,7 @@ class TruthRecorder:
         # a slot's lines index it, so writing N slots costs N, not N^2 (092 K11c)
         self._overlaps = {}
         self.open = [False] * n
+        self.started = [False] * n           # whether the slot has had an episode (issue 199)
 
     def _row(self, obs):
         ego = obs["ego"]
@@ -76,9 +77,10 @@ class TruthRecorder:
         for k in torch.nonzero(mask).flatten().tolist():
             if self.open[k]:
                 self._close(k, len(self.rows) - 2, "running")
+            if self.started[k]:     # closed by its outcome or just now: a new number (issue 199)
                 self.episode[k] += 1
             self.start[k] = len(self.rows) - 1
-            self.open[k] = True
+            self.open[k] = self.started[k] = True
 
     def record(self, obs):
         """One step's observation; a slot whose outcome is no longer running closes its episode."""
