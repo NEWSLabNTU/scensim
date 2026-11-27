@@ -380,3 +380,56 @@ and +0.6 ms); the 40 Hz case does not block L3, which runs at the default. Each 
 records, if the annotator gives it, the pose the render took (its `info` transform), so each
 frame's render pose can be timed against the stamp L2 assigns: the basis of a stamp taken from
 the render itself.
+
+## The repeat: results (118's runs, 2026-11-27 15:49 to 16:24; tables by 243)
+
+Ten counted runs on 118's GPU0, eb741eda (before L2: aib ca600c4, siw 95e7fb4), a fresh stack
+each, `fixture_c170_targets_pass` (ee7f4249), both run-only patches in every try
+(`ab196_debug_patch.py` 97ce5ce2, `ab196_render_pose_patch.py` ce84795b; shas in each run's
+provenance). S03 and S04 each needed a second try after a refused start. The render-pose patch
+printed its pose without the 1000 s base the stamps carry (243's bug); 118 took it off offline
+and kept the raw lines. Runs: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 195 L3
+(118)/series/`.
+
+| run | physics | tau target_a / target_b (ms) | first lidar stamp | stamp less the /clock before it | render pose's time less the stamp (above 1 m/s) |
+|---|---|---|---|---|---|
+| S01 | 40 Hz | +1.3 / +0.5 | 1000.10 | -150 ms | 0.0 ms (p10 0.0, p90 0.0) |
+| S02 | 40 Hz | +26.3 / +25.6 | 1000.10 | -150 | 0.0 |
+| S03 | 60 Hz | +34.4 / +33.8 | 1015.00 | -150 | 0.0 |
+| S04 | 40 Hz | +1.2 / +0.5 | 1015.10 | -150 | 0.0 |
+| S05 | 40 Hz | +1.2 / +0.6 | 1015.50 | -150 | 0.0 |
+| S06 | 60 Hz | +34.2 / +33.9 | 1000.10 | -150 | 0.0 |
+| S07 | 40 Hz | +26.2 / +25.6 | 1000.10 | -150 | 0.0 |
+| S08 | 60 Hz | +34.2 / +33.8 | 1015.50 | -150 | 0.0 |
+| S09 | 40 Hz | +26.2 / +25.5 | 1000.10 | -150 (16 scans -100) | 0.0 |
+| S10 | 60 Hz | +34.3 / +33.8 | 1014.90 | -150 | 0.0 |
+
+In every run the lidar's stamps step 50.0 ms on the frame grid; the substep log is the same in
+every run of a rate (n 2, dt 0.025 s or n 3, dt 1/60 s, the render on the last substep); the
+annotator's transform matched a pose of the lidar's track to 0.000 m.
+
+*Against the predictions.* R1 holds: the six 40 Hz runs split three at +1.2 to +1.3 ms and three
+at +25.5 to +26.3. R2 fails. R3 holds: the four 60 Hz runs read +33.8 to +34.4.
+
+*Reading (243).*
+- At 40 Hz the render's geometry comes from one of two poses per run, the frame's end (no lag) or
+  the end of its first substep (25 ms), with the same schedule, code and stamps. At 60 Hz all
+  runs so far took the first substep's (and at 120 Hz the two runs read so far). What picks
+  the mode is per run and not seen here: not the stamp's phase (+1.2 and +26 both start at
+  1000.10), not the substep schedule.
+- The annotator's `transform` is the pose written last, before the render's substep, in every
+  run, including those whose geometry is 26 or 34 ms older. It tells what was written, not what
+  the rays were cast from, so a stamp taken from it would be wrong whenever there is a lag. The
+  stamp-from-the-render idea is refuted.
+- L2's stamp ((n - 1) dt back) is right in the runs that took the first substep's pose and wrong
+  by (n - 1) dt in the others. At 60 Hz, the default, no run of the six so far (F60 and the
+  repeat's four, step 2) has taken the end's pose; that is evidence, not a guarantee.
+
+*What would make it independent of the mode (a plan for L2b, for 133).* Write the lidar's prim
+once a frame, before the first substep, at the pose predicted for the frame's end, and leave it
+during the substeps. Whichever substep's write the render picks up is then the same pose, and
+the scan is stamped at the frame's end (L2's back-dating removed). The prediction error over a
+frame is the car's acceleration's: 0.5 a t^2, about 4 mm at 3 m/s^2 over 50 ms, against 0.37 m
+of lag at 11 m/s. This is the second of the three options in "The plan" above; it changes what
+the render sees and needs its own measurement: tau within 2 ms at 40, 60 and 120 Hz, in every
+run, over six runs at 40 Hz and three each at 60 and 120.
