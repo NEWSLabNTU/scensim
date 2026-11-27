@@ -189,6 +189,11 @@ def problems(settings: dict, simulator: str, project: Path = None) -> list:
             elif v not in ("default", "none") and project is not None \
                     and not _path(project, v).is_file():
                 out.append(("isaac.ego", f"{v}: no such file"))
+            elif v not in ("default", "none") and project is not None \
+                    and _truth_as_estimate(_path(project, v)):
+                out.append(("isaac.ego", f"{v}: ground_truth.pose_estimate puts the truth on the "
+                            "pose estimator's topic without the debug mark; set the pilot's "
+                            "direct_localization: true instead (issue 195)"))
         elif k == "render" and v not in RENDERS:
             out.append(("isaac.render", f"{v!r} is not one of {', '.join(RENDERS)}"))
         elif k == "follow" and _flag(v) not in FOLLOWS:
@@ -267,6 +272,17 @@ def side_args(project: Path, world: dict) -> dict:
 
 ISAAC_EGO_PATHS = ("rig", "body")   # what an aib ego config names, from its own directory
 RESOLVED_EGO = "isaac_ego_resolved.yaml"
+
+
+def _truth_as_estimate(path: Path) -> bool:
+    """Whether the aib ego config at ``path`` publishes the truth as the pose estimate."""
+    import yaml
+    try:
+        doc = yaml.safe_load(Path(path).read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return False   # aib names it when it loads it
+    gt = doc.get("ground_truth") if isinstance(doc, dict) else None
+    return isinstance(gt, dict) and gt.get("pose_estimate") is True
 
 
 def isaac_ego_config(path: Path, out_dir: Path = None) -> Path:

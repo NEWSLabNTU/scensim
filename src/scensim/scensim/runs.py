@@ -228,12 +228,18 @@ def _workspace(r) -> str:
     return "~" + ws[len(home):] if ws == home or ws.startswith(home + "/") else ws
 
 
+def verdict_text(r) -> str:
+    """A run's verdict for a listing; a debug run's says so (issue 195)."""
+    v = (r or {}).get("verdict", "(none)")
+    return f"{v} (debug)" if (r or {}).get("debug") else v
+
+
 def cmd_list(args, out):
     root = runs_root(args)
     rows = [("RUN", "VERDICT", "SCENARIO", "DURATION", "WORKSPACE")]
     for d in run_dirs(root):
         r = load(d)
-        rows.append((d.name, (r or {}).get("verdict", "(none)"), _scenario_name(r), _duration(r),
+        rows.append((d.name, verdict_text(r), _scenario_name(r), _duration(r),
                      _workspace(r)))
     table(rows, out)
     return EXIT_OK
@@ -267,6 +273,8 @@ def _header(d, r, out):
         out.write("verdict   (no result.json)\n")
         return
     out.write(f"verdict   {r.get('verdict')}\n")
+    if r.get("debug"):
+        out.write(f"debug     {', '.join(r['debug'])}; {results.DEBUG_NOTE}\n")
     if r.get("reason"):
         out.write(f"reason    {r['reason']}\n")
     out.write(f"scenario  {(r.get('scenario') or {}).get('file', '-')}\n")

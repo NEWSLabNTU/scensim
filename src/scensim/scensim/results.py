@@ -22,6 +22,11 @@ SCHEMA = "swb.result/1"
 PASSED, FAILED, ERROR = "passed", "failed", "error"
 VERDICTS = (PASSED, FAILED, ERROR)
 
+# Issue 195: options that make a run a debug run, never an evaluation (`debug` in the result);
+# `direct_localization` gives the autopilot the truth pose.
+DEBUG_OPTIONS = ("direct_localization",)
+DEBUG_NOTE = "not an evaluation"
+
 COLLISION_VEHICLE = "collision.vehicle"
 COLLISION_PEDESTRIAN = "collision.pedestrian"
 COLLISION_STATIC = "collision.static"
@@ -130,12 +135,15 @@ class RunResult:
     # roadmap 092 K12, additive: the commanded entities' lag and the world server's counts
     # (scensim.truth.commands); absent from runs that command none
     commands: dict = None
+    # issue 195, additive: the debug options the run's stack had (DEBUG_OPTIONS); absent from
+    # an evaluation
+    debug: list = None
     schema: str = SCHEMA
 
     def to_dict(self) -> dict:
         d = dataclasses.asdict(self)
         for k in ("sample", "replay", "attachments", "knobs", "anchors", "maps", "error", "clock",
-                  "commands"):
+                  "commands", "debug"):
             if d.get(k) is None:
                 d.pop(k)
         return {"schema": d.pop("schema"), **d}
@@ -178,7 +186,7 @@ class RunResult:
 
 _TOP = ("schema", "run_id", "verdict", "reason", "scenario", "ssv2", "events", "metrics",
         "pilots", "provenance", "sample", "replay", "attachments", "knobs", "anchors", "maps",
-        "error", "clock", "commands")
+        "error", "clock", "commands", "debug")
 _REQUIRED = ("schema", "run_id", "verdict")
 
 
@@ -207,6 +215,9 @@ def problems(d) -> list:
         out.append("run_id: expected a non-empty string")
     if "verdict" in d and d["verdict"] not in VERDICTS:
         out.append(f"verdict: {d['verdict']!r} is not one of {', '.join(VERDICTS)}")
+    if "debug" in d and not (isinstance(d["debug"], list) and d["debug"]
+                             and all(o in DEBUG_OPTIONS for o in d["debug"])):
+        out.append(f"debug: expected a non-empty list of {', '.join(DEBUG_OPTIONS)}")
     if "reason" in d and not isinstance(d["reason"], str):
         out.append("reason: expected a string")
     elif "\n" in d.get("reason", ""):

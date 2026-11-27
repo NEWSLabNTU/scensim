@@ -43,7 +43,32 @@ KINDS = ("autoware", "carla_basic", "simple", "launch", "command", "none")
 LATER_KINDS = ("container",)
 CARLA_ONLY = ("carla_basic",)
 COMMON_PILOT_KEYS = ("kind", "vehicle", "args", "lifetime", "ready", "inputs", "rviz", "component",
-                     "vehicle_interface")
+                     "vehicle_interface", "direct_localization")
+# Issue 195: the truth reaches an autopilot's localization only through the pilot's
+# `direct_localization` (a debug option; scensim marks its runs). The vehicle sides' own switches
+# for it, and acb's retired true-pose seed, are refused as pilot arguments, by name.
+DIRECT_LOCALIZATION_FIX = ("direct_localization: true on the pilot (a debug option; its runs are "
+                           "marked and never count as an evaluation)")
+RETIRED_PILOT_ARGS = {
+    "seed_localization_on_attach": (
+        "is retired: acb no longer seeds the true pose; Autoware initializes from its GNSS "
+        "(issue 195)", "remove it"),
+    "publish_direct_localization": ("is acb's old truth switch, retired (issue 195)",
+                                    DIRECT_LOCALIZATION_FIX),
+    "truth_pose_estimate": ("would put the truth on the pose estimator's topic without the "
+                            "debug mark (issue 195)", DIRECT_LOCALIZATION_FIX),
+}
+DIRECT_LOCALIZATION_STOCK = (
+    "direct_localization turns Autoware's NDT off through autoware_sim_profile's ndt:=none; the "
+    "stock profile has no such switch",
+    "set autoware_profile: scensim, or start your autoware_launch without a pose estimator "
+    "yourself and set direct_localization on a launch pilot")
+
+
+def retired_arg_problems(args) -> list:
+    """``(name, what, fix)`` for each retired truth argument among a pilot's ``args``."""
+    return [(k, *RETIRED_PILOT_ARGS[k]) for k in (args if isinstance(args, dict) else {})
+            if k in RETIRED_PILOT_ARGS]
 KIND_KEYS = {
     "autoware": ("autoware_launch", "autoware_profile", "overlays"),
     "launch": ("launch", "agent", "overlays"),
@@ -487,6 +512,14 @@ def _check_pilot(name, p, sim) -> list:
                            "(autoware_sim_profile's tuning)"))
     if p.get("args") is not None and not isinstance(p["args"], dict):
         out.append(Finding(pf, f"{where}: args: is not a mapping", "args: {name: value}"))
+    for k, what, fix in retired_arg_problems(p.get("args")):
+        out.append(Finding(pf, f"{where}.args.{k}: {what}", fix))
+    dl = p.get("direct_localization")
+    if dl is not None and not isinstance(dl, bool):
+        out.append(Finding(pf, f"{where}: direct_localization {dl!r} is not true or false"))
+    elif dl and kind == "autoware" and p.get("autoware_profile", "stock") != "scensim":
+        out.append(Finding(pf, f"{where}: {DIRECT_LOCALIZATION_STOCK[0]}",
+                           DIRECT_LOCALIZATION_STOCK[1]))
     if p.get("vehicle") is not None and not isinstance(p["vehicle"], str):
         out.append(Finding(pf, f"{where}: vehicle: is not a catalog name"))
     if kind in overlaysmod.KINDS:
@@ -758,6 +791,8 @@ def profile_problems(project: Path, settings: dict) -> list:
             continue
         pa = data.get("pilot_args")
         for entity, extra in (pa.items() if isinstance(pa, dict) else []):
+            for k, what, fix in retired_arg_problems(extra):
+                out.append(Finding(_rel(project, suite), f"pilot_args.{entity}.{k}: {what}", fix))
             key = pilot_for(pilots, str(entity))
             p = pilots.get(key) if key is not None else None
             if not isinstance(p, dict) or p.get("kind") != "autoware" or \

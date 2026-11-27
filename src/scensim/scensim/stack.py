@@ -507,10 +507,12 @@ def _ego_doc(isaac_ego, ego) -> dict:
     return doc
 
 
-def isaac_ego_with_ground_truth(base: Path = None) -> dict:
+def isaac_ego_with_ground_truth(base: Path = None, pose_estimate: bool = False) -> dict:
     """aib's ego config ``base`` (default: aib_ego_config()) with its paths made absolute and
     the ground truth on (Odometry of base_link in the map on ISAAC_GROUND_TRUTH_TOPIC): the
-    ego config of an Isaac stack whose ego pilot drives on the true pose (GROUND_TRUTH_KINDS)."""
+    ego config of an Isaac stack whose ego pilot drives on the true pose (GROUND_TRUTH_KINDS).
+    ``pose_estimate``: also the truth on the pose estimator's topic, the pilot's
+    ``direct_localization`` (issue 195, a debug option)."""
     import yaml
     base = Path(base) if base else aib_ego_config()
     try:
@@ -523,6 +525,8 @@ def isaac_ego_with_ground_truth(base: Path = None) -> dict:
             p = Path(os.path.expandvars(str(doc[key])))
             doc[key] = str(p if p.is_absolute() else (base.parent / p).resolve())
     doc["ground_truth"] = {**(doc.get("ground_truth") or {}), "topic": ISAAC_GROUND_TRUTH_TOPIC}
+    if pose_estimate:
+        doc["ground_truth"]["pose_estimate"] = True
     return doc
 
 
@@ -936,10 +940,15 @@ def plan(project_arg=None, seat_arg=None, simulator=None, map_name=None, logs=No
         ego = "default" if sided else "none"
         # a pilot of a ground-truth kind, or one that says it drives on the true pose
         # (inputs: [ground_truth], e.g. a launch pilot running simple_pilot; roadmap 077)
-        if any(b.kind in GROUND_TRUTH_KINDS or "ground_truth" in (b.spec.get("inputs") or [])
-               for b in sided):
+        direct = any(b.spec.get("direct_localization") is True for b in sided)
+        if direct and (isaac or {}).get("ego") not in (None, "default"):
+            raise StackRefused("direct_localization writes the Isaac ego config (the truth on the "
+                               "pose estimator's topic); drop isaac.ego, or drop "
+                               "direct_localization (issue 195)")
+        if direct or any(b.kind in GROUND_TRUTH_KINDS
+                         or "ground_truth" in (b.spec.get("inputs") or []) for b in sided):
             isaac_ego = {"path": str(stack_dir / ISAAC_EGO),
-                         "config": isaac_ego_with_ground_truth()}
+                         "config": isaac_ego_with_ground_truth(pose_estimate=direct)}
             ego = isaac_ego["path"]
         first = [str(map_path)] + [str(map_dir(project, m)) for m in preload if m != chosen]
         sim_side = {"world": ",".join(first), "ego": ego, **sim_side}

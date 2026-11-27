@@ -36,7 +36,8 @@ after the runs (SIGINT to its process group, then SIGTERM, SIGKILL). A stack alr
 used and never stopped; one that differs from the project is refused, never replaced.
 
 Exit codes: 0 every run as expected (passed, or the suite's ``expect``), 1 a scenario failed,
-2 an infrastructure error, 3 refused.
+2 an infrastructure error, 3 refused, 4 a debug run (issue 195: a pilot's
+``direct_localization``), whatever its verdict: never an evaluation.
 """
 import argparse
 import dataclasses
@@ -69,6 +70,7 @@ from scensim import simulator as simmod, testbenches
 from scensim.findings import ros_args
 
 EXIT_OK, EXIT_FAILED, EXIT_INFRA, EXIT_REFUSED = 0, 1, 2, 3
+EXIT_DEBUG = 4  # issue 195: a debug run, whatever its verdict; worst of all, so a suite says so
 DEFAULT_TIMEOUT = 400          # scenario.launch.xml's global_timeout
 END_MARGIN = 120               # past global_timeout before the runner stops SSv2 itself
 READY_TIMEOUT = 600
@@ -2097,7 +2099,7 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
         attachments={r.name: r.record() for r in attached} or None, knobs=knob_block,
         anchors=spec.anchors, maps=maps_block,
         error=results.error_block(verdict, infra, reason), clock=clock_block,
-        commands=commands_block)
+        commands=commands_block, debug=debug_options(pilots) or None)
     result.write(run_dir / "result.json")
     judged = ([contact] if contact else []) + judgesmod.run_all(
         judgesmod.after_verdict(judge_list), run_dir, project, verdict)
@@ -2166,8 +2168,16 @@ def wait_pilots_ready(ctx: Context):
     return None
 
 
+def debug_options(pilots) -> list:
+    """The debug options (results.DEBUG_OPTIONS) any of a stack's pilots has (issue 195)."""
+    return [o for o in results.DEBUG_OPTIONS
+            if any((p.get("spec") or {}).get(o) is True for p in pilots or ())]
+
+
 def outcome(result: results.RunResult, expect=None) -> int:
-    """The exit code a run contributes."""
+    """The exit code a run contributes: a debug run's is EXIT_DEBUG whatever its verdict."""
+    if result.debug:
+        return EXIT_DEBUG
     if expect is not None:
         return EXIT_OK if result.verdict == expect else (
             EXIT_INFRA if result.verdict == results.ERROR else EXIT_FAILED)
@@ -2181,7 +2191,10 @@ def line(result: results.RunResult, run_dir: Path, expect=None) -> str:
     why += f"  {warn}" if warn else ""
     judged = judgesmod.summary(run_dir)
     jud = ("  judges: " + " ".join(f"{k}={v}" for k, v in judged.items())) if judged else ""
-    return f"{tag:<8} {result.run_id}  {run_dir}{jud}{why}"
+    # issue 195: last, so a reader of the first fields (verdict, run, directory) is not misled
+    mark = (f"  [debug: {', '.join(result.debug)}; {results.DEBUG_NOTE}]"
+            if result.debug else "")
+    return f"{tag:<8} {result.run_id}  {run_dir}{jud}{why}{mark}"
 
 
 # --- the command ----------------------------------------------------------------------------
