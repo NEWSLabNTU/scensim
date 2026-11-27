@@ -790,3 +790,38 @@ standstill) run `2026-11-27T08-45-09_fixture_c170_down_hold_r0`, passed. Same re
 - *133's sum and difference* of the across medians (+ left of the truth's heading), R1 and R2:
   EKF c = (+0.1793 + 0.2067) / 2 = **+0.193 m**, v = (+0.1793 - 0.2067) / 2 = **-0.014 m**;
   NDT c = **+0.190 m**, v = **-0.019 m**.
+
+## The GNSS pose's 2.085 deg, against E1 (243, 2026-11-27; 133's question)
+
+The GNSS pose's yaw sits +2.085 deg (0.0364 rad) off the truth in all three runs, the kit's
+`sensor_kit_base_link` yaw, while E1 had the kit and the rig agree. Both stand: the 0.0364 rad is
+in every kit sensor's mount, in the TF and in the rig alike, and only the GNSS pose's path turns
+it into an error.
+- *R1's `/tf_static` as recorded* (`tfstatic170.py`): base_link to sensor_kit_base_link t (0.9,
+  0.0, 2.0), rpy (-0.001, 0.015, -0.0364). Composed, base_link to `top`: t (0.9, 0.0, 2.0), rpy
+  (0.015004, 0.000937, 1.538615), aib's lidar mount (step 2); base_link to `gnss_link`: t
+  (0.7971, 0.0035, 1.8015), rpy (-0.001, 0.015, -0.0364), aib's GNSS mount (`tesla_model3.rig.yaml`
+  `gnss`: translation (0.797072, 0.003548, 1.801523), its quat's yaw -0.0364). So the run-time TF
+  agrees with the rig for the lidar (E2 held) and for the GNSS.
+- *Where the error comes from:* the kit runs gnss_poser with `use_gnss_ins_orientation` false
+  (`tesla_model3_sensor_kit_launch/launch/gnss.launch.xml`), and aib publishes only a NavSatFix.
+  With no orientation, gnss_poser makes one from the antenna's motion
+  (`get_quaternion_by_position_difference`, Autoware 1.5's `gnss_poser_node.hpp`): yaw along the
+  motion, no roll or pitch. It takes that as gnss_link's attitude and applies gnss_link to
+  base_link from the TF, which holds the kit's rotation. So base_link's pose comes out turned by
+  the kit's rotation and its lever moved by it.
+- *By numbers:* base_link's error in the car's frame is t less R_kit^T t, with t the GNSS lever and
+  R_kit the kit's rotation: predicted (+0.0278, -0.0272, -0.0118) m and +2.086 deg; measured
+  (median, R1 to R3) (+0.0273, -0.0270, -0.0116) m and +2.085 deg. Within a millimetre and 0.001 deg.
+- *G1 read:* the GNSS-derived pose differs from `sim_pose` by 2.7 cm along and across and 0.036 rad,
+  so G1 as written **FAILED**; with gnss_poser's own model of the orientation taken out, the
+  residual is under 1 mm and 0.001 deg, so the transforms G1 was kept to check agree: the
+  antenna's lever, the projector there and back, and the truth's base_link. The failure is
+  gnss_poser's motion heading, which is GNSS-only. The EKF does not take the GNSS pose (it is the
+  initializer's), and NDT's scan goes through the lidar chain, which matches the render.
+- *The GNSS jumps while stopped* (R1 +0.79 / -0.67 m, R3 -0.05 / +1.54 m): a heading from
+  position differences at zero speed is noise, and it swings the 0.80 m lever with it. The same
+  mechanism; not localization.
+- *So the 0.0364 rad does not reach the lidar:* the cloud is rendered from the rig's mount and
+  transformed by the same rotation, and c (+0.19 m) is not from it. A 2 deg lidar yaw would show
+  as a dyaw in NDT of that size; NDT's dyaw medians are -0.43 to +0.13 deg.
