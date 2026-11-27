@@ -250,3 +250,48 @@ Position errors 0.01 to 0.14 m (c6b 0.07 to 0.09 m on average, c170 0.02 to 0.04
 *Truth.* The ego trace (`attachments/ego_trace/ego.csv`) holds the car's yaw while it stands at
 the start, through every try: within 0.0006 rad of 0 in D1, D2, D3 and L1 alike (D1 -0.00054 to
 -0.00002 rad). The scenario's pose is the car's, so the yaw errors above are NDT's.
+
+## The live starts: the reading (243, 2026-11-27)
+
+*Against the predictions.*
+- Prediction D1 (fixture_c6b under 15 %; its live start fails after 8): the rate holds, 0 of 24
+  draws (interval to 13.8 %), 1 of 30 with L1. The live part does not: L1 landed on its sixth
+  try. One start; at 3.3 % a try, a start reaches a hit within eight about 24 % of the time.
+- Prediction D2 (fixture_c170 40 to 80 %; its live start within 3 tries): 6 of 16 draws, 37.5 %
+  (18.5 to 61.4 %), just below the band with the interval across it: not decided. CL landed on
+  its first try: holds.
+- Prediction D3 (CARLA Town01): no runs yet.
+- Prediction D4 (independent tries): partly fails. No trend with the try index on either map,
+  and NVTL does not order c6b's tries, as predicted. But c6b's starts differ: the run effect is
+  p 0.0065, so tries within one start are not independent draws. On c170 the next line's NVTL
+  ordered the errors (rho -0.67, p 0.01, n 14), against the prediction; one map, fourteen pairs.
+
+*The bias 133 asked about.* There is no bias common to the map or the method: pooled over 47
+tries the mean is +0.007 rad (interval -0.007 to +0.021), c6b's +0.017 (-0.003 to +0.036) and
+c6b without D1 +0.002. There is a bias per start: D1's eight tries sit at +0.057 rad (interval
++0.044 to +0.071, all eight positive, sd 0.016 against 0.05 to 0.06 in D2 and D3), and L1's lean
+the other way (-0.026, p 0.067). The car stood at 0 in every run (truth within 0.0006 rad), so
+the offset is the align's, and it is the start, not the map, that picks it: the same pose on
+fresh stacks gave D1 a basin near +0.05, D2 mostly +0.05 to +0.08 with two near -0.05, L1 mostly
+-0.04. c6b's straight lets NDT settle at several headings a few hundredths off, and 0 is not
+the one it favours. That is the biased optimum 133 read in D1, and it belongs to the start.
+
+*What it implies for the options.*
+- Option 1 as coded (8 tries within 0.01 rad): on fixture_c6b it fails a reset about 3 times in
+  4 at the measured rate (0.967^8 = 0.76; 0.30 even at the interval's top), and a start that
+  draws D1's basin does not escape it. Not good enough to land for straights.
+- (a) A higher cap: buys little. It assumes independent tries, which c6b's run effect denies;
+  at 3.3 % a try even 30 independent tries fail one start in three.
+- (b) A looser tolerance: to pass most c6b tries it has to reach 0.05 to 0.08 rad, and the
+  earlier runs showed NDT keeps the align's heading for the whole run (EKF first to last within
+  0.004 rad); B2 at -0.053 swerved 1.02 m. It would hide the error, not remove it.
+- (c) DIRECT: the simulator knows the start pose exactly (here the scenario's pose is the car's
+  to 0.0006 rad). Setting the EKF there skips the yaw search that produces these errors. The
+  same flatness that lets the align land anywhere near 0 suggests NDT then holds the heading it
+  is given, so a DIRECT start should hold near 0. Untested: it needs a start on fixture_c6b with
+  a prediction (NDT's yaw within 0.01 rad of truth over the standing window and the first
+  100 m), and it gives up the align's check that the scan fits the map, which the verify stage
+  (NVTL over its window) would have to carry alone.
+
+So (c), measured first on fixture_c6b; option 1 and (a) do not fix c6b, and (b) moves the error
+into the run. CARLA Town01 (241) would say whether a featured map needs anything at all.
