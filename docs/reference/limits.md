@@ -99,6 +99,15 @@ The rules in full, with what fails and how: [What a scenario may use](scenarios.
   only where the route cannot keep its lane, and never reverses.
 - **An agent's episode** carries the pose and an episode id; its `scenario`, `map` and
   `parameters` are empty ([The agent SDK](agent-sdk.md)).
+- **Autoware does not see a low obstacle under the car.** With the profile's perception, a
+  rock or block lower than about 0.20 m is taken for ground, even where it is taller than the
+  car's ground clearance (0.138 m on the Tesla Model 3). The car does not stop for it and
+  strikes it with its underbody. On Isaac, a 15 cm rock was struck in three runs out of three
+  where the car's path put it under the body. Three stages each drop it: the ground filter
+  (its 0.20 m threshold), the occupancy grid outlier filter (a small object never has enough
+  neighbouring points) and the map comparison filter. A setting of those stages that keeps it
+  was not found. Larger obstacles, such as a 35 cm boulder, are seen and stopped for at the
+  speed tested (15 km/h).
 - **The `carla_basic` ego variant** of the tutorials (BasicAgent instead of Autoware) runs
   the same scenarios but has not been run through every tutorial.
 

@@ -1,6 +1,6 @@
 # 182: after it sees the boulder, the ego creeps into it and strikes repeatedly instead of holding a stop
 
-**Status:** open; plan written (2026-11-25), for 133. Kept apart from issue 181: this is planning and
+**Status:** closed (2026-11-27), except the standstill drift, which moved to batch L (243). The creep is gone with the -6 m/s^2 emergency stop (issue 190, pinned by 5cad4e9b): every run of steps 2b and 2c stopped short and held. Before that: open; plan written (2026-11-25), for 133. Kept apart from issue 181: this is planning and
 the system's emergency handling, not perception. **Severity:** to be judged in the plan.
 **Found:** 2026-11-25, scensim 118, 086 C6e3 run b2 (numbered by 133).
 
@@ -657,3 +657,15 @@ object in 100 % of the stopped frames of every run, and obstacle_stop's STOP in 
   but small: the stop came from AEB in all six runs, at 10.4 to 12.2 m.
 - 181's live gain is therefore 1.6 m at the validator and 1.3 m at the final objects, measured
   over 3 + 3 runs at one commit.
+
+## Closed, but for the standstill drift (241, 2026-11-27, batch P)
+
+- **The creep, closed.** It came from the MRM's emergency stop at stock -2.5 m/s^2 (step 2a).
+  With issue 190's -6 m/s^2 (pinned by 5cad4e9b), all seven runs since (2b's run B, 2c's six)
+  stopped short of the boulder, held with no motion, and saw it as a final object in 100 % of
+  the stopped frames. None touched it.
+- **The standstill drift, moved.** While the car stands, the EKF's position drifts backward
+  along the track (up to 0.63 m at 0.29 m/min in 2c's B1), and the MRM's operations follow it.
+  It moves to batch L under 243, with issues 196 (the scan stamped 34 ms after its render pose)
+  and 170 (localization off the truth on Isaac). It is not shown to be either; that is batch L's
+  question.

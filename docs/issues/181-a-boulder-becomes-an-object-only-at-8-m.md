@@ -1,6 +1,6 @@
 # 181: a 35 cm boulder becomes an object only at 8 m although its points show from 31 m
 
-**Status:** open; plan written (2026-11-25), for 133. **Severity:** to be judged in the plan: on
+**Status:** closed (2026-11-27). The fix: the validator's UNKNOWN threshold 5 in the profile (asv b269c4a, pinned by 120e0678, the user's decision). Its live gain is +1.6 m validated and +1.3 m final over 3 runs each (182 step 2c). Before that: open; plan written (2026-11-25), for 133. **Severity:** to be judged in the plan: on
 Isaac, the Autoware stack begins to brake for a 35 cm boulder in the lane only about 6 m before
 its bumper reaches it, and strikes it (issue 182 for what follows). **Found:** 2026-11-25,
 scensim 118, 086 C6e3 run b2 (numbered by 133).
@@ -603,3 +603,14 @@ checked from its own record. Truth frame, means:
   the one-run 3.9 m and 1.8 m above.
 - In all six runs the stop came from AEB, at 10.4 to 12.2 m, which the change does not touch.
   The details are in 182, step 2c's result.
+
+## Closed (241, 2026-11-27, batch P)
+
+- The boulder becomes an object later than its points show because of the validator's UNKNOWN
+  threshold of 10 (steps 2 to 4).
+- The profile now uses 5 (asv b269c4a, pinned by scensim 120e0678). Live, over 3 runs each at
+  one commit, that moves the first validated object 1.6 m earlier and the first final object
+  1.3 m earlier, with no false object on the carriageway (182 step 2c).
+- In all six runs the stop itself came from AEB (10.4 to 12.2 m), which the change does not
+  touch, and every run stopped short and held.
+- Smaller obstacles, which this threshold does not reach, are issue 180's.

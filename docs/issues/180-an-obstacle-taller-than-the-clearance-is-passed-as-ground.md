@@ -2,7 +2,7 @@
 
 (a 15 cm rock under the plate; the geometry is correct)
 
-**Status:** open; plan later, after 086 C6e3 (133, 2026-11-25). **Severity:** to be judged in
+**Status:** open, for option 3 (a lane-only height-above-map check), after the map's low road layer is fixed (its own issue). Option 1 was taken on 2026-11-27 (the user, through 133): the limit is documented in `docs/reference/limits.md`. Before that: plan later, after 086 C6e3 (133, 2026-11-25). **Severity:** to be judged in
 the plan: on Isaac, Autoware drives into anything between the car's ground clearance (0.138 m)
 and its ground filter's threshold (0.20 m) that lies under the underbody, and the car stops dead
 on it. **Found:** 2026-11-25, scensim 118, 086 C6e3 run b1; confirmed on the repeat, b2 (numbered by 133).
@@ -413,3 +413,14 @@ My recommendation:
 - Option 3 as a planned change, with the map defect filed first. h 0.12 sits 3 cm under the
   rock's height and leaves no margin for a 12 cm rock.
 - Option 2 does not reach the goal at any setting.
+
+## The decision (the user, through 133, 2026-11-27)
+
+- **Option 1 now.** The limit is documented for users in `docs/reference/limits.md` (Pilots and
+  autopilots): obstacles under about 0.20 m are taken for ground, even when taller than the
+  car's clearance, and the three stages that each drop them are named.
+- **Option 3 later.** It comes after the map's low road layer is fixed. Its plan (the node's
+  interface, its tests, one live run and the predictions) goes to 133 before any code.
+- **Option 2 is not taken.** No setting reaches the rock.
+
+This issue stays open for option 3.
