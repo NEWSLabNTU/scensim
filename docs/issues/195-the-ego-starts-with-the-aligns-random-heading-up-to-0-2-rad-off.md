@@ -494,6 +494,31 @@ scensim run reproduces.
 4. The measurement: eight fresh-stack starts per map (fixture_c6b, fixture_c170 on Isaac;
    Town01 on CARLA), predictions committed here first, as (4) above.
 
+*Two notes on the plan (133's, 2026-11-27).*
+
+- *The stock profile.* "Any autopilot" holds on the topic side: every vehicle side publishes
+  the truth on the pose estimator's output topic, for any pilot kind. Only the switch that
+  turns Autoware's own estimator off needs the scensim profile (`ndt:=none`); an `autoware`
+  pilot on the stock profile with `direct_localization` is refused with a message that names
+  it: "direct_localization turns Autoware's NDT off through autoware_sim_profile's `ndt:=none`;
+  set `autoware_profile: scensim`, or start your autoware_launch without a pose estimator
+  yourself and set `direct_localization` on a `launch` pilot".
+- *Exit code 4.* Read at main 574f9cc4, the consumers of `scensim run`'s exit and its line:
+  - `scripts/t3.py`: takes the worst exit of its steps (`max`), so a debug run makes t3 exit 4,
+    not 0;
+  - `scensim/dispatch.py`: the same `max` over its runs;
+  - `scripts/gap_live.py`: logs the exit, and takes the verdict from the line's first three
+    fields (`^(passed|failed|error|refused)\s+(\S+)\s+(\S+)`); the debug mark therefore goes at
+    the end of the line, after the run directory, never in the verdict field;
+  - the justfile recipes (`scenario`, `two-av`, `demo-tour`, `e2e`) `exec` the run and pass its
+    exit through;
+  - `run_suite`, `gap_oracle`, `physical_verdict`, `scripts/gate.sh` and `.github/workflows`
+    (release only) do not read it.
+  None gives 4 a meaning today. (acb_bridge's own exit 4, physics drift, is a different
+  process's and never `scensim run`'s.) So the line is `passed  <run id>  <run dir>  [debug:
+  direct_localization; not an evaluation]`, and the plan's "reads `passed [debug: ...]`" is
+  corrected to that.
+
 ## A9: the GNSS noise model (118, 2026-11-27)
 
 The user's answer 2: GNSS noise, RTK-like, 2 cm by default, configurable per project. Agreed
