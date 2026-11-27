@@ -901,3 +901,35 @@ at the stamp, where the car was τ earlier: an along error of -v τ (behind), gr
   |τ| under 5 ms and a about -0.3 m; L1 predicts τ 45 ms or more.
 - *Across against speed,* the same bins: a lag gives no across on a straight, so c (+0.19 m) is
   predicted not to depend on v whichever holds (slope under 5 ms, as m per m/s).
+
+## The speed split: result (243, 2026-11-27)
+
+`speed170.py` (`/var/tmp/aeon/170/speed170.jsonl`): per run, the error's median in 1 m/s bins of
+the truth's speed (1 to 12 m/s, the whole run), and a line a + b v over the bins.
+
+| | NDT along: tau (ms), a (m) | EKF along: tau, a | NDT across: slope (ms), a (m) | NDT along by bin, 1.5 / 5.5 / 9.5 / 11.5 m/s |
+|---|---|---|---|---|
+| R1 | 30.1, +0.029 | 29.1, +0.015 | 13.6, +0.117 | +0.005 / -0.177 / -0.261 / -0.294 m |
+| R2 | 36.9, +0.060 | 36.8, +0.059 | 10.7, +0.142 | +0.016 / -0.143 / -0.284 / -0.352 m |
+| R3 | 32.9, +0.083 | 35.0, +0.094 | 9.0, +0.215 | +0.033 / -0.099 / -0.209 / -0.302 m |
+
+- **The along error is a lag.** It grows with speed through every bin, from about 0 at 1.5 m/s to
+  -0.29 / -0.35 / -0.30 m at 11.5, the same in NDT and the EKF: tau 30 to 37 ms, intercept
+  +0.03 to +0.08 m. **L0 FAILED** (tau is not under 5 ms). **L1 FAILED** (not 45 ms or more: not
+  a whole frame, nor 133's two). **L1/2 held in kind, at its edge:** tau 30.1 ms in R1 is inside
+  its 20 to 30 ms, R2 and R3's 36.9 and 32.9 are just over, and the intercepts are around its
+  0.05 m bound (+0.03, +0.06, +0.08). So the cloud's stamp is later than the pose it was rendered
+  from by about 0.6 to 0.75 of a frame, not by whole frames: the stamp aib gives a scan (the end
+  of the frame it was rendered in, 2 frames back) is not the time of the pose the points come
+  from. Which part of the frame the RTX render takes its pose from is the next question (aib's
+  note says one pose; this says not the frame's end).
+- *R2's larger along at cruise* (-0.35 against -0.29 m) is its larger tau (36.9 ms), not a
+  direction effect: R2's bins match R1's and R3's up to 9.5 m/s.
+- **Across against speed: not flat** (slopes 9 to 19 ms against the predicted under 5), but
+  confounded: the low bins are the start's acceleration, where every run's right swerve is, and
+  the cruise bin (11.5 m/s, 760 samples a run) is lower than the bins below it (+0.16, +0.21,
+  +0.14 m). A lag on a straight gives no across; c is read as a level near +0.14 to +0.21 m at
+  cruise and is not explained by the lag.
+- *Haruna's runs,* slower (about 4 to 8 m/s), would carry -0.13 to -0.27 m of along from the same
+  lag; their along errors were under 0.11 m. Not checked here (their records are 118's; a speed
+  split of them is the check).
