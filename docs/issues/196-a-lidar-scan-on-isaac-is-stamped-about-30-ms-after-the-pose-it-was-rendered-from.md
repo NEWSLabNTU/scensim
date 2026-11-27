@@ -468,3 +468,22 @@ pinned, on 118's GPU0):
 - K2: NDT's along error constant along the road: its median over each 100 m of the drive
   within 0.15 m of the others. Its level is the start's along offset (the align's, pose-free
   since L1; S06 kept +0.69 m) less the old lag, about 0.37 m at 11.1 m/s.
+
+## The L2r check run: results (118's run, 2026-11-27; read by 243)
+
+`2026-11-27T22-20-17_fixture_c170_down_hold120_r0`, map A 9cc1a29f, scensim 23b65448 (aib
+757fb53), on 118's GPU0; NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 195 L3
+(118)/runs/K_A-...`; the reading by 118's `l3/along_x.py`.
+
+- K0 holds: the ego reached the goal (x 569.6), and the run passed.
+- K1 holds: NDT's along slope +0.01 % of x over 1052 moving scans (x 28 to 561), against
+  +1.67 to +1.74 % with L2.
+- K2 holds as to the spread: the 100 m segment medians of NDT's along error are -0.201, -0.269,
+  -0.250, -0.244, -0.238 and -0.143 m (the last the braking into the goal), within 0.126 m of
+  each other. Its level misses: the moving median is -0.244 m, against the predicted -0.32 (the
+  start's +0.054 less 0.37). The cruise middle (x 100 to 500) reads -0.24 to -0.27, the lag
+  at the cruise speed; a prediction error of 0.08 m in the level, recorded as such.
+
+The EKF follows NDT within 0.01 m, the GNSS pose stays within 0.025 m of the truth along, and
+NDT's per-scan pull is about zero (median +0.1 mm). L2r removes the drift; the (n - 1) dt lag is
+back, as expected.

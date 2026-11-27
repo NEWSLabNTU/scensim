@@ -1182,3 +1182,31 @@ spherical (118: 0.92 m at (190.8, -130.1)), is 118's.
 Indoor or Local maps (golf-cart basements): no pose-free start yet. GNSS on such a map is refused
 at start (aib 14ebf4c on Isaac; acb's equivalent from 241); such a map needs another start
 source.
+
+## Two aligns at each pose-free start (243, 2026-11-27; from the code, no runs)
+
+Since L1 every stack's start holds two NDT aligns about 1.8 s apart (T170_A1 at t 1001.0 and
+1002.8; the L2r check run the same).
+- The first is Autoware's automatic_pose_initializer, which `gnss_enabled:=true` starts: it
+  calls `/localization/initialize` once at the stack's start with an empty pose (GNSS).
+- The second is scensim's vehicle agent, at the reset (`scensim_agent/adapters/autoware.py`, the
+  reset's `initialize` stage). Before its first call it waits out an initialization it did not
+  start (`_await_other`, issue 046), then calls `initialize` itself, so that its call comes after
+  SSv2 has placed the car.
+
+It is new since L1: before, a managed ego ran `gnss_enabled:=false` and the agent seeded the
+scenario's pose (one align). A pose-free initialize is refused without `gnss_enabled` ("GNSS is
+not supported"), so L1 turned it on and the automatic initializer runs too. It is not a race:
+the agent waits it out. Each align is an independent draw from the same flat score; the agent's
+replaces the first and is what the run drives on. So C3 and P1 are scored on the last
+`/initialpose3d` before the first motion; the automatic one is recorded and labelled. 118's
+`mcscore.py` splits the Monte Carlo markers per align (a burst of arrays per align); per align
+the winner is rank 1 of 200 and the score is flat in yaw (T170_A1: align 1 dyaw -0.032, align 2
+dyaw -0.071, the best particle within 0.01 rad 0.006 to 0.016 below each winner).
+
+*Later, optional* (133, 2026-11-27; neither needed for L3):
+- (i) the agent accepts a finished automatic initialization that ended after the car was placed,
+  with the reset pose unchanged since, saving an align (it needs a reliable placed time);
+- (ii) the automatic initializer off for a managed ego, the agent alone initializing from GNSS:
+  pose_initializer's `gnss_enabled` without automatic_pose_initializer, a profile split of two
+  switches the stock launch ties together.
