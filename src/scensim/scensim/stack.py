@@ -472,6 +472,11 @@ def pilot_entry(b: Bound, project: Path, ctx: dict) -> dict:
             v = _absolute_words(v, project)
         entry[k] = v
     args = spec.get("args") or {}
+    # after every merge (a suite's or run_one's pilot_args): a stock pilot would ignore these
+    bad = projectmod.stock_profile_arg_problems(spec, args)
+    if bad:
+        raise StackRefused(f"{where}: {', '.join(bad)} {projectmod.SCENSIM_PROFILE_ARG_STOCK[0]}"
+                           f"; {projectmod.SCENSIM_PROFILE_ARG_STOCK[1]}")
     if args:
         entry["args"] = dict(args)
     entry.setdefault("seed", ctx.get("seed") if ctx.get("seed") is not None else 0)

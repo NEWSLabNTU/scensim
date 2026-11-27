@@ -76,6 +76,15 @@ SCENSIM_PROFILE_ARG_STOCK = (
     "set autoware_profile: scensim, or remove it")
 
 
+def stock_profile_arg_problems(pilot: dict, args) -> list:
+    """The names among ``args`` that only the scensim profile takes, when ``pilot`` is an
+    autoware pilot on another profile (issue 180)."""
+    if not isinstance(pilot, dict) or pilot.get("kind") != "autoware" or \
+            pilot.get("autoware_profile", "stock") == "scensim" or not isinstance(args, dict):
+        return []
+    return [k for k in args if k in SCENSIM_PROFILE_ARGS]
+
+
 def retired_arg_problems(args) -> list:
     """``(name, what, fix)`` for each retired truth argument among a pilot's ``args``."""
     return [(k, *RETIRED_PILOT_ARGS[k]) for k in (args if isinstance(args, dict) else {})
@@ -525,12 +534,9 @@ def _check_pilot(name, p, sim) -> list:
         out.append(Finding(pf, f"{where}: args: is not a mapping", "args: {name: value}"))
     for k, what, fix in retired_arg_problems(p.get("args")):
         out.append(Finding(pf, f"{where}.args.{k}: {what}", fix))
-    if (kind == "autoware" and p.get("autoware_profile", "stock") != "scensim"
-            and isinstance(p.get("args"), dict)):
-        for k in p["args"]:
-            if k in SCENSIM_PROFILE_ARGS:
-                out.append(Finding(pf, f"{where}.args.{k}: {SCENSIM_PROFILE_ARG_STOCK[0]}",
-                                   SCENSIM_PROFILE_ARG_STOCK[1]))
+    for k in stock_profile_arg_problems(p, p.get("args")):
+        out.append(Finding(pf, f"{where}.args.{k}: {SCENSIM_PROFILE_ARG_STOCK[0]}",
+                           SCENSIM_PROFILE_ARG_STOCK[1]))
     dl = p.get("direct_localization")
     if dl is not None and not isinstance(dl, bool):
         out.append(Finding(pf, f"{where}: direct_localization {dl!r} is not true or false"))
@@ -812,6 +818,10 @@ def profile_problems(project: Path, settings: dict) -> list:
                 out.append(Finding(_rel(project, suite), f"pilot_args.{entity}.{k}: {what}", fix))
             key = pilot_for(pilots, str(entity))
             p = pilots.get(key) if key is not None else None
+            for k in stock_profile_arg_problems(p, extra):
+                out.append(Finding(_rel(project, suite),
+                                   f"pilot_args.{entity}.{k}: {SCENSIM_PROFILE_ARG_STOCK[0]}",
+                                   SCENSIM_PROFILE_ARG_STOCK[1]))
             if not isinstance(p, dict) or p.get("kind") != "autoware" or \
                     not isinstance(extra, dict):
                 continue
