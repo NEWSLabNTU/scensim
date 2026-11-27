@@ -566,3 +566,91 @@ either way.
 
 How sure: the validated ranges about 80 %, the final objects about 60 % (tracking varies), the
 start heading's spread about 50 % (two draws so far: +0.071 and -0.142 rad).
+
+### Step 2c's result (241, 2026-11-27)
+
+118 ran the six on its GPU0 at e6a34fd5 (siw 542cfae), alternating A1, B1, A2, B2, A3, B3
+(09:35 to 09:55). The record is on the NAS: `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue
+181 182 step 2c six runs (118)`. Each run ended by the scenario's time-out (rc 1, as designed).
+The readers (`valrange182.py`, `run182.py`, `excur182.py`, `drift182.py`, `start182.py`,
+`valcount182.py`) are in the NAS folder `home/2026-11-27 issue 181 replay (241)/`.
+
+**Which arm each run had.**
+- A3's validator process read the stock file from `/proc` (`--params-file`, UNKNOWN 10).
+- A2's live read failed ("Node not found": the probe lacked the stack's DDS settings), and 118's
+  stop check then took the error text for a value. A1 had no live read.
+- So every arm is also read from its own record. The validator keeps an object only when more
+  than its threshold of compare-map points lie strictly inside the object's hull, and
+  `valcount182.py` counts them for every validated object.
+  - Checked first on runs A (10) and B (5): A's smallest count is 11; B has 12 objects at 6 to 10.
+  - All three A' runs: smallest 11, none at 10 or below (2548 to 2573 objects).
+  - All three B runs: smallest 6, with 13, 13 and 18 objects at 6 to 10.
+  - The arms separate cleanly, and every run is the arm it was meant to be.
+
+**The runs** (ranges in the truth's frame from `valrange182.py`; AEB in the EKF's frame from
+`run182.py`; the stop's gap in the truth's frame, the bumper to the boulder's centre):
+
+| run | start yaw error (EKF, rad) | first cluster | first validated | first final object | AEB's first ERROR | stopped at gap | MRM operations stopped | EKF yaw error stopped (p50) | EKF along-track drift stopped |
+|---|---|---|---|---|---|---|---|---|---|
+| A1 | -0.0322 | 13.58 | 9.47 | 8.30 | 11.71 | 4.25 | 5 | +0.0192 | -0.090 m (-0.037 m/min) |
+| B1 | +0.0494 | 12.53 | 11.90 | 10.24 | 10.36 | 3.09 | 36 | -0.0180 | -0.632 m (-0.294 m/min) |
+| A2 | -0.0336 | 13.43 | 10.32 | 9.42 | 12.18 | 4.73 | 6 | +0.0179 | -0.225 m (-0.048 m/min) |
+| B2 | -0.0533 | 13.63 | 10.92 | 9.89 | 11.29 | 4.07 | 2 | +0.0281 | -0.225 m (-0.087 m/min) |
+| A3 | +0.0232 | 12.73 | 9.45 | 8.63 | 11.73 | 4.24 | 11 | -0.0031 | -0.189 m (-0.054 m/min) |
+| B3 | +0.0171 | 13.58 | 11.29 | 10.04 | 11.58 | 4.25 | 12 | -0.0013 | -0.061 m (-0.078 m/min) |
+
+Means:
+
+| arm | first validated | first final object | first cluster | AEB's first ERROR |
+|---|---|---|---|---|
+| A' | 9.75 m | 8.78 m | 13.25 m | 11.87 m |
+| B | 11.37 m | 10.06 m | 13.25 m | 11.08 m |
+
+Every run stopped short (gaps 3.09 to 4.73 m). No contact was recorded in any run (`contacts`
+empty), and the truth's x did not move while stopped (under 2 mm). The boulder was a final
+object in 100 % of the stopped frames of every run, and obstacle_stop's STOP in 100 %.
+
+**Against the predictions.**
+- First validated:
+  - A' at 9.5 ± 1.5: held, 3 of 3.
+  - B at 13.4 ± 1.5: FAILED, 1 of 3 (11.90 in; 10.92 and 11.29 below).
+  - Every B above every A': held (B's least 10.92 against A''s most 10.32).
+  - B's mean at least 2.5 m above A''s: FAILED, it is 1.62 m.
+- First final object:
+  - A' at 8.2 ± 1.5: held, 3 of 3.
+  - B at 10.0 ± 1.5: held, 3 of 3.
+  - B's mean 1 to 3 m above A''s: held, 1.27 m. Every B is above every A' here too (9.89
+    against 9.42).
+- First cluster 13.5 ± 1.0 in both arms: held, 6 of 6 (12.53 to 13.63). The means are equal at
+  13.25 m.
+- AEB's first ERROR:
+  - 11 to 13 m in every run: FAILED in B1 (10.36 m); 5 of 6 held.
+  - The arms' means within 1 m: held (0.79 m).
+- The boulder:
+  - no strike: held;
+  - stops and holds: held. The speed stayed at 0, and the truth did not move;
+  - an object while stopped (90 % in B, 60 % in A'): held, 100 % in all six.
+- The start heading error:
+  - between 0.02 and 0.2 rad in every run: FAILED in B3 (0.017); 5 of 6 held.
+  - Either sign and not tied to the arm: held (A' -0.032, -0.034, +0.023; B +0.049, -0.053,
+    +0.017).
+  - The swerve: no run started over 0.1 rad, so the swerve prediction is untested. But B2, at
+    -0.053 rad, swerved 1.02 m from the lane's centre before x 360. The others swerved 0.26 to
+    0.59 m. The threshold of 0.1 rad was too high.
+- The MRM's operations in the tens where the EKF ends with a yaw error over 0.02 rad: FAILED.
+  - Only B2 ends over 0.02, and it had 2.
+  - B1, with 36, ends at 0.018.
+  - What the counts follow instead is the EKF's drift along the track while standing. B1 drifted
+    0.63 m back at 0.29 m/min against at most 0.23 m elsewhere, with B2 the exception (0.087
+    m/min, 2 operations). That is 182's open question (the standstill drift), not the arm.
+
+**What this says about 181's change.**
+- The UNKNOWN threshold of 5 makes the boulder a validated object 1.6 m earlier on average, and
+  a final object 1.3 m earlier.
+- In every pairing it is earlier: every B run is above every A' run at both stages.
+- Run B's 13.41 m (step 2b) was a high draw. Over three runs per arm the gain is about half what
+  runs A and B suggested (3.9 m).
+- The change does not touch the clustering or AEB, as predicted. Its effect on the stop is real
+  but small: the stop came from AEB in all six runs, at 10.4 to 12.2 m.
+- 181's live gain is therefore 1.6 m at the validator and 1.3 m at the final objects, measured
+  over 3 + 3 runs at one commit.
