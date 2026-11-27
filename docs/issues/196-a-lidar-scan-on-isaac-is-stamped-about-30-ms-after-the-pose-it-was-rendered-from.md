@@ -87,3 +87,28 @@ runs' format (`xyzirc`) that is the stamp the scan would have had.
   is elsewhere (the pose the render takes). If the offsets are all 0 (P1 fails), RTX renders the
   revolution at one instant and the annotator's times say nothing of the lag; step 2 (the
   geometry) then has to.
+
+## Step 1's result (243, 2026-11-27)
+
+Ran 09:02:59 to 09:03:34 on host 243 (21.6 GB free on the card), `run196.sh`, the runner exited 0
+after 40 s of sim time; 739 scans logged (`/var/tmp/aeon/196/scans.jsonl`). The runner's log has
+one `ModuleNotFoundError: No module named 'em'` traceback (a ROS message import at start; the
+runner went on). The runner steps 20 Hz frames in three physics substeps of 1/60 s (its default
+`--physics-dt`), not the world server's split.
+
+- **P1 held.** Every scan's offsets run 0 to 49.977 ms, median 24.37 ms: one revolution at 20 Hz.
+- **P2 FAILED, and the other way.** Each cloud arrives 133.3 ms after its first point (`/clock`
+  at receipt less the header, every scan). aib's own first-scan log says the same: "first at
+  world 0.200 s (clock 0.283 s)", the first point 83.3 ms before the frame the cloud was built
+  in. The runs' format stamps a scan at that frame less 2 frames (100 ms): so that stamp falls
+  **16.7 ms before** the first point and 41 ms before the points' median, where P2 predicted 50
+  ms and 25 ms after.
+- **P3:** if the points' times were the time of the pose the scan was rendered from, a stamp
+  before them would put localization *ahead* of the car; the runs have it 30 to 37 ms *behind*.
+  So the annotator's per-point times are not the render pose's time, and stamping a scan at its
+  points' median would move the stamp the wrong way (later, by 41 ms). They do not explain the
+  lag. The 16.7 ms is exactly one of this runner's substeps, so the annotator's clock and aib's
+  differ by a substep here at least; under the world server (its own substeps) that offset may
+  differ.
+- *So:* step 1 cannot locate the lag; step 2 (the scan's geometry against the fixture at the
+  stamp and around it, while moving) has to, as planned. Nothing changed in code.
