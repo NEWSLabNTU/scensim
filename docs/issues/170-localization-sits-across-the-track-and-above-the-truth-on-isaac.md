@@ -933,3 +933,21 @@ the truth's speed (1 to 12 m/s, the whole run), and a line a + b v over the bins
 - *Haruna's runs,* slower (about 4 to 8 m/s), would carry -0.13 to -0.27 m of along from the same
   lag; their along errors were under 0.11 m. Not checked here (their records are 118's; a speed
   split of them is the check).
+
+## The lag on Haruna's 18 runs: predictions (243, 2026-11-27, before reading)
+
+On fixture_c170 the along error is a lag, tau 30 to 37 ms. Haruna's runs (C6e2's six, 168's
+twelve; about 4 to 8 m/s) had along errors under 0.11 m, where a 33 ms lag would give -0.13 to
+-0.27 m. The same split on them (`speed170.py`; the EKF only: those records hold no NDT pose,
+and on fixture_c170 the EKF's tau matched NDT's within 2 ms), with each run's achieved frame
+period: the gap trace's `wall_ns` per frame (the simulation step is 0.05 s throughout; the records
+hold no RTX render time, so the wall period is the only load measure).
+- *K1 (the lag is constant):* tau 30 to 37 ms on every Haruna run too; then its small along
+  errors were a lag offset by an along offset of the other sign (the intercept a, +0.1 to +0.2 m).
+- *K2 (the lag depends on the run):* tau differs between Haruna and the fixture by more than 10
+  ms, and follows the wall frame period across all 21 runs (the heavier world, trees and a 15.8 M
+  point map, renders slower).
+- *K3 (no lag on Haruna):* |tau| under 10 ms on Haruna, with the wall period not explaining it;
+  then what differs is the fixture (its course, its map) or the build (Haruna's ran at main
+  c5c on 118's host, the fixture at fcc01e50 on 243's).
+Prediction: K1. The stamp logic is the same code and the 0.05 s step is the same.
