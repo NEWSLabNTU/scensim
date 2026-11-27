@@ -1093,3 +1093,38 @@ landing; then L3's T and H).*
   fixture_c6b, under 0.01 on Town01).
 - C4: the align's duration no longer than before at the same load (fewer particles land far off;
   the particle count is unchanged).
+
+## CARLA's GNSS sits 0.82 m off: a hypothesis and predictions (241, 2026-11-27, before the runs)
+
+**What is seen.** On CARLA, gnss_poser's pose (`/sensing/gnss/pose_with_covariance`) sits off the
+base_link truth by a steady map dx +0.07, dy +0.82 m, dz 0.00 m (TW at L1b, runs 1 and 2, standing
+and driving alike, the car facing pi at y -130). The pre-L1b run shows the same while driving
+(dy +0.845). The CARLA GNSS sensor itself sits where the spec says: acb's log places it at
+base_link + (0.797, 0.004, 1.802), so 0.004 m sideways. Isaac shows no such offset (118: about
+1 mm). Every start's guess is therefore about 0.8 m off, which L1d's narrower particle spread
+could not absorb.
+
+**The hypothesis: a sphere against an ellipsoid.** CARLA turns a world position into latitude and
+longitude on a sphere of radius a = 6378137 m (its Mercator, lat_0 = lon_0 = 0: latitude =
+y / a to first order). Autoware's map projector here is a transverse Mercator on the WGS84
+ellipsoid (`map_projector_info.yaml`: origin 0, 0). Near the equator its northing is the
+meridian arc, a (1 - e^2) phi, with e^2 = 0.00669438. So a CARLA latitude phi = y / a comes back
+as a northing of (1 - e^2) y: |y| short by e^2 |y|. Eastings agree (the prime vertical radius is
+a at the equator). acb negates latitude for the map's y = -CARLA_y, which keeps the sign. So:
+- the error is world-fixed, along map y only, toward y = 0, and grows with |y|: e^2 |y|;
+- at y -130.1: +0.871 m predicted, against +0.82 m measured (the 0.05 m rest not explained yet);
+- Town01's far corner (y -330) would be 2.2 m off.
+
+**Predictions** for two stand-and-drive runs on Town01's north-south lanes (project
+`i195_gnss`: the raw fix `/sensing/gnss/gnss_link/nav_sat_fix` and `/tf` added to the record;
+the car facing north at x 396.4 from y -250 to -180, and south at x 392.4 from y -100 to -170):
+- G1: the error is along map y and world-fixed. Facing north or south, it lies ALONG the car,
+  not across it; |dx| stays under 0.1 m.
+- G2: it scales with |y|. Facing north from y -250 to -180, map dy falls from +1.67 to +1.20 m
+  (within 0.1 m of e^2 |y| at each point). Facing south from y -100 to -170, it grows from +0.67
+  to +1.14 m.
+- G3: the raw fix converted by the same projector (the antenna, before gnss_poser) is off the
+  truth antenna (base_link + R (0.8, 0, 1.8)) by the same e^2 |y| along y. That puts the error in
+  acb's fix, not in gnss_poser's lever arm.
+- If G1 or G2 fails (the error turns with the car, or does not scale with y), the hypothesis is
+  wrong and the cause is car-fixed: the lever arm or the sensor's mount.
