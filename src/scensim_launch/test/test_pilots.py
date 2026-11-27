@@ -448,7 +448,7 @@ def test_the_pilots_defaults_are_the_profiles():
     """A declared pilot arg that the profile also declares has the profile's default, so setting
     nothing changes nothing."""
     import re
-    prof = os.path.join(os.path.dirname(PILOTS), "..", "..", "..", "autoware_sim_vehicle",
+    prof = os.path.join(os.path.dirname(PILOTS), "..", "..", "autoware_sim_vehicle",
                         "autoware_sim_profile", "launch", "autoware.launch.xml")
     if not os.path.isfile(prof):
         pytest.skip(f"no autoware_sim_profile at {prof}")
