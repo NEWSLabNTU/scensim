@@ -24,9 +24,11 @@ SCENSIM_AUTOWARE_OVERLAY_SOURCES=(
         localization/autoware_pose_instability_detector"
     # Branch csb/ndt-step-reversal-1.5.0: tag 1.5.0 plus NDT's step bound halved when the step
     # reverses, so a two-point cycle no longer runs to max_iterations and its WARN (an emergency
-    # stop in Autoware 1.5's graph, docs/issues/002).
+    # stop in Autoware 1.5's graph, docs/issues/002), and the align's yaw drawn around a guess
+    # whose yaw variance is below initial_pose_estimation.yaw_prior_variance_threshold instead
+    # of over the circle (docs/issues/195, the start yaw).
     "autoware_core https://github.com/NEWSLabNTU/autoware_core.git
-        879b7ce5f7324cbbf977c494c2783018ae47bafc
+        61f9c96e5a15c73a5497a582d8d5084cf3e8755f
         localization/autoware_ndt_scan_matcher
         localization/autoware_localization_util"
 )
