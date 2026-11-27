@@ -430,6 +430,7 @@ def test_the_scensim_profile_gets_the_compare_map_z_ratio_declared_and_passed():
 @pytest.mark.parametrize("name,default", [
     ("lane_height_check", "false"),            # step B's N arm (issue 180)
     ("gnss_particle_yaw_variance", "1.1e-4"),  # the start yaw (issue 195): the receiver's heading
+    ("max_velocity", "4.17"),                  # L3's Tsukuba testbenches (243)
 ])
 def test_the_scensim_profile_gets_step_b_and_l3s_args_declared_and_passed(name, default):
     """Every profile arg step B or L3 sets is a pilot arg declared here, at the profile's own
@@ -453,5 +454,6 @@ def test_the_pilots_defaults_are_the_profiles():
         pytest.skip(f"no autoware_sim_profile at {prof}")
     theirs = dict(re.findall(r'<arg name="([^"]+)"\s+default="([^"]*)"', open(prof).read()))
     args, _ = xml_args("autoware.launch.xml")
-    for name in ("compare_map_z_ratio", "lane_height_check", "gnss_particle_yaw_variance"):
+    for name in ("compare_map_z_ratio", "lane_height_check", "gnss_particle_yaw_variance",
+                 "max_velocity"):
         assert args[name].get("default") == theirs[name], name
