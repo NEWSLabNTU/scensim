@@ -331,3 +331,52 @@ and the end of its first substep, and on which substep the render was asked for.
   the scheduling changed or the render did.
 - If AB0 fails (n or the render substep differ from the above), that is the finding, whichever
   of AB1 and AB2 holds.
+
+## The 40 Hz A/B: results (118's runs, 2026-11-27 15:36 to 15:41; tables by 243)
+
+Both on 118's GPU0, back to back, `fixture_c170_targets_pass` (ee7f4249), physics_hz 40, map A
+(9cc1a29f), /clock recorded, each build from a clean environment at its SHA, with
+`ab196_debug_patch.py` (sha256 97ce5ce2; world.py 782d17fe patched to 864a2416, removed after
+each run; recorded in each run's provenance).
+
+| run | build | result | target_a tau (ms) | target_b tau (ms) | lidar stamps | stamp less the /clock before it |
+|---|---|---|---|---|---|---|
+| A `2026-11-27T15-37-17` (retry; `15-36-53` refused at the start) | eb741eda (aib ca600c4) | passed | +1.2 (0.1, 4.7); n 150 | +0.5 (0.0, 1.5); n 87 | on the frame grid | -150 ms |
+| B `15-40-10`, retry `15-40-33` | b1700191 (aib dda18ad) | both refused at the start (pre-L1b GNSS) | none: the ego never moved | none | 25 ms off the grid | -175 ms |
+
+The substep log: every logged frame of both runs (212 and 203 lines) steps n 2, dt 0.025 s, the
+render on the second substep, except frame 1 (no render).
+
+*Against the predictions.* AB0 holds. AB1 fails: A reads +1.2 ms, not +24 to +27. AB2's half that
+can be read holds (A about 0); B gave no tau. Between step 3's build (53b76a47: aib 4c6b144,
+siw 542cfae) and A's (eb741eda: aib ca600c4, siw 95e7fb4) the only aib and siw commits are A9's
+GNSS error (ca600c4, and siw's pin of it), which does not touch the lidar or the render. So the
+same 40 Hz schedule (n 2, render on the second substep) gave a 25 ms lag in step 3's run and none
+in A's and in F40b's (whose -24 ms under L2 is L2's 25 ms with no lag to remove).
+
+*Reading (243).* At 40 Hz the render's pose differs between runs on the same code: the pose
+written before the frame's first substep in step 3, before its second (the frame's end) in A and
+F40b. At 60 and 120 Hz every run so far took the first substep's (step 2, step 3, F60 and F120
+under L2 at +1 ms). Not shown: what picks it per run. If it is a per-run phase, a stamp that
+assumes (n - 1) dt is right only in the runs that took the first substep's pose, and the stamp
+should come from the pose the render actually took (the annotator's `info` transform, issue
+172's observable) rather than from the schedule.
+
+## The 40 Hz repeat: plan and predictions (243, before any run)
+
+Pre-L2 build (eb741eda) so that a run's tau is its render lag itself, the same scenario and
+patch as the A/B, on 118's GPU0, a fresh stack each: six runs at 40 Hz and four at 60 Hz,
+in the order 40, 40, 60, 40, 40, 60, 40, 60, 40, 60. Each run's tau, stamp phase and substep log
+are read as above.
+
+*Predictions.*
+- R1, if the 40 Hz lag is a per-run phase: the six 40 Hz runs split between about 0 and about
+  +25 ms (each within 3 ms of one of the two), at least one of each.
+- R2, if it is not (step 3's +25.6 the odd one out): all six read within 3 ms of 0.
+- R3: the four 60 Hz runs each read within 3 ms of +33.3 ms (no second mode at 60 Hz).
+
+The default physics rate is 60 Hz (`physics_hz`, the world server's), where L2 holds (F60 +1.0
+and +0.6 ms); the 40 Hz case does not block L3, which runs at the default. Each repeat run also
+records, if the annotator gives it, the pose the render took (its `info` transform), so each
+frame's render pose can be timed against the stamp L2 assigns: the basis of a stamp taken from
+the render itself.
