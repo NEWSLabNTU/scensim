@@ -1,6 +1,6 @@
 # 196: a lidar scan on Isaac is stamped about 30 ms after the pose it was rendered from
 
-**Status:** open; a plan, no code. **Severity:** medium. Localization sits behind the car by
+**Status:** open again (2026-11-27): L2 (aib dda18ad, the stamp back-dated (n - 1) substeps) made NDT drift +1.7 % of the distance and was reverted (L2r, aib 757fb53); L2b is the candidate. **Severity:** medium. Localization sits behind the car by
 the lag times the speed: -0.29 to -0.35 m at 11 m/s on fixture_c170, -0.05 to -0.15 m at
 Haruna's 1 to 5 m/s, in NDT and the EKF alike. **Found:** issue 170 step 4's speed split
 (fixture_c170 R1 to R3), and pooled on Haruna's 18 runs, 2026-11-27.
@@ -433,3 +433,38 @@ frame is the car's acceleration's: 0.5 a t^2, about 4 mm at 3 m/s^2 over 50 ms, 
 of lag at 11 m/s. This is the second of the three options in "The plan" above; it changes what
 the render sees and needs its own measurement: tau within 2 ms at 40, 60 and 120 Hz, in every
 run, over six runs at 40 Hz and three each at 60 and 120.
+
+## L2 reverted (L2r): back-dating the stamp breaks the EKF and NDT loop (243, 2026-11-27)
+
+*What L3 found.* With L2 (aib dda18ad: each scan stamped (n - 1) substeps before its frame's
+end), NDT's along error grows with the distance driven, and the ego stops short of its goal. On
+fixture_c170 at 60 Hz, NDT's along slope against x over the moving scans (118's `l3/along_x.py`,
+from the records):
+
+| run | build | map | NDT along slope | ends |
+|---|---|---|---|---|
+| S06 (the 40/60 Hz repeat) | eb741eda, before L2 | A 9cc1a29f | +0.01 % (flat at +0.69 m) | passed |
+| F60 (L3's F) | b1700191, L2 | A | +1.74 % | 9.4 m short, timed out |
+| T170_A1 | 2b53c5b5 | A | +1.67 % | 9.3 m short, timed out |
+| T170_B1 | 2b53c5b5 | B 2658430d | +1.71 % | 9.5 m short, timed out |
+
+In every run the EKF follows NDT within 0.2 m, the GNSS pose stays on the truth (under 0.06 m
+moving), and the twist reads 0.99999 of the truth's speed. NDT's per-scan pull (result less
+guess) is about zero (medians -0.4 to +0.4 mm): NDT accepts guesses that are already ahead, so
+the drift is in what it is fed, not in the match. 1.67 % is 1/60: one 60 Hz substep's worth of
+motion per second. The mechanism is not shown; a stamp that is not the frame's end, against the
+EKF's own clock, is the lead.
+
+*L2r* (aib 757fb53, `git revert dda18ad`; siw 54194da): the scan is stamped at its frame's end
+again, with the known (n - 1) dt lag. 196 is open again: the lag is real, but moving the stamp
+breaks the EKF and NDT loop. The candidate fix is L2b (above: the lidar prim written once a
+frame at the frame's end pose, the stamp at the frame's end), to be measured against this drift
+first, not only against the faces.
+
+*The check run, predictions before it* (fixture_c170_down_hold120 on map A, after L2r is
+pinned, on 118's GPU0):
+- K0: the ego reaches the goal; the run passes.
+- K1: NDT's along slope against x under 0.1 % of x over the moving scans.
+- K2: NDT's along error constant along the road: its median over each 100 m of the drive
+  within 0.15 m of the others. Its level is the start's along offset (the align's, pose-free
+  since L1; S06 kept +0.69 m) less the old lag, about 0.37 m at 11.1 m/s.
