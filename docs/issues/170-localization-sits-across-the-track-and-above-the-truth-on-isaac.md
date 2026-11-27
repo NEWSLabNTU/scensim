@@ -762,3 +762,31 @@ Readers: `err170.py` (errors against the gap trace's `sim_pose`, origin_offset (
   +0.044 m. The align's best_particle_score 3.380 (one align, at 1002.35).
 - *The truth's track (G6):* its y less the lane's (1.62) over the drive: min -0.929 m (at x 56.8),
   median -0.152, max +0.218.
+
+**R2** (west, the other lane, start x 580, y -1.62, heading pi) ran on host 243 from the same
+install, run `2026-11-27T08-41-08_fixture_c170_west_r0`, passed. **R3** (R1 again, with the
+standstill) run `2026-11-27T08-45-09_fixture_c170_down_hold_r0`, passed. Same readers, x 60 to
+540, |v| > 1 m/s.
+
+| x 60 to 540 | along median (sd) | across median (sd), p5 to p95 | dz median | dyaw median, p5 to p95 |
+|---|---|---|---|---|
+| R2 EKF, 879 | -0.3484 (0.0294) m | +0.2067 (0.0668), +0.1142 to +0.3338 m | -0.0108 m | +0.030, -0.201 to +0.149 deg |
+| R2 NDT, 879 | -0.3494 (0.0615) m | +0.2089 (0.0821), +0.1052 to +0.3524 m | -0.0113 m | -0.425, -0.653 to -0.282 deg |
+| R2 GNSS, 439 | +0.0274 (0.0013) m | -0.0274 (0.0001) m | -0.0116 m | +2.085 (sd 0.010) deg |
+| R3 EKF, 880 | -0.2923 (0.0542) m | +0.1556 (0.1009), +0.0332 to +0.3832 m | -0.0110 m | -0.011, -0.289 to +0.247 deg |
+| R3 NDT, 880 | -0.2917 (0.0740) m | +0.1572 (0.1095), +0.0150 to +0.3786 m | -0.0114 m | +0.079, -0.163 to +0.337 deg |
+| R3 GNSS, 440 | +0.0273 (0.0013) m | -0.0270 (0.0001) m | -0.0116 m | +2.085 (sd 0.010) deg |
+
+- *R3's standstill:* 37.4 s at x 569.6, the truth moved 0.01 mm. Change first to last, along /
+  across / z: EKF +0.071 / +0.012 / -0.003 m (sd along 0.040, across 0.003); NDT +0.081 / +0.036 /
+  -0.002 m (sd 0.050, 0.046); GNSS -0.054 / +1.538 / 0.000 m (sd 0.486, 0.540). R2 has no
+  standstill window (its scenario ends at the goal).
+- *Start (G7),* EKF and NDT yaw less the truth's, first and last sample before motion: R2 EKF
+  -0.0050, -0.0046 rad; NDT -0.0048, -0.0091 rad (align score 3.369). R3 EKF +0.0075, +0.0099 rad;
+  NDT +0.0079, +0.0081 rad (score 3.368). With R1's +0.0275 / +0.0287 (score 3.380).
+- *The truth's track (G6),* y less the lane's y over the drive, in the map's y: R2 min +0.002,
+  median +0.217, max +0.406 m (largest at x 545.2; heading west, + is the car's right); R3 min
+  -0.523 (at x 63.5), median -0.173, max +0.047 m.
+- *133's sum and difference* of the across medians (+ left of the truth's heading), R1 and R2:
+  EKF c = (+0.1793 + 0.2067) / 2 = **+0.193 m**, v = (+0.1793 - 0.2067) / 2 = **-0.014 m**;
+  NDT c = **+0.190 m**, v = **-0.019 m**.
