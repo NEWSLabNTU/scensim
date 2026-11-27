@@ -1288,7 +1288,12 @@ def lost_goals(rec: dict, entities, since: float = 0.0) -> dict:
     """``{entity: why}`` for the entities whose goal the relay says went for good at or after
     ``since`` (wall time; their agent registered again and could not be handed it back;
     roadmap 077, G32). An earlier loss is another run's: a pilot the stack restarted between
-    runs (a map switch) registers again before this run's episode begins."""
+    runs (a map switch) registers again before this run's episode begins.
+
+    Also a reset of this run that failed (issue 197): the relay may have answered the
+    concealer OK ("in progress") before the agent's reset failed, and SSv2 then waits out its
+    scenario's limit with an ego that was never placed. The relay's reset record says so; a
+    record without its time (an older relay) is not read."""
     if not entities:
         return {}
     try:
@@ -1300,9 +1305,14 @@ def lost_goals(rec: dict, entities, since: float = 0.0) -> dict:
         with Commander(f"tcp://localhost:{rec['ports']['relay']}", "scensim-run", timeout=3.0) as c:
             for e in entities:
                 reply = c.query(e)
-                if isinstance(reply, dict) and reply.get("lost") and \
-                        float(reply.get("lost_at") or 0.0) >= since:
+                if not isinstance(reply, dict):
+                    continue
+                reset = reply.get("reset") or {}
+                if reply.get("lost") and float(reply.get("lost_at") or 0.0) >= since:
                     out[e] = reply["lost"]
+                elif reset.get("status") == "FAILED" and reset.get("at") is not None and \
+                        float(reset["at"]) >= since:
+                    out[e] = f"its reset failed: {reset.get('message') or 'no message'}"
     except (CommanderError, OSError):
         return {}
     return out

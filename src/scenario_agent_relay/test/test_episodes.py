@@ -82,6 +82,16 @@ def test_a_failed_reset_fails_the_initialize(relay):
     client.stop()
 
 
+def test_a_finished_reset_is_stamped_with_its_wall_time(relay):
+    # issue 197: scensim's run tells this run's failed reset from an earlier one by it
+    client = run(relay, SlowReset(fail=True))
+    before = time.time()
+    Episodes(relay).initialize("ego", POSE, reply_window=2.0)
+    record = relay.last_reset("ego")
+    assert record["status"] == P.FAILED and before <= record["at"] <= time.time()
+    client.stop()
+
+
 def test_a_slow_reset_answers_ok_then_goes_on_and_a_retry_joins_it(relay):
     agent = SlowReset(seconds=1.5)
     client = run(relay, agent)

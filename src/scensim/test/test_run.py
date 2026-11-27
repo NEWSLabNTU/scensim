@@ -1448,6 +1448,40 @@ def test_a_goal_lost_before_the_run_began_is_not_this_runs(monkeypatch):
     assert run.lost_goals(rec, ["ego"], since=50.0) == {"ego": "gone"}
 
 
+def test_a_failed_reset_of_this_run_ends_it(monkeypatch):
+    """Issue 197: the relay answered the concealer OK ("in progress") for a reset that then
+    failed, the concealer never heard, and the run waited out its scenario's limit. The probe
+    reads the relay's reset record: a FAILED reset of this run ends it, naming the reason."""
+    import types
+    replies = {"ego": {"registered": True, "reset": {
+        "status": "FAILED", "at": 150.0,
+        "message": "the align landed off the scenario's heading 8 times"}}}
+
+    class C:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *e):
+            return None
+
+        def query(self, e):
+            return replies[e]
+    fake = types.ModuleType("scensim_agent.commander")
+    fake.Commander, fake.CommanderError = C, RuntimeError
+    monkeypatch.setitem(sys.modules, "scensim_agent.commander", fake)
+    rec = {"ports": {"relay": 1}}
+    assert run.lost_goals(rec, ["ego"], since=100.0) == {
+        "ego": "its reset failed: the align landed off the scenario's heading 8 times"}
+    assert run.lost_goals(rec, ["ego"], since=200.0) == {}   # an earlier run's
+    replies["ego"]["reset"]["status"] = "OK"
+    assert run.lost_goals(rec, ["ego"], since=100.0) == {}
+    replies["ego"]["reset"] = {"status": "FAILED", "message": "no stamp"}   # an older relay
+    assert run.lost_goals(rec, ["ego"], since=100.0) == {}
+
+
 def test_a_lost_goal_ends_the_run_error_with_the_relays_reason(live, where):
     d, _ = live
     sleeper = where["tmp"] / "sleeper.py"

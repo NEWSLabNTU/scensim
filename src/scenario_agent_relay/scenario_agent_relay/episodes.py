@@ -78,6 +78,9 @@ class Episodes:
         record["timed_out"] = status is None and "within" in message
         record["status"] = status or P.FAILED
         record["message"] = message
+        # issue 197: wall time, so a commander (scensim's run) can tell this run's failed
+        # reset from an earlier run's; the concealer may already have been answered OK
+        record["at"] = time.time()
         with self._lock:
             if self._running.get(entity, (None, done))[1] is done:
                 del self._running[entity]
