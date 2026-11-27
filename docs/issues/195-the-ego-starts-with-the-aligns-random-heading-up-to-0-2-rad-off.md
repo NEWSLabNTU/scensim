@@ -929,3 +929,67 @@ grade at cruise is near it (read from the truth trace in H), the two modes sit o
 not on two. If the rebuilt arm has 0 behind in 4 or
 more while the published arm keeps its rate, the second minimum was the map's, and 172 moves to
 198.
+
+## L1b: a GNSS/INS heading for the pose-free start (243, 2026-11-27, plan and predictions before any code)
+
+*What L3's first run found* (118's F40a, `2026-11-27T14-15-02_fixture_c170_targets_r0`, map A;
+NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 195 L3 (118)/runs/F40a-.../`). The car
+stood at (20.00, 1.62) the whole run. The estimate came up at x 21.39, and SSv2's concealer,
+which checks the estimate against the scenario's pose within 1 m before it requests a route,
+refused the route. The cause is in our sensor kit: its `gnss.launch.xml` (autoware_sim_vehicle's
+template `autoware_gen/templates/@KIT@_launch/launch/gnss.launch.xml`, generated into each car's
+kit) runs gnss_poser with `use_gnss_ins_orientation: false`, so the GNSS pose's yaw is the
+bearing between consecutive fixes. Autoware's own default is true. With A9's 2 cm noise and
+the car still, that bearing is random: the recorded `/sensing/gnss/pose_with_covariance` yaw
+went +0.036, +0.303, +1.647, -1.861, -2.689 rad over the first five seconds. gnss_poser then
+moves the antenna (gnss_link, 0.797 m ahead of base_link and 1.80 m up) to base_link along
+that yaw, so the GNSS's base_link wandered on a circle of about 0.8 m around the antenna.
+`/initialpose3d` took (21.18, 1.18), and NDT kept the along offset on the straight. Before A9
+the fixes were identical, the bearing was 0, and a start facing +x came out right by chance.
+Every pose-free start is exposed, on CARLA as on Isaac (acb has the same noise and kit).
+
+*The user's decision (2026-11-27):* a simulated GNSS/INS heading, as a sensor with its own
+noise, the way an RTK car with a dual-antenna receiver or an INS has one. No ground-truth pose
+goes to Autoware.
+
+*The change.*
+- **aib and acb (118):** each vehicle bridge publishes `autoware_sensing_msgs/
+  GnssInsOrientationStamped` on `/autoware_orientation` (the topic gnss_poser's stock launch
+  reads), at the GNSS's rate with the fix's stamp, frame `gnss_link`. The orientation is
+  gnss_link's in the map (base_link's orientation composed with the mount), with the
+  receiver's error: yaw `heading_stddev_deg` (default 0.2, a dual-antenna RTK heading), roll and
+  pitch `attitude_stddev_deg` (default 0.05). The rmse fields carry those standard deviations.
+  The keys sit beside A9's GNSS noise keys (aib's `gnss` block, `GNSS_NOISE_DEFAULTS`; acb's
+  `gnss_noise_*` parameters), drawn from the same seeded generator, and `enabled: false` gives
+  the exact orientation as it gives the exact position (the truth only in the same debug
+  sense). The orientation is computed from the simulated receiver's pose, not taken from the
+  IMU's message.
+- **autoware_sim_vehicle (243):** the kit template sets `use_gnss_ins_orientation` back to true
+  and remaps `autoware_orientation` to `/autoware_orientation`, gnss_poser's own launch default; the generated kits (tesla_model3, drift_mustang) regenerated from it. vehicle_check's
+  contract gains the topic.
+- **scensim (243):** the stack routes the two new keys with the GNSS block (`GNSS_ARGS`,
+  `gnss_block()`), the project file documents them, and every run records its GNSS settings
+  and the yaw source (`ins`, with its standard deviations and seed) in its result.
+- **Tests first,** in each repository: a still car's published heading has the configured
+  spread and the seed's values; `enabled: false` gives the exact orientation; the message's
+  stamp and frame are the fix's; the kit's generated launch sets the parameter and the remap;
+  scensim refuses an unknown key and passes the defaults through.
+
+*The landing (as L1 and L2).* asv first; then the deps pins of acb, aib and siw that carry
+asv, with acb's and aib's own publisher commits; then one scensim pin commit, gated with the
+Isaac lane (`ISAAC_ROOT=/var/tmp/aeon/isaac-sim-6.2`). 133's OK is needed before each push.
+L3's T, S and H wait for it; F finishes on the current main.
+
+*Predictions (one stand-only start per map after the landing, before L3 resumes).*
+- Q1: standing, `/sensing/gnss/pose_with_covariance`'s yaw stays within 0.012 rad of the
+  truth's (3 sigma of 0.2 deg), and its base_link position within 0.05 m of the truth's (2 cm
+  noise plus 0.8 m times the heading error, about 3 mm).
+- Q2: the start's position (`/initialpose3d` and the first INITIALIZED estimate) within 0.15 m
+  of the truth on fixture_c170 and fixture_c6b, and within 0.15 m on CARLA Town01. SSv2's
+  concealer check passes on every start.
+- Q3, the start's yaw (stated against 133's target of 0.01 rad): Autoware 1.5.0's NDT align
+  samples yaw over the whole circle and uses only the guess's position and covariance, so the
+  GNSS heading does not set the start's yaw. The prediction stays P1's: under 0.01 rad on
+  Town01, under 0.02 rad on fixture_c170, 0.02 to 0.08 rad (median) on fixture_c6b. A c6b start
+  within 0.01 rad would need the align to use the heading, which is a separate change
+  (the initializer's yaw covariance or the align's sampling), not part of L1b.
