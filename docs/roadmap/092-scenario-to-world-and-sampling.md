@@ -2365,6 +2365,65 @@ conditional on its proposal covering every failure region.
 ids) and `SHA256SUMS` (89 files). The truth exports stay on 241 in
 `/var/tmp/aeon/k11d-run/runs/*/truth/`. The run executed a0d6c257 (main 190a172b).
 
+### K11f's plan: the batch's score in the batch (2026-11-27, 241; approved by 133 the same day, with three additions, before any code)
+
+K11b scores a batch generation from its truth export: `search_run.py` keeps every step's rows
+in `TruthRecorder`, writes one `slot_<k>_ep<e>/truth.jsonl` per slot (4.8 GB a search of 21
+generations of 1000), and `scensim.truth.slot_outcomes` reads them back for `closest()`, a
+Python loop over frames and entities. K11c's g0 took 857 s on 7f436b99. K11f computes the same
+score while the batch runs, so a generation needs no export.
+
+**What it adds.**
+
+- `scensim_batch.score.ClosestGap`: at each step, in torch over slots and entities, the
+  signed distance between the ego's declared box and every other entity's at the batch's
+  poses (the batch's origin offset is 0, as its truth export writes), as
+  `gap_geometry.signed_distance` measures it: separating axes, then the vertex-to-edge
+  distance when the boxes are disjoint, minus the penetration depth when they overlap, 0
+  within `TOUCH_TOLERANCE`. Each slot keeps its running minimum with the entity, frame and
+  sim_time, with `closest()`'s tie-break (the first strict minimum, frames in order, then
+  entities in their order). `contact` is the storyboard overlap the export's contact lines
+  come from, at any frame of the episode. Episodes open and close as `TruthRecorder`'s do.
+- `rows()` gives `slot_outcomes`' rows (`record`, `score`, `failed`, `contact`, `error`,
+  `closest`, `run`); with `margin_k`, K11e's sloped score from the walker model's records in
+  memory, the formula `sloped_score` reads from `decision.json`.
+- `search_run.py` scores in the batch by default. `--truth` also writes the export (for K3's
+  replays and audits); both paths then run, and a disagreement beyond the bar stops the run
+  with an error naming the slot, the episode, both values and the bar.
+
+**Exit checks, with predictions (fixed before any code; the tests first, in their own
+commit).**
+
+1. **Geometry** (unit, CPU): the torch signed distance equals `gap_geometry.signed_distance`
+   within 1e-12 m on 10^4 seeded random box pairs (disjoint, overlapping, touching, corner to
+   corner, rotated), and on hand cases at the touch tolerance. float64, as the batch runs on
+   CPU.
+2. **Tracking** (unit): a tie between frames, a tie between entities, an episode closed mid-run,
+   a slot reopened by `begin`: each `closest()`'s answer exactly.
+3. **Against the saved exports** (CPU): every saved slot episode's pose tensors rebuilt from its
+   `truth.jsonl` and scored by `ClosestGap`, against `slot_outcomes` on the same file. K11c's
+   21 generations and fresh stage (21000 episodes), K11d's (21000), K11e's (about 9000, with
+   `margin_k`, so the sloped score is checked against its `decision.json`). Read from the local
+   copies in `/var/tmp/aeon/k11{c,d,e}-run/runs/*/truth/` (not the NAS), one episode at a time,
+   so peak RSS stays bounded. **The bar**: the score within 1e-9 m on every episode; `failed`,
+   `contact`, `error`, the closest entity and frame identical on every episode; no exception.
+   Reported: the largest |difference| in score and its p50 and p99, the episode count, total
+   bytes read, wall time and peak RSS. **Prediction**: every episode meets the bar, and the
+   largest difference is about 1e-15 m (the paths differ only in the order of floating-point
+   operations; a JSON float round-trips a float64, so the inputs are the run's own).
+4. **Integration** (CPU, small, in `just test`): `search_run` with `--truth` on K11c g0's first
+   100 records; both paths agree within check 3's bar (fewer records if it takes over 60 s).
+5. **Timing** (CPU, measured, no bar): `search_run` on K11c g0's 1000 records, with the export
+   and without, against 857 s on 7f436b99: seconds, peak RSS and bytes written. Run at nice 10,
+   only while the host's load is under its 24 cores and no TW or GPU-heavy run is going on it
+   (133). **Prediction**: without the export, under half of 857 s, and under 1 MB written
+   (against 4.8 GB a search); its outcomes equal g0's saved `outcomes.jsonl` within check 3's
+   bar.
+6. **Gate**: `just gate` with `ISAAC_ROOT` and the Isaac lane run.
+
+**Not in K11f**: the GPU device path beyond the torch code being device-agnostic (a live GPU
+run later, assigned by 133); `scensim bench`; the export's format.
+
 ## K13's plan: the vehicle behaviour model (2026-11-25, 241; approved by 133 the same day, before any code)
 
 The design is [vehicle-behaviour-model.md](../design/vehicle-behaviour-model.md): the
