@@ -114,7 +114,9 @@ scensim_autoware_overlay_source() {
     if [ ! -f "$dir/install/local_setup.bash" ]; then
         echo "[just] WARNING: Autoware overlay not built; running stock Autoware, which has" >&2
         echo "[just]   the blind_spot right-turn bug (autoware_universe#13509) and NDT's" >&2
-        echo "[just]   two-point cycle (an emergency stop now and then, docs/issues/002)." >&2
+        echo "[just]   two-point cycle (an emergency stop now and then, docs/issues/002)," >&2
+        echo "[just]   and whose pose_instability_detector can die on a second localization" >&2
+        echo "[just]   initialize, which an agent's reset makes when it retries (docs/issues/027)." >&2
         echo "[just]   Build it: ros2 run scensim autoware overlay (or just build-autoware-overlay)" >&2
         return 0
     fi
