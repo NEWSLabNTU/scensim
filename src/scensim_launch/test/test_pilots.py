@@ -425,3 +425,33 @@ def test_the_scensim_profile_gets_the_compare_map_z_ratio_declared_and_passed():
     assert len(profile) == 1
     passed = {a.get("name"): a.get("value") for a in profile[0].findall("arg")}
     assert passed["compare_map_z_ratio"] == "$(var compare_map_z_ratio)"
+
+
+@pytest.mark.parametrize("name,default", [
+    ("lane_height_check", "false"),            # step B's N arm (issue 180)
+    ("gnss_particle_yaw_variance", "1.1e-4"),  # the start yaw (issue 195): the receiver's heading
+])
+def test_the_scensim_profile_gets_step_b_and_l3s_args_declared_and_passed(name, default):
+    """Every profile arg step B or L3 sets is a pilot arg declared here, at the profile's own
+    default, and passed to the profile's include; under play_launch an undeclared one may not
+    reach the profile at all (issue 180, 133)."""
+    args, root = xml_args("autoware.launch.xml")
+    assert args[name].get("default") == default
+    profile = [i for i in root.iter("include")
+               if "autoware_sim_profile" in (i.get("file") or "")]
+    passed = {a.get("name"): a.get("value") for a in profile[0].findall("arg")}
+    assert passed[name] == f"$(var {name})"
+
+
+def test_the_pilots_defaults_are_the_profiles():
+    """A declared pilot arg that the profile also declares has the profile's default, so setting
+    nothing changes nothing."""
+    import re
+    prof = os.path.join(os.path.dirname(PILOTS), "..", "..", "..", "autoware_sim_vehicle",
+                        "autoware_sim_profile", "launch", "autoware.launch.xml")
+    if not os.path.isfile(prof):
+        pytest.skip(f"no autoware_sim_profile at {prof}")
+    theirs = dict(re.findall(r'<arg name="([^"]+)"\s+default="([^"]*)"', open(prof).read()))
+    args, _ = xml_args("autoware.launch.xml")
+    for name in ("compare_map_z_ratio", "lane_height_check", "gnss_particle_yaw_variance"):
+        assert args[name].get("default") == theirs[name], name
