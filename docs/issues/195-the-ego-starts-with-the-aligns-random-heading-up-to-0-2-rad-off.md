@@ -189,3 +189,64 @@ defaults; a draws run too if 241 has the time).
   on the first or second try.
 - D4: the tries are independent: no trend in |yaw error| from try 1 to 8, and NVTL does not
   order them (as the 2c scores did not).
+
+## The live starts: results (118's runs, 2026-11-27; tables by 243)
+
+118 ran the seven Isaac starts on GPU0 from the bundle (58da5a69), 10:07 to 10:31, each on a
+fresh stack: draws x3 on fixture_c6b (runs D1 to D3), live on fixture_c6b (L1), draws x2 on
+fixture_c170 (C1, C2), live on fixture_c170 (CL). Logs and 118's README: NAS `autoveh/logs/2026
+SSv2 on CARLA/2026-11-27 issue 195 live starts (118)`; the scripts and outputs below: NAS
+`home/2026-11-27 issue 195 live starts (243)/reading/` (`bias195.py`, `indep195.py`). CARLA
+Town01 (241) has not run yet. Run labels D1 to D3 are 118's runs, not predictions D1 to D3.
+
+Every try's signed yaw error (rad), in order; the live runs stop at the first within 0.01:
+
+| run | map | tries | yaw error |
+|---|---|---|---|
+| D1 | c6b | 8 | +0.0798 +0.0472 +0.0808 +0.0674 +0.0388 +0.0485 +0.0507 +0.0450 |
+| D2 | c6b | 8 | +0.0169 +0.0790 -0.0558 +0.0673 +0.0524 +0.0596 -0.0365 +0.0518 |
+| D3 | c6b | 8 | -0.0343 +0.0337 +0.0631 -0.1178 +0.0520 -0.0403 +0.0224 -0.0198 |
+| L1 | c6b | 6 | -0.0372 -0.0430 +0.0114 -0.0458 -0.0489 +0.0065 (accepted) |
+| C1 | c170 | 8 | +0.0242 -0.0247 +0.0056 -0.0365 +0.0664 -0.0095 -0.0062 -0.0017 |
+| C2 | c170 | 8 | +0.0477 -0.0100 -0.0492 -0.0364 -0.0145 +0.0029 -0.0573 -0.0474 |
+| CL | c170 | 1 | -0.0069 (accepted) |
+
+Position errors 0.01 to 0.14 m (c6b 0.07 to 0.09 m on average, c170 0.02 to 0.04 m).
+
+*Rate* (|yaw error| within 0.01 rad; Wilson 95 % intervals):
+
+| set | within | rate | 95 % interval |
+|---|---|---|---|
+| c6b draws (D1 to D3) | 0 of 24 | 0.000 | 0.000 to 0.138 |
+| c6b, L1 included | 1 of 30 | 0.033 | 0.006 to 0.167 |
+| c170 draws (C1, C2) | 6 of 16 | 0.375 | 0.185 to 0.614 |
+| c170, CL included | 7 of 17 | 0.412 | 0.216 to 0.640 |
+| both maps | 8 of 47 | 0.170 | 0.089 to 0.301 |
+
+*Bias* (signed mean, its 95 % t interval, two-sided p against 0; positive tries of all):
+
+| set | n | mean | sd | 95 % interval | p | positive |
+|---|---|---|---|---|---|---|
+| D1 | 8 | +0.0573 | 0.0164 | +0.0436 to +0.0710 | < 0.0001 | 8 of 8 |
+| D2 | 8 | +0.0293 | 0.0501 | -0.0126 to +0.0713 | 0.14 | 6 of 8 |
+| D3 | 8 | -0.0051 | 0.0600 | -0.0553 to +0.0450 | 0.82 | 4 of 8 |
+| L1 | 6 | -0.0262 | 0.0275 | -0.0550 to +0.0027 | 0.067 | 2 of 6 |
+| C1 | 8 | +0.0022 | 0.0318 | -0.0244 to +0.0288 | 0.85 | 3 of 8 |
+| C2 | 8 | -0.0205 | 0.0348 | -0.0497 to +0.0086 | 0.14 | 2 of 8 |
+| c6b (D1 to L1) | 30 | +0.0165 | 0.0518 | -0.0028 to +0.0358 | 0.092 | 20 of 30 |
+| c6b without D1 | 22 | +0.0017 | 0.0524 | -0.0216 to +0.0249 | 0.88 | 12 of 22 |
+| c170 (C1, C2, CL) | 17 | -0.0090 | 0.0332 | -0.0261 to +0.0080 | 0.28 | 5 of 17 |
+| both maps | 47 | +0.0073 | 0.0472 | -0.0066 to +0.0211 | 0.30 | 25 of 47 |
+
+*Independence* (permutation tests, 20000 shuffles):
+- run effect (one-way F of the signed error across one map's starts): c6b (D1, D2, D3, L1)
+  F 5.24, p 0.0065; c170 (C1, C2) F 1.86, p 0.19.
+- trend of |yaw error| with the try index (draw runs, index shuffled within a run): c6b
+  rho -0.25, p 0.26; c170 rho -0.19, p 0.48.
+- NVTL (the agent's line carries the score as it read it; the first try's is none): with the
+  same line's NVTL, c6b rho +0.21, c170 rho -0.27; with the next line's, c6b rho -0.24, c170
+  rho -0.67 (p 0.0099, n 14). NVTL ranges 3.279 to 3.311 on c6b, 3.344 to 3.373 on c170.
+
+*Truth.* The ego trace (`attachments/ego_trace/ego.csv`) holds the car's yaw while it stands at
+the start, through every try: within 0.0006 rad of 0 in D1, D2, D3 and L1 alike (D1 -0.00054 to
+-0.00002 rad). The scenario's pose is the car's, so the yaw errors above are NDT's.
