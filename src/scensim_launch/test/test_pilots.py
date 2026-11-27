@@ -412,3 +412,16 @@ def test_the_release_check_resolves_what_the_stock_pilot_passes():
     passed = {a.get("name") for a in stock.findall("arg")}
     # data_path: the check's stub of Autoware's models (a user's own is their Autoware's)
     assert from_script - {"data_path"} == passed
+
+
+def test_the_scensim_profile_gets_the_compare_map_z_ratio_declared_and_passed():
+    """Issue 180 step B v2: the compare-map filter's z band (asv's compare_map_z_ratio, its
+    downsize_ratio_z_axis) is a pilot arg declared here, default the files' 0.6, and passed to
+    the profile's include, not left to the launch's global scope (133)."""
+    args, root = xml_args("autoware.launch.xml")
+    assert args["compare_map_z_ratio"].get("default") == "0.6"
+    profile = [i for i in root.iter("include")
+               if "autoware_sim_profile" in (i.get("file") or "")]
+    assert len(profile) == 1
+    passed = {a.get("name"): a.get("value") for a in profile[0].findall("arg")}
+    assert passed["compare_map_z_ratio"] == "$(var compare_map_z_ratio)"
