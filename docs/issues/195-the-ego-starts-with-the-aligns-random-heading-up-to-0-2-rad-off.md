@@ -1,6 +1,6 @@
 # 195: the ego starts with the align's random heading, up to 0.2 rad off
 
-**Status:** open; a plan with two fix options for the user to choose between (through 133), no
+**Status:** open; the user chose option 1 (through 133, 2026-11-27); its plan below, before any
 code. **Severity:** medium. On a featureless straight the ego starts 0.005 to 0.142 rad (0.3 to
 8.2 deg) off its true heading, the error differs run to run, and a large one steers the car
 across its lane (0.75 m in 6 s in run A) and leaves a lasting bias in the EKF. **Found:** 241's
@@ -94,3 +94,51 @@ start should be; the run-to-run randomness is the larger cost for a test bench.
 scenario's pose; the 2.x type under the 2.x profile); (2) the change; (3) predictions, then a
 live check: fixture_c170 R1 to R3 again, start yaw error under 1e-3 rad in all three, and 182's
 fixture_c6b run with no start swerve; (4) the gate.
+
+## The user's decision: option 1 (2026-11-27, through 133)
+
+A tight acceptance and a retry, not DIRECT. 133's terms: accept the align only within about
+0.01 rad of the scenario's yaw and re-initialize otherwise; a retry cap with a clear failure
+naming the last error; log each try's yaw error and score; deal with the EKF's learned yaw bias.
+
+**What the agent does today** (`scensim_agent/adapters/autoware.py`, `AutowareAgent`'s reset):
+after `initialize`, the `converge` stage waits until the estimate is `consistent` with the reset
+pose (1.0 m, `yaw_tolerance` 0.2 rad), or until `converge_timeout` (30 s), and only then
+initializes again (`_reinitialize`, up to `reinitialize_attempts` 3). With 0.01 rad, every align
+that lands off would cost the full 30 s before the next try, because a standing car's estimate
+does not move toward the pose by itself (B: 0.003 rad in 3 s).
+
+**The change:**
+- `yaw_tolerance` 0.01 rad (was 0.2). The position bound stays 1.0 m.
+- In `converge`, once the estimate is fresh (newer than the reset, localization INITIALIZED),
+  within 1.0 m and more than `yaw_tolerance` off in yaw, the agent initializes again at once
+  (a miss, not a wait), logging the try: `align <n> of <cap>: yaw error <e> rad, position error
+  <d> m, NVTL <s>` (the score the port has, NDT's newest NVTL; the align's own
+  best_particle_score is on `/diagnostics`, which the port does not read, and is not added here).
+  A fresh estimate further than 1.0 m off keeps today's path (wait, then `converge_timeout`).
+- A cap of its own, `align_attempts` 8, apart from `reinitialize_attempts` (the lost-scan
+  repeats of roadmap 072). Of the five starts measured, two were within 0.01 rad, so a try
+  lands in about 40 %: eight fail together in about 1.7 %. When the cap is reached the reset
+  fails with: `the align landed off the scenario's heading <n> times; the last <e> rad off (NVTL
+  <s>), the tolerance <t> rad, at (<x>, <y>)`, which the relay reports as today's failures are.
+- A success logs the tries it took and its yaw error.
+
+**The EKF's yaw bias:** each try goes through Autoware's pose initializer, which deactivates the
+EKF and starts it again at the aligned pose, and `EKFModule::initialize` sets the yaw bias to 0
+(`x(IDX::YAWB) = 0.0`, autoware_core `localization/autoware_ekf_localizer/src/ekf_module.cpp:74`,
+tag 1.5.0 as the overlay carries it). So a re-initialize resets the learned bias, and an
+accepted start within 0.01 rad gives the bias at most that to learn (run B learned +0.064 rad
+from a 0.142 rad start). No change to the EKF.
+
+**Risk:** the same agent drives CARLA's egos. Their align is the same search on CARLA's maps,
+which have features; a CARLA start that cannot get within 0.01 rad would now fail after eight
+tries where it passed before. `yaw_tolerance` and `align_attempts` stay config keys, so a stack
+can set its own; the gate's CARLA lane runs scenarios and would show it.
+
+**Steps:** (1) the failing tests first, in `scensim_agent/test/test_autoware_agent.py` on the
+fake Autoware: an align 0.03 rad off is retried at once (not after `converge_timeout`) and the
+next, 0.004 rad off, is accepted; each try is logged with its yaw error and NVTL; eight misses
+fail with the message above naming the last error; an estimate more than 1.0 m off still waits
+for `converge_timeout`; the existing reset tests pass with the new default. (2) The change.
+(3) `just gate`. (4) Ask 133 before the push. (5) A live check, predictions first: fixture_c170
+R1 to R3 again, every start within 0.01 rad, the tries per start logged.
