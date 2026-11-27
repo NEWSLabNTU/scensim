@@ -424,3 +424,103 @@ My recommendation:
 - **Option 2 is not taken.** No setting reaches the rock.
 
 This issue stays open for option 3.
+
+## Option 3's plan: a lane-only height-above-map check (241, 2026-11-27, before any code)
+
+Issue 198 has landed (scensim 3a35369f, siw 9bfd1b1), so the map's road is where the road is.
+On the rebuilt fixture_c6b, `hmap180.py` on r180's record gave the rock as a would-be object at
+11.3 m (h 0.05, N 3), 8.8 m (h 0.10, N 3) and 6.1 m (h 0.12, N 3), with no false object on the
+carriageway at any of them (issue 198, "Issue 180's lane check against the rebuilt c6b").
+
+**The rule.** The node uses the sensors and the map only, never the truth:
+- the raw cloud, `/sensing/lidar/concatenated/pointcloud`;
+- the EKF's pose, `/localization/kinematic_state`, to place the cloud in the map;
+- the point cloud map, whole (`/map/pointcloud_map`) or by tiles through the map loader's
+  differential service, as compare-map takes it, so a divided map (Haruna, Tsukuba) works;
+- the lanelet map, `/map/vector_map`: the carriageway is the union of the road lanelets'
+  polygons, not a fixture's hard-coded band.
+
+A point is an obstacle point when it is inside a road lanelet, 1 to 30 m ahead of base_link,
+outside the ego's own box, and more than h above the highest map point within 0.5 m of it.
+Obstacle points are binned in 0.3 m map cells. A detection is a group of touching cells holding
+at least N points, and it is published once present in 3 consecutive frames. These are
+`hmap180.py`'s rules, unchanged, except that the lanelets replace the band.
+
+**The interface.**
+- A Python node in `autoware_sim_profile`, `lane_height_check` (as `clock_guard` is), started
+  by the profile when `lane_height_check:=true`. The default is false until the live run below
+  has passed, then true by a separate, asked-for change.
+- Its output is a `PointCloud2` of the persistent detections' points,
+  `/perception/obstacle_segmentation/lane_height_check/pointcloud`, plus a small status topic:
+  frame time, points in and kept, detections, and the processing time.
+- How the planner stops for it. The motion velocity planner has one pointcloud input
+  (`planning_input_pointcloud_topic_name`, today `/perception/obstacle_segmentation/pointcloud`).
+  obstacle_stop's pointcloud type is off in 1.5.0's parameters (`check_inside.pointcloud:
+  false`), so today no module stops for a bare point. The candidate:
+  - concatenate the two clouds into the planner's input, and turn on obstacle_stop's
+    pointcloud check (`check_inside.pointcloud: true`), with pointcloud_deceleration as for
+    unknown objects;
+  - the risk is that this also makes obstacle_stop stop for any non-ground point of the
+    ordinary cloud in the path. Step A measures that before anything is chosen. If it is not
+    clean, the fallback is to publish the detections as UNKNOWN `DetectedObjects` into the
+    object merger, which costs the tracker's confirmation lag (1.3 to 3.4 m, issue 181).
+- Step 0 names, from a live stack's `ros2 node info`, every module reading the planner's
+  pointcloud input, before step A.
+
+**The threshold (for 133 to choose).**
+- **h 0.10, N 3 (my recommendation).** It makes a would-be object at 8.8 m, past the 7 m
+  planned-stop bar. It ignores what the car can drive over: c6b's 8 cm loose rock at s 300
+  sits under the tyre and clears the plate by 58.8 mm (133's static check). Anything taller
+  than 0.10 m is within 4 cm of the 0.138 m clearance.
+- **h 0.05, N 3.** It makes the object at 11.3 m, but would also stop the car for every 5 to
+  10 cm rock or debris on the lane. c6b's 8 cm rock would then stop it.
+- h is measured from the map's road, so the EKF's height error adds to it: 2.3 cm low and
+  steady in r180's record. It is checked again in step A.
+
+**Tests (before the live run).**
+- Unit tests, in the profile's test suite, on synthetic data with no ROS:
+  - the lanelet mask, including a curve and a junction;
+  - the height above the map, against a flat map and a map with a 10 % grade and a crown;
+  - cell grouping, and the N and 3-frame persistence;
+  - a box rejecting the ego's own points;
+  - the divided map's tile lookup.
+- A node test with rclpy: a synthetic map, lanelets and cloud published, and a detection
+  checked on the output topic within 3 frames.
+- Step A, before any code: a replay (no simulator) of 180 step 2's run (118, NAS) against the
+  rebuilt fixture_c6b map, by `hmap180.py` with the lanelet mask in place of the band. It
+  checks the rock's range and the carriageway's false detections with the lanelets. For the
+  interface, it also counts the ordinary obstacle_segmentation cloud's points inside the
+  recorded trajectory's footprint (lateral margin 0.3 m), frame by frame. That is what turning
+  on obstacle_stop's pointcloud check would stop for.
+- After the code: the same record replayed through the node itself, for its ranges and its
+  processing time per frame on 241.
+
+**One live run (step B).** fixture_c6b on Isaac at the profile's default speed (4.17 m/s), on
+the rebuilt map, with the rock at s 100 m moved to the lane's centre line so the car's path
+meets it under the plate. `lane_height_check:=true` and the chosen interface. Recorded: the
+node's output and status, the planner's stop reason, the truth trace, and contacts by the
+truth's height and speed (issue 176: no chassis contacts reported). Run on scensim main with
+the node, gated first.
+
+**Predictions (at h 0.10, N 3; if 133 picks h 0.05 they move as noted).**
+- P1 (step A, then the node's replay): with the lanelet mask, and then through the node, the
+  ranges are `hmap180.py`'s on r180's record within 0.5 m. The would-be
+  object comes at 8.8 m (11.3 m at h 0.05), with no false would-be object on the carriageway.
+- P2 (the node's replay): processing time p95 under 30 ms a frame on 241. The node keeps up at 10 Hz
+  with no dropped frame in 1000.
+- P3 (step A): the ordinary obstacle_segmentation cloud has no point in the trajectory's
+  footprint for 3 consecutive frames anywhere on r180's record. If it does, the
+  DetectedObjects fallback is used and P5's ranges shorten by the tracker's lag.
+- P4 (unit and node tests): all pass. The synthetic 15 cm box is detected and an 8 cm box is
+  not, at h 0.10 (both at h 0.05).
+- P5 (step B): the car stops short of the rock with no strike, its bumper 1.5 to 5 m before
+  the rock's near side (2.5 to 6.5 m at h 0.05), and peak deceleration within the planner's
+  limit (2.5 m/s^2).
+- P6 (step B): no stop for anything else over the fixture's 600 m. At h 0.10 that includes
+  the 8 cm loose rock at s 300 and the pothole. At h 0.05, the 8 cm rock stops the car.
+- P7 (step B): no would-be object is ever made from the truth. That is checked by code
+  review: the node subscribes to none of the world server's topics.
+
+**Order.** Step 0 (a live stack's node info) and step A (a replay, no simulator) come first.
+133 then chooses the interface from P3, and the threshold. Then the code with its tests, the
+gate, and step B.
