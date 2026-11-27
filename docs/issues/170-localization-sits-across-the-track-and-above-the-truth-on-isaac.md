@@ -825,3 +825,51 @@ it into an error.
 - *So the 0.0364 rad does not reach the lidar:* the cloud is rendered from the rig's mount and
   transformed by the same rotation, and c (+0.19 m) is not from it. A 2 deg lidar yaw would show
   as a dyaw in NDT of that size; NDT's dyaw medians are -0.43 to +0.13 deg.
+
+## Step 4's runs read against the predictions (243, 2026-11-27)
+
+From the raw numbers above (R1 to R3, host 243, fcc01e50's install; G1 is read in the GNSS
+section). Across is + left of the truth's heading.
+
+- **G2 FAILED.** Predicted about -0.037 m (within 0.015) both ways; R1 +0.179 (EKF) / +0.171 (NDT),
+  R2 +0.207 / +0.209 m. Opposite sign and five times the size. Its second half held: the map
+  vector's across part is about 0, v = -0.014 (EKF) / -0.019 m (NDT), under 0.02. So the across
+  error on this straight is car-fixed, c = +0.19 m, localization left of the truth both ways.
+- **G3 FAILED** (both within 0.01 of 0): the straight with no crown, bends or props has the
+  larger error, not none.
+- **G4 FAILED.** NDT's z less the truth's -0.0114 m in all three (predicted within 5 mm): 11 mm
+  below the truth, with no crown or grade. (Haruna's was above.)
+- **G5 FAILED.** R3 against R1 across: EKF +0.156 against +0.179 (23 mm), NDT +0.157 against
+  +0.171 (14 mm); predicted within 5 mm. The level repeats to about 2 cm; the spread within a run
+  (sd 0.07 to 0.16 m) is larger than that.
+- **G6 FAILED, in part.** The EKF's yaw medians held (-0.058, +0.030, -0.011 deg, under 0.1);
+  NDT's did not in R1 and R2 (+0.133, -0.425, +0.079 deg). The truth did not stay within 0.2 m of
+  its lane's centre: R1 down to -0.93 m (x 56.8), R2 up to +0.41 m (the car's right, heading
+  west), R3 down to -0.52 m (x 63.5). Over the drive the truth's median sits right of the lane's
+  centre in all three (R1 -0.15, R2 +0.22 to the car's right, R3 -0.17 m), the mirror of c: the
+  controller holds localization on the centre, and the car is c to the right of it.
+- **G7 HELD.** Start yaw (EKF): R1 +0.028, R2 -0.005, R3 +0.008 rad, under 0.2, R1 over 0.01,
+  different in each run; NDT the same to 1 mm rad. Align scores 3.380, 3.369, 3.368: the best
+  score is R1's, the most off. Its second half is mixed: R1 (+0.028, localization turned left of
+  the truth) swerved right to -0.93 m early, as a controller steering localization to the centre
+  would; but R3 (+0.008) swerved right to -0.52 m too and R2 (-0.005) to +0.41 m to its right. So
+  every run's early swerve is to the right, whatever the start yaw's sign, and the start yaw is
+  not the whole of it. Where the right swerve comes from is open (c itself, a car-fixed
+  localization offset to the left, would make the car sit right of the centre, which it does).
+- **S1 and S2, neither.** R3's standstill (37.4 s, the truth still to 0.01 mm): the EKF's along
+  moved +0.071 m (S1 needs 0.1 or more; S2 needs NDT within 0.02: NDT moved +0.081), across +0.012
+  and z -0.003 (under 0.01 held). NDT's sd along 0.050 against across 0.046 (S1 needs over 3 times).
+  So a creep along, about 0.12 m/min (run A: 0.23 m/min), not a walk. R1's window is not clean
+  (the truth crept 74 mm in it). ekf_localizer's Mahalanobis WARN: 3 lines in R1, 0 in R2, 1 in R3
+  (when, against the windows, not yet mapped).
+- **Moving, NDT's along spread over twice its across:** FAILED (sd along 0.069, 0.062, 0.074;
+  across 0.157, 0.082, 0.110 m). Across varies more than along on this straight.
+- *Not predicted:* along -0.29 m (R1, R3) and -0.35 m (R2), the same in NDT and the EKF, behind
+  the truth. At about 11 m/s that is about 30 ms of lag; Haruna's runs, slower, had under 0.11 m.
+
+*What it leaves.* The straight has a car-fixed across error of +0.19 m (G2's opposite sign) and a
+car-fixed along error of -0.3 m, both in NDT, with the map equal to the world ((a), step 3), the
+lidar chain equal to the render (E1, E2), and no distortion (D1, D2). What is left on the scan
+side is the render itself and NDT on a flat road (the scan side's results). One check from these
+records next: NDT's across and along error against speed, within each run (a lag is
+speed-proportional; a render offset is not).
