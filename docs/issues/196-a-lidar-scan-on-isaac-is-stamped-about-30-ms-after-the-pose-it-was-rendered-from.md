@@ -206,3 +206,29 @@ is checked before the predictions are committed.
   over the frame), so the pose the render takes is the stamp's;
 - or have the renderer see each write (a USD to Fabric sync before the render), if the render's
   read is the cause; the costliest and the least sure.
+
+## Step 3: how a run sets the physics step, and the runs (243, 2026-11-27, before any run)
+
+*How it is set.* A testbench's `isaac: {physics_hz: N}` (scensim `world.py`, ISAAC_KEYS) goes to
+the Isaac world server as `--physics-hz`; the world sets `physics_dt = 1 / N` and announces it
+in Hello as `max_physics_dt`; the bridge splits each 0.05 s SSv2 frame into the fewest substeps
+of at most that (`physics_steps`, `scenario_world_bridge/src/backend/remote/mod.rs`:
+n = ceil(0.05 N), dt = 0.05 / n). So 60 Hz is 3 x 1/60 s (step 2), 40 Hz 2 x 0.025 s, 120 Hz
+6 x 1/120 s. The render stays on the last substep and the frame stays 0.05 s.
+
+*The runs.* Step 2's targets testbench (`170/proj`, `fixture_c170_targets.xosc`, the Tesla,
+`max_velocity` 11.11, the raw cloud recorded) three times, changed only in `isaac.physics_hz`:
+60 (a control: main has moved aib and the Isaac world server since step 2's fcc01e50 build), 40,
+120. On 118's GPU0 (133's offer), from main's code, both workspaces built from a clean
+environment. Package: NAS `home/2026-11-27 issue 196 step 3 (243)` (three projects, the fixture
+copied into each, `face196.py`, SHA256SUMS). Read with `face196.py <run dir>`, as step 2.
+
+*Predictions* (tau from the faces, median over each target's moving scans):
+- S0, 60 Hz on main: 33 to 35 ms at both targets (step 2's 33.7 and 34.3); else stop: the build
+  moved the lag, and the other two runs would not read against step 2.
+- H (above): 40 Hz gives 25 ms (24 to 27), 120 Hz 41.7 ms (40 to 44), flat with speed.
+- Not H, a fixed render latency in time: about 34 ms at both rates.
+- Not H, two substeps whatever their length: 50 ms at 40 Hz, 16.7 ms at 120 Hz.
+- At 40 Hz the car's own dynamics take a coarser step; the run may drive differently, which does
+  not touch tau (the faces divide by the truth's speed). A run that errors at the world server
+  or the vehicle at 40 or 120 Hz is a result, reported as it stands, not retried with changes.
