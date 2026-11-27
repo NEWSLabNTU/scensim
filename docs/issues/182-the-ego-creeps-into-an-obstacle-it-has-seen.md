@@ -643,6 +643,9 @@ object in 100 % of the stopped frames of every run, and obstacle_stop's STOP in 
   - What the counts follow instead is the EKF's drift along the track while standing. B1 drifted
     0.63 m back at 0.29 m/min against at most 0.23 m elsewhere, with B2 the exception (0.087
     m/min, 2 operations). That is 182's open question (the standstill drift), not the arm.
+    It belongs with issue 196 (the scan stamped 34 ms after its render pose) and issue 170
+    (localization off the truth on Isaac). A standing car whose NDT sees each scan at the wrong
+    pose would drift this way. That is not shown here; it is the question 182 carries to them.
 
 **What this says about 181's change.**
 - The UNKNOWN threshold of 5 makes the boulder a validated object 1.6 m earlier on average, and

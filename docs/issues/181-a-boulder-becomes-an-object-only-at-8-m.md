@@ -566,6 +566,8 @@ An earlier summary to 133 named only `min_points_num`; that was imprecise.
 boulder's first validated range is about 12.1 m (±1.5 m), against r1's 8.8 m by step 1's rule
 (9.6 m by step 3's).
 
+**The change's live gain, measured (182 step 2c, 3 runs each at one commit): +1.6 m validated, +1.3 m final.** The 3.9 m below was one run each; run B's 13.41 m was a high draw.
+
 ## The change, live (241, 2026-11-27; from issue 182's runs A and B)
 
 Issue 182's runs A (scensim 7716891b, the stock validator) and B (e6a34fd5, this issue's change),
@@ -576,7 +578,7 @@ objects placed by the truth's pose (`valrange182.py`; the EKF's pose was off by 
 | | run A (UNKNOWN 10) | run B (UNKNOWN 5) | gain |
 |---|---|---|---|
 | first cluster | 13.47 m | 13.63 m | 0.2 m (not the change's) |
-| first validated | 9.51 m | 13.41 m | **3.9 m** |
+| first validated | 9.51 m | 13.41 m | 3.9 m (one run each; 1.6 m over 3 + 3, below) |
 | first final object | 8.20 m | 9.99 m | 1.8 m |
 
 - The prediction for this change, about 12.1 ± 1.5 m validated, **held**: 13.41 m.
@@ -584,3 +586,20 @@ objects placed by the truth's pose (`valrange182.py`; the EKF's pose was off by 
 - The final objects gain less, 1.8 m: tracking's confirmation takes part of it.
 - One run each. Issue 182's step 2c repeats both arms three times at the same code, with the
   stock file through the change's launch argument, to put a spread on these numbers.
+
+## The gain over three runs each (182 step 2c, 241, 2026-11-27)
+
+Issue 182's step 2c ran each arm three times, alternating, at e6a34fd5. Each run's arm was
+checked from its own record. Truth frame, means:
+
+| | A' (UNKNOWN 10) | B (UNKNOWN 5, this change) | gain |
+|---|---|---|---|
+| first cluster | 13.25 m | 13.25 m | 0 (not the change's) |
+| first validated | 9.75 m (9.45 to 10.32) | 11.37 m (10.92 to 11.90) | **+1.6 m** |
+| first final object | 8.78 m (8.30 to 9.42) | 10.06 m (9.89 to 10.24) | **+1.3 m** |
+
+- Every B run is above every A' run at both stages.
+- The change's live gain is **+1.6 m validated and +1.3 m final (3 runs each)**. It replaces
+  the one-run 3.9 m and 1.8 m above.
+- In all six runs the stop came from AEB, at 10.4 to 12.2 m, which the change does not touch.
+  The details are in 182, step 2c's result.
