@@ -487,3 +487,94 @@ pinned, on 118's GPU0):
 The EKF follows NDT within 0.01 m, the GNSS pose stays within 0.025 m of the truth along, and
 NDT's per-scan pull is about zero (median +0.1 mm). L2r removes the drift; the (n - 1) dt lag is
 back, as expected.
+
+## Why L2 drifted, from the EKF's code, and L2b: plan and predictions (243, 2026-11-27, before any code or run)
+
+*The mechanism, as far as the code shows it.* Autoware 1.5.0's ekf_localizer (autoware_core,
+`ekf_module.cpp`; the reference copy in `third_party/cuda_ndt_matcher/tests/comparison`) keeps
+`extend_state_step` past states, one per prediction step. The profile runs it at
+`predict_frequency` 20 Hz with `extend_state_step` 20 (`ekf_localizer.param.yaml`), so the
+states lie 50 ms apart.
+- An NDT pose is applied to one of them: the one whose accumulated delay is closest to
+  `t_curr - stamp` (`find_closest_delay_time_index`). On an exact tie it takes the larger delay,
+  the older state.
+- The EKF's timer runs on the simulation clock, which advances once a frame, so its steps fall
+  on the frame ends, every 50 ms. This is assumed from the clock, not checked; the EKF's own
+  debug output would show it.
+- With the scan stamped at its frame's end (L2r, and before L2), a scan's delay is a whole
+  number of steps, and each pose goes to the state of its own time.
+- With L2's stamp, (n - 1) dt before the frame's end, the delay is k x 50 ms + (n - 1) dt, and
+  the nearest state is off by delta = 50 ms - (n - 1) dt:
+  - 16.7 ms at 60 Hz, 33.3 ms back;
+  - 8.3 ms at 120 Hz, 41.7 ms back;
+  - an exact tie at 40 Hz (25 ms back), resolved to the older state, so +25 ms, unless rounding
+    breaks the tie the other way.
+- In every case the pose is filed as older than it is. Its position is the car's at the stamp,
+  but the EKF compares it with its own state delta earlier, when the car was v x delta behind.
+  So the update pulls the estimate forward by about K v delta at each scan, for an effective
+  gain K.
+- NDT gives no restoring pull along a straight: its per-scan pull was about 0 in every L2 run
+  (NDT accepts a guess that is already ahead, the flat along-road score this issue and 195 saw).
+  So the lead accumulates. Its slope against distance is the scan rate times K delta, and at
+  10 scans a second, 10 K delta.
+- F60's +1.74 % with delta 16.7 ms gives K about 0.10, the only number fitted.
+- This also explains why L2r's frame-end stamp shows no drift (+0.01 %). It predicts the other
+  physics rates, below.
+
+What the code does not settle: K itself (the Kalman gain with the profile's covariances and
+`pose_smoothing_steps` 2), and whether a featured road (Haruna) restores some of the lead.
+
+*The general point.* A pose stamped at a fixed phase against the EKF's 50 ms grid is
+mis-filed by the same amount at every scan. A real car's lidar and EKF clocks are not locked,
+so the phase wanders and the error averages out. In a simulation that locks them, it
+accumulates. Any stamp scensim publishes for the EKF should therefore sit on the frame grid,
+or the EKF's step should be fine against the offset. It is noted here; no change is planned for
+it beyond L2b.
+
+*M, a check of the mechanism from records already on the NAS (no runs).* 118's `along_x.py` on
+L3's F runs, which ran with L2 at 120 and 40 Hz (F120b `2026-11-27T15-06-04`, F40b
+`14-15-24`):
+- M1: F120b's NDT along slope is +0.7 to +1.0 % (delta 8.3 ms, half of F60's).
+- M2: F40b's along slope is 2.2 to 3.0 % in size (delta 25 ms, 1.5 times F60's), and positive
+  if the tie resolves as the code reads.
+- M fails if F120b's slope is about F60's, or about 0, or if F40b's is under 1.5 %. Then the
+  mechanism is something else, and L2b's check below matters all the more.
+- If a run's drive is too short or too slow for a slope (the targets scenarios), that is
+  recorded, and M rests on the other.
+
+*L2b, the change (aib's `Lidar`, `aib/isaac/sensors.py`).* The lidar prim is written once a
+frame, before the frame's first substep, at the pose predicted for the frame's end:
+- `_pose_after` over the whole frame's dt, from the body's state at the frame's start;
+- the writes before the later substeps are dropped.
+
+Whichever write the render picks up is then the frame's end pose. The scan is stamped at the
+frame's end, as now (L2r), on the EKF's grid. Motion distortion's reference stays at the
+frame's end, `latency` frames back (as before L2). The prediction's error over a frame is the
+car's acceleration's, 0.5 a T^2: about 4 mm at 3 m/s^2 over 50 ms, against the 0.24 to 0.37 m
+lag.
+
+The other sensors are not changed. Whether a camera prim has the same lag is a separate
+question, left open. No setting keeps the per-substep writes (no shims).
+
+*Tests first (aib's fake kit):*
+- For n = 2, 3, 6 substeps, the prim's pose is set exactly once per frame, before substep 1, to
+  the frame-end pose `_pose_after(frame_dt)` gives.
+- The stamp is the frame's end.
+- The first frame after a teleport writes the teleported pose's prediction.
+- Motion distortion's reference is the frame's end, `latency` frames back.
+- The warm-up frames write too.
+
+*Predictions after L2b is pinned* (118's GPU0 or mine, after the current queue):
+- B1, the faces: tau within 2 ms of 0 at 40, 60 and 120 Hz (`face196.py`, the targets
+  scenarios). Six runs at 40 Hz, since its pose was bimodal per run, and three each at 60 and
+  120. Every run, not the median of runs.
+- B2, the lag gone: on fixture_c170_down_hold120, maps A and B, 2 runs each, the moving along
+  median less the run's own start along offset is within 0.08 m of 0. Under L2r it was about
+  -0.30 m (K2: -0.244 against a start of +0.054).
+- B3, no drift: NDT's along slope under 0.1 % of x over the moving scans in each of those 4
+  runs, as K1.
+- B4: the 4 runs reach the goal and pass. The EKF follows NDT within 0.2 m. NDT's per-scan pull
+  has a median under 1 mm.
+- B5, the 40 Hz mode: the 40 Hz face runs show one mode, not two (step 3's bimodality came from
+  which write the render took; with one write a frame there is one).
+- If B1 holds and B3 fails, the drift has a cause other than M's, and L2b is not landed.
