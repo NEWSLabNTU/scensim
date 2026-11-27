@@ -1266,6 +1266,77 @@ points to hold the stop. The rebuilt maps' upload is held on it.
 - P8 holds on c170 (0.45 to 0.80). On c6b it exceeds 0.8 in 3 of 4 (to 0.88): the range was too
   tight.
 
+## L3's H set on L2r: results (118's runs at scensim 23b65448, 2026-11-27 and 28; table only, the reading follows)
+
+*The runs*:
+- haruna_down on two maps, 4 each, interleaved (pub1 rb1 pub2 rb2 ... rb4), a fresh stack each:
+  - pub: the published Haruna, dataset fff4cb0b, tile-set a54e0a3b (survey198's hash).
+  - rb: 241's rebuilt Haruna, siw 9bfd1b10, tile-set 280e8b91, over the same course, isaac and
+    scenarios.
+- Testbench tb-l3h: issue 172 step 5's isaac_i172_smooth unchanged, plus the GNSS and align
+  topics in the record. Physics 60 Hz: SSv2's 0.05 s step is 3 physics steps.
+- When and where: 23:45 on the 27th to 01:01 on the 28th, on 118's GPU0.
+- Outcome: all 8 passed, every judge (nvtl, physical_verdict, pose_error).
+
+*The load (133's decision, 243's rule)*:
+- burn.py is not run by default. 139's P4 runs on GPU1 stand in for step 5's contention, from
+  another source.
+- The rule: 30 s before each start, sample the 1-minute load. From 34 to 65 (step 5's starts),
+  run as is. Under 34, add burn.py workers in steps of 8 until the load is at least 34 (118
+  capped it at 24). Over 65, wait up to 10 min.
+- From pub4 on (133): the sample is taken at least 60 s after the previous stack exits, and is
+  logged itself.
+- Two earlier runs are void and were re-run as pair 1. Both had burn.py at 24 on top of P4:
+  pub1 (load about 95), and rb1 (load 183; SSv2's wall-clock timeout).
+
+*Unplanned difference from step 5*: step 5 ran on isaac-ex/c6b-haruna/none/haruna, which has a
+road_detail.yaml (086 C6b's "none" corridors over course/section.npz, gd0 1e-12): the road layer.
+H's maps are copies of the dataset, without it: the plain course mesh. Both of H's arms have the
+same road, so pub against rb is like for like. H's comparison with step 5's 6 of 9 is not like
+for like on the road surface, and P10b is judged only within H.
+
+*The table*:
+- Columns:
+  - The scored start is the last `/initialpose3d` before the first motion (2 in every run).
+  - moving along is ndtT's median while moving (4.2 m/s); "less start" is moving along less the
+    start's along.
+  - decision is the 1-minute load sample that set burn.py; mean load is the 1-minute load's mean
+    over the run (n samples, 30 s apart).
+- Errors are against the truth, in m and rad.
+
+| run | start along / across / yaw | moving along | less start | across | z | NVTL | decision | burn.py | mean load (n) | pose_error p95 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| pub1 | -0.022 / -0.046 / +0.0012 | -0.0971 | -0.0751 | -0.067 | -0.0182 | 3.162 | 64.21 | 0 | 40.3 (15) | 0.1814 |
+| rb1 | +0.007 / -0.024 / -0.0002 | -0.0970 | -0.1041 | -0.037 | +0.0028 | 3.168 | 36.02 | 0 | 43.9 (17) | 0.170 |
+| pub2 | -0.005 / -0.061 / +0.0000 | -0.0979 | -0.0929 | -0.066 | -0.0180 | 3.162 | 34.23 | 0 | 38.2 (16) | 0.1852 |
+| rb2 | +0.038 / -0.046 / +0.0002 | -0.0965 | -0.1341 | -0.038 | +0.0027 | 3.168 | 37.89 (a) | 8 | 48.5 (17) | 0.1705 |
+| pub3 | +0.041 / -0.061 / -0.0009 | -0.0078 | -0.0486 | -0.067 | -0.0246 | 3.163 | 45.73 (a) | 24 | 87.3 (19) | 0.1125 |
+| rb3 | -0.008 / -0.034 / +0.0005 | -0.0255 | -0.0173 | -0.037 | -0.0021 | 3.168 | 52.98 | 0 | 22.0 (15) | 0.1124 |
+| pub4 | -0.031 / -0.071 / +0.0011 | -0.0996 | -0.0687 | -0.068 | -0.0181 | 3.162 | 12.78 (b) | 24 | 81.4 (20) | 0.1815 |
+| rb4 | -0.002 / -0.054 / +0.0003 | -0.0962 | -0.0947 | -0.037 | +0.0029 | 3.168 | 37.38 | 0 | 25.5 (14) | 0.168 |
+
+- (a) The load after the adds. The decision sample itself, from the 30 s log, was under 34:
+  - rb2: about 30 to 32;
+  - pub3: about 23, falling as rb2's stack had exited. 8 workers gave 20.20, 16 gave 31.95, 24
+    gave 45.73.
+- (b) The decision sample, 60 s after rb3's stack exited. With 24 workers the load reached
+  33.71, 0.3 under the window: marked.
+
+*Pairs*:
+- In-run load: pairs 1 (40.3 / 43.9) and 2 (38.2 / 48.5) are within 2x. Pairs 3 (87.3 / 22.0)
+  and 4 (81.4 / 25.5) differ 4.0x and 3.2x and are marked. Both marked pairs are the ones whose
+  pub run carried 24 workers.
+- pub less rb, moving along: -0.0001, -0.0014, +0.0177, -0.0034 m.
+- In every pair, pub against rb: across -0.066 to -0.068 against -0.037 to -0.038, z -0.018 to
+  -0.025 against -0.002 to +0.003, NVTL 3.162 to 3.163 against 3.168.
+
+*P10b as written*: at least 2 of 4 behind on each map. published 3 of 4 (pub3 level), rebuilt 3
+of 4 (rb3 level). The behind runs read -0.0962 to -0.0996 m, the level runs -0.0078 and -0.0255.
+
+The records are on the NAS (`autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 195 L3 (118)/`,
+runs H2_* and the void H_*; scripts/ holds htable.py, htable_H2.txt, load_H.txt, the run
+scripts and times.txt).
+
 ## The align's start yaw: a yaw prior in the overlay's NDT (241, 2026-11-27; plan approved by 133, predictions before any run)
 
 **The user's decision (through 133, 2026-11-27):** fix the start yaw in our Autoware overlay.
