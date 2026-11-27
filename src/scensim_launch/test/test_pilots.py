@@ -153,6 +153,17 @@ def test_direct_localization_is_off_by_default_and_reaches_acb():
     assert "publish_direct_localization" not in passed
 
 
+def test_acb_gets_the_maps_projector_for_its_gnss_fix():
+    """Issue 195: acb makes the GNSS fix through the map's own projector (map_projector_path,
+    the map dir's map_projector_info.yaml), so gnss_poser gets the antenna back; without it acb
+    falls back to TransverseMercator at (0, 0), which only a CARLA town declares."""
+    args, root = xml_args("vehicle_side_carla.launch.xml")
+    default = args["map_projector_path"].get("default")
+    assert "$(var map_path)/map_projector_info.yaml" in default
+    passed = {a.get("name"): a.get("value") for a in root.find("include").findall("arg")}
+    assert passed["map_projector_path"] == "$(var map_projector_path)"
+
+
 def test_direct_localization_turns_the_profiles_ndt_off():
     """Issue 195: with direct_localization the scensim profile starts no pose estimator
     (ndt:=none); the EKF fuses the vehicle side's truth on the estimator's topic."""
