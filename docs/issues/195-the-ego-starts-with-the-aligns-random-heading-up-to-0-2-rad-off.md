@@ -911,3 +911,21 @@ counts only when it exceeds the larger of the two maps' spreads.
 
 *Order.* F first (it is the shortest check that L2 works); then T170, T6b, S and H on GPU0; TW on
 GPU1 in parallel. Results are committed here, tables first, before the reading.
+
+*Amendment (133, before any H run): H on the old and a rebuilt Haruna.* Issue 198's survey found
+72.0 % of the published Haruna's road cells terrain-only, a median 0.131 m below the road; that
+is the map 172's two modes ran on. 241 rebuilds Haruna locally with siw 9bfd1b10, kept on the NAS
+and not uploaded; its sha256 and builder go in each run's record as for the fixtures. H becomes
+two arms under `burn.py`, at least 4 runs each, interleaved: the published map (combined
+sha256 a54e0a3b) and the rebuilt one.
+
+*Prediction P10b (replacing P10's count).* The behind mode survives the rebuild: at least 2 of 4
+runs behind on each map (step 5's rate, 6 of 9, gives 0 of 4 with probability about 1 %). The
+reason: the mode appears with CPU contention and not without it (step 5: 0 of 9 quiet on the
+same build and map), which points to timing at the first motion, and the map is the same in
+both of step 5's arms. A geometric note, not a prediction: a behind run's NDT z is 6 to 7 mm
+higher than a level run's: 0.086 m back up a grade of 7 to 8 % gives that, so if the course's
+grade at cruise is near it (read from the truth trace in H), the two modes sit on one surface,
+not on two. If the rebuilt arm has 0 behind in 4 or
+more while the published arm keeps its rate, the second minimum was the map's, and 172 moves to
+198.
