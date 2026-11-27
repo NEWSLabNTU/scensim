@@ -2435,6 +2435,44 @@ commit).**
 **Not in K11f**: the GPU device path beyond the torch code being device-agnostic (a live GPU
 run later, assigned by 133); `scensim bench`; the export's format.
 
+### K11f's result (2026-11-27, 241): checks 1 to 6 held; check 5's half-time prediction met only against the old code
+
+- **Checks 1, 2 and 4 (tests):** `test_score.py` (the signed distance on 10^4 random box pairs
+  and hand cases within 1e-12 m; ties, an episode closed mid-run, a slot reopened, random
+  trajectories against `closest()` on the export; search_run without the export against it, the
+  sloped score too; the fail-stop's message) and `test_pointmass.py`, 20 of 20. The random
+  trajectories found issue 199 (a reopened slot's export overwrote its last episode), fixed in
+  this landing before the K11f code.
+- **Check 3 (the saved exports, at 30ee8bf4):** the score equal on every one of 52000 episodes,
+  exactly, against the prediction of about 1e-15 m (both paths compute in the same float64
+  order on CPU); failed, contact, error, the closest entity and frame and sim_time identical on
+  every one. Local copies, one chunk of 100 episodes at a time, at nice 10:
+
+| Run | Episodes | Failures of the bar | max / p50 / p99 \|difference\| | Bytes read | Wall | Peak RSS |
+|---|---|---|---|---|---|---|
+| K11c (g0 to g19, fresh) | 21000 | 0 | 0 / 0 / 0 m | 9.74 GB | 772 s | 301 MB |
+| K11d (g0 to g19, fresh) | 21000 | 0 | 0 / 0 / 0 m | 9.68 GB | 871 s | 300 MB |
+| K11e (g0 to g8, fresh; margin_k 1.0) | 10000 | 0 | 0 / 0 / 0 m (closest_gap too) | 4.19 GB | 452 s | 294 MB |
+
+  Bytes read count both paths' reads. K11e has 10000 episodes (nine generations and the fresh
+  stage), not "about 9000".
+- **Check 4, the local part:** K11c g0's first 100 records with `--truth` on the v3 Town01
+  export: both paths agree, every difference 0, 4.5 s.
+- **Check 5 (at 5d5571e1; nice 10, load 18 to 22 on 24 cores):** K11c g0's 1000 records:
+
+| | Wall | Peak RSS | Written |
+|---|---|---|---|
+| scored in the batch, no export | 28.0 s | 271 MB | 276 KB |
+| `--truth` (the export, both scorings) | 41.5 s | 312 MB | 224 MB |
+
+  Equal: the `--truth` run's comparison held and the two runs' outcomes are identical. Against
+  the same code's export path the batch saves **32 %** of the time (28.0 against 41.5 s), not
+  half: the prediction "under half of 857 s" holds only against 7f436b99's number, most of
+  whose time has since left the export path. Under 1 MB written: held (276 KB, against 224 MB a
+  generation). The drift from the saved g0, with no bar: every slot 3.3e-5 to 2.250e-3 m (p50
+  2.249e-3), the same 17 slots failing.
+- **Check 6:** `just gate` passed with the Isaac lane (1000 tests), at 5d5571e1.
+
 ## K13's plan: the vehicle behaviour model (2026-11-25, 241; approved by 133 the same day, before any code)
 
 The design is [vehicle-behaviour-model.md](../design/vehicle-behaviour-model.md): the
