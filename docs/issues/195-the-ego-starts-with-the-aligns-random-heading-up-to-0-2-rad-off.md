@@ -1034,3 +1034,62 @@ a pose-free start fails when the host is slow, so it is recorded here.
   (I changed the testbench while its stack started) and is void with no finding.
 - The rerun logs each run's load average at its start and its align duration. No build of
   mine runs on the host during it.
+
+## L1b's checks, and L1c and L1d: plan and predictions (243, 2026-11-27, before any code)
+
+*L1b is on main* (2c83fa71: asv 5a9131f, acb fafd5c3, aib 94ff923, siw 71a6ede). Its checks:
+
+- CARLA Town01 (241, TW runs 1 and 2 at 2c83fa71, `2026-11-27T16-38-28` and `16-41-37`): the
+  start within 0.053 and 0.038 m of the truth (Q2 holds), yaw +0.0011 and +0.0008 rad. Align 27.3 s
+  at a load of 51 on 24 cores (an earlier run at load 71 took 73 s and outlasted the agent's 60 s
+  wait: void, kept).
+- Isaac (118, main 0e34220e, `Q_*` runs; fixture_c170 B and fixture_c6b rebuilt): the standing GNSS
+  pose from its second fix on within 0.0103 rad (median 0.0023) and 0.078 m (median 0.023) of the
+  truth: Q1 holds there. No offset: mean dx and dy within 2 mm.
+- Q1 fails, as worded, on every stack's first GNSS pose: its yaw is the mount's (identity
+  orientation: dyaw -3.105 rad on Town01 facing pi, +0.0364 on Isaac facing 0), 1.685 m off on
+  Town01. gnss_poser's first fix met no orientation. In TW run 2 the fix and the orientation
+  arrived together, the orientation first in the record, and the first pose was still the
+  identity's: publishing order alone does not cover it. Neither run's initializer used that pose
+  (its call came 1.5 to 1.8 s, 14 to 15 poses, later); one 0.1 s window cannot be ruled out.
+- Q2 fails on both Isaac straights: `/initialpose3d` 1.617 m from the truth on fixture_c170 B, 0.606
+  m on fixture_c6b, though the GNSS poses around it were within 0.05 m. pose_initializer samples
+  the align's particles from `gnss_particle_covariance`, Autoware's 1.0 m^2 in x and y (an ordinary
+  receiver's), and on a straight NDT's score is flat along the road, so a particle 1.6 m ahead can
+  win. Town01's structure pins it.
+- On CARLA every GNSS pose sits about 0.82 m to the right of base_link (across -0.818 m, along
+  -0.07; before L1b -0.843), and not on Isaac. A forward lever arm cannot make a sideways error;
+  241 is locating it in acb (the map-frame error, the raw antenna against the truth's, the GNSS
+  sensor's transform against the actor's, a start at another heading). Today's 1 m^2 particle
+  spread absorbs it.
+- S (a start, then 120 s standing without a route) cannot run: SSv2 does not run an ego without a
+  route ("waited for the Autoware state to transition to PLANNING ... WAITING_FOR_ROUTE"). S is
+  dropped (133); the standstill comes from T's 120 s holds and their stand before the first motion.
+
+*L1c (118, aib and acb).* Each frame the orientation goes out before the fix, both with one
+stamp, and no NavSatFix is published until the orientation has gone out for at least two GNSS
+periods, so gnss_poser has a heading before its first fix whatever the delivery order. Tests
+first; the commit states what gnss_poser 0.48.0 does with a fix that arrives before any
+orientation.
+
+*acb's offset (241).* Fixed where it is found, test first.
+
+*L1d (243, asv and scensim).* pose_initializer's GNSS particle spread follows the receiver, as a
+car with an RTK receiver is configured: the x and y variance (3 horizontal_stddev_m)^2, at least
+0.01 m^2 (0.01 for the 2 cm default); z, roll, pitch and yaw as now (the align samples yaw over the
+circle). The profile's `pose_initializer.param.yaml` takes the default; scensim writes the stack's
+own copy when a project's `gnss_noise_horizontal_stddev_m` gives another, and passes its path.
+
+*The landing.* L1c, acb's offset fix and L1d in one scensim pin, gated with the Isaac lane: L1d
+must not land without the offset fix, since a 0.1 m spread cannot absorb a 0.82 m error and every
+CARLA start would then align from the wrong place.
+
+*Predictions (one CARLA Town01 start and both Isaac straights, two starts each, after the
+landing; then L3's T and H).*
+- C1: every stack's first GNSS pose within 0.012 rad and 0.05 m of the truth, on both simulators.
+- C2: on CARLA the standing GNSS pose's mean across within 0.05 m of zero.
+- C3: `/initialpose3d` within 0.15 m of the truth on fixture_c170 B, fixture_c6b rebuilt and Town01,
+  in every start; its yaw as P1 (the align's: under 0.02 rad on fixture_c170, 0.02 to 0.08 on
+  fixture_c6b, under 0.01 on Town01).
+- C4: the align's duration no longer than before at the same load (fewer particles land far off;
+  the particle count is unchanged).
