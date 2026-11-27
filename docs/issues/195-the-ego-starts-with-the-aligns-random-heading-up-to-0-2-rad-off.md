@@ -1013,3 +1013,24 @@ issue 195 L3 TW (241)/pre-L1b sample/`.
   the drive, is 0.645 to 0.646.
 - (b), POST HOC (chosen after run 1, not a prediction result): the max |offset| from 20 m to
   6 m before the goal is 0.053 to 0.056 m.
+
+## A finding from a void TW run: under heavy load the pose-free align outlasts the agent's wait (241, 2026-11-27)
+
+The first TW run at L1b's main (2c83fa71; `2026-11-27T16-11-25_town01_ego_drive_r0`) is void and
+not counted: the host was loaded by my own builds besides other users' jobs. It still shows how
+a pose-free start fails when the host is slow, so it is recorded here.
+- The load average, read at 16:14:21, just after the align, was 71.5 (1 min) and 74.3 (5 min)
+  on 24 cores; at 16:16:31 it was 201 (1 min). The run's start was not sampled.
+- Autoware's own initialization (the automatic initializer) called the align server at 16:11:42
+  and got its success at 16:12:55: **73 s**. The five pre-L1b runs, at a normal load, took 13
+  to 18 s from the agent's reset to "initialized" (13.2, 14.1, 17.2, 17.5, 16.5 s).
+- The agent waits out an initialization it did not start for at most `align_wait`, 60 s by
+  default (`scensim_agent/adapters/autoware.py`, an agent_config key, agent-sdk.md). It gave up
+  at 60 s, 13 s before the align finished, and the run ended "its reset failed: localization
+  stayed INITIALIZING 60 s in an initialization the agent did not start".
+- Since pose-free starts now depend on the align finishing, `align_wait` bounds how slow a host
+  may be. It is already a config key; whether its default should scale (with the particle
+  count, or a measured align time) is for 243's L-batch reading. Run 2 was refused at its start
+  (I changed the testbench while its stack started) and is void with no finding.
+- The rerun logs each run's load average at its start and its align duration. No build of
+  mine runs on the host during it.
