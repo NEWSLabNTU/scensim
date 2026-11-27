@@ -821,3 +821,93 @@ The across error and the height belong with issue 198's maps: L3 on the rebuilt 
 this baseline on the old ones, separates them. The standstill wander is the matcher's own on a
 featureless straight; the rebuilt maps and L2 may narrow it, and the EKF gate's rejections
 show the EKF already distrusts it.
+
+## L3: the campaign, plan and predictions (243, 2026-11-27, before any run)
+
+L1 (b42c39f9: the pose-free initialization, GNSS on, the direct-localization option) and L2
+(b1700191: aib dda18ad, a scan stamped at its render pose) are on main. Issue 198's maps are
+rebuilt offline by 241 from its unlanded fix (siw 9bfd1b10). Every run records its map's
+`pointcloud_map.pcd` sha256 and the code that built it.
+
+*The maps.*
+
+| map | sha256 | built by | road 0.2 m cells with a point | points over 2 cm below the road |
+|---|---|---|---|---|
+| fixture_c170 A (old) | 9cc1a29fb03167e44c3856ca38ee832be6af1826d390d5faff934f865affb713 | siw before 198 | 75.9 % | 65730 |
+| fixture_c170 B (rebuilt) | 2658430d99c29a0eba325801421b57c064adbacc3b6e1a701dc4f227bf747538 | siw 9bfd1b10 (unlanded) | 47.0 % | 0 |
+| fixture_c170 C (dense) | 47b8feb466f012537a7b43a11b78e4093c807d5c28f30ea62cf8cdc221495ca0 | siw 9bfd1b10 with the ribbon's step 0.1 m (local, on no branch) | 98.2 % | 0 |
+| fixture_c6b old | 32bab6cc1a3ddccada85c3a897cb864e8b6cc762e82b9144342e1c69bab4e0f7 | siw before 198 | | |
+| fixture_c6b rebuilt | aea7dc9d9fbc63f16940573c8b356aa716b99293e4305b0233a11198d2eba1e5 | siw 9bfd1b10 (unlanded) | | |
+
+The rebuilt maps and C are on the NAS (`home/2026-11-27 issue 198 rebuilt fixture maps (241)/`,
+with SHA256SUMS). Only `pointcloud_map.pcd` differs between a map's versions. B against C
+changes the road's density alone; A against C changes the road's height alone.
+
+*The runs.* 118's GPU0 for Isaac, from b1700191 (built 14:10 from a clean environment, aib
+dda18ad in the world server's tree); 241's GPU1 for CARLA. A fresh stack for each run, the
+default pilot (no direct localization), the NDT trace's topic list recorded in each.
+
+| set | scenario and map | runs | what it measures |
+|---|---|---|---|
+| T170 | fixture_c170_down_hold on A, B and C, the hold at the goal 120 s | 2 per map, 6 | the drive and the stand; the start |
+| T6b | fixture_c6b_r181 on old and rebuilt | 2 per map, 4 | the drive, the stop before the boulder and the stand; the start |
+| S | the start and 120 s standing, no drive: fixture_c170 on B, fixture_c6b rebuilt | 2 and 4 | the start; the standstill before any motion |
+| TW | CARLA town01_ego_drive | 8 | the start and the first 100 m on CARLA |
+| H | haruna_down (the published map, not rebuilt) under `burn.py` (172's step 5 load) | 8 | 172's behind mode |
+| F | 196's targets scenario with `face196.py` at 40, 60 and 120 Hz | 3 | the stamp's lag |
+
+So eight pose-free starts per map: fixture_c170 6 + 2, fixture_c6b 4 + 4, Town01 8. 27 Isaac runs
+and 8 CARLA runs.
+
+*Readings.* As the baseline's (above): per scan, NDT's result less the truth in yaw, along,
+across and z; NVTL, transform probability and iterations; the EKF's yaw bias and its
+Mahalanobis gate. Each split into standing and moving, and the drive's along against speed.
+Added: at the start, the initialized pose less the truth (yaw and position) and the calls it
+took; over the first 100 m driven, the truth's distance from the lane's centreline and NDT's yaw
+error. The noise between maps is the spread between a map's two runs; a difference between maps
+counts only when it exceeds the larger of the two maps' spreads.
+
+*Predictions.*
+- P1, the starts. Every start initializes from GNSS without a scenario pose, on the first call in
+  at least 7 of 8 per map; none ends the run. The initialized pose's position is within 0.15 m
+  of the truth. Its yaw error is the align's: fixture_c6b median 0.02 to 0.08 rad (the draws'
+  spread, up to 0.14); fixture_c170 under 0.02 rad; Town01 under 0.01 rad in all 8.
+- P2, the first 100 m. NDT's yaw error falls below 0.01 rad within the first 100 m on every
+  Isaac run. On fixture_c6b the largest distance of the truth from the lane's centreline in the
+  first 100 m follows the start's |yaw| error (Spearman rho above 0.6 over its 8 starts); on
+  Town01 it stays under 0.2 m.
+- P3, the along against speed (L2). From 4 m/s up, the drive's median along error is within
+  0.05 m of zero on both maps (tau under 5 ms; the baseline 27 to 36 ms), on A, B and C alike.
+  The baseline's N2 (47 to 58 ms) was a second, unexplained lag; if it recurs, a run reads about
+  -0.1 to -0.2 m at 11 m/s, recorded as such.
+- P4, 196's faces (F). tau under 2 ms at 40, 60 and 120 Hz (the baseline 25.6 to 42.7 ms).
+- P5, the across (170). fixture_c170's drive median across stays +0.10 to +0.25 m on A, B and C
+  alike, within the maps' noise of each other: 198's survey found no left-right asymmetry, and
+  the road is straight, where the stamp acts along. 170 stays open.
+- P6, the height. NDT's z error, constant per run on the baseline (-0.012 c170, -0.024 c6b),
+  is within 0.005 m of zero on B, C and the rebuilt fixture_c6b, and repeats on A and the old
+  fixture_c6b.
+- P7, density (B against C, 133's question). NVTL, transform probability, iterations and the
+  four errors, standing and moving, agree between B and C within the maps' noise. If C's NVTL
+  is higher beyond the noise and its errors are no worse, C wins; if C's errors are lower beyond
+  the noise in both runs, the densifying goes into 198 before the published maps are rebuilt.
+- P8, the standstill (182, and 133's ask). Over 120 s stopped, NDT's along still wanders: peak to
+  peak 0.2 to 0.8 m on every map, A, B and C alike within noise, through per-scan jumps of a few
+  cm of both signs. The stamp does not act on a car standing still, and on a straight the along
+  direction is held only by what lies beside the road. The S runs (no motion before the stand)
+  wander less than the T runs' stands, with fewer gate rejections (the baseline had none before
+  the first motion).
+- P9, the drive's NVTL is no lower than the baseline's on the same map (A, old fixture_c6b): a
+  scan is no longer matched against a pose 34 ms off.
+- P10, Haruna (172). 172 holds that every run starts motion with the EKF 20 to 34 ms late and
+  that a behind run keeps it, which looks like L2's lag at 60 Hz ((n - 1) dt, 33 ms). But 172's
+  level runs read +0.002 to +0.007 m along at cruise, where the baseline's fixture_c170 runs read
+  -v x 33 ms: Haruna's runs did not carry the stamp lag as fixture_c170's did, and why is not
+  known (the rig's point format, `xyzirc` or `xyzircaedt`, which L2 leaves alone, is recorded in
+  each H run). So the prediction: L2 moves neither mode; under `burn.py` at least 3 of 8 runs are
+  behind (along at cruise about -0.086 m; step 5: 6 of 9) and the rest level. If 0 of 8 are
+  behind, L2 acts on 172 by a route this does not explain, and that is the reading's first
+  question.
+
+*Order.* F first (it is the shortest check that L2 works); then T170, T6b, S and H on GPU0; TW on
+GPU1 in parallel. Results are committed here, tables first, before the reading.
