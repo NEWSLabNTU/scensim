@@ -406,3 +406,90 @@ start's tries are not independent), each with:
 - NVTL and the initializer's reliability flag, to see whether Autoware can tell a bad start;
 - the runs' outcomes (contacts, lane departure on c6b at B2's place).
 Predictions go in this issue before the runs, as above.
+
+## The user's answers, and the code plan (243, 2026-11-27, before any code)
+
+The user's answers, through 133:
+1. A7 and A8 become one opt-in *direct localization* that passes the truth pose to any autopilot
+   (not only Autoware), for debugging, not for evaluation, off by default; a run that uses it is
+   marked a debug run in its result so it cannot pass as an evaluation. A6 is retired (or folded
+   into that option).
+2. A9: GNSS noise, RTK-like, 2 cm by default, configurable per project.
+3. acb's `ground_truth_objects` stays an opt-in tool; the rule covers the pose only.
+
+The work is split: 118 takes A9 in sim_vehicle_spec, aib and acb (its own section below, with
+its predictions); 243 takes the agent, the relay, the launches, the direct-localization option
+and 197.
+
+### Decisions
+
+*Direct localization, one meaning in both simulators.* The vehicle side publishes the truth's
+base_link pose as `PoseWithCovarianceStamped` on the pose estimator's output topic
+(`/localization/pose_estimator/pose_with_covariance`), as aib's `ground_truth.pose_estimate`
+already does, and the autopilot's own estimator is not started. For Autoware (the scensim
+profile): `ndt:=none`, so tier4_localization starts no pose estimator, the pose initializer runs
+with `ndt_enabled` false (a pose-free initialize puts the EKF at the GNSS pose), and the EKF
+fuses the truth from then on. Every other part of the stack runs as in an evaluation. Any other
+autopilot reads the same topic. acb's `publish_direct_localization` (the truth straight to
+`/localization/kinematic_state` and `/tf`, the EKF bypassed) is the other meaning; it is
+replaced by acb's `truth_pose_estimate` (the aib behaviour), and the old parameter is refused by
+name. A6 (`seed_localization_on_attach`) is retired, not folded: with the estimator off there is
+nothing for it to seed.
+
+*The option.* A pilot key, `direct_localization: true` (default false), on the pilot that has
+the vehicle side. scensim turns it into aib's `ground_truth: {pose_estimate: true}` in the Isaac
+ego config, or acb's `truth_pose_estimate:=true`, and for an `autoware` pilot into
+`ndt:=none`. An `autoware` pilot on the stock profile is refused with it (no `ndt` argument
+there).
+
+*The debug mark.* A run of a stack with any debug option carries `"debug":
+["direct_localization"]` in `result.json` (`swb.result/1`, an optional list, validated). Its
+verdict is judged as any run's, but it never counts as an evaluation: the run's line reads
+`passed [debug: direct_localization]`, and its exit code is 4 (`EXIT_DEBUG`, new, above
+refused) whatever the verdict, so a suite, a gate or a script that takes exit 0 as a pass
+cannot take a debug run as one; `scensim runs` shows the mark. The bridges also log a WARN at
+start while it is on.
+
+*A pose-free reset (the agent).* `/api/localization/initialize` without a pose (AUTO): the
+pose initializer takes the GNSS pose. The reset's pose stays in the agent protocol (other
+agents, a simple pilot, may use it), so the relay does not change; the Autoware adapter stops
+forwarding it. The adapter accepts an initialization on Autoware's evidence alone: the state
+INITIALIZED, an estimate newer than the call, then the existing verify window on NVTL. It never
+compares the estimate with the reset pose to decide; it logs that comparison once per reset, as
+a judge would. The retry on a refused call (the car not yet stopped 3 s, no GNSS within 3 s)
+stays (`initialize_retry`, `initialize_attempts`).
+
+*Issue 046's collision.* With `gnss_enabled` true the automatic initializer runs once at stack
+start. A reset that finds the localization state INITIALIZING waits for it to leave that state
+(bounded by `align_wait`) before calling, so its call is the last one and comes after SSv2 has
+placed the car; a concealer retry while the reset runs joins it, as today.
+
+*GNSS for relay egos.* `pilots/autoware.launch.xml` stops setting `gnss_enabled` false for
+relay egos (the argument stays, default true).
+
+*118's GNSS keys, per project.* The pilot's `args` carry `gnss_noise_*` (118's names); scensim
+routes them to acb's parameters on CARLA (`pilots/vehicle_side_carla.launch.xml`) and to the
+Isaac ego config's GNSS block on Isaac, and passes the stack's seed when none is given, so a
+scensim run reproduces.
+
+### Order (test-first; each landing gated, 133 asked before each push)
+
+1. 118: sim_vehicle_spec's GNSS noise field; aib's and acb's noise; acb's A6 retirement. Each
+   on its own main.
+2. 243, acb (on 118's acb): `truth_pose_estimate` replaces `publish_direct_localization`,
+   refused by name; tests first (the pose message, the frame, the WARN, the refusal).
+3. 243, scensim, one landing:
+   - the agent's pose-free reset, its acceptance on Autoware's evidence, the wait for an
+     initialization in progress (fake_autoware tests first: no pose in the request; an estimate
+     far from the reset pose accepted; an INITIALIZING state waited out; a refused call
+     retried);
+   - 197's two commits (f7de9207, 660c81eb), rebased;
+   - the launches: `gnss_enabled` for relay egos; `vehicle_side_carla`'s seed argument dropped
+     and refused by name; the `gnss_noise_*` and `truth_pose_estimate` pass-through;
+   - scensim: `direct_localization` (config validation, the stack's mapping per simulator,
+     the stock-profile refusal), the debug mark (result field, line, exit 4, `runs`), the GNSS
+     keys' routing and seed; tests first for each;
+   - docs: projects-and-pilots (the option, the mark, the GNSS keys), vehicle-side;
+   - pins: sim_vehicle_spec, aib, acb by `land_pin`, with the components' deps.
+4. The measurement: eight fresh-stack starts per map (fixture_c6b, fixture_c170 on Isaac;
+   Town01 on CARLA), predictions committed here first, as (4) above.
