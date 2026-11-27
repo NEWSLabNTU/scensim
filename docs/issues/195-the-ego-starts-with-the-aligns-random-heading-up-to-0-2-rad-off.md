@@ -1210,3 +1210,58 @@ dyaw -0.071, the best particle within 0.01 rad 0.006 to 0.016 below each winner)
 - (ii) the automatic initializer off for a managed ego, the agent alone initializing from GNSS:
   pose_initializer's `gnss_enabled` without automatic_pose_initializer, a profile split of two
   switches the stock launch ties together.
+
+## L3's T set on L2r: results (118's runs at scensim 23b65448, 2026-11-27; tables by 243)
+
+*T170*:
+- Runs: fixture_c170_down_hold120 on maps A, B and C, 2 each, interleaved, a fresh stack each.
+- When and where: 22:24 to 22:50 on 118's GPU0. The host's 1-minute load was 18 to 63, from
+  139's P4 runs on GPU1 and another user's compile.
+- Outcome: all 6 passed.
+- The scored start is the agent's last `/initialpose3d` (issue 195's two aligns).
+
+| run | map | start pos / yaw | along slope | moving along | 100 m spread | across | z | hold along p2p | NVTL | aligns (s) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| A1 | A | 0.146 / +0.0018 | +0.00 % | -0.536 | 0.153 | +0.213 | -0.0113 | 0.592 | 3.354 | 5.1 + 7.6 |
+| B1 | B | 0.098 / -0.0092 | +0.02 % | -0.398 | 0.184 | +0.022 | -0.0005 | 0.595 | 3.351 | 1.7 + 1.6 |
+| C1 | C | 0.020 / +0.0042 | +0.01 % | -0.365 | 0.141 | +0.029 | +0.0001 | 0.588 | 3.351 | 1.3 + 1.3 |
+| A2 | A | 0.284 / +0.0030 | -0.03 % | -0.391 | 0.198 | +0.130 | -0.0113 | 0.801 | 3.355 | 1.2 + 1.3 |
+| B2 | B | 0.079 / +0.0065 | +0.01 % | -0.268 | 0.136 | +0.023 | -0.0005 | 0.451 | 3.353 | 1.6 + 1.2 |
+| C2 | C | 0.158 / -0.0093 | -0.00 % | -0.303 | 0.116 | +0.025 | +0.0001 | 0.728 | 3.349 | 1.6 + 1.8 |
+
+*T6b*:
+- Runs: fixture_c6b_r181 on the old map (32bab6cc) and the rebuilt map (aea7dc9d), 2 each,
+  interleaved.
+- When and where: 22:52 to 23:07, after the testbench was rebuilt over 23b65448.
+- Outcome: all 4 end at the scenario's 150 s timeout, as before.
+
+| run | start pos / yaw | moving along | across | z | hold along p2p | NVTL | aligns (s) | contact |
+|---|---|---|---|---|---|---|---|---|
+| old1 | 0.216 / +0.047 | -0.357 | +0.217 | -0.0238 | 0.681 | 3.303 | 1.1 + 1.1 | none |
+| rb1 | 0.114 / +0.0036 | -0.088 | +0.114 | -0.0086 | 0.882 | 3.316 | 1.2 + 1.3 | the boulder |
+| old2 | 0.196 / -0.0155 | -0.132 | -0.223 | -0.0241 | 0.854 | 3.302 | 1.1 + 1.2 | none |
+| rb2 | 0.124 / -0.022 | -0.392 | -0.235 | -0.0081 | 0.836 | 3.319 | 1.5 + 1.5 | the boulder |
+
+The ego struck the boulder on the rebuilt map in both runs, and on the old map in neither. The
+cause is read in issue 180 ("The r181 boulder on the rebuilt map: the stop releases"). Both maps
+stop for it at the same place. On the rebuilt map the compare-map filter leaves it too few
+points to hold the stop. The rebuilt maps' upload is held on it.
+
+*Against the predictions*:
+- C1 holds: the first GNSS pose is 0.030 / 0.029 m in all 10.
+- C3's position: 4 of 6 on c170 and 2 of 4 on c6b are within 0.15 m (misses 0.284, 0.158,
+  0.216, 0.196).
+- P1's yaw holds on c170 (at most 0.0093 rad). On c6b the median is 0.019 rad, just better than
+  the predicted 0.02 to 0.08.
+- C4: aligns of 1.1 to 1.8 s, except A1's 5.1 and 7.6 s under a load of 63.
+- P3 does not apply: L2 is reverted. The along sits at the old lag (c170 median about -0.37 m).
+- No run drifts: the along slope is at most 0.03 % on c170. c6b's 60 m drive is too short for
+  a slope.
+- P5 fails, a prediction error. The across depends on the map: A reads +0.13 to +0.21 m, B and
+  C +0.02 to +0.03 m. A is the old map, with points under the road.
+- P6 holds on c170 (B and C within 0.0005 of zero, A repeats -0.0113). It fails on c6b's
+  rebuilt map: -0.008, against the old map's -0.024.
+- P7: B and C agree within the runs' spread on NVTL, along, across and z. C's better starts are
+  the align's draw. The denser ribbon buys nothing measurable on c170.
+- P8 holds on c170 (0.45 to 0.80). On c6b it exceeds 0.8 in 3 of 4 (to 0.88): the range was too
+  tight.

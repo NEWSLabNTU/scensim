@@ -670,3 +670,83 @@ and the truth trace.
   `/localization/kinematic_state` and the map files).
 - P8: live, the node's processing time stays under 30 ms at p95, and it reports a status for at
   least 99 % of the raw clouds.
+
+## The r181 boulder on the rebuilt map: the stop releases (243, 2026-11-27; from L3 T6b's records, no runs)
+
+*What L3 T6b found* (issue 195; 118's runs at scensim 23b65448, fixture_c6b_r181, 2 runs on the
+old map 32bab6cc and 2 on the rebuilt map aea7dc9d, `lane_height_check` off): the ego struck
+the 35 cm boulder at s 400 (`/World/RoadRocks/s_25_0_1588`) in both rebuilt runs (first contact
+at sim 1050.25 and 1048.2, max impulse 3533 and 3636) and in neither old run.
+
+*What the records hold.* Localization topics only: no perception or planning topic and no raw
+cloud. So no stage can be read, and an offline replay through the chain is not possible. Read
+here: the truth trace, the contacts, and the ego's launch log, whose euclidean_cluster "Empty
+sensor points!" (throttled to 1 Hz) and KdTree "empty input cloud" lines mark an empty obstacle
+cloud.
+
+*What happens* (the truth trace):
+
+| run | first stop, base_link x | its deceleration | after the stop | the obstacle cloud empty from | contact |
+|---|---|---|---|---|---|
+| old1 | 391.6 at sim 1026.2 | -5.9 m/s^2 | holds 125 s | never after the stop | none |
+| old2 | 392.0 at sim 1026.3 | -5.8 m/s^2 | holds 125 s | never after the stop | none |
+| rb1 | 392.1 at sim 1027.0 | -8.0 m/s^2 | creeps to x 394.9 by sim 1048 | sim about 1048.5, x 394.9 | sim 1050.25, x 396.9 |
+| rb2 | 392.0 at sim 1026.6 | -6.1 m/s^2 | creeps to x 394.5 by sim 1044 | sim about 1044.1, x 394.5 | sim 1048.2, x 396.9 |
+
+The decelerations are the truth's largest per frame (50 ms). The empty-cloud times are wall times mapped to sim time by each run's real-time factor (0.93 to
+0.95), within about 1 s.
+- Both maps detect the boulder at range and stop for it at the same place, with issue 190's
+  emergency stop: base_link about 8 m from the boulder, outside issue 182's 4.9 m blind zone.
+- On the rebuilt map the stop does not hold:
+  - the car creeps forward in steps of 0.2 to 1 m/s while the obstacle cloud is still not
+    empty;
+  - at 5.1 to 5.5 m from the boulder, the blind zone's edge, the cloud goes empty for good;
+  - within 1 to 4 s the car speeds up to 1.8 m/s, strikes the boulder and rests on it.
+- Localization does not explain it: the rebuilt runs have the better start, z (-0.008 against
+  -0.024) and NVTL.
+
+*Why (an inference from the filter's rule and the geometry, not a reading).* The compare-map
+filter drops a point when a map point lies within |dz| < 0.3 m (step 1 above; 181 step 3).
+- On the old map the road's points sat about 0.13 m under the surface (issue 198). The band
+  ended about 0.17 m above the road, so the boulder kept 0.17 to 0.35 m, about half its height.
+- On the rebuilt map the road is at its true height. The band ends at 0.30 m, and the boulder
+  keeps only its top 5 cm, about a seventh.
+- With that few points, the object falls under the validator's count (UNKNOWN 5, issue 181) in
+  some frames. obstacle_stop keeps a lost obstacle for only 1.0 s (182), so the stop releases.
+  The car creeps until the blind zone hides the boulder, then drives on.
+
+So 198's fix is right, and it unmasks this issue: the old map's low road had been letting the
+boulder through the compare-map filter.
+
+*Map or noise.*
+- The first stops are identical, so it is not detection's draw.
+- The hold differs in the direction the band predicts.
+- On the old map every hold since issue 190's stop held: these 2 runs plus every run of 182's
+  steps 2b and 2c, at least 8. Against 0 of 2 on the rebuilt map, Fisher's p is about 0.02.
+  The 2/0 split alone would give p 0.33.
+
+*For I2 (an expectation, not shown; it was off in these runs).* By its rule, on the rebuilt map
+the boulder stands above the highest map point within 0.5 m by up to 0.35 m. Its points from
+0.098 to 0.35 m pass, about three quarters of its height against the compare-map filter's
+seventh. So I2 would likely hold the stop at 8 m. Neither I2 nor any filter can help inside the
+blind zone: the stop has to hold at range.
+
+*A second remedy the rebuilt map makes possible: a compare-map dz of 0.1 m.*
+- It would keep the boulder's top 0.25 m.
+- It was unsafe on the old map, whose road sat 0.13 m under the surface.
+- The risk is the false side (241). The rebuilt road is sparse: on Haruna only 46.5 % of the
+  ribbon's 0.2 m cells hold a point within 0.05 m of the road. The nearest-voxel test may then
+  keep road points as obstacles, and the car would stop for nothing.
+
+*A separate question, for later (133).* The stop releases and the car creeps while some of the
+boulder's points remain: obstacle_stop's hold, not detection. It is noted here, not taken up.
+
+*Next* (133's order): issue 195's H first, on 118. Then step B is extended to the r181 boulder
+on the rebuilt map. It runs three arms of 4 runs each:
+- I2 on;
+- compare-map dz 0.1;
+- neither (the control).
+The records add no_ground, the compare-map output, obstacle_stop's input, the objects and the
+planning factors, so the stage where the boulder's points drop is measured, not inferred. The
+brief and its predictions go in before the runs. The rebuilt maps' upload is held until a fix
+holds the stop on the rebuilt map.
