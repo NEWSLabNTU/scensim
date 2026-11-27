@@ -305,3 +305,111 @@ One more prediction, before the run:
    under 0.20 m. The outlier filter removes at least 80 % of those points. So of the two, the
    outlier filter does most of the dropping. If this holds, the grid's "outlier filter off"
    column matters as much as the thresholds.
+
+## Step 2's result: no setting of Autoware's chain makes the rock an object (241, 2026-11-27)
+
+**The run.** 118 ran `fixture_c6b_r180` once, at main bbaba522 (siw 542cfae), with the staged
+topics. NAS: `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 180 step 2 run (118)`.
+- It PASSED: reached x 112 at 23 s, with no contact.
+- The car passed the rock with its centre at y 1.21 to 1.26, so the rock (y 2.425) was 1.2 m to
+  its left and was not struck. The perception question does not depend on that.
+
+**The replay.**
+- Autoware 1.5.0's own CropBox, ScanGroundFilter and occupancy-grid outlier filter ran in a
+  component container, fed the recorded raw cloud at 0.1x through `ros2 bag play`.
+- 181's replay ran the rest: the downsampling, the compare-map filter by the EKF's pose, the
+  clustering and the validator.
+- At first the replay lost 20 to 26 % of its frames between the player and the crop box: 4 MB
+  clouds on Cyclone's default socket buffers. A scratch Cyclone profile with 64 MB receive
+  buffers lost none: 455 of 455 ground-filter frames, 340 of 340 after the outlier filter.
+- The scripts are on the NAS: `home/2026-11-27 issue 180 step 2 run (241)/replay/`.
+
+**The raw cloud sees the rock.** Placed by the truth's pose, it has points more than 0.05 m above
+the road in 109 of 144 frames from 30 m to the strike. That is up to 34 points a frame (at 5.9 m),
+and the highest at 0.148 m, the rock's top.
+
+**Each stage at the rock** (frames within 30 m of the bumper with at least one rock point more
+than 0.05 m high; the grid of 12 ground replays x 4 dz x 3 `min_cluster_size` x 2 validator, 288
+settings):
+
+| ground threshold g | the ground filter's own output | after the outlier filter (on) | outlier off, then compare-map dz 0.3 / 0.2 / 0.1 / 0.05 | validated / would-be final (any dz, mcs, V) |
+|---|---|---|---|---|
+| 0.20 (as run) | 0 of 163 | 0 | 0 / 0 / 0 / 0 | never / never |
+| 0.15 | 0 | 0 | 0 / 0 / 0 / 0 | never / never |
+| 0.12 | 7, at most 2 points | 0 | 0 / 1 / 7 / 7 (at most 1) | never / never |
+| 0.10 | 38, at most 15 | 0 | 0 / 1 / 37 / 38 (at most 5 to 6) | never / never |
+| 0.08 | 60, at most 20 | 0 | 0 / 1 / 53 / 60 (at most 5 to 7) | never / never |
+| 0.05 | 66, at most 27 | 0 | 0 / 1 / 53 / 66 (at most 5 to 9) | once, at 1.5 m (dz 0.05, mcs 5, V 3) / never |
+
+- **The ground filter** drops the rock at 0.15 m and above.
+- **The outlier filter** drops every rock point the ground filter keeps, at every threshold. A
+  15 cm rock never has the clamp(400/d, 4, 70) neighbours within 1 m, and its cell's occupancy
+  never reaches 45.
+- **The compare-map filter** drops what is left at dz 0.2 and above.
+- **The validator.** Even with both filters opened up, at most 5 to 9 rock points reach the
+  clustering. The validator keeps an object only with more than V points strictly inside its
+  hull, and for so few points nearly all are the hull's own vertices. So the rock is validated
+  once, at 1.5 m, in one setting of 288, and never becomes a would-be final object.
+- **False objects on the carriageway** (|y - 1.62| < 1.75, more than 1 m from the rock, in 3
+  consecutive frames): 0 in all 288 settings.
+- **Off the carriageway.** At g 0.12 and below with dz 0.1 and below, the shoulder's real loose
+  rocks (7 to 10 cm) become persistent objects in up to 161 of 163 frames.
+
+**A third option, outside Autoware's chain: a lane-only height-above-map check**
+(`hmap180.py`).
+- The rule: a raw point is an obstacle when it is on the carriageway, 1 to 30 m ahead, and more
+  than h above the highest map point within 0.5 m of it.
+- Points are placed by the EKF's pose, as a node in the stack would place them. Detections are
+  0.3 m cells with at least N points, and a would-be object is one in 3 consecutive frames.
+
+| h | N | rock first detected (bumper) | first would-be object (bumper) | false would-be objects on the carriageway |
+|---|---|---|---|---|
+| 0.05 | 3 | 14.7 m | 11.3 m | 92 % of frames |
+| 0.08 | 3 | 12.2 m | 9.1 m | 85 % |
+| 0.10 | 3 | 9.3 m | 8.8 m | 72 % |
+| 0.10 | 10 | 4.0 m | 3.6 m | 36 % |
+| **0.12** | **3** | **9.1 m** | **6.1 m** | **0 %** |
+| 0.12 | 5 | 4.3 m | 3.8 m | 0 % |
+
+The false objects at h 0.10 and below are a **map defect**, not the method's. At the spots that
+make them (x 77.5, 90.7 and 104.4 on the lane), the raw road is flat. But within 0.5 m there the
+map holds only points 0.10 to 0.13 m below the real road (z -0.160 against the road's -0.024
+to -0.059). Elsewhere it also has a layer near the true height: step 1 found the map's road band
+0.11 m thick. The EKF's height error is small and steady here (2.3 cm low, pitch and roll under
+0.0005 rad), so it is not the cause. On a map whose road is where the road is, h 0.08 would
+likely be clean. That is not measured.
+
+**Against the predictions.**
+1. The fidelity check held: 1.0000 at the median, p5 and minimum, on both stages and every frame.
+2. As run held: 0 rock points, no cluster.
+3. g 0.10 with dz 0.3: "at least 3 rock points in most frames within 20 m" FAILED, 8 of 96.
+   "Compare-map drops them all" held.
+4. FAILED. With mcs 3, no cluster is ever validated at 6 or 9 m, and no final object comes at
+   3 to 8 m. The validator's strictly-inside count, not the clustering, stops a 15 cm rock.
+   "No cluster beyond 3 m with mcs 10" held.
+5. Held: false objects on the carriageway 0 % (bar 2 %).
+6. FAILED both ways. The rock is never a final object at 0.05/0.05, and the carriageway is
+   clean (0 %, not over 10 %).
+7. FAILED. The shoulder rocks become objects from g 0.12 with dz 0.05, and broadly from 0.10,
+   not from 0.08.
+8. FAILED in its first half: at g 0.20 the ground filter keeps no rock point, so it alone
+   drops the rock as run. Its second half held: the outlier filter removes 100 % of what lower
+   thresholds keep.
+
+## The options for the user (241, 2026-11-27)
+
+The bars: a would-be object by 3 m from the bumper for an emergency stop (AEB at -6 m/s^2 from
+4.17 m/s), and by 7 m for a planned one.
+
+| option | the 15 cm rock | false objects | what it takes |
+|---|---|---|---|
+| 1. No change; document the limit | never an object; a car that meets one under the plate strikes it (b1 stopped dead, b2 and c1 scraped over) | none new | a note in the profile's docs: obstacles 0.14 to 0.20 m tall (here up to 0.15) under the car are not seen |
+| 2. Autoware's ground filter, outlier filter, compare-map, clustering and validator settings | never a final object in 288 settings; validated once, at 1.5 m | none on the carriageway; the shoulder's 7 to 10 cm loose rocks become persistent objects from g 0.12 / dz 0.1 down | profile parameters only, but it does not reach the rock, so not recommended |
+| 3. A lane-only height-above-map check, at h 0.12, N 3 | would-be object at 6.1 m (detected 9.1 m): meets the emergency bar, just short of the planned one | 0 % on the carriageway in this run | a new node in the profile (raw cloud, the map, the EKF pose, the lanelet map), with tests; one live run to confirm |
+| 3b. Option 3 after the map's low road layer is fixed | likely earlier (h 0.08 detected it at 12.2 m), not measured on a fixed map | the 85 % at h 0.08 here is the map's; on a fixed map, to be measured | the map rebuilt or cleaned first (its own issue), then option 3 |
+
+My recommendation:
+- Option 1 now, since it is the true state of the stack.
+- Option 3 as a planned change, with the map defect filed first. h 0.12 sits 3 cm under the
+  rock's height and leaves no margin for a 12 cm rock.
+- Option 2 does not reach the goal at any setting.
