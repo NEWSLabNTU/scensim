@@ -263,3 +263,36 @@ annotator's clock under the runner fits the same picture. The fix options above 
 about 0.8 ms left to explain. Logs: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 196 step 3
 (118)` (run dirs without the raw bags, face196's JSON and rows per run, provenance; the bags
 stay on 118, `runs_on_118.txt`).
+
+## The fix (batch L, L2): the scan stamped at the pose it was rendered from (243, 2026-11-27, a plan, before any code)
+
+Of the three options above, the first: aib stamps a scan with the time of the pose the render
+took, the frame's end less (n - 1) substeps, which step 3 showed exact at 40, 60 and 120 Hz.
+The second (one prim write a frame, at a predicted end pose) changes what the render sees and
+needs its own measurement; the third depends on the renderer. The first changes only the stamp.
+
+*The change, in aib's `Lidar` (`aib/isaac/sensors.py`).*
+- `before_substep` keeps the world clock at the end of the frame's first substep (the pose
+  written before it is the one the render takes).
+- `publish` records, for the frame just stepped, its stamp less the clock from that first
+  substep's end to the frame's end, `(n - 1) dt`: `ros.stamp(sim_time - (clock - first))`, in
+  place of the frame's end. A scan read `latency` frames later goes out with it, as now.
+- Motion distortion's reference (`t_ref`, the pose the revolution was rendered from) moves the
+  same `(n - 1) dt` back, so a point's correction starts from the pose the render used.
+- The per-point-time path (`point_times`, `xyzircaedt`) takes its stamp from the annotator's own
+  timestamps, which step 1 found one substep off aib's clock under the runner. It is left as it
+  is in L2 and named in L3's reading; the Tesla rig scensim runs publishes `xyzirc`, the path
+  changed here.
+- No setting keeps the old stamp: the old stamp was wrong (no shims).
+
+*Tests first (aib, its fake kit):* a frame of n substeps of dt stamps its scan at the frame's end
+less (n - 1) dt for n = 2, 3, 6; the first frame after a teleport (no last body) does the same;
+the stamp a scan goes out with is its render frame's, `latency` frames on; motion distortion's
+reference moves with it.
+
+*Predictions for L3* (after L1 and L2, the same targets scenario and `face196.py` as step 3):
+- tau from the faces under 2 ms at 40, 60 and 120 Hz (step 3's 0.5 to 1.1 ms residual may stay);
+- the drive's along error on fixture_c170 at 10 to 12 m/s within 0.05 m of zero (the baseline
+  N4: -0.39 m), on the rebuilt and the old map alike;
+- NDT's NVTL during the drive no lower than the baseline's (the stamp no longer pairs a scan
+  with a pose 34 ms off).
