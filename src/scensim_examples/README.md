@@ -50,6 +50,19 @@ Town02 scenario runs last; the project needs Town02 for it, and each other
 | --- | --- | --- |
 | `town01_two_av.xosc` | Town01 | The ego and `bg_av_1`, a second Autoware-driven vehicle (controller `agent`) 90 m ahead in the same lane; both reach their goals without colliding. Needs a pilot for `bg_av_1` beside the ego's, `bg_av_*: {kind: autoware}` in `testbench.yaml`, as the `multi_pilot` project has ([Tutorial 4, several pilots](../../docs/tutorials/04-several-pilots.md)). |
 
+## sampling/ -- sampling, search and coverage, on the CPU
+
+The files of [Tutorials 9 and 10](../../docs/tutorials/09-search-for-failures.md). They are
+read from a source checkout and are not installed. Tutorial 8 uses the sampler's own examples.
+
+| File | What it is |
+| --- | --- |
+| `cs1_walker_search.xosc` | CS1's walker behind a parked van, its decision draw declared as `accept_u` so that a search can move it |
+| `cs1_search.yaml` | the search: five variables on an invented base, N 200, seed 11 |
+| `straight_world.json` | a straight three-lane road as a batch map export, written by `make_straight_world.py` |
+| `join_outcomes.py` | pairs a search runner's outcomes with their records, for `scensim-sample coverage` |
+| `catalogue.yaml` | a study's categories and cell levels, for the coverage report |
+
 ## tutorial/ -- the worked example of the tutorials
 
 | Scenario | Town | What it checks |

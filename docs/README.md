@@ -54,6 +54,12 @@ first, Isaac Sim from tutorial 6.
    in USD, models in a scenario
 7. [Road physics](tutorials/07-road-physics.md): mud, gravel and a wet road, watching the
    wheels
+8. [Sample scenarios](tutorials/08-sample-scenarios.md): sample records from a parameter
+   distribution, seeds, importance weights; no simulator
+9. [Search for failures](tutorials/09-search-for-failures.md): an adaptive search for a
+   rare failure, run in a batch on the CPU
+10. [Coverage](tutorials/10-coverage.md): what a set of runs covered against a study's
+   catalogue
 
 ## How-to guides
 

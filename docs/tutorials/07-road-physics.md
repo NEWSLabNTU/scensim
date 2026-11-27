@@ -213,5 +213,6 @@ key, road-detail key and `RoadCondition` property.
 
 ## Next
 
+- [Tutorial 8: sample scenarios](08-sample-scenarios.md), which needs no simulator.
 - [Road physics on Isaac Sim](../reference/road-physics.md): every key.
 - [Your car](../how-to/your-car.md), to drive the same ground with a car of your own.

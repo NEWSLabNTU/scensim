@@ -147,8 +147,12 @@ student can paste.
 | 5 | [Suites](tutorials/05-suites.md) | a suite over a parameter grid with repetitions, and its `summary.csv` |
 | 6 | [Isaac Sim](tutorials/06-carla-assets-on-isaac.md) | the lab 2 scenario passing on Isaac Sim, unchanged |
 | 7 | [Road physics](tutorials/07-road-physics.md) | a ground that makes the car stall, shown on `/scensim/wheels` |
+| 8 | [Sample scenarios](tutorials/08-sample-scenarios.md) | a draw reproduced from its seed, and a record read aloud |
+| 9 | [Search for failures](tutorials/09-search-for-failures.md) | a search's estimate with its interval, and one failure rerun alone |
+| 10 | [Coverage](tutorials/10-coverage.md) | the conditions a set of runs left uncovered |
 
-Labs 1 to 5 run on CARLA; 6 and 7 need an Isaac seat. Tutorial 4 runs two Autowares in one
+Labs 1 to 5 run on CARLA; 6 and 7 need an Isaac seat; 8 to 10 need neither, only a
+scensim source checkout (and PyTorch for 9 and 10). Tutorial 4 runs two Autowares in one
 stack: it needs a seat with room for both (32 GB of RAM or more, and the GPU memory of two).
 
 ## A six-week schedule

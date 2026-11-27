@@ -1,0 +1,10 @@
+# The study's catalogue for docs/tutorials/10-coverage.md: the categories and cell levels a
+# study of pedestrian dart-outs means to cover. The search covers one cell of eight.
+catalogue: 1
+categories: [R2.walker_crossing.dart_out, R1.rear_end.lead_brakes]
+cells:
+  R2.walker_crossing.dart_out:
+    illumination: [day, night]
+    surface: [dry, wet]
+    occluder: [van, none]
+t: 2

@@ -126,6 +126,9 @@ its dependencies. The documentation is then organised as follows:
    5. [Suites](docs/tutorials/05-suites.md)
    6. [The same testbench on Isaac Sim](docs/tutorials/06-carla-assets-on-isaac.md)
    7. [Road physics](docs/tutorials/07-road-physics.md)
+   8. [Sample scenarios](docs/tutorials/08-sample-scenarios.md)
+   9. [Search for failures](docs/tutorials/09-search-for-failures.md)
+   10. [Coverage](docs/tutorials/10-coverage.md)
 3. **How-to guides**, for a specific task: [the list](docs/README.md#how-to-guides)
 4. **Reference**, for exact behaviour: [the list](docs/README.md#reference)
 5. **Explanation**, for the design: [How it works](docs/explanation/how-it-works.md),

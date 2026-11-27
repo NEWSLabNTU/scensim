@@ -1,0 +1,12 @@
+# The search of docs/tutorials/09-search-for-failures.md: CS1's walker in one cell (day, dry,
+# van) on the straight world, five variables searched on an invented base, the ego aeb_ttc on a
+# CPU point mass. Roadmap 092 K11e's settings, with N 200.
+search: 1
+id: e1_cs1_straight
+scenario: cs1_walker_search.xosc
+model: ../../scensim_sampler/examples/cases/models/cs1_gap_acceptance_k11d.yaml
+variables: [ego_speed, walk_speed, behaviour, ttc_entry, accept_u]
+n: 200
+seed: 11
+threshold: 0
+acceptance_draws: 100000
