@@ -78,3 +78,37 @@ def test_a_carla_egos_own_seed_is_kept(where, maps_hub):
     p = stack.plan(project_arg=str(d))
     [e] = [e for e in p.record["pilot_entries"] if e["kind"] == "autoware"][:1]
     assert e["args"]["gnss_noise_seed"] == 7
+
+
+# Issue 195 L1b: the receiver's heading (GnssInsOrientationStamped), its error beside the
+# position's, and the stack's record of where Autoware's GNSS yaw comes from.
+
+def test_the_heading_error_reaches_the_isaac_ego_config(where, maps_hub, aib_ego):
+    d = make(where, template="isaac")
+    _with_args(d, "gnss_noise_heading_stddev_deg: 0.5, gnss_noise_attitude_stddev_deg: 0.1")
+    gnss = stack.plan(project_arg=str(d)).record["isaac_ego"]["config"]["gnss"]
+    assert gnss == {"heading_stddev_deg": 0.5, "attitude_stddev_deg": 0.1, "seed": 0}
+
+
+def test_a_heading_error_that_is_not_a_number_is_refused(where, maps_hub, aib_ego):
+    d = make(where, template="isaac")
+    _with_args(d, "gnss_noise_heading_stddev_deg: wide")
+    with pytest.raises(stack.StackRefused, match="gnss_noise_heading_stddev_deg"):
+        stack.plan(project_arg=str(d))
+
+
+def test_a_carla_ego_keeps_its_heading_error_for_acb(where, maps_hub):
+    d = make(where)
+    _with_args(d, "gnss_noise_heading_stddev_deg: 0.5")
+    p = stack.plan(project_arg=str(d))
+    [e] = [e for e in p.record["pilot_entries"] if e["kind"] == "autoware"][:1]
+    assert e["args"]["gnss_noise_heading_stddev_deg"] == 0.5
+
+
+def test_an_isaac_stack_records_the_gnss_yaw_source(where, maps_hub, aib_ego):
+    d = make(where, template="isaac")
+    assert stack.plan(project_arg=str(d)).record["gnss_yaw_source"] == "ins"
+
+
+def test_a_carla_stack_records_the_gnss_yaw_source(where, maps_hub):
+    assert stack.plan(project_arg=str(make(where))).record["gnss_yaw_source"] == "ins"

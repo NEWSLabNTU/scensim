@@ -32,6 +32,13 @@
 - **The GNSS receiver has an error model**, RTK-like by default (0.02 m horizontal, 0.04 m
   vertical), set per project with the pilot's `gnss_noise_*` arguments and seeded so runs
   reproduce ([The testbench](reference/project-file.md#localization)).
+- **The GNSS receiver reports its heading**, as one with two antennas or an inertial unit
+  does (0.2 degrees in yaw by default, `gnss_noise_heading_stddev_deg`), and Autoware's GNSS
+  pose takes its yaw from it. It used to take the bearing between two fixes, which under the
+  receiver's error is random while the car stands still and moved the start up to 0.8 m along
+  the road (issue 195). On Isaac this needs `autoware_sensing_msgs` in Isaac's message
+  bindings: run `scensim isaac msgs` once after updating (`scensim project check` names it
+  when it is missing).
 - **`direct_localization`**, a pilot key for debugging: the autopilot is given the true pose
   as its pose estimate. Every run of such a stack is marked `debug` in `result.json` and
   exits 4, so it never counts as an evaluation.

@@ -107,8 +107,15 @@ GNSS_ARGS = {"gnss_noise_enabled": "enabled",
              "gnss_noise_horizontal_stddev_m": "horizontal_stddev_m",
              "gnss_noise_vertical_stddev_m": "vertical_stddev_m",
              "gnss_noise_bias_stddev_m": "bias_stddev_m",
+             # issue 195 L1b: the receiver's heading (dual antenna / INS), its error in degrees
+             "gnss_noise_heading_stddev_deg": "heading_stddev_deg",
+             "gnss_noise_attitude_stddev_deg": "attitude_stddev_deg",
              "gnss_noise_seed": "seed"}
 GNSS_SEED = 0
+# Issue 195 L1b: where Autoware's GNSS pose takes its yaw, in every stack's record: the
+# receiver's heading on /autoware_orientation (gnss_poser's use_gnss_ins_orientation). Before
+# L1b it was the bearing between two fixes, random while the car stood still.
+GNSS_YAW_SOURCE = "ins"
 
 
 def gnss_block(args: dict) -> dict:
@@ -1171,6 +1178,7 @@ def plan(project_arg=None, seat_arg=None, simulator=None, map_name=None, logs=No
         "env": env,
         "pilots": pilots,
         "pilot_entries": entries,
+        "gnss_yaw_source": GNSS_YAW_SOURCE,
         "workspaces": workspaces,
         "pilot_contract": common,
         "pilots_dir": str(Path(scensim_launch_share()) / "launch" / "pilots"),

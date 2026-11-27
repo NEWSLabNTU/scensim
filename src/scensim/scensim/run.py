@@ -1721,7 +1721,7 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
                      **({"replay_of": spec.replay_of} if spec.replay_of is not None else {}),
                      **({"copy": copy} if copy else {})},
         "stack": {k: rec.get(k) for k in ("stack_id", "simulator", "map", "seat", "domains",
-                                           "ports", "fingerprint")},
+                                           "ports", "fingerprint", "gnss_yaw_source")},
         "pilots": {p["entity"]: {"kind": p["kind"], "lifetime": p.get("lifetime", "stack"),
                                  "domain": p["domain"]} for p in pilots},
         "run_pilots": {p["entity"]: e for p, e in run_pilots},

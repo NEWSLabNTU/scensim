@@ -103,6 +103,14 @@ horizontally and 0.04 m vertically per fix, and no bias. A pilot's `args` set it
 stack) and `gnss_noise_seed`. scensim gives seed 0 when none is set, so runs reproduce; `-1`
 draws a fresh seed, which the vehicle side logs.
 
+The receiver also reports its heading, as one with two antennas or an inertial unit does:
+Autoware's GNSS pose takes its yaw from it, not from the bearing between two fixes, which is
+random while the car stands still. Its error is white noise of 0.2 degrees in yaw and 0.05
+degrees in roll and pitch per reading, set with `gnss_noise_heading_stddev_deg` and
+`gnss_noise_attitude_stddev_deg`; `gnss_noise_enabled: false` and the seed apply to it as to
+the position. Each run's `resolved.yaml` names the yaw's source (`stack.gnss_yaw_source`,
+`ins`).
+
 An `autoware` pilot's `args` (and a suite's `pilot_args` for it) are checked by the
 Autoware profile's own argument check when `testbench check` runs, and so before the stack
 starts: a renamed argument (`carla_control`, now `sim_control`), a value outside its
