@@ -750,3 +750,25 @@ The records add no_ground, the compare-map output, obstacle_stop's input, the ob
 planning factors, so the stage where the boulder's points drop is measured, not inferred. The
 brief and its predictions go in before the runs. The rebuilt maps' upload is held until a fix
 holds the stop on the rebuilt map.
+
+## A pilot arg the testbench sets must be declared in the pilot (241, 2026-11-27; 133)
+
+Step B's arms set `lane_height_check` (N) and `compare_map_z_ratio` (D) as pilot args, and
+scensim's `pilots/autoware.launch.xml` declared neither: they would reach the scensim profile
+only through the launch's global scope. A toy launch of the same shape (an undeclared arg on
+the command line, read by an included file's own `<arg default>`) showed the included file
+the value under `ros2 launch`, and printed nothing under play_launch 0.41.2: **an undeclared arg
+may silently not reach the profile under play_launch**, and the run then has the profile's
+default with nothing to say so. Under the `ros2` launcher the global scope does work in the
+field: L3's c170 testbenches set `max_velocity: 11.11`, undeclared then, and every T170 run
+cruised at 11.1 m/s against the profile's 4.17 (118). The pilot now declares, at the profile's own defaults, and
+passes to the profile's include every profile arg step B or L3 sets (118's and 243's
+testbenches, listed 2026-11-27): `lane_height_check`
+(false), `compare_map_z_ratio` (0.6), `gnss_particle_yaw_variance` (1.1e-4) and `max_velocity`
+(4.17), beside `gnss_particle_variance`; a test pins the declarations, the passes and that the
+defaults equal the profile's. Args other testbenches set and the pilot still leaves to the
+global scope (`ndt`, `lidar_detection_model`, `obstacle_pointcloud_based_validator_param_path`,
+the param-path overrides) are not changed here; each is declared when a run depends on it.
+Step B v2's D arm is checked live in any case: its launch log must read
+"z ratio 0.2 (band 0.10 m)".
+

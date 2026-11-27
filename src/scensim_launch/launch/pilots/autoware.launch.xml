@@ -16,9 +16,12 @@
      - agent: vehicle_agent.launch.xml (relay, entity, the car's spec_hash).
 
      On CARLA this is what stack.launch.py's default ego was (acb_launch
-     carla_simulator.launch.xml plus the vehicle agent), composed here without that file. Every
-     argument not declared here reaches the profile or acb (launch arguments are global):
-     rviz, max_velocity, lidar_detection_model, gpu, the sim_* switches, steering_multiplier, ...
+     carla_simulator.launch.xml plus the vehicle agent), composed here without that file. An
+     argument not declared here reaches the profile or acb only through the launch's global
+     scope (lidar_detection_model, gpu, the sim_* switches, steering_multiplier, ...), which
+     play_launch was not seen to give (issue 180): an argument a testbench sets is declared here
+     and passed to the include, as gnss_particle_variance, max_velocity, lane_height_check,
+     compare_map_z_ratio and gnss_particle_yaw_variance are.
      acb_bridge is required (on_exit shutdown): an episode change ends the pilot, and its
      supervisor (the stack's respawn) starts it again.
 -->
