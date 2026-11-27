@@ -167,3 +167,42 @@ targets' catalog reference lacked its parameter assignments) and ran nothing. `f
 - *A number to note, not a reading:* 34 ms is about two thirds of the 50 ms frame (33.3 ms), or
   two 1/60 s substeps; step 1 found the annotator's clock one 1/60 s substep off aib's under the
   runner. Which substep's pose the render takes is the open part, and is what a fix needs.
+
+## Step 3: which substep's pose the render takes (243, 2026-11-27; from the code, a plan)
+
+*The frame, from the code.* The world server steps physics at 1/60 s (`max_physics_dt`,
+`world.set_simulation_dt`), so a 0.05 s frame is three substeps (`world.py`, `step`'s loop). Before
+each substep every ego's `before_substep` runs, and the lidar's (`aib/isaac/sensors.py`) sets its
+prim (`translate.Set`, `orient.Set`) to the pose the vehicle will have *after* that substep
+(`_pose_after`: the last substep's body moved on at its velocities). Only the third substep's
+`world.step` renders (`rendering = render and s == substeps - 1`). So just before the render the
+prim holds the frame's end pose E, the time the scan is stamped with (2 frames later, `latency`).
+If the render used it, tau would be 0.
+
+*What the numbers say.* tau is 33.7 to 34.3 ms (step 2) and 30 to 37 ms (the speed split): two
+substeps, 2/60 s = 33.3 ms. The pose that fits is the one set before the *first* substep, E less
+two substeps: as if the renderer takes the prim's transform as it stood after the first write
+since the last render, and the writes before substeps 2 and 3 reach it only at the next render.
+Under the runner (also 1/60 s substeps) step 1 found the annotator's clock one substep off aib's,
+another sign that the renderer's view of time and pose trails the USD writes. Not confirmed;
+the code read here does not show where the renderer reads the transform.
+
+*H (stated so it can fail):* the render takes the pose written before substep 1 of its frame, so
+tau = (n - 1) x physics_dt for n substeps a frame.
+- With physics_dt 1/40 (two substeps of 0.025 s): tau = 25 ms.
+- With physics_dt 1/120 (six substeps): tau = 41.7 ms.
+- *Not H:* tau stays near 34 ms whatever the substep (a fixed render latency in time), or
+  scales with the frame, not the substep.
+
+*The test (one run each, the targets scenario of step 2, the card guard; measurement only):*
+the same `face196.py` reading at two physics steps. The world server's physics step comes from
+the bridge's Hello (`max_physics_dt`); how a run sets it (a stack argument or the bridge's config)
+is checked before the predictions are committed.
+
+*Fix options for after the test (not now):*
+- stamp a scan at the time of the pose it was rendered from (E less (n - 1) substeps), if H holds:
+  one line in aib, exact for any n;
+- or write the prim once a frame, before the first substep, at the frame's end pose (predicted
+  over the frame), so the pose the render takes is the stamp's;
+- or have the renderer see each write (a USD to Fabric sync before the render), if the render's
+  read is the cause; the costliest and the least sure.
