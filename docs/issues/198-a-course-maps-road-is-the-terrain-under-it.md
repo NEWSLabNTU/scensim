@@ -1,6 +1,6 @@
 # 198: a course map's road in the point cloud is mostly the terrain under the road
 
-**Status:** open; plan only (241, 2026-11-27, batch P, for 133). **Severity:** medium. The
+**Status:** fixed in code: siw 9bfd1b10 (the test deaa640a first), pinned here (2026-11-27). The published haruna and tsukuba maps and the local fixtures are rebuilt separately; batch L3 decides first whether the sparser road needs a denser ribbon. Before that: open; plan only (241, 2026-11-27, batch P, for 133). **Severity:** medium. The
 points the map holds for the road lie 0.10 to 0.13 m below the surface the lidar sees, on most
 of the lane. Any check of height above the map is blind below that (issue 180's option 3), and
 NDT localizes against a road that is not there. **Found:** 2026-11-27, 241, in issue 180 step 2:
