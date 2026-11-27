@@ -66,6 +66,7 @@
        publishes the truth on the pose estimator's topic, and the scensim profile starts no pose
        estimator (ndt:=none), so the EKF fuses the truth. The stock profile has no such switch. -->
   <arg name="gnss_particle_yaw_variance" default="1.1e-4" description="scensim profile: the pose initializer's GNSS particle variance in yaw, rad^2; the align samples around the guess's yaw below the overlay NDT's threshold (issue 195, the start yaw)"/>
+  <arg name="max_velocity" default="4.17" description="scensim profile: Autoware's max_vel, m/s (the profile's 4.17, upstream's 15 km/h)"/>
   <arg name="lane_height_check" default="false" description="scensim profile: stop for low obstacles on the lane that the ground filter passes; Autoware 1.5.0 (issue 180)"/>
   <arg name="compare_map_z_ratio" default="0.6" description="scensim profile: the compare-map filter's downsize_ratio_z_axis, (0, 1]; its z band is 0.5 m x this (issue 180 step B v2)"/>
   <arg name="direct_localization" default="false" description="debug only: the truth pose on the pose estimator's topic, Autoware's NDT off (scensim profile)"/>
@@ -132,6 +133,7 @@
     <arg name="gnss_enabled" value="$(var gnss_enabled)"/>
     <arg name="gnss_particle_variance" value="$(var gnss_particle_variance)"/>
     <arg name="gnss_particle_yaw_variance" value="$(var gnss_particle_yaw_variance)"/>
+    <arg name="max_velocity" value="$(var max_velocity)"/>
     <arg name="lane_height_check" value="$(var lane_height_check)"/>
     <arg name="compare_map_z_ratio" value="$(var compare_map_z_ratio)"/>
   </include>
