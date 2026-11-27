@@ -106,7 +106,8 @@ class Runner(unittest.TestCase):
                  "seeds": {"scenario": 1 + i, "pilots": {"walker": 2 + i}}}
                 for i, t in enumerate((0.5, 3.0, 6.0))]
         with tempfile.TemporaryDirectory() as d:
-            s = sr.run(recs, CASE, StraightWorld(), Path(d), steps=240, step_time=DT)
+            s = sr.run(recs, CASE, StraightWorld(), Path(d), steps=240, step_time=DT,
+                         truth=True)
             rows = [json.loads(x) for x in Path(d, "outcomes.jsonl").read_text().splitlines()]
             named = {json.loads(p.read_text())["scenario"]
                      for p in Path(d, "truth").glob("slot_*_ep0/outcome.json")}
@@ -134,7 +135,8 @@ class Runner(unittest.TestCase):
                  "seeds": {"scenario": 1 + i, "pilots": {"walker": 2 + i}}}
                 for i, t in enumerate((0.5, 1.5, 3.0, 6.0))]
         with tempfile.TemporaryDirectory() as d:
-            sr.run(recs, CASE, StraightWorld(), Path(d), steps=240, step_time=DT, margin_k=1.0)
+            sr.run(recs, CASE, StraightWorld(), Path(d), steps=240, step_time=DT, margin_k=1.0,
+                   truth=True)
             rows = [json.loads(x) for x in Path(d, "outcomes.jsonl").read_text().splitlines()]
             for k, r in enumerate(rows):
                 o = r["outcome"]
