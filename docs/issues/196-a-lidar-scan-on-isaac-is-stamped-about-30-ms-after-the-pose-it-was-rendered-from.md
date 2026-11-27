@@ -296,3 +296,38 @@ reference moves with it.
   N4: -0.39 m), on the rebuilt and the old map alike;
 - NDT's NVTL during the drive no lower than the baseline's (the stamp no longer pairs a scan
   with a pose 34 ms off).
+
+## L3's F: the fix against step 3, and a 40 Hz A/B (243, 2026-11-27; the A/B's predictions before its runs)
+
+*F's results* (118's runs on b1700191, L2's pins: aib dda18ad; `fixture_c170_targets` and, for
+120 Hz, `fixture_c170_targets_pass`; `face196.py` unedited; tau in ms, median, target_a /
+target_b): 60 Hz +1.0 / +0.6, 120 Hz +1.1 / +0.6, 40 Hz -24.0 / -24.3. L3's P4 (under 2 ms at all
+three) holds at 60 and 120 Hz and fails at 40 Hz. Runs on NAS `autoveh/logs/2026 SSv2 on
+CARLA/2026-11-27 issue 195 L3 (118)/runs/` (F40b `2026-11-27T14-15-24`, F60 `14-27-33`, F120b
+`15-06-04`).
+
+*What the 40 Hz run shows.* Its scans' stamps sit at .025 and .075 s (12072 of 12072 steps 50.0
+ms), against .000 and .050 in step 3's 40 Hz run (2203 of 2203): L2 moved each stamp back one 25
+ms substep, as designed. A stamp 25 ms earlier turns step 3's +25.6 ms into about +0.6, not
+-24. So between step 3's run (main 53b76a47, aib before L1) and F40b, the pose the 40 Hz render
+took also moved, by about one substep, and not through the stamp. At 60 and 120 Hz nothing of
+the kind shows (the residuals match step 3's 0.5 to 1.1 ms).
+
+*The A/B.* 118's GPU0, back to back on one host and stack configuration, at 40 Hz,
+`fixture_c170_targets_pass` (sha256 ee7f4249): A on eb741eda (the pins before L2: aib ca600c4),
+B on b1700191 (aib dda18ad). Only L2 differs. Each run also logs, from a debug patch applied
+alike to both builds' world server (its diff and sha256 recorded, not landed), per frame for
+the first 200 frames and every 100th after: the substep count n, dt, the frame's start time
+and the end of its first substep, and on which substep the render was asked for.
+
+*Predictions.*
+- AB0: both runs step n = 2, dt = 0.025 s, the render on the second substep, in every logged
+  frame.
+- AB1, if L2 is the only change: A reads tau +24 to +27 ms (step 3's), B -1 to +2 ms; F40b's
+  -24 was then a property of that run or stack, not of L2, and B says which.
+- AB2, the alternative: A reads about 0 ms and B about -25 ms. Then the 40 Hz render's pose
+  moved by one substep between 53b76a47 and eb741eda, independently of L2, and L2's
+  (n - 1) dt overcorrects at 40 Hz on current code. The substep log (AB0) then says whether
+  the scheduling changed or the render did.
+- If AB0 fails (n or the render substep differ from the above), that is the finding, whichever
+  of AB1 and AB2 holds.
