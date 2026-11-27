@@ -578,3 +578,28 @@ question, left open. No setting keeps the per-substep writes (no shims).
 - B5, the 40 Hz mode: the 40 Hz face runs show one mode, not two (step 3's bimodality came from
   which write the render took; with one write a frame there is one).
 - If B1 holds and B3 fails, the drift has a cause other than M's, and L2b is not landed.
+
+## M's result: the mis-filed stamp explains L2's drift at all three rates (243, 2026-11-27)
+
+118's `along_x.py` (unedited, from the NAS copy) on L3's F runs, read-only from the NAS
+records. The outputs and the script are on NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-27
+issue 196 M (243)/`, with SHA256SUMS. No runs.
+
+| run | physics | delta (predicted) | NDT along slope, moving | 100 m segment medians | per-scan pull, median | K = slope / (10 delta) |
+|---|---|---|---|---|---|---|
+| F60 (above) | 60 Hz | 16.7 ms | +1.74 % | | -0.4 mm | 0.104 |
+| F120b | 120 Hz | 8.3 ms | +0.75 % (987 scans, x 28 to 542) | +0.17, +0.89, +1.83, +2.45, +3.15, +3.69 | -0.1 mm | 0.090 |
+| F40b | 40 Hz | 25 ms | +2.55 % (1025 scans, x 28 to 548) | +0.81, +3.13, +5.70, +8.22, +10.77, +12.93 | -0.3 mm | 0.102 |
+
+- M1 holds: F120b's slope is +0.75 %, within the predicted +0.7 to +1.0 %.
+- M2 holds: F40b's slope is +2.55 %, within 2.2 to 3.0 %, and positive. The 40 Hz tie went to
+  the older state, as the code reads.
+- In all three runs the GNSS pose stays on the truth, and NDT's per-scan pull is under 0.5 mm.
+- The slope scales with delta, and the implied gain is the same at the three rates (0.09 to
+  0.10). So L2's drift is the EKF filing each back-dated pose under the state nearest its delay,
+  delta older than its stamp, with no restoring pull from NDT along a straight.
+- What remains assumed: that the EKF's steps fall on the frame ends. It is consistent with all
+  three numbers, but not read directly.
+
+So L2b, whose stamp stays at the frame's end on the EKF's grid, is not exposed to this. B3
+checks it.
