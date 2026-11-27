@@ -141,10 +141,22 @@ def test_the_particle_variance_reaches_an_isaac_pilot_too(where, maps_hub, aib_e
 
 
 def test_a_projects_own_particle_variance_is_kept(where, maps_hub):
+    # the scensim profile's argument: only that profile takes it (issue 180)
     d = make(where)
     _with_args(d, "gnss_particle_variance: 0.5")
+    tb = d / "testbench.yaml"
+    tb.write_text(tb.read_text().replace("kind: autoware,",
+                                         "kind: autoware, autoware_profile: scensim,", 1))
     [a] = _autoware_args(stack.plan(project_arg=str(d)))[:1]
     assert a["gnss_particle_variance"] == 0.5
+
+
+def test_a_stock_pilots_own_particle_variance_is_refused_by_name(where, maps_hub):
+    # a stock pilot would ignore it: refused, not kept (issue 180)
+    d = make(where)
+    _with_args(d, "gnss_particle_variance: 0.5")
+    with pytest.raises(stack.StackRefused, match=r"pilots\.ego\.args\.gnss_particle_variance"):
+        stack.plan(project_arg=str(d))
 
 
 def test_particle_variance_rule():
