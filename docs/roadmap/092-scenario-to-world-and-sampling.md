@@ -2423,6 +2423,13 @@ commit).**
    (133). **Prediction**: without the export, under half of 857 s, and under 1 MB written
    (against 4.8 GB a search); its outcomes equal g0's saved `outcomes.jsonl` within check 3's
    bar.
+   **Changed after the plan (2026-11-27, 241; accepted by 133):** K11c's world export is v2
+   (lanelet2's centreline), which main refuses since issue 194; on the same Town01 exported
+   again (v3, map_sha256 ee291b6e unchanged) every slot of g0's first 100 differs from the
+   saved g0 by about 2.25 mm (the centreline and the code since 7f436b99, not K11f). So the
+   equality is against the same code's export path, the `--truth` run of the same pair (bar
+   1e-9 m); the drift from the saved g0 is reported with no bar; 857 s is quoted as history
+   only, the timing being the same-code pair.
 6. **Gate**: `just gate` with `ISAAC_ROOT` and the Isaac lane run.
 
 **Not in K11f**: the GPU device path beyond the torch code being device-agnostic (a live GPU
