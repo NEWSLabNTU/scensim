@@ -2413,6 +2413,10 @@ commit).**
    operations; a JSON float round-trips a float64, so the inputs are the run's own).
 4. **Integration** (CPU, small, in `just test`): `search_run` with `--truth` on K11c g0's first
    100 records; both paths agree within check 3's bar (fewer records if it takes over 60 s).
+   **Changed after the plan (2026-11-27, 241; accepted by 133):** K11c g0's world export
+   (`town01_map_export.json`) is not in the repository, so the test in `just test` runs CS1's
+   case on test_core's straight world (4 records, with and without the sloped score), and the
+   100-record K11c g0 integration runs locally, reported beside check 5.
 5. **Timing** (CPU, measured, no bar): `search_run` on K11c g0's 1000 records, with the export
    and without, against 857 s on 7f436b99: seconds, peak RSS and bytes written. Run at nice 10,
    only while the host's load is under its 24 cores and no TW or GPU-heavy run is going on it
