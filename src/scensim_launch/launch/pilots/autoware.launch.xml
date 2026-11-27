@@ -21,7 +21,10 @@
      scope (lidar_detection_model, gpu, the sim_* switches, steering_multiplier, ...), which
      play_launch was not seen to give (issue 180): an argument a testbench sets is declared here
      and passed to the include, as gnss_particle_variance, max_velocity, lane_height_check,
-     compare_map_z_ratio and gnss_particle_yaw_variance are.
+     compare_map_z_ratio and gnss_particle_yaw_variance are. Those are the scensim profile's
+     alone: the stock include gets none of them, and scensim refuses a stock pilot that sets one
+     (project.py SCENSIM_PROFILE_ARGS); a launch run by hand with autoware_profile:=stock ignores
+     them, silently.
      acb_bridge is required (on_exit shutdown): an episode change ends the pilot, and its
      supervisor (the stack's respawn) starts it again.
 -->
@@ -65,13 +68,13 @@
        automatic initializer before its own call (issue 046's collision). -->
   <arg name="gnss_enabled" default="true" description="GNSS for the initial pose (Autoware's pose initializer); true with a relay too (issue 195)"/>
   <arg name="gnss_particle_variance" default="0.01" description="scensim profile: the pose initializer's GNSS particle variance in x and y, m^2; scensim gives (3 x the receiver's horizontal stddev)^2, at least 0.01 (issue 195 L1d)"/>
-  <!-- issue 195: a debug option, never an evaluation (scensim marks the run): the vehicle side
-       publishes the truth on the pose estimator's topic, and the scensim profile starts no pose
-       estimator (ndt:=none), so the EKF fuses the truth. The stock profile has no such switch. -->
   <arg name="gnss_particle_yaw_variance" default="1.1e-4" description="scensim profile: the pose initializer's GNSS particle variance in yaw, rad^2; the align samples around the guess's yaw below the overlay NDT's threshold (issue 195, the start yaw)"/>
   <arg name="max_velocity" default="4.17" description="scensim profile: Autoware's max_vel, m/s (the profile's 4.17, upstream's 15 km/h)"/>
   <arg name="lane_height_check" default="false" description="scensim profile: stop for low obstacles on the lane that the ground filter passes; Autoware 1.5.0 (issue 180)"/>
   <arg name="compare_map_z_ratio" default="0.6" description="scensim profile: the compare-map filter's downsize_ratio_z_axis, (0, 1]; its z band is 0.5 m x this (issue 180 step B v2)"/>
+  <!-- issue 195: a debug option, never an evaluation (scensim marks the run): the vehicle side
+       publishes the truth on the pose estimator's topic, and the scensim profile starts no pose
+       estimator (ndt:=none), so the EKF fuses the truth. The stock profile has no such switch. -->
   <arg name="direct_localization" default="false" description="debug only: the truth pose on the pose estimator's topic, Autoware's NDT off (scensim profile)"/>
 
 
