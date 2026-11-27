@@ -1265,3 +1265,48 @@ points to hold the stop. The rebuilt maps' upload is held on it.
   the align's draw. The denser ribbon buys nothing measurable on c170.
 - P8 holds on c170 (0.45 to 0.80). On c6b it exceeds 0.8 in 3 of 4 (to 0.88): the range was too
   tight.
+
+## The align's start yaw: a yaw prior in the overlay's NDT (241, 2026-11-27; plan approved by 133, predictions before any run)
+
+**The user's decision (through 133, 2026-11-27):** fix the start yaw in our Autoware overlay.
+Autoware 1.5.0's NDT align draws every particle's yaw uniformly over the circle
+(`NDTScanMatcher::align_pose`, and localization_util's TPE, `get_next_input`), whatever the
+guess's covariance says. On a straight NVTL is flat to about 0.015 across +-0.14 rad, so the
+best particle's yaw is noise: C3 +0.061 rad.
+
+**The change**, written to be upstreamable and reading no truth:
+
+- autoware_core fork, branch `csb/ndt-step-reversal-1.5.0`, 61f9c96e (tests first: 0651ee25 and
+  5c1347be, both failing before the fix; 84b86c2a formatting; 61f9c96e the change). A new
+  parameter `initial_pose_estimation.yaw_prior_variance_threshold` [rad^2], upstream default
+  0.0 (no change). When the guess's yaw variance is below it, the TPE takes a sixth sample mean
+  and stddev and draws yaw from N(guess yaw, sqrt(variance)) in its startup trials and EI
+  candidates; otherwise the uniform draw, in the same engine order as today. The TPE kernel and
+  the selection (best NVTL) are unchanged.
+- asv's profile: `gnss_particle_yaw_variance` (default 1.1e-4 rad^2, (3 x 0.2 deg)^2, the
+  receiver's heading error, as L1d did for x and y) is pose_initializer's
+  gnss_particle_covariance yaw, and ndt_scan_matcher's `yaw_prior_variance_threshold` is
+  0.01 rad^2 (a guess better than 5.7 deg, 1 sigma).
+- The Jazzy profile copies (config/2.0.0) are left alone, as L1d left them: the overlay fork is
+  Autoware 1.5.0's, so the threshold would do nothing there (133 accepted).
+- Before any upstream PR (not now): the two test files are formatted with clang-format 17, the
+  host's; pre-commit pins v19. Reformat with v19 (pip `clang-format==19` in a venv, not the
+  system's) first.
+
+**Predictions** (fixed before any run; the live check runs on 118 after L2r's check run):
+fixture_c170 and fixture_c6b, 4 runs each, C3 yaw (the align's result against truth at the
+start): **|C3 yaw| <= 0.03 rad in every run, and <= 0.01 rad in at least half, on each
+fixture.** The reasoning: with NVTL flat in yaw the best particle is close to a random draw
+from the prior, about N(guess, 0.0105 rad), and the guess itself is good (L1b's C1 0.0005 rad);
+so within 0.01 in about 68 % of runs and within 3 sigma (0.03) in essentially all. 0.01 rad in
+every run is not predicted.
+
+**Recorded in each run, beside C3** (243): the guess's own yaw error, the GNSS/INS heading in
+the align's request against the truth at the call (L1b's Q1 measure), so the reading separates
+the prior's offset from the draw. With the heading's own error (about 0.0035 rad) added,
+P(|C3| <= 0.01) is a little under the 0.68 of the draw alone.
+
+**A possible follow-up, not in this change** (133: it changes the selection rule, more than the
+user approved): among the particles whose NVTL is within a tolerance of the best (a parameter,
+default 0, meaning off), take the one closest to the prior's mean. That would predict
+|C3 yaw| <= 0.01 rad in every run.
