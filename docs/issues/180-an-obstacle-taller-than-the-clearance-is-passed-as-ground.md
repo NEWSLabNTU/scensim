@@ -772,3 +772,37 @@ the param-path overrides) are not changed here; each is declared when a run depe
 Step B v2's D arm is checked live in any case: its launch log must read
 "z ratio 0.2 (band 0.10 m)".
 
+
+## Step B v2: the remedies on the rebuilt map, plan and predictions (241 with 243, 2026-11-27; approved by 133, before any run)
+
+243's T6b found the ego striking the r181 boulder (35 cm, s 400, x 400.000, y 1.625) on the
+rebuilt c6b map (issue 198) in 2 of 2 runs and in 0 of 2 on the old one: compare-map's |dz| band
+(0.3 m) leaves the boulder about 5 cm of points above the true road, the object drops out
+intermittently, and obstacle_stop's hold releases. Step B v2 compares two remedies on that map.
+The brief, its judge and r180's original brief: NAS
+`home/2026-11-27 issue 180 step B v2 brief (241)/` (README.md sha256 d72bfa70...,
+judge_stepB180_v2.py 91ebc6ed..., judge_stepB180.py d0e02ce4...; SHA256SUMS), run on 118 after H.
+
+**The run.** fixture_c6b_r181 (sha256 ededd282...), project isaac_l3_c6b_rb, 3 arms x 4 runs
+interleaved, a fresh stack each: C (control), N (`lane_height_check:=true`, I2, h 0.098 m) and D
+(`compare_map_z_ratio:=0.2`, a 0.1 m band). In C and D obstacle_stop stops for objects only; in N
+also for the lane check's points (steps 0 and A above). Then r180's original step B run.
+
+**Predictions** (Q3's and Q4's measures calibrated on step 2c's six old-map runs before any v2
+run, labelled; 133 accepted):
+- Q1: C replicates T6b, the boulder struck in at least 3 of 4 runs. Q1b: in C compare-map
+  removes at least 70 % of the boulder's downsampled points from 12 m in (old map: a median of 3
+  to 21 %; 181's replay 0 to 43 %).
+- Q2: N holds: contact 0 of 4, no forward motion above 0.05 m/s after the first stop; the node
+  publishes the boulder in at least 99 % of its frames from its first detection to the stand;
+  P8 (p95 under 30 ms, a status for at least 99 % of raw clouds).
+- Q3: D holds: contact 0 of 4, no forward motion above 0.05 m/s after the first stop; at least
+  99 % of compare-map's frames after the stop keep 5 or more boulder points (old-map holds:
+  99.81 to 99.84 %; single frames reach 0, so "every frame" would fail a hold).
+- Q4: the false side, N and D: no obstacle_stop or obstacle_slow_down factor whose stop pose is
+  off the boulder's line or outside 15 m before it (a factor's control point is the stop pose,
+  8.9 to 9.5 m before the boulder in the old-map runs, not the obstacle). r180's P6 ("x within
+  1 m of 99.8") is read the same way.
+- Q5: localization as in T6b: start within 0.25 m, z within +-0.03 m, NVTL above 3.2.
+- Q6: in C, every creep step after the first stop follows more than 1.0 s with no tracked object
+  within 1.5 m of the boulder.
