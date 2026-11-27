@@ -554,7 +554,8 @@ used only to report the rock's range.
   | 0.12 | 9.1 m | 6.1 m | 0 |
 
   The ranges equal `hmap180.py`'s with the band (P1 held for step A).
-- The ordinary cloud in the trajectory's footprint (half width 0.9475 + 0.3 m, 30 m ahead):
+- The ordinary cloud in the trajectory's footprint (half width 0.9475 + 0.3 m, 30 m ahead; see
+  the correction below):
   what obstacle_stop would stop for if its pointcloud type were on with today's input. Ten c6b
   records: r180, the 181/182 runs A, B, A1 to A3 and B1 to B3, and c1.
   - Nearly every in-footprint frame is the 35 cm boulder at s 400, while the car stands before
@@ -589,3 +590,83 @@ My recommendation: I2, with h = clearance - 0.04 m (at least 0.05 m).
 - I2 is the only interface that is clean in step A and keeps the 8.8 m range.
 - I1 stops for the ground filter's leaks.
 - I3 loses 1.3 to 3.4 m to the tracker.
+
+## The decision, and I2's code (241, 2026-11-27)
+
+**The decision (the user, through 133).** I2, with h = clearance - 0.04 m (at least 0.05 m),
+read from the vehicle spec. Code it test-first, then step B's live run, with predictions
+updated for I2 and committed first.
+
+**A correction to step A.** The footprint used half width 0.9475 m, which is the drift
+Mustang's. The Model 3's vehicle_info width is 2.163 m, so the half width is 1.0815 m. Rerun at
+1.0815:
+- 9 records are still clean away from the fixture's obstacles.
+- Run B has 57 frames, 44 of them as 3 consecutive frames (before: 52 and 41), at the same
+  places.
+- The conclusion is unchanged. The lane check itself has no footprint and is unaffected.
+
+**The code** (autoware_sim_vehicle, branch `i180-lane-check` on 5a9131fc, not pushed). Tests
+came first, in their own commits.
+- The node is `autoware_sim_profile/scripts/lane_height_check`, with the rule as planned.
+  - The map's reference is a 0.2 m grid of the highest map point, max-filtered over a 0.5 m
+    disc, over the lanelets only.
+  - h comes from the car's generated `<car>_description/config/body.param.yaml`.
+    `autoware_gen` writes the spec's `body.ground_clearance` there, and the node refuses to
+    start without it.
+- `lane_height_check:=true` (default false; Autoware 1.5.0) does three things:
+  - It starts the node.
+  - A node-targeted `set_remap` (`motion_velocity_planner:~/input/no_ground_pointcloud`)
+    gives the motion velocity planner the check's cloud alone. A toy launch showed that such
+    a rule reaches only the named composable node and overrides its own remap.
+  - obstacle_stop runs from a copy of upstream's parameters with `check_inside.pointcloud:
+    true`. A test holds the copy to upstream otherwise.
+- The profile's argument check refuses `lane_height_check:=true` on Autoware 2.x and beside
+  `obstacle_stop_param_path:=`.
+- asv's `just check` passes: 74 + 20 tests, pyflakes and the sync checks. The node test runs
+  the rclpy node, which publishes a 15 cm box from its third frame.
+
+**The node's replay** (`node_replay180.py`, r180's record, the rebuilt c6b map, the node's
+own functions in its callback's order):
+
+| clearance | h | rock detected | published | anything else published | ms per frame p50 / p95 / max |
+|---|---|---|---|---|---|
+| 0.138 (the Model 3) | 0.098 | 9.3 m | 8.8 m | 0 of 344 frames | 3.9 / 6.8 / 10.5 |
+| 0.09 | 0.050 | 13.9 m | 11.1 m | 0 | 3.9 / 6.9 / 10.8 |
+
+- P1 held: at h 0.10 the ranges equal hmap180's (9.3 and 8.8 m).
+- P2 held offline: p95 6.8 ms, against the 30 ms bar.
+- At h 0.05 the grid's reference makes the ranges 0.2 to 0.8 m shorter than hmap180's
+  exact 0.5 m radius. That is conservative, and outside the chosen threshold.
+- On Haruna (15.7M map points, 32 road lanelets) the map loads in 6.5 s, with a 40 MB grid
+  and a 615 MB peak while loading.
+
+## Step B: plan and predictions for I2 (241, 2026-11-27, before the run)
+
+**The run.** fixture_c6b_r180 on Isaac, unchanged, on the rebuilt c6b map (issue 198), with
+`lane_height_check:=true`. The scenario, the course and the testbench are 118's
+`isaac_i180_c6b`. The rock does not need moving:
+- the s 100 rock (y 2.425) lies on the left lane, a road lanelet;
+- in r180 the car passed it with its centre at y 1.21 to 1.26, so the rock was 1.2 m to its
+  left;
+- obstacle_stop's footprint reaches 1.08 + 0.3 = 1.38 m from the centre, so I2 should stop
+  the car for it.
+
+The scenario's goal is x 112, so a correct stop ends the run held before the rock, failed by
+its timeout. The run is judged by the predictions, not by the scenario's verdict. Recorded: the
+step 2 topics, the node's output and `~/debug/status`, `/planning/planning_factors/obstacle_stop`,
+and the truth trace.
+
+**Predictions** (P1 and P2 are above):
+- P3, for I2: no lane-check detection is published anywhere but the s 100 rock from the start
+  to the stop.
+- P4 held: the tests pass.
+- P5: the car stops short of the s 100 rock without touching it.
+  - Its bumper ends 1.5 to 5 m before the rock's near side.
+  - The truth's deceleration, averaged over any 0.5 s, stays at most 2.5 m/s^2.
+  - The first published detection comes at 8.3 to 9.3 m from the bumper.
+- P6: no stop and no slow-down for anything before the rock. obstacle_stop's planning factors
+  name only a pointcloud stop at the rock (x within 1 m of 99.8).
+- P7: the node subscribes to no world server topic (code review: its inputs are the raw cloud,
+  `/localization/kinematic_state` and the map files).
+- P8: live, the node's processing time stays under 30 ms at p95, and it reports a status for at
+  least 99 % of the raw clouds.
