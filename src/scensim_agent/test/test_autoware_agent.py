@@ -96,6 +96,31 @@ def test_reset_fails_when_localization_does_not_converge(rig):
     assert "did not reach" in agent.state_message()["detail"]
 
 
+def test_after_a_failed_reset_the_agent_refuses_a_goal(rig):
+    # issue 197: the reset failed, the agent went IDLE and took the goal 72 ms later
+    clock, autoware, agent = rig
+    autoware.CONVERGE_TIME = 1e9
+    with pytest.raises(Failed, match="did not reach"):
+        agent.on_reset(Episode(pose=START))
+    assert agent.state_message()["phase"] != P.IDLE
+    with pytest.raises(Failed, match="no goal after a failed reset: .*did not reach"):
+        agent.on_goal(GOAL, [])
+    assert "set_route" not in autoware.calls
+    assert "did not reach" in agent.state_message()["detail"]
+
+
+def test_a_new_reset_clears_the_failed_state(rig):
+    clock, autoware, agent = rig
+    autoware.CONVERGE_TIME = 1e9
+    with pytest.raises(Failed):
+        agent.on_reset(Episode(pose=START))
+    autoware.CONVERGE_TIME = 1.0
+    agent.on_reset(Episode(pose=START))
+    assert agent.state_message()["phase"] == P.IDLE
+    agent.on_goal(GOAL, [])
+    assert "set_route" in autoware.calls
+
+
 def test_reset_checks_the_scan_matcher_score_on_a_healthy_start(rig):
     clock, autoware, agent = rig
     started = clock()

@@ -216,6 +216,9 @@ class AutowareAgent(scensim_agent.Agent):
         self._core = threading.RLock()
         self.relocalization: Relocalization | None = None
         self.resetting = False  # on_reset runs: INITIALIZING whatever Autoware shows
+        # Issue 197: the last reset's failure, until the next reset. The ego was never placed:
+        # INITIALIZING (not IDLE) whatever Autoware shows, and no goal is taken.
+        self.reset_failure: str | None = None
         self.goal = None  # the active route's arguments
         self.stopped = False
         self.detail = ""
@@ -234,8 +237,8 @@ class AutowareAgent(scensim_agent.Agent):
     def derived_phase(self, snapshot=None) -> str:
         s = snapshot or self.port.snapshot()
         with self._core:
-            return derive_phase(s, self.resetting or self.relocalization is not None,
-                                self.stopped)
+            return derive_phase(s, self.resetting or self.relocalization is not None
+                                or self.reset_failure is not None, self.stopped)
 
     def publish_state(self, snapshot=None):
         """Report what Autoware shows now: phase, faults, indicators, RTC, pose."""
@@ -330,8 +333,14 @@ class AutowareAgent(scensim_agent.Agent):
             self.goal = None
             self.stopped = False
             self.resetting = True
+            self.reset_failure = None
         try:
             self._reset(ep)
+        except scensim_agent.Failed as e:
+            with self._core:
+                self.reset_failure = str(e)
+                self.detail = str(e)
+            raise
         finally:
             with self._core:
                 self.resetting = False
@@ -351,6 +360,10 @@ class AutowareAgent(scensim_agent.Agent):
         self.relocalize(ep.pose)
 
     def on_goal(self, goal, waypoints, allow_goal_modification=False, segments=None):
+        with self._core:
+            failure = self.reset_failure
+        if failure is not None:
+            raise scensim_agent.Failed(f"no goal after a failed reset: {failure}")
         s = self.port.snapshot()
         phase = self.derived_phase(s)
         if phase in (P.UNAVAILABLE, P.INITIALIZING):
