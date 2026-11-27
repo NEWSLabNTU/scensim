@@ -873,3 +873,31 @@ lidar chain equal to the render (E1, E2), and no distortion (D1, D2). What is le
 side is the render itself and NDT on a flat road (the scan side's results). One check from these
 records next: NDT's across and along error against speed, within each run (a lag is
 speed-proportional; a render offset is not).
+
+## The along and across errors against speed, and the cloud's stamp: predictions (243, 2026-11-27, before the split)
+
+*The timing, from aib's code.* A frame is 0.05 s (the runs' `step_time`). Each substep aib puts
+the lidar prim at its pose at that substep's end (`before_substep`, `_pose_after`); the frame's
+last substep renders; then the host publishes with `stamp` = the clock at the frame's end
+(`isaac/ego.py`'s order, `world.py` `publish_clock(end)`). The annotator's data is
+`latency_frames` (2) renders old when read, so the cloud takes the stamp saved 2 frames back
+(`Lidar.publish`, `_msg`): the end of the frame it was rendered in. aib's note: "The RTX lidar
+renders a revolution from one pose", the prim's. If that holds and the delay is 2 frames, the
+stamp is the time of the pose the points come from: no lag.
+
+A lag τ (the stamp later than the pose the points were rendered from) puts NDT's pose, labelled
+at the stamp, where the car was τ earlier: an along error of -v τ (behind), growing with speed,
+0 at rest, and no across error on a straight. A render or map offset gives a constant along.
+- *L0 (aib's design holds):* τ = 0; the along error does not depend on v (slope under 5 ms in
+  magnitude), and its level is the constant -0.29 / -0.35 m.
+- *L1 (the delay is off by k whole frames):* τ = k x 0.05 s; the along error is -0.05 k v:
+  -0.56 m at 11.1 m/s for k = 1, -1.1 m for k = 2 (133's 2-frame case). The level seen (-0.29 m)
+  already rules out k = 1 or 2 at 11 m/s unless a constant offsets it; the slope tells.
+- *L1/2 (half a frame, e.g. the scan taken over the frame, not at its end):* τ = 25 ms: -0.278 m at
+  11.1 m/s, the size seen, 0 at rest.
+- *The test:* within each run, NDT's along error against the truth's speed, binned by 1 m/s from
+  1 to 12 m/s (the start's acceleration gives the low bins); a line along = a - τ v fitted over
+  the bins. Read: τ and a, per run. L1/2 predicts τ 20 to 30 ms and |a| under 0.05 m; L0 predicts
+  |τ| under 5 ms and a about -0.3 m; L1 predicts τ 45 ms or more.
+- *Across against speed,* the same bins: a lag gives no across on a straight, so c (+0.19 m) is
+  predicted not to depend on v whichever holds (slope under 5 ms, as m per m/s).
