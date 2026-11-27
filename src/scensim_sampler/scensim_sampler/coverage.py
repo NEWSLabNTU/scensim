@@ -105,6 +105,10 @@ def outcomes_from_jsonl(path):
         row = json.loads(line)
         if not isinstance(row, dict) or "record" not in row or "outcome" not in row:
             raise CoverageError(f"{path}: line {i + 1}: {{record, outcome}}")
+        if not isinstance(row["record"], dict):     # issue 200: a runner's row names it by id
+            raise CoverageError(f"{path}: line {i + 1}: {{record, outcome}} with the sample "
+                                f"record itself, not {type(row['record']).__name__} "
+                                f"{str(row['record'])[:16]!r}")
         o = row["outcome"]
         out.append((row["record"], {"failed": bool(o.get("failed")),
                                     "contact": bool(o.get("contact")),

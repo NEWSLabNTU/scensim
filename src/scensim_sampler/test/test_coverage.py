@@ -213,6 +213,18 @@ class Inputs(unittest.TestCase):
         self.assertEqual(rep["schema"], "scensim.coverage/1")
         self.assertEqual(sum(x["failures"] for x in rep["layer3"]), 2)
 
+    def test_a_row_naming_its_record_by_id_is_refused_with_the_shape_expected(self):
+        # issue 200: a search runner's outcomes.jsonl names each record by its id; coverage
+        # needs the record itself, and crashed with a TypeError in report() instead of saying so
+        d = Path(tempfile.mkdtemp())
+        f = d / "outcomes.jsonl"
+        f.write_text(json.dumps({"record": "ab" * 32, "outcome": {"failed": True}}) + "\n")
+        with self.assertRaises(cov.CoverageError) as e:
+            cov.outcomes_from_jsonl(f)
+        self.assertIn("line 1", str(e.exception))
+        self.assertIn("{record, outcome}", str(e.exception))
+        self.assertIn("the sample record itself", str(e.exception))
+
     def test_scensim_run_directories(self):
         d = Path(tempfile.mkdtemp())
         r = Sampler.from_file(EXAMPLES / "walker_dartout_dist.xosc").draw(n=2).records
