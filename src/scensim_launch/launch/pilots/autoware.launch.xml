@@ -65,6 +65,7 @@
   <!-- issue 195: a debug option, never an evaluation (scensim marks the run): the vehicle side
        publishes the truth on the pose estimator's topic, and the scensim profile starts no pose
        estimator (ndt:=none), so the EKF fuses the truth. The stock profile has no such switch. -->
+  <arg name="compare_map_z_ratio" default="0.6" description="scensim profile: the compare-map filter's downsize_ratio_z_axis, (0, 1]; its z band is 0.5 m x this (issue 180 step B v2)"/>
   <arg name="direct_localization" default="false" description="debug only: the truth pose on the pose estimator's topic, Autoware's NDT off (scensim profile)"/>
 
 
@@ -128,6 +129,7 @@
     <arg name="publish_ground_truth_objects" value="$(var publish_ground_truth_objects)"/>
     <arg name="gnss_enabled" value="$(var gnss_enabled)"/>
     <arg name="gnss_particle_variance" value="$(var gnss_particle_variance)"/>
+    <arg name="compare_map_z_ratio" value="$(var compare_map_z_ratio)"/>
   </include>
   </group>
 </launch>
