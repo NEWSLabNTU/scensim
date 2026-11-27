@@ -142,3 +142,29 @@ fail with the message above naming the last error; an estimate more than 1.0 m o
 for `converge_timeout`; the existing reset tests pass with the new default. (2) The change.
 (3) `just gate`. (4) Ask 133 before the push. (5) A live check, predictions first: fixture_c170
 R1 to R3 again, every start within 0.01 rad, the tries per start logged.
+
+## The six 182 step 2c starts (241, 2026-11-27), and option 1's cap
+
+241's `start182.py` on 182 step 2c's six runs (fixture_c6b_r181, x 320, e6a34fd5): yaw less the
+truth's, EKF and NDT, at the first sample and the last before the first motion, and the align's
+best_particle_score.
+
+| run | EKF first, last | NDT first, last | score |
+|---|---|---|---|
+| A1 | -0.0322, -0.0287 | -0.0323, -0.0275 | 3.307 |
+| B1 | +0.0494, +0.0457 | +0.0492, +0.0446 | 3.319 |
+| A2 | -0.0336, -0.0315 | -0.0333, -0.0303 | 3.302 |
+| B2 | -0.0533, -0.0499 | -0.0537, -0.0497 | 3.310 |
+| A3 | +0.0232, +0.0213 | +0.0228, +0.0209 | 3.305 |
+| B3 | +0.0171, +0.0155 | +0.0170, +0.0153 | 3.298 |
+
+(rad.) B2 (-0.053) swerved 1.02 m off the lane's centre before x 360. The scores again do not
+follow the error.
+
+*What it does to the plan above.* The plan took a try to land within 0.01 rad about 40 % of the
+time (two of the first five). Now: fixture_c6b 0 of 8 (A, B and these six: |error| 0.017 to
+0.142); fixture_c170 2 of 3 (R2 -0.005, R3 +0.008). Pooled, 2 of 11, about 18 %: eight tries
+all miss about 0.82^8 = 20 % of the time, and on fixture_c6b alone (no hit in 8) the rate could
+be far worse. So on a featureless straight option 1 as planned may fail a reset often. Raised
+with 133 before landing; the code (58da5a69) is not changed for it. The live starts (Isaac
+fixture_c170 here, CARLA Town01 on 241's GPU1) are the next numbers.
