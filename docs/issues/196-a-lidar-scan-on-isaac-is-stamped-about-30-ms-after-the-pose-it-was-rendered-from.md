@@ -232,3 +232,34 @@ copied into each, `face196.py`, SHA256SUMS). Read with `face196.py <run dir>`, a
 - At 40 Hz the car's own dynamics take a coarser step; the run may drive differently, which does
   not touch tau (the faces divide by the truth's speed). A run that errors at the world server
   or the vehicle at 40 or 120 Hz is a result, reported as it stands, not retried with changes.
+
+## Step 3's result (118's runs, 2026-11-27; read by 243)
+
+Three runs on 118's GPU0, main 53b76a47's code (37402fd2 is docs only over it), each passed with
+exit 0 and no guard stop: 60 Hz at 10:41, 40 Hz at 10:44, 120 Hz at 10:47. `face196.py`; tau in
+ms as median (p10, p90), by speed bin, n scans:
+
+| physics | n substeps | (n - 1) dt | target_a | target_b | face d (m) |
+|---|---|---|---|---|---|
+| 60 Hz | 3 | 33.3 | 34.4 (32.1, 36.4); 34.2 / 34.7 / 34.2; 154 | 33.6 (33.2, 34.7); 33.7 / 33.6; 87 | -0.9148 |
+| 40 Hz | 2 | 25.0 | 26.1 (24.9, 29.5); 26.6 / 26.0 / 25.8; 150 | 25.6 (25.0, 26.4); 25.6 / 25.6; 88 | -0.9166 |
+| 120 Hz | 6 | 41.7 | 42.7 (41.4, 45.5); 43.7 / 42.7 / 42.1; 153 | 42.2 (41.7, 43.3); 42.2 / 42.3; 86 | -0.9168 |
+
+Speed bins: target_a 1 to 4, 4 to 7, 7 to 10 m/s; target_b 7 to 10, 10 to 13 m/s. The car
+started moving at 7.10, 6.55 and 8.50 s.
+
+- S0 held: 60 Hz on main reads 34.4 and 33.6 ms, as step 2 (34.3 and 33.7).
+- H held: 40 Hz 25.6 to 26.1 ms (predicted 24 to 27), 120 Hz 42.2 to 42.7 ms (40 to 44), flat
+  with speed at every rate.
+- Both alternatives fail: a fixed latency would read about 34 ms at all three; two substeps would
+  read 50 and 16.7 ms.
+- Each rate reads 0.5 to 1.1 ms above (n - 1) dt, about 0.8 ms on average, the same at all three:
+  a constant left over after the substeps, not a part of H.
+
+So the render takes the lidar prim's pose as written before the first substep of its frame, and
+a scan stamped at the frame's end is (n - 1) x physics_dt late. Step 1's one-substep offset of the
+annotator's clock under the runner fits the same picture. The fix options above stand; the first
+(stamp the scan at the frame's end less (n - 1) substeps) is now exact for any physics rate, with
+about 0.8 ms left to explain. Logs: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 196 step 3
+(118)` (run dirs without the raw bags, face196's JSON and rows per run, provenance; the bags
+stay on 118, `runs_on_118.txt`).
