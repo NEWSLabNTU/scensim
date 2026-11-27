@@ -1394,3 +1394,85 @@ P(|C3| <= 0.01) is a little under the 0.68 of the draw alone.
 user approved): among the particles whose NVTL is within a tolerance of the best (a parameter,
 default 0, meaning off), take the one closest to the prior's mean. That would predict
 |C3 yaw| <= 0.01 rad in every run.
+
+## The yaw prior's live check: YSEQ results (118's runs at scensim f482b53a, 2026-11-28; reading 241)
+
+**What the align is given, from the code** (autoware_core 61f9c96e). The agent's initialize
+carries no pose (scensim_agent `initialize_request`), and neither does
+automatic_pose_initializer's. pose_initializer then takes `get_gnss_pose()`, which copies the
+latest GNSS pose its subscription delivered and **replaces** its covariance with the
+`gnss_particle_covariance` parameter, verbatim (pose_initializer_core.cpp:260): entry 35 is the
+profile's `gnss_particle_yaw_variance`, 1.1e-4. Nothing of the receiver's own covariance is
+added and no unit is converted; NDT reads covariance(5,5) as is and samples yaw with its square
+root.
+
+**A mislabelled number, corrected.** The first run's "guess yaw variance 2.62e-4" was
+covariance[35] of `/localization/pose_estimator/initial_pose_with_covariance`, NDT's per-scan
+input from the EKF, not the align's request (118 relabelled it from Y_6b_1 on). The align's real
+input shows in `/localization/pose_estimator/monte_carlo_initial_pose_marker`, already recorded:
+the first 100 particles (n_startup_trials) are draws from the prior alone. Their yaw sd is
+0.0113 rad in every run; 0.0105 (1.1e-4) is inside 100 draws' 95 % interval (0.0091 to 0.0120),
+0.0162 (2.62e-4) is not (0.0142 to 0.0186). The align drew with 1.1e-4.
+
+**The draws repeat.** The TPE's engine is upstream's static `std::mt19937_64 engine(0)`
+(tree_structured_parzen_estimator.cpp:28); the fork only takes the yaw draw from it. So every
+fresh stack's scored align draws the same 100 offsets: the startup sd is 0.011290 in all 8 runs,
+equal to 6 digits. A run differs from another only by its guess (one of a few GNSS fixes) and by
+NDT's landscape. The predictions above assumed an independent draw per run; that was wrong.
+
+**The guess** is a GNSS fix received 0.1 to 1.1 s before "Call align server.", not always the
+last one, as `get_pose()` reads.
+
+**The runs:** Y_170_1..4 (fixture_c170 B, down_hold120, all passed) interleaved with Y_6b_1..4
+(fixture_c6b rebuilt, r181; 150 s timeout by design, 3 of 4 with the known rock contact),
+01:20 to 01:54, 118's GPU0. Each run read `yaw_prior_variance_threshold` 0.01 live and mapped the
+overlay's ndt_scan_matcher. Records: NAS `autoveh/logs/2026 SSv2 on CARLA/... L3 (118)/runs/Y_*`;
+118's ytable.py, mcinit.py and ytable_Y.txt in its `scripts/`.
+
+| run | C3 pos m | C3 yaw rad | prior offset | startup sd | GNSS yaw err at /initialpose3d | particles within 0.01 | rank |
+|---|---|---|---|---|---|---|---|
+| Y_170_1 | 0.0405 | -0.0032 | -0.0051 | 0.0113 | -0.0038 | 98 | 1 |
+| Y_6b_1 | 0.4949 | +0.0187 | +0.0050 | 0.0113 | +0.0062 | 105 | 1 |
+| Y_170_2 | 0.2591 | +0.0269 | -0.0034 | 0.0113 | -0.0022 | 105 | 1 |
+| Y_6b_2 | 0.3944 | -0.0031 | +0.0050 | 0.0113 | +0.0062 | 98 | 1 |
+| Y_170_3 | 0.2787 | +0.0110 | -0.0050 | 0.0113 | -0.0037 | 94 | 1 |
+| Y_6b_3 | 0.3355 | -0.0295 | -0.0050 | 0.0113 | -0.0038 | 89 | 1 |
+| Y_170_4 | 0.2025 | +0.0270 | +0.0005 | 0.0113 | +0.0018 | 114 | 1 |
+| Y_6b_4 | 0.3205 | +0.0004 | +0.0050 | 0.0113 | +0.0062 | 99 | 1 |
+
+*Against the predictions*:
+- |C3 yaw| <= 0.03 rad in every run: **holds** on both fixtures (at most 0.0295).
+- <= 0.01 rad in at least half: holds on c6b (2 of 4), **fails on c170** (1 of 4). Recorded as
+  failed. C3 yaw spans about +-0.027 under an offset within +-0.005 and a 0.011 draw: NVTL's
+  choice among the same particles spreads it, not the prior. The prior bounds the yaw; it does
+  not make NDT pick the particle nearest the truth.
+
+**C3's position got worse**: 1 of 8 within 0.15 m (c170 0.04 to 0.28, c6b 0.32 to 0.49), against
+6 of 10 in L3's T set before this pin. Three things changed together: the yaw prior; c6b's map,
+now the rebuilt one (issue 198); and the rest of the cf931f5c pin (autoware_sim_vehicle 9d4bc31,
+acb f4c9758, aib cde40f0, siw 6a59ebd). The A/B below separates the first from the others.
+
+## The yaw prior and C3's position: an A/B (241, 2026-11-28; approved by 133, predictions before any run)
+
+**The run** (118, after step B v2): scensim 4343e3bd, project l3_c170_B on fixture_c170 B, scenario
+down_hold120, autoware_profile scensim, a fresh stack per run, interleaved A1 B1 A2 B2 A3 B3 A4
+B4. **A**: the pilot args as Y_170. **B**: the same and `gnss_particle_yaw_variance: 10.0`, above
+the 0.01 threshold, so the overlay's TPE draws yaw uniformly over the circle, as upstream; nothing
+else differs. First-run checks, any failure stopping the sequence: B1's startup yaw spread is
+wide (about 1.8 rad) and A1's is 0.0113; entry 35 of the live gnss_particle_covariance reads 10.0
+in B and 1.1e-4 in A. Recorded per run: C3 position and yaw, the prior's offset, the startup sd,
+the startup draws' xy sd, the winner's xy against the guess's, the winner's rank.
+
+**Predictions**:
+- A replicates YSEQ's c170 arm: C3 position within 0.15 m in at most 1 of 4.
+- B's yaw is as before the pin on this fixture (L3's T set: at most 0.0093 rad): |C3 yaw| <= 0.03
+  rad in all 4.
+- The reading: B within 0.15 m in 3 or 4 of 4 means the yaw prior costs position; in 0 or 1 of 4,
+  the prior is not the cause, and the rest of the pin is; 2 of 4 decides nothing, and the A/B is
+  extended by 4 + 4.
+- The draws repeat in both arms (engine(0)), so each arm's 4 runs differ by the guess and the
+  landscape only; the A/B compares the two rules, not two random samples of each.
+
+A mechanism, if the prior is the cause (a guess, to check in B's markers): with yaw pinned near
+the guess, the TPE spends its 100 trials after the startup on xy around nearly right yaws, and
+NVTL's best among them may sit at an xy the uniform search would not keep.
