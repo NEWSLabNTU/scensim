@@ -64,3 +64,41 @@ message. **Steps, once chosen:** confirm the path in 118's logs (above); a faili
 relay's tests (a reset that fails after the reply window answers FAILED to the next attempt and
 every later one); the change; the gate; a live check with 195's draw config, predicting an error
 ending within 300 s that names the agent's message.
+
+## The chain confirmed (118's D1 logs, 2026-11-27)
+
+`home/2026-11-27 issue 197 D1 log lines (118)/i197_D1_lines.txt`:
+- *relay:* `initialize -> OK: reset ego-1-1795745292 in progress` (at ...301.99), then
+  `ego: reset ego-1-1795745292 -> FAILED in 17.0 s: the align landed off the scenario's heading 8
+  times...` (...309.97). No other initialize or reset line: the concealer never called again.
+- *scenario:* no `AutowareError`, no "Requested the service", no initialize or localization line
+  (only the parameter dump: `initialize_localization` 10, `initialize_duration` 120).
+- *agent:* `command reset -> FAILED...`, `phase INITIALIZING -> IDLE`, then 72 ms later
+  `command set_goal` -> `goal set: (490.00, 1.62); engaging once ready` -> OK.
+D1, D2 and D3 all ended `failed` at the timeout.
+
+So steps 2 and 4 hold as written, and the logs add **a second fault: after a failed reset the
+agent goes to IDLE and accepts the goal.** An agent whose reset failed has no valid pose and
+should refuse a route until it is reset again.
+
+## A's timing, before any code
+
+Under A the concealer gets FAILED at once on each attempt, but its loop sleeps its interval
+(10 s for `initialize_localization`) between attempts, and makes 30 (`requestInitialPose(...,
+30)`): it would throw after about 300 s. A scenario with a shorter limit (this one's 150 s)
+ends first, still `failed`, unless the scenario's time stands still while the concealer is
+blocked. Which it does is the question A rests on; the interpreter runs Autoware's
+initialization on the concealer's own task thread ("Hold the task queue"), so it may well
+advance. To settle on a test run (one run, the draw config, a 150 s scenario) before choosing.
+
+*A revised plan, both faults:*
+1. The agent: a failed reset leaves it in a failed state (not IDLE) that refuses `set_goal` and
+   `engage` with the reset's message, until the next reset. This alone stops the ego being
+   driven from no pose, whatever the relay answers.
+2. The relay: no OK for an unfinished reset (A), and a failed reset answered FAILED to later
+   attempts at the same pose for a short while (one-shot for an OK, so a back-to-back rerun of
+   the same scenario still resets).
+3. If 2 is too slow against a scenario's limit, the run's result reads the relay's reset record
+   and names the failure (the run is `error` by scensim's classifier rather than `failed`),
+   whatever SSv2 does.
+Tests first for 1 and 2; then the gate; then the live check.
