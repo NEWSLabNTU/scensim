@@ -603,3 +603,18 @@ issue 196 M (243)/`, with SHA256SUMS. No runs.
 
 So L2b, whose stamp stays at the frame's end on the EKF's grid, is not exposed to this. B3
 checks it.
+
+## L2b's checks: B6, the Haruna split (243, 2026-11-28, before any L2b run; 133 approved)
+
+*Why.* Issue 195's H (118's runs at scensim 23b65448, L2r, tb-l3h, haruna_down at 60 Hz, 3
+substeps, 4.2 m/s) split its runs in two, by neither map nor load: 3 of 4 on each map sit
+behind at -0.096 to -0.100 m along while moving, and one pair is level (-0.008, -0.025). Step 5
+of issue 195 split the same way. The behind level is 23 to 24 ms of motion, against the 33.6 to
+34.4 ms render lag measured at 60 Hz (step 3), about the same fraction NDT shows on c170 under
+L2r (24 to 36 ms). So the behind mode may be this issue's lag as NDT sees it. The level mode
+has no explanation here.
+
+*B6.* After L2b is pinned, 4 runs of haruna_down on tb-l3h's rebuilt map, beside B1 to B5:
+- every run's moving along median is within 0.03 m of 0, and none is near -0.1 m.
+- If the runs still split, the split is not this issue's lag. That is recorded in issue 195,
+  and L2b's landing rests on B1 to B5 alone.
