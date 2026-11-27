@@ -102,3 +102,13 @@ advance. To settle on a test run (one run, the draw config, a 150 s scenario) be
    and names the failure (the run is `error` by scensim's classifier rather than `failed`),
    whatever SSv2 does.
 Tests first for 1 and 2; then the gate; then the live check.
+
+## The strongest case, on CARLA (241, 2026-11-27)
+
+241's Town01 run `2026-11-27T11-10-35_town01_ego_drive_r0` (the 58da5a69 build, the draws'
+tolerance, so the reset fails by design): the agent's reset failed after eight aligns, the
+agent took the goal anyway, the car moved at sim 97.6 s and reached it, and the run PASSED
+(physical_verdict passed, 132 s). On Isaac's fixture_c6b the same chain ended at the
+scenario's timeout; on CARLA the car stood where the truth put it, so nothing in the run
+noticed. A failed reset that can pass is why the run must end on it (660c81eb) and the agent
+must refuse the goal (f7de9207).

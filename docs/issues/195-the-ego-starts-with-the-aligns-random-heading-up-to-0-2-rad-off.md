@@ -608,3 +608,93 @@ measured:
 
 So acb's stand-alone bring-up localizes without the seed, through Autoware's GNSS initializer
 (133's condition). The logs are on the NAS (`2026-11-27 issue 195 A9 stand-alone start (118)`).
+
+## Batch L: localization and Isaac sensing (133, 2026-11-27)
+
+The user asked for related issues to be resolved in batches. Batch L, led by 243 with 118:
+195 (the start's heading; now no truth to Autoware), 197 (a failed reset that does not end
+the run), 196 (the lidar scan stamped (n - 1) substeps after its render pose), 170 (Isaac's
+localization off the truth: across +0.19 m, along the stamp lag), 182's standstill drift, and
+172 (Haruna's bimodal localization, whose "~24 ms time offset latched early" looks like 196's
+lag). The order: **L1**, one landing of 195 (the pose-free initialization, the
+direct-localization option and its debug mark, GNSS on, 118's GNSS noise and acb's retired
+seed) with 197; **L2**, the 196 fix in aib (test-first), then a pin landing; **L3**, one
+measurement campaign on L1 and L2, predictions first: eight pose-free starts per map
+(fixture_c6b, fixture_c170, CARLA Town01), along and across against speed (the 34 ms lag
+expected gone), 170's car-fixed across offset, 182's standstill drift and a Haruna rerun set
+for 172. The NDT trace below runs as a baseline now and again in L3.
+
+*Data for the record.*
+- CARLA Town01 (241, GPU1, the 58da5a69 build with the overlay; run
+  `2026-11-27T11-10-35_town01_ego_drive_r0`, project i195_draws): eight draws at +0.0009,
+  +0.0008, +0.0006, +0.0008, +0.0012, +0.0014, +0.0011, +0.0012 rad, and +0.0011 in a defaults
+  run; the truth's yaw is the reset's to 1e-6 rad. Every try within 0.01 rad, all positive:
+  Town01's structure pins the yaw, where fixture_c6b's straight spread it 0.02 to 0.14 rad.
+- That run's reset failed by design (the draws' tolerance), the agent took the goal, and the
+  run PASSED in 132 s: 197's case on CARLA, where nothing in the run notices (recorded in 197).
+- The Autoware overlay is needed wherever a reset initializes more than once: without it the
+  second initialize can kill `pose_instability_detector` (docs/issues/027's negative time;
+  241's first attempt, `2026-11-27T10-21-12`). L1's precheck warns by name when an agent's
+  stack runs without the overlay.
+
+## The NDT trace: is the drift inherited from the initialization? (243, plan and predictions, before any run)
+
+The user's question, through 133: is the localization error inherited from NDT's pose
+initialization (an offset NDT never corrects) or made later by its per-scan tracking? A trace
+of both, against the truth, now on current main (the baseline) and again in L3.
+
+*What is recorded* (Autoware 1.5.0's own outputs, read from autoware_core 1.5.0's source):
+- the align: `/localization/pose_estimator/monte_carlo_initial_pose_marker` (a MarkerArray
+  per particle: its initial and result pose; its score and iteration count as the markers'
+  colours, `exchange_color_crc(score / 4.5)` and `(iteration / 30)`, read back by inverting
+  that map); the pose initializer's output `/initialpose3d`; `/diagnostics`
+  (`ndt_align_service` `best_particle_score`). The winning particle is the one whose result
+  pose is the initializer's output.
+- per scan: `/localization/pose_estimator/initial_pose_with_covariance` (the EKF's pose
+  interpolated to the scan, NDT's guess), `.../pose_with_covariance` (its result),
+  `.../initial_to_result_relative_pose` and `.../initial_to_result_distance` (the pull),
+  `.../iteration_num`, `.../transform_probability`,
+  `.../nearest_voxel_transformation_likelihood`, `.../exe_time_ms`;
+- the EKF: `/localization/kinematic_state`, `/localization/pose_twist_fusion_filter/
+  biased_pose_with_covariance`, `.../estimated_yaw_bias`, and `/diagnostics`'
+  `pose_mahalanobis_distance`, `pose_is_passed_mahalanobis_gate` and `pose_is_passed_delay_gate`;
+  the innovation is NDT's result against the EKF's pose at the scan's stamp (the EKF publishes
+  no innovation of its own);
+- `/localization/initialization_state`, `/sensing/gnss/pose_with_covariance`,
+  `/vehicle/status/velocity_status`, `/tf_static`; the truth from the gap trace's `sim_pose`
+  with its origin offset taken off (`scensim.truth`). No point clouds.
+
+*The runs.* 118's GPU0, current main's code (53b76a47; later commits are docs), a fresh stack
+each, `ros2 launch` (play_launch is not on 118; recorded): fixture_c6b_r181 twice (the start
+at x 320, the drive, the stop before the boulder and the stand there, 182's standstill) and
+fixture_c170_down_hold twice (the drive at 11.11 m/s and 45 s held at the goal). On main the
+agent still initializes at the scenario's position (zero spread); L3 repeats the trace
+pose-free.
+
+*The attribution.* At the initialization: the winning particle's yaw, along and across
+offsets against the truth. Then, per scan: the error of NDT's guess and of its result against
+the truth, the pull (result less guess) and the EKF's innovation, each in yaw, along and
+across, against time and speed. Inherited means the error at the first scan equals the
+winning particle's, and later pulls average to zero; made means it grows through pulls of
+one sign.
+
+*Predictions.*
+- N1, the init: the winning particle's yaw error is the start's (fixture_c6b 0.02 to 0.08
+  rad, fixture_c170 under 0.03 rad); its position error under 0.1 m; on fixture_c6b the
+  particles' scores do not order their yaw errors (the scores within 0.05 of each other).
+- N2, yaw inherited: from the first scan on, NDT's yaw error stays within 0.005 rad of the
+  winning particle's, standing and driving, on both maps; the per-scan yaw pull is under 0.001
+  rad (median of its absolute value) and averages to zero.
+- N3, across inherited: the car-fixed across offset (170's +0.19 m) is already the winning
+  particle's to within 0.05 m, and stays.
+- N4, along made while driving: the along error follows the speed (196's 34 ms, about 0.37 m at
+  11.11 m/s) and is absent standing; the pulls do not carry it (it is in the scan's stamp, not
+  in the match).
+- N5, the standstill drift made by tracking: standing, the along error moves at 0.05 to 0.3
+  m/min (182's range) through small pulls of one sign (median under 1 mm a scan), every one
+  passing the EKF's Mahalanobis gate; the truth stays within 1 mm.
+- If N2 or N3 fails (the error is not the init's), the drift is tracking's; if N5 fails
+  (no one-signed pull), the standstill drift is the EKF's, not NDT's.
+
+The topic list is staged for 118 as a testbench `logging.topics` block on the NAS
+(`home/2026-11-27 issue 195 NDT trace (243)`); the runs wait for 133's go.
