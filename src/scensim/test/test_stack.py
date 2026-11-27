@@ -222,7 +222,9 @@ def test_isaac_plan(where, maps_hub):
     d = make(where, template="isaac")
     p = stack.plan(project_arg=str(d))
     assert p.launch_args["sim"] == "isaac"
-    assert p.launch_args["sim_args"] == (f"world:={d / 'assets' / 'maps' / 'Town01'} ego:=default"
+    # issue 195 A9: the ego config carries the GNSS seed, so the stack writes it
+    assert p.launch_args["sim_args"] == (f"world:={d / 'assets' / 'maps' / 'Town01'} "
+                                         f"ego:={p.stack_dir / stack.ISAAC_EGO}"
                                          f" state_dir:={d / 'state'}")
     assert p.launch_args["side_args"].startswith(f"state_dir:={d / 'state'} gap_trace_dir:=")
     assert " contact_report_dir:=" in p.launch_args["side_args"]
@@ -732,9 +734,11 @@ def test_isaac_options_and_preload(where, maps_hub):
     sim = stack._named(p.launch_args["sim_args"])
     maps = d / "assets" / "maps"
     assert sim == {"world": f"{maps / 'Town01'},{maps / 'Town05'}",
-                   "ego": str((d / "config" / "ego_lockstep.yaml").resolve()),
+                   "ego": str(p.stack_dir / stack.ISAAC_EGO),
                    "state_dir": str(d / "state"), "render": "headless", "physics_hz": "240",
                    "follow": "false", "wheels_topic": "false"}
+    # issue 195 A9: the project's ego config, with the GNSS seed layered on (as wheel_query is)
+    assert p.record["isaac_ego"]["config"] == {"lockstep": True, "gnss": {"seed": 0}}
     assert p.record["maps"] == ["Town01", "Town05"] and p.record["preload"] == ["Town05"]
     assert stack.switch_problem(p.record, "Town05") is None
     rec = dict(p.record, preload=[])

@@ -99,6 +99,40 @@ SIDED_KINDS = ("autoware", "simple")  # kinds that always bring a vehicle side
 GROUND_TRUTH_KINDS = ("simple",)
 ISAAC_GROUND_TRUTH_TOPIC = "/ground_truth/odom"  # simple_pilot's default on Isaac
 ISAAC_EGO = "isaac_ego.yaml"  # the stack's ego config, in its directory, when it needs one
+# Issue 195 A9: the GNSS receiver's error, a project setting as the pilot's arguments: acb's
+# parameters of the same names on CARLA (launch arguments reach acb_bridge.launch.xml), aib's
+# ego config `gnss` keys on Isaac. scensim gives the seed (0) when the project does not, so a
+# run reproduces; -1 asks for a fresh one (logged by the bridge).
+GNSS_ARGS = {"gnss_noise_enabled": "enabled",
+             "gnss_noise_horizontal_stddev_m": "horizontal_stddev_m",
+             "gnss_noise_vertical_stddev_m": "vertical_stddev_m",
+             "gnss_noise_bias_stddev_m": "bias_stddev_m",
+             "gnss_noise_seed": "seed"}
+GNSS_SEED = 0
+
+
+def gnss_block(args: dict) -> dict:
+    """aib's ego config `gnss` from a pilot's ``gnss_noise_*`` arguments, the seed always
+    given (GNSS_SEED unless set; -1 is aib's fresh seed, None)."""
+    out = {}
+    for k, v in (args or {}).items():
+        key = GNSS_ARGS.get(k)
+        if key is None:
+            continue
+        try:
+            if key == "enabled":
+                v = v if isinstance(v, bool) else str(v).strip().lower() == "true"
+            elif key == "seed":
+                v = int(v)
+            else:
+                v = float(v)
+        except (TypeError, ValueError):
+            raise StackRefused(f"{k}: {v!r} is not a "
+                               f"{'number' if key != 'seed' else 'whole number'}") from None
+        out[key] = v
+    seed = out.get("seed", GNSS_SEED)
+    out["seed"] = None if seed == -1 else seed
+    return out
 
 
 # Launch arguments the project interface replaced (roadmap 076 step 10), each with what to give
@@ -846,6 +880,9 @@ def plan(project_arg=None, seat_arg=None, simulator=None, map_name=None, logs=No
     entries = []
     for b in stack_pilots:
         entries.append(pilot_entry(b, project, ctx))
+        if sim == "carla" and b.sided():
+            # issue 195 A9: acb's GNSS seed, given, so the run reproduces
+            entries[-1].setdefault("args", {}).setdefault("gnss_noise_seed", GNSS_SEED)
 
     name = project.resolve().name
     stack_id = f"{now_id(now)}_seat{s.index}"
@@ -995,6 +1032,14 @@ def plan(project_arg=None, seat_arg=None, simulator=None, map_name=None, logs=No
                                "the vehicle side, or isaac.ego: none)")
         doc = _ego_doc(isaac_ego, sim_side.get("ego"))
         doc["vehicle"] = {**(doc.get("vehicle") or {}), "wheel_query": wheel_query}
+        isaac_ego = {"path": str(stack_dir / ISAAC_EGO), "config": doc}
+        sim_side["ego"] = isaac_ego["path"]
+    sided_isaac = [b for b in bound if b.sided()] if not server and sim == "isaac" else []
+    if sided_isaac and sim_side.get("ego") != "none":
+        # issue 195 A9: the GNSS receiver's error and its seed, into the ego config's `gnss`
+        doc = _ego_doc(isaac_ego, sim_side.get("ego"))
+        doc["gnss"] = {**(doc.get("gnss") or {}),
+                       **gnss_block(sided_isaac[0].spec.get("args") or {})}
         isaac_ego = {"path": str(stack_dir / ISAAC_EGO), "config": doc}
         sim_side["ego"] = isaac_ego["path"]
     ego_car = cars.get(vehicle) if vehicle else None
