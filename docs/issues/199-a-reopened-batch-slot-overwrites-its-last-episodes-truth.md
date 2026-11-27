@@ -1,6 +1,6 @@
 # 199: a batch slot reopened after its episode ended overwrites that episode's truth export
 
-**Status:** open; the fix rides in 092 K11f's landing (241, 2026-11-27, for 133). **Severity:**
+**Status:** fixed in 092 K11f's landing (the test first, then `TruthRecorder.begin`; 241, 2026-11-27). **Severity:**
 low. No landed export is affected (below); a future caller that resets finished slots would lose
 every episode but each slot's last, silently. **Found:** 2026-11-27, 241, by K11f's
 random-trajectory test (`test_score.py`), which compares the batch's in-batch score with
