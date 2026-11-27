@@ -140,3 +140,30 @@ acceleration, the one at x 540 at cruise and in the braking.
   trace's `sim_pose` stamped 30 to 37 ms early for the pose it holds) or from NDT and the EKF
   after the scan.
 - Q3: the same tau at x 60 (accelerating, 1 to 8 m/s) and x 540 (11 m/s and braking).
+
+## Step 2's result (243, 2026-11-27)
+
+Run `2026-11-27T09-38-02_fixture_c170_targets_r0` on host 243 (fcc01e50's install), passed; the
+raw cloud recorded (2.5 GB). A first attempt refused at the preprocessor (my scenario: the
+targets' catalog reference lacked its parameter assignments) and ran nothing. `face196.py`,
+`/var/tmp/aeon/170/g1b/face196.json`.
+
+- *The calibration:* standing (119 scans before the first motion), target_a's rear face is
+  d = -0.915 m from its pose (spread -0.915 to -0.894 m).
+- *target_a* (passed while accelerating, 1.0 to 8.5 m/s, 154 scans): **tau 34.3 ms** (p10 33.2,
+  p90 38.5); by speed 34.6 (1 to 4 m/s), 34.4 (4 to 7), 34.0 ms (7 to 10).
+- *target_b* (at cruise and braking, 8.0 to 11.1 m/s, 87 scans): **tau 33.7 ms** (p10 33.2,
+  p90 34.9); 33.7 ms in both speed bins.
+- **Q1 held:** 33.7 to 34.3 ms, inside the speed split's 30 to 37. **Q3 held:** the same at both
+  targets and flat with speed (within 0.6 ms from 1 to 11 m/s). A scan's points are placed where
+  the sensor was 34 ms before the scan's stamp.
+- **Q2 as written was wrong, and is settled another way.** The faces compare the cloud's stamp
+  with the truth's time, as the speed split did, so a truth stamped 34 ms early would look the
+  same. The GNSS separates them: its pose is computed from aib's vehicle state at the frame it is
+  published with, and its along error against the truth is +0.0273 m at every speed (sd 1.3 mm,
+  R1 to R3), all of it gnss_poser's lever (170, the GNSS section). A 34 ms offset between aib's
+  state and the truth would add 0.37 m at 11 m/s. So the truth and aib's state agree in time, and
+  **the lag is in the cloud's stamp:** later than the pose the scan was rendered from by 34 ms.
+- *A number to note, not a reading:* 34 ms is about two thirds of the 50 ms frame (33.3 ms), or
+  two 1/60 s substeps; step 1 found the annotator's clock one 1/60 s substep off aib's under the
+  runner. Which substep's pose the render takes is the open part, and is what a fix needs.
