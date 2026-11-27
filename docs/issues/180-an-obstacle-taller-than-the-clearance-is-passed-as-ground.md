@@ -524,3 +524,68 @@ the node, gated first.
 **Order.** Step 0 (a live stack's node info) and step A (a replay, no simulator) come first.
 133 then chooses the interface from P3, and the threshold. Then the code with its tests, the
 gate, and step B.
+
+## Steps 0 and A: what reads the planner's cloud, and what each interface would stop for (241, 2026-11-27)
+
+**Step 0, from the launches and parameters.** No live stack was up on 241, so this was read
+from Autoware 1.5.0's installed launches and the profile's preset, not from `ros2 node info`.
+The planner's pointcloud input (`planning_input_pointcloud_topic_name`) is read by:
+- motion_velocity_planner (`~/input/no_ground_pointcloud`). obstacle_stop's and obstacle_slow_down's
+  pointcloud types are off (`check_inside.pointcloud: false`, `pointcloud: false`).
+  obstacle_velocity_limiter is `static_only`, and obstacle_cruise takes objects only. So on
+  the lanes today no module acts on a bare point.
+- behavior_velocity_planner (`~/input/no_ground_pointcloud`). Its detection_area module reads
+  points only inside a map's detection areas, and the courses have none.
+- surround_obstacle_checker, which the sim preset turns off.
+- the parking scenario's costmap (`points_no_ground`), on a parking goal only.
+
+**Step A** (`stepA180.py`, NAS `home/2026-11-27 issue 180 option 3 step A (241)/`). It replays
+records against the rebuilt fixture_c6b map, with no node code and no simulator. The truth is
+used only to report the rock's range.
+
+- The lane check with the lanelet mask, over the whole r180 record (455 frames), N 3. r180 is
+  the only record holding the raw cloud:
+
+  | h | rock detected (bumper) | would-be object | false would-be objects on the lanelets |
+  |---|---|---|---|
+  | 0.05 | 14.7 m | 11.3 m | 0 of 455 frames |
+  | 0.08 | 12.2 m | 9.1 m | 0 |
+  | 0.10 | 9.3 m | 8.8 m | 0 |
+  | 0.12 | 9.1 m | 6.1 m | 0 |
+
+  The ranges equal `hmap180.py`'s with the band (P1 held for step A).
+- The ordinary cloud in the trajectory's footprint (half width 0.9475 + 0.3 m, 30 m ahead):
+  what obstacle_stop would stop for if its pointcloud type were on with today's input. Ten c6b
+  records: r180, the 181/182 runs A, B, A1 to A3 and B1 to B3, and c1.
+  - Nearly every in-footprint frame is the 35 cm boulder at s 400, while the car stands before
+    it: a real obstacle.
+  - Away from the fixture's rocks and boulder (more than 2 m), 9 records have none.
+  - Run B has 52 frames, 41 of them as 3 consecutive frames. There are 1 to 5 points a frame,
+    at the map's road height (within 0.05 m, a few to 0.15 m below it), 20 to 23 m ahead at x
+    352 to 375. Meanwhile the ego drifted left from y 1.61 to 2.57. These are road points the
+    ground filter passed as non-ground, and obstacle_stop's 0.3 s rule would have stopped for
+    them.
+  - So P3 FAILED: the ordinary cloud is not clean in the footprint.
+
+**The choices for the user** (bars: a would-be object by 7 m from the bumper for a planned
+stop, by 3 m for an emergency one).
+
+| interface | what the planner stops for | false stops in step A | the rock's object (at h 0.10) | what it takes |
+|---|---|---|---|---|
+| I1. The lane check's cloud joined to the ordinary cloud; obstacle_stop's pointcloud type on | any point of either cloud in the footprint | run B: 41 episodes of 3 frames, from road points the ground filter passed (1 record of 10) | 8.8 m | parameters and a concatenation; not clean |
+| **I2. The lane check's cloud alone into motion_velocity_planner; obstacle_stop's pointcloud type on** | only the lane check's detections; every other reader keeps the ordinary cloud | the lane check's own: 0 in r180's 455 frames | 8.8 m | the profile carries its own motion-planning launch, so that only motion_velocity_planner's input is remapped |
+| I3. The lane check's detections as UNKNOWN DetectedObjects into the object merger | the tracked object | the lane check's own: 0 | about 5.4 to 7.5 m, after the tracker's 1.3 to 3.4 m lag | the merger's input; nothing in planning changes |
+
+| threshold | rule | for the Model 3 (clearance 0.138 m) | the car stops for | it does not stop for |
+|---|---|---|---|---|
+| **h = clearance - 0.04 m, at least 0.05 m** | the margin covers the EKF's height error (2.3 cm in r180) and the map road's spread | 0.098 m, so 0.10 | what could strike the plate: c6b's 15 cm rocks and its 35 cm boulder (the boulder is already an object today) | c6b's 8 cm loose rock, which the tyre climbs and the plate clears by 58.8 mm |
+| h = 0.05 m for every car | the noise floor only | 0.05 m | also the 8 cm rock, and anything over 5 cm on a lane | nothing over 5 cm |
+
+- For a car with low clearance (the MuSHR nano's 0.03 m), the first rule gives the 0.05 m floor.
+- The 8 cm rock's row comes from its height. No record holds the raw cloud past x 112, so it
+  was not measured.
+
+My recommendation: I2, with h = clearance - 0.04 m (at least 0.05 m).
+- I2 is the only interface that is clean in step A and keeps the 8.8 m range.
+- I1 stops for the ground filter's leaks.
+- I3 loses 1.3 to 3.4 m to the tracker.
