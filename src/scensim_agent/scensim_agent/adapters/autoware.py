@@ -45,10 +45,14 @@ MRM_BEHAVIORS = {1: "NONE", 2: "EMERGENCY_STOP", 3: "COMFORTABLE_STOP", 4: "PULL
 # autoware_vehicle_msgs/TurnIndicatorsCommand
 TURN = {1: P.INDICATORS_NONE, 2: P.LEFT, 3: P.RIGHT}
 
+# Issue 195: Autoware runs as a real car would; it is given no pose, and the agent does not judge
+# its estimate against the reset pose. These keys set that judgement and are refused by name.
+RETIRED = {
+    "position_tolerance": "the agent no longer compares the estimate with the reset pose",
+    "yaw_tolerance": "the agent no longer compares the estimate with the reset pose",
+}
+
 DEFAULTS = {
-    # the concealer's bounds (field_operator_application.cpp)
-    "position_tolerance": 1.0,  # m: the estimate agrees with the reset pose
-    "yaw_tolerance": 0.2,  # rad
     "scans_required": 2,  # fresh LiDAR scans before initializing localization
     "scan_wait": 10.0,  # s: initialize anyway after this without them
     # Localization has this long to agree with the pose; the concealer allowed 10 s after
@@ -113,7 +117,7 @@ class AutopilotPort:
     def snapshot(self) -> Snapshot:
         raise NotImplementedError
 
-    def initialize(self, pose, stamp):
+    def initialize(self, stamp):
         raise NotImplementedError
 
     def set_route(self, goal, waypoints, allow_goal_modification, segments):
@@ -189,6 +193,7 @@ class Relocalization:
     unready_since: float | None = None  # Autoware's services went away mid-reset
     align_pending: bool = False  # an initialize call timed out; its align may still run
     align_since: float | None = None  # when the agent began waiting for that align
+    other_since: float | None = None  # waiting out an initialization it did not start
     deadline: float = 0.0
     last_scan_count: int = field(default=0)
     failure: str = ""
@@ -207,6 +212,10 @@ class AutowareAgent(scensim_agent.Agent):
     def __init__(self, config=None, port: AutopilotPort | None = None, clock=time.monotonic,
                  sleep=time.sleep):
         super().__init__(config)
+        retired = sorted(k for k in self.config if k in RETIRED)
+        if retired:
+            raise ValueError("agent config: " + "; ".join(
+                f"{k} is retired ({RETIRED[k]}; issue 195)" for k in retired))
         self.cfg = {**DEFAULTS, **{k: v for k, v in self.config.items() if k in DEFAULTS}}
         self.clock, self.sleep = clock, sleep
         self._closing = threading.Event()
@@ -292,9 +301,9 @@ class AutowareAgent(scensim_agent.Agent):
             self.relocalization = Relocalization(
                 pose=pose, before=s.pose_stamp, scan_count=s.scan_count,
                 started=self.clock(), last_scan_count=s.scan_count)
-            self.detail = "re-localizing at the reset pose"
-        self.log.info(f"re-localizing at ({pose['x']:.2f}, {pose['y']:.2f}, yaw "
-                      f"{yaw_of(pose):.2f})")
+            self.detail = "re-localizing"
+        self.log.info(f"re-localizing; Autoware is given no pose (the reset's is ({pose['x']:.2f}, "
+                      f"{pose['y']:.2f}, yaw {yaw_of(pose):.2f}), for the record)")
         while True:
             with self._core:
                 r = self.relocalization
@@ -505,13 +514,20 @@ class AutowareAgent(scensim_agent.Agent):
                 self.log.warning(r.failure)
                 return
             r.next_try = now + c["initialize_retry"]
+        if (r.stage == "initialize" and now >= r.next_try and s.localization == LOC_INITIALIZING
+                and r.attempts == 0 and r.reinits == 0):  # before this reset's first call
+            self._await_other(r, now)
+            if r.stage != "initialize" or now < r.next_try:
+                return
         if r.stage == "initialize" and now >= r.next_try:
-            r.unready_since = None
+            r.unready_since, r.other_since = None, None
             r.attempts += 1
-            ok, message = self.port.initialize(r.pose, s.scan_stamp or None)
+            ok, message = self.port.initialize(s.scan_stamp or None)
             r.align_pending = not ok and NO_RESPONSE in (message or "")
             if ok:
                 r.stage, r.deadline = "converge", self.clock() + c["converge_timeout"]
+                # only an estimate newer than the call's return is this initialization's
+                r.before = max(r.before, self.port.snapshot().pose_stamp)
             elif r.attempts >= c["initialize_attempts"]:
                 r.stage = "failed"
                 r.failure = f"localization initialize refused: {message}"
@@ -523,29 +539,28 @@ class AutowareAgent(scensim_agent.Agent):
         if r.stage == "converge":
             s = self.port.snapshot()
             if (s.localization == LOC_INITIALIZED and s.pose is not None
-                    and s.pose_stamp > r.before
-                    and consistent(r.pose, s.pose, c["position_tolerance"],
-                                   c["yaw_tolerance"])):
+                    and s.pose_stamp > r.before):
+                self._record_error(r, s)
                 r.stage, r.verify_until = "verify", self.clock() + c["verify_window"]
                 r.score_count0, r.score_above0 = s.score_count, s.score_above
             elif self.clock() >= r.deadline:
                 where = ("no estimate" if s.pose is None else
-                         f"estimate at ({s.pose['x']:.2f}, {s.pose['y']:.2f})")
-                self._reinitialize(r, s, f"localization did not reach the reset pose in "
-                                         f"{c['converge_timeout']:.0f} s ({where})")
+                         f"last estimate at ({s.pose['x']:.2f}, {s.pose['y']:.2f})")
+                self._reinitialize(r, s, f"localization was not INITIALIZED with a fresh "
+                                         f"estimate in {c['converge_timeout']:.0f} s ({where})")
                 return
         if r.stage == "verify":
             s = self.port.snapshot()
             scores = s.score_count - r.score_count0
             if s.score_above > r.score_above0 or (
                     scores == 0 and self.clock() >= r.verify_until):
-                self.log.info(f"localized at the reset pose after "
+                self.log.info(f"localized after "
                               f"{self.clock() - r.started:.1f} s"
                               + ("" if scores else " (no scan-matcher score)"))
                 r.stage = "done"
             elif scores >= c["lost_scores"] or self.clock() >= r.verify_until:
                 self._reinitialize(r, s, f"the scan matcher scored {scores} scan(s) at "
-                                         f"{c['lost_score']:g} or below after localizing at the reset pose")
+                                         f"{c['lost_score']:g} or below after localizing")
 
     def _await_align(self, r: Relocalization, s: Snapshot, now: float):
         """Issue 046: an initialize call that timed out is not cancelled; its align runs on
@@ -569,18 +584,44 @@ class AutowareAgent(scensim_agent.Agent):
             return
         r.align_pending, r.align_since = False, None
         if (s.localization == LOC_INITIALIZED and s.pose is not None
-                and s.pose_stamp > r.before
-                and consistent(r.pose, s.pose, c["position_tolerance"], c["yaw_tolerance"])):
-            self.log.info("the timed-out initialize aligned at the reset pose after all")
+                and s.pose_stamp > r.before):
+            self.log.info("the timed-out initialize ended INITIALIZED after all")
             r.stage, r.deadline = "converge", now + c["converge_timeout"]
 
+    def _await_other(self, r: Relocalization, now: float):
+        """Issue 046: an initialization the agent did not start (the automatic initializer,
+        which gnss_enabled runs once at stack start, before SSv2 places the car) is waited
+        out, up to `align_wait`, so the agent's own call is the last and comes after the car
+        is placed."""
+        c = self.cfg
+        if r.other_since is None:
+            r.other_since = now
+            self.log.info("an initialization the agent did not start is running; waiting for "
+                          "it to end before initializing")
+        if now - r.other_since >= c["align_wait"]:
+            r.stage = "failed"
+            r.failure = (f"localization stayed INITIALIZING {c['align_wait']:.0f} s in an "
+                         "initialization the agent did not start")
+            self.log.warning(r.failure)
+            return
+        r.next_try = now + min(c["initialize_retry"], 0.5)
+
+    def _record_error(self, r: Relocalization, s: Snapshot):
+        """The estimate against the reset pose, logged for the record as a judge would; the
+        agent does not act on it (issue 195)."""
+        yaw = math.remainder(yaw_of(s.pose) - yaw_of(r.pose), 2.0 * math.pi)
+        d = math.hypot(s.pose["x"] - r.pose["x"], s.pose["y"] - r.pose["y"])
+        score = "none" if s.score is None else f"{s.score:.3f}"
+        self.log.info(f"initialized: the estimate is {d:.2f} m and yaw {yaw:+.4f} rad from the "
+                      f"reset pose (NVTL {score}; for the record, not used)")
+
     def _reinitialize(self, r: Relocalization, s: Snapshot, why: str):
-        """Initialize again at the same pose, or fail once the repeats are spent."""
+        """Initialize again, or fail once the repeats are spent."""
         c = self.cfg
         if r.reinits >= c["reinitialize_attempts"]:
             r.stage = "failed"
-            r.failure = (f"{why}; gave up after {r.reinits + 1} initialization(s) at "
-                         f"({r.pose['x']:.2f}, {r.pose['y']:.2f})")
+            r.failure = (f"{why}; gave up after {r.reinits + 1} initialization(s) "
+                         f"(the reset at ({r.pose['x']:.2f}, {r.pose['y']:.2f}))")
             self.log.warning(r.failure)
             return
         r.reinits += 1

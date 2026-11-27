@@ -21,9 +21,31 @@ START = {"x": 190.8, "y": -130.1, "z": 0.3, "qx": 0.0, "qy": 0.0,
 def rig():
     clock = Clock()
     autoware = FakeAutoware(clock)
+    autoware.true_pose = dict(START)  # where SSv2 puts the car; the reset pose names it
     agent = C.AutowareAgent({"step_period": 0}, port=autoware, clock=clock,
                             sleep=clock.sleep)
     return clock, autoware, agent
+
+
+@pytest.fixture
+def agent_log(rig):
+    """The agent's own log lines (a handler on its logger: caplog misses them under ROS's
+    pytest plugins, which rewire the logging tree)."""
+    import logging
+    lines = []
+
+    class Keep(logging.Handler):
+        def emit(self, record):
+            lines.append(record.getMessage())
+
+    handler = Keep(level=logging.DEBUG)
+    log = rig[2].log
+    log.addHandler(handler)
+    old = log.level
+    log.setLevel(logging.DEBUG)
+    yield lines
+    log.removeHandler(handler)
+    log.setLevel(old)
 
 
 def run(clock, agent, seconds, dt=0.1):
@@ -91,22 +113,22 @@ def test_reset_waits_for_fresh_scans_but_not_forever(rig):
 def test_reset_fails_when_localization_does_not_converge(rig):
     clock, autoware, agent = rig
     autoware.CONVERGE_TIME = 1e9
-    with pytest.raises(Failed, match="did not reach"):
+    with pytest.raises(Failed, match="not INITIALIZED"):
         agent.on_reset(Episode(pose=START))
-    assert "did not reach" in agent.state_message()["detail"]
+    assert "not INITIALIZED" in agent.state_message()["detail"]
 
 
 def test_after_a_failed_reset_the_agent_refuses_a_goal(rig):
     # issue 197: the reset failed, the agent went IDLE and took the goal 72 ms later
     clock, autoware, agent = rig
     autoware.CONVERGE_TIME = 1e9
-    with pytest.raises(Failed, match="did not reach"):
+    with pytest.raises(Failed, match="not INITIALIZED"):
         agent.on_reset(Episode(pose=START))
     assert agent.state_message()["phase"] != P.IDLE
-    with pytest.raises(Failed, match="no goal after a failed reset: .*did not reach"):
+    with pytest.raises(Failed, match="no goal after a failed reset: .*not INITIALIZED"):
         agent.on_goal(GOAL, [])
     assert "set_route" not in autoware.calls
-    assert "did not reach" in agent.state_message()["detail"]
+    assert "not INITIALIZED" in agent.state_message()["detail"]
 
 
 def test_a_new_reset_clears_the_failed_state(rig):
@@ -175,11 +197,11 @@ def test_reset_retries_a_refused_initialize(rig):
     calls = []
     original = autoware.initialize
 
-    def initialize(pose, stamp):  # refused twice, then accepted
+    def initialize(stamp):  # refused twice, then accepted
         calls.append(clock())
         if len(calls) == 3:
             autoware.refuse.clear()
-        return original(pose, stamp)
+        return original(stamp)
 
     autoware.initialize = initialize
     agent.on_reset(Episode(pose=START))
@@ -196,9 +218,9 @@ def _timing_out_first(autoware, then=None):
     calls = []
     original = autoware.initialize
 
-    def initialize(pose, stamp):
-        calls.append(pose)
-        ok, message = original(pose, stamp)
+    def initialize(stamp):
+        calls.append(stamp)
+        ok, message = original(stamp)
         if len(calls) == 1:
             if then is not None:
                 then(autoware)
@@ -216,17 +238,16 @@ def test_a_timed_out_initialize_whose_align_takes_the_pose_is_not_sent_again(rig
     assert len(calls) == 1 and agent.phase == P.IDLE
 
 
-def test_a_timed_out_initialize_whose_align_ends_elsewhere_is_sent_again(rig):
+def test_a_timed_out_initialize_is_taken_where_its_align_lands(rig):
+    # issue 195: the agent no longer judges an align by the reset pose; an align that ends
+    # INITIALIZED with a fresh estimate is Autoware's answer, wherever it landed
     clock, autoware, agent = rig
-    elsewhere = dict(START, x=START["x"] + 40.0)
-    autoware.CONVERGE_TIME = 5.0          # the align outlasts the retry interval
+    autoware.CONVERGE_TIME = 5.0
     agent.cfg["initialize_retry"] = 0.5
+    elsewhere = dict(START, x=START["x"] + 40.0)
     calls = _timing_out_first(autoware, lambda a: setattr(a, "init_pose", elsewhere))
-    started = clock()
     agent.on_reset(Episode(pose=START))
-    assert len(calls) == 2 and agent.phase == P.IDLE
-    # the second call waited for the first align to end, not only the retry interval
-    assert clock() - started >= autoware.CONVERGE_TIME
+    assert len(calls) == 1 and agent.phase == P.IDLE
 
 
 def test_no_initialize_is_queued_while_a_timed_out_align_runs(rig):
@@ -274,12 +295,12 @@ def test_reset_waits_out_services_restarting_mid_reset(rig):
     original = autoware.initialize
     down = []
 
-    def initialize(pose, stamp):
+    def initialize(stamp):
         if not down:
             down.append(clock())
             autoware.s.ready = False
             return False, "/api/localization/initialize: service not available"
-        return original(pose, stamp)
+        return original(stamp)
 
     def back():
         if down and clock() - down[0] > 40.0:
@@ -433,3 +454,62 @@ class _RealTimeFake(C.AutowareAgent):
 def test_passes_check_on_a_fake_autoware():
     report = run_check(_RealTimeFake, {"step_period": 0.05, "settle": 0.5}, 15.0)
     assert report.passed, report.text()
+
+
+# --- issue 195: the reset gives Autoware no pose ----------------------------------------------
+
+def test_reset_initializes_without_a_pose(rig):
+    clock, autoware, agent = rig
+    agent.on_reset(Episode(pose=START))
+    assert autoware.init_args and all(len(a) == 1 for a in autoware.init_args)  # the stamp only
+    assert agent.phase == P.IDLE
+    assert C.consistent(START, agent.state_message()["pose"])  # the car's own pose, found
+
+
+def test_an_estimate_off_the_reset_pose_is_accepted_and_logged(rig, agent_log):
+    clock, autoware, agent = rig
+    autoware.align_error = (0.4, -0.3, 0.12)
+    agent.on_reset(Episode(pose=START))
+    assert autoware.calls.count("initialize") == 1 and agent.phase == P.IDLE
+    line = next(x for x in agent_log if "from the reset pose" in x)
+    assert "yaw +0.1200 rad" in line and "0.50 m" in line and "not used" in line
+
+
+def test_reset_waits_out_an_initialization_already_running(rig):
+    # issue 046: the automatic initializer (gnss_enabled) started before SSv2 placed the car
+    clock, autoware, agent = rig
+    autoware.true_pose = dict(START, x=0.0, y=0.0)   # where the car stood at stack start
+    autoware.CONVERGE_TIME = 5.0
+    autoware.begin_initialization()
+    started = clock()
+    autoware.true_pose = dict(START)                  # SSv2 places it
+    at = []
+    original = autoware.initialize
+
+    def initialize(stamp):
+        at.append(clock())
+        return original(stamp)
+
+    autoware.initialize = initialize
+    agent.on_reset(Episode(pose=START))
+    assert len(at) == 1 and at[0] >= started + 5.0  # ours, after the automatic one ended
+    assert agent.phase == P.IDLE
+    assert C.consistent(START, agent.state_message()["pose"])
+
+
+def test_an_initialization_that_never_ends_fails_the_reset(rig):
+    clock, autoware, agent = rig
+    agent.cfg["align_wait"] = 10.0
+    autoware.begin_initialization()
+    autoware.initialized_at = None                   # it never ends
+    with pytest.raises(Failed, match="INITIALIZING"):
+        agent.on_reset(Episode(pose=START))
+    assert "initialize" not in autoware.calls
+
+
+@pytest.mark.parametrize("key", ["yaw_tolerance", "position_tolerance"])
+def test_the_reset_pose_tolerances_are_refused_by_name(key):
+    clock = Clock()
+    with pytest.raises(ValueError, match=key):
+        C.AutowareAgent({"step_period": 0, key: 0.5}, port=FakeAutoware(clock), clock=clock,
+                        sleep=clock.sleep)

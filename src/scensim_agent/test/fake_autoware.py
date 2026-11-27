@@ -2,6 +2,8 @@
 operation-mode and localization behaviour to drive AutowareAgent through a scenario.
 Moved from autoware_carla_bridge's acb_pilot (roadmap 030 step 6)."""
 
+import math
+
 from scensim_agent.adapters import autoware as C
 
 
@@ -24,7 +26,7 @@ class Clock:
 
 class FakeAutoware(C.AutopilotPort):
     PLAN_TIME = 1.0  # route SET -> autonomous mode available
-    CONVERGE_TIME = 1.0  # initialize -> estimate at the pose
+    CONVERGE_TIME = 1.0  # initialize -> an estimate
 
     def __init__(self, clock, rtc=False):
         self.clock = clock
@@ -36,7 +38,12 @@ class FakeAutoware(C.AutopilotPort):
         self.calls = []
         self.route_set_at = None
         self.initialized_at = None
-        self.init_pose = None
+        # Issue 195: the initializer is given no pose. Its estimate is where the car truly is
+        # (SSv2 placed it; the GNSS and NDT find it), off by `align_error` (dx, dy, dyaw).
+        self.true_pose = dict(self.s.pose)
+        self.align_error = (0.0, 0.0, 0.0)
+        self.init_pose = None  # the estimate the running initialization will publish
+        self.init_args = []  # what each initialize call was given
         self.refuse = set()
         self.publish_scans = True
         # The scan matcher's score per scan once localized: a number, or a list of them, one
@@ -72,12 +79,26 @@ class FakeAutoware(C.AutopilotPort):
             return False, f"{name} refused"
         return True, ""
 
-    def initialize(self, pose, stamp):
+    def estimate(self):
+        """The estimate an initialization lands on: the true pose, off by `align_error`."""
+        dx, dy, dyaw = self.align_error
+        p = dict(self.true_pose, x=self.true_pose["x"] + dx, y=self.true_pose["y"] + dy)
+        yaw = C.yaw_of(self.true_pose) + dyaw
+        p.update(qx=0.0, qy=0.0, qz=math.sin(yaw / 2.0), qw=math.cos(yaw / 2.0))
+        return p
+
+    def begin_initialization(self):
+        """An initialization starts (the agent's call, or the automatic initializer's)."""
+        self.s.localization = C.LOC_INITIALIZING
+        self.s.route = C.ROUTE_UNSET
+        self.initialized_at, self.init_pose = self.clock(), self.estimate()
+
+    def initialize(self, *args):
+        self.init_args.append(args)
+        stamp = args[-1] if args else None
         ok, msg = self._call("initialize")
         if ok:
-            self.s.localization = C.LOC_INITIALIZING
-            self.s.route = C.ROUTE_UNSET
-            self.initialized_at, self.init_pose = self.clock(), pose
+            self.begin_initialization()
             self.initializations += 1
             self.init_stamp = stamp
         return ok, msg

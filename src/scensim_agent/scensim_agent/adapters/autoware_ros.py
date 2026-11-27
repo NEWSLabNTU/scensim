@@ -19,7 +19,6 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.parameter import Parameter
 from rclpy.qos import (DurabilityPolicy, QoSProfile, ReliabilityPolicy,
                        qos_profile_sensor_data)
-from rclpy.time import Time
 
 from autoware_adapi_v1_msgs.msg import (LocalizationInitializationState, MrmState,
                                         OperationModeState, RouteState)
@@ -27,7 +26,6 @@ from autoware_adapi_v1_msgs.msg import RoutePrimitive, RouteSegment
 from autoware_adapi_v1_msgs.srv import (ChangeOperationMode, ClearRoute,
                                         InitializeLocalization, SetRoute, SetRoutePoints)
 from autoware_vehicle_msgs.msg import TurnIndicatorsCommand
-from geometry_msgs.msg import PoseWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
 
@@ -132,6 +130,12 @@ def cdr_header_stamp(data: bytes) -> float:
     little = data[1] == 1  # encapsulation: 0x0001 = CDR little-endian
     sec, nanosec = struct.unpack_from("<iI" if little else ">iI", data, 4)
     return sec + nanosec * 1e-9
+
+
+def initialize_request():
+    """`/api/localization/initialize` with no pose (issue 195): the initializer takes the GNSS
+    pose, the scan matcher aligns from it; the truth and the scenario's pose never go in."""
+    return InitializeLocalization.Request()
 
 
 def _pose_msg(d, pose):
@@ -400,17 +404,10 @@ class AutowarePort(AutopilotPort):
             return False, error
         return response.status.code == Tier4Status.SUCCESS, response.status.message
 
-    def initialize(self, pose, stamp):
-        request = InitializeLocalization.Request()
-        p = PoseWithCovarianceStamped()
-        p.header.frame_id = "map"
-        # Autoware's time base: the newest scan's stamp when there is one, else the
-        # node's (sim) clock.
-        p.header.stamp = (Time(seconds=stamp).to_msg() if stamp
-                          else self.node.get_clock().now().to_msg())
-        _pose_msg(pose, p.pose.pose)
-        request.pose = [p]
-        return self._adapi(self._call("initialize", request,
+    def initialize(self, stamp):
+        # Issue 195: no pose; Autoware's pose initializer takes the GNSS pose and NDT's align,
+        # as on a real car. `stamp` is the port interface's (other ports may use it).
+        return self._adapi(self._call("initialize", initialize_request(),
                                       timeout=self.initialize_timeout or INITIALIZE_TIMEOUT))
 
     def set_route(self, goal, waypoints, allow_goal_modification, segments):
