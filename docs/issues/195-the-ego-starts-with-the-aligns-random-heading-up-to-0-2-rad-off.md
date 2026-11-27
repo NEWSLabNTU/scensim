@@ -295,3 +295,114 @@ the one it favours. That is the biased optimum 133 read in D1, and it belongs to
 
 So (c), measured first on fixture_c6b; option 1 and (a) do not fix c6b, and (b) moves the error
 into the run. CARLA Town01 (241) would say whether a featured map needs anything at all.
+
+## The user's decision, and the replan (243, 2026-11-27; a plan, no code)
+
+The user, through 133: "I prefer to let Autoware run as though it's a real car. We don't pass
+ground truth position to it. The autopilot should always rely on sensor or v2x to get the
+pose." So DIRECT is out, and so is today's path (the agent initializes at the scenario's pose).
+Comparing Autoware's estimate with the truth as a judge stays allowed. 58da5a69 and f26af7da are
+not landed; the branch (i195) is kept.
+
+### (1) The audit: where the truth or the scenario's pose reaches Autoware's localization
+
+Read at main 37402fd2 and its pins; Autoware 1.5.0 from autoware_core's source at tag 1.5.0.
+
+| # | where | what reaches Autoware | when |
+|---|---|---|---|
+| A1 | scensim_agent `adapters/autoware_ros.py` `initialize` | the scenario's pose as `/api/localization/initialize`'s `pose` (AUTO method), zero covariance | every reset of a relay ego |
+| A2 | scensim_agent `adapters/autoware.py`, the converge stage | not an input, but a choice: an align is accepted or re-run by comparing the estimate with the scenario's pose (`consistent`, 1.0 m and `yaw_tolerance`); 58da5a69 makes it re-run until the heading matches | every reset |
+| A3 | scensim_launch `pilots/autoware.launch.xml` | `gnss_enabled` false for relay egos, so Autoware has no GNSS initialization and only A1 can initialize it | every relay ego |
+| A4 | the relay (`relay_node.py`, `episodes.py`) | carries SSv2's `/api/localization/initialize` pose (the scenario's) to the agent's reset | every scenario start |
+| A5 | SSv2's concealer (`field_operator_application.cpp`) | `requestInitialPose` sends the scenario's pose to `/api/localization/initialize`, retried 30 x 10 s while `waitForLocalizationToReach` (1 m, 0.2 rad against the scenario's pose) fails | every scenario start; with the relay, through A4 |
+| A6 | acb_bridge `seed_localization_on_attach` (`autoware.rs`, `service_localization_seed`) | CARLA's true pose as `/initialpose` (RViz's 2D Pose Estimate entry point) until the estimate is within its tolerance | default true when `relay:=none` (stand-alone and `just ego-av` without an agent), false with the relay |
+| A7 | acb_bridge `publish_direct_localization` | the true pose as `/localization/kinematic_state` and `/tf`, replacing Autoware's localization | default false; opt-in |
+| A8 | aib `ground_truth.pose_estimate` (rig, `ros.py`) | the true pose on NDT's output topic | default false; opt-in |
+| A9 | aib `gnss_reading` and CARLA's `sensor.other.gnss` (spec `carla_sensors.yaml`, no noise parameters) | the antenna's true position, no noise: a sensor, but a perfect one (an RTK fix without its 1 to 2 cm) | whenever GNSS is on |
+
+Not localization, but the same question: acb's `ground_truth_objects` publishes perception's
+objects from the simulator's truth; a separate item for the user.
+
+Allowed and kept: the judges (`pose_error`, `nvtl`, the gap trace), the ego trace, 170 and 196's
+analyses, and the concealer's `waitForLocalizationToReach` as a check (it does not feed
+Autoware; with A5 removed it only decides whether the scenario starts).
+
+One fact changes the picture. Autoware 1.5.0's align (`NDTScanMatcher::align_pose`) samples yaw
+uniformly over the full circle and takes only the position (and its covariance) from the guess;
+the guess's heading is not used. So today the scenario's heading never reached the align: what
+A1 gave it was the position, with zero spread. The yaw errors measured above are already the
+align's own, and a real car's start would show the same on the same map.
+
+### (2) The real-car path
+
+How a real Autoware car starts: `automatic_pose_initializer` calls the initializer once at
+start with no pose (AUTO); `pose_initializer` takes the GNSS pose (`gnss_module`: the latest
+`/sensing/gnss/pose_with_covariance` within `gnss_pose_timeout`, 3 s) with
+`gnss_particle_covariance` (1 m in x and y, yaw 10 rad^2), checks the car has been stopped
+`stop_check_duration` (3 s), and hands it to NDT's align, which searches position around it
+(TPE, 200 particles) and yaw over the full circle. Without `gnss_enabled` an initialize with no
+pose is refused ("GNSS is not supported"). An operator's 2D pose estimate is the other stock
+way; in simulation it would be the truth, so it is out.
+
+The heading: at standstill `gnss_poser` has no motion to derive a heading from, and with
+`use_gnss_ins_orientation` false (the sensor kits) it has no other. That does not matter to the
+stock align, which ignores the guess's heading; it would matter to a heading-aware align (below).
+170's 2.085 deg (gnss_poser's motion-derived yaw through the kit-rotated gnss_link) likewise
+touches only the GNSS pose's orientation, which neither the align nor the initializer's
+pose-error check (2D position) reads. Real cars that do not rely on the yaw search carry a
+dual-antenna GNSS or an INS (`GnssInsOrientationStamped`, `use_gnss_ins_orientation` true).
+
+The change, per path:
+- Relay egos: `gnss_enabled` true (A3); the agent's reset calls `/api/localization/initialize`
+  with no pose (A1); the relay stops passing SSv2's pose to the agent (A4); the agent accepts an
+  align on Autoware's own evidence (INITIALIZED, the initializer's reliability flag, NVTL over
+  the verify window), never on the scenario's pose (A2); it may log the error against the
+  scenario's pose for the record, as a judge does, without acting on it. 58da5a69's retries go.
+- Stand-alone acb: `seed_localization_on_attach` (A6) retired; the automatic initializer does it.
+- A7 and A8: refused with an Autoware pilot (they are for pilots that are not an autopilot), or
+  retired; the user's call.
+- A9: a GNSS noise model in aib and acb (position noise and bias, a fix type), defaulting to an
+  RTK-like 2 cm, so the GNSS is a believable sensor rather than the truth; the user's call on
+  the default.
+- Order at start: with `gnss_enabled` true the automatic initializer runs once at stack start,
+  before SSv2 places the car (issue 046's reason for turning it off: it competes with the
+  scenario's initialize). The agent's reset after the teleport initializes again; the plan has
+  to let the two not collide (the reset waits out an initialization in progress, or joins it).
+
+Options inside the rule for later, if the measured cost is too high: (i) the align's own
+parameters (more particles, the startup trials), sensor only; (ii) a heading sensor (a
+dual-antenna GNSS/INS model in aib and acb, with noise) plus an Autoware overlay fix that samples
+yaw around the INS heading when its covariance says it is known; what real cars with an INS do.
+
+### (3) What it does to 197 and to scenario resets
+
+- A scenario start or reset stays an SSv2 teleport of the car followed by a localization the
+  car does itself: the agent's reset becomes a pose-free initialize. It can still fail (no GNSS
+  within 3 s, the align unreliable, the initializer refusing a moving car), so 197 is needed as
+  it is: the agent refuses a goal after a failed reset (f7de9207), and the run ends as an error
+  when this run's reset fails (660c81eb). Only the failure texts change; 58da5a69's "landed off
+  the scenario's heading N times" disappears with A2.
+- The concealer still waits for the estimate to reach the scenario's pose (1 m, 0.2 rad); an
+  align that lands further off is a start that does not happen, an honest failure of the
+  autopilot, reported by SSv2's timeout. Its retries come through the relay as repeated
+  initializes, which join the running reset or start a pose-free one.
+- An align within 0.2 rad but off is no longer corrected: the ego drives with it. That is the
+  cost (4) measures, and the judges see it.
+
+### (4) The cost, and the measurement
+
+What changes for Autoware is the position guess (GNSS with 1 m particle spread instead of the
+scenario's position with none) and the timing (GNSS timeout, stop check); the yaw search is the
+same. So the yaw error should look like the draws above: fixture_c6b about 3 % within 0.01 rad,
+|error| typically 0.02 to 0.08; fixture_c170 about 40 %.
+
+Measurement, after the change is coded and gated, on fixture_c6b and fixture_c170 (Isaac) and
+CARLA Town01 (241): eight fresh-stack starts per map (starts, not tries: the run effect says one
+start's tries are not independent), each with:
+- the yaw and position error of the first INITIALIZED estimate against the truth (the judge's
+  comparison), and the same 5 s later standing and over the first 100 m (does driving correct
+  it; the 2c runs said no);
+- the start time: stack ready to INITIALIZED, and the reset's own seconds (the relay's record);
+- NVTL and the initializer's reliability flag, to see whether Autoware can tell a bad start;
+- the runs' outcomes (contacts, lane departure on c6b at B2's place).
+Predictions go in this issue before the runs, as above.
