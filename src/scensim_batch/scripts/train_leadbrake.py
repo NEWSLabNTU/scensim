@@ -30,6 +30,9 @@ if THREADS:
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aib import app_exit  # noqa: E402 (stdlib only: nothing before Kit's app)
 __import__("scensim_batch.tasks")      # registers Scensim-LeadBrake-v0
+if os.environ.get("PPO_LOG"):          # per-update KL, clip fraction, learning rate (094 P4)
+    from scensim_batch import ppo_log  # noqa: E402 (stdlib only until a PPO is built)
+    ppo_log.install(os.environ["PPO_LOG"])
 
 script, sys.argv = sys.argv[1], sys.argv[1:]
 # Isaac Lab's train.py builds its app itself: an escaped exception ends with 1 without Kit's

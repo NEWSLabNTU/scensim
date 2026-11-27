@@ -26,6 +26,11 @@
 # isaaclab-3.0 b491b13 or later; its bench/p4_leadbrake holds stock's PPO settings), OV (the
 # Isaac Lab python), ISAACLAB (its source checkout), GPU (default 0), SHARED=1, MAX_LOAD,
 # WAIT_IDLE, CLEAN_ROWS and MAX_ROWS (the continuous gate), THREADS, ALLOW_DIRTY=1.
+# Run settings for P4's KL diagnostic and steadying runs (environment; all off by default):
+# KL_LOG=1 writes PPO's per-update approx KL, clip fraction and learning rate to <name>.ppo.jsonl
+# (scensim_batch.ppo_log); GRID=50 evaluates every saved checkpoint (50 to 1450 by 50, 1499)
+# rather than 100 to 1400 by 100 and 1499; LR=<value> trains at that fixed learning rate
+# (rsl_rl's schedule fixed, by agent.algorithm overrides), named in the run's form (-lr<value>).
 set -euo pipefail
 stage=${1:?stage: smoke|repro|seeds|seed|evals|sweep}; out=${2:?out dir}; headway=${3:-stock}
 # the row (LeadBrakeEnvCfg.row): joints (the comparable row, stock's action law on the joints) or
@@ -42,6 +47,15 @@ case $engine in B|A) ;; *) echo "engine: B|A" >&2; exit 2 ;; esac
 # the form a run records: the comparable row keeps its name; the others name engine and row
 form="scensim-b-$headway"
 [ "$row" != joints ] || [ "$engine" != B ] && form="scensim-$engine-$row-$headway"
+agentargs=()
+if [ -n "${LR:-}" ]; then
+    agentargs=(agent.algorithm.schedule=fixed agent.algorithm.learning_rate="$LR"); form="$form-lr$LR"
+fi
+case ${GRID:-100} in
+    100) grid="$(seq 100 100 1400) 1499" ;;
+    50) grid="$(seq 50 50 1450) 1499" ;;
+    *) echo "GRID: 100|50" >&2; exit 2 ;;
+esac
 rowargs=(env.row="$row" env.engine_name="$engine")
 evalargs=(--row "$row" --engine "$engine")
 dev=(); [ "$engine" = A ] && dev=(--device cpu)    # train.py sets the sim's device from it
@@ -80,12 +94,13 @@ run() {
     mkdir -p "$d"
     land=(); [ "$engine" = A ] && land=(env.landing_log="$d.landings.jsonl"   # issue 113
                                         env.landing_raise="${LANDING_RAISE:-true}")
-    echo "$name: headway=$headway row=$row engine=$engine timers=$timers seed=$seed envs=$n iterations=$iters ($(date -Is))"
-    (cd "$d" && env -u DISPLAY "$OV" -m wheeledlab_bench.launch --out "$d" --form "$form" \
+    ppo=(); [ "${KL_LOG:-0}" = 1 ] && ppo=(PPO_LOG="$d.ppo.jsonl")
+    echo "$name: headway=$headway row=$row engine=$engine timers=$timers seed=$seed envs=$n iterations=$iters form=$form${ppo:+ ${ppo[*]}} ($(date -Is))"
+    (cd "$d" && env -u DISPLAY "${ppo[@]}" "$OV" -m wheeledlab_bench.launch --out "$d" --form "$form" \
         --timers "$timers" --warmup "$warmup" --seed "$seed" --gpu "$GPU" "${gate[@]}" "${hooks[@]}" "${prov[@]}" \
         -- "$here/train_leadbrake.py" "${thr[@]}" "$ISAACLAB/scripts/reinforcement_learning/train.py" \
         "${kit[@]}" --rl_library rsl_rl --task Scensim-LeadBrake-v0 --num_envs "$n" \
-        --max_iterations "$iters" --seed "$seed" "${dev[@]}" env.train_headway="$headway" "${rowargs[@]}" \
+        --max_iterations "$iters" --seed "$seed" "${dev[@]}" env.train_headway="$headway" "${rowargs[@]}" "${agentargs[@]}" \
         env.starts_log="$d.starts.jsonl" "${land[@]}" > "$d.log" 2>&1)
 }
 
@@ -102,7 +117,7 @@ evaluate() {
 # a seed's evaluation grid: every iteration of it its evals.jsonl lacks
 evals_run() {
     local s=$1 evals="$out/seeds/seed$1.evals.jsonl" line
-    for it in $(seq 100 100 1400) 1499; do
+    for it in $grid; do
         if [ -s "$evals" ] && grep -q "^{\"iteration\": $it, \"checkpoint\"" "$evals"; then continue; fi
         line=$(evaluate "seed$s" "$it"); echo "$line" >> "$evals"
         echo "seed$s it$it: $(echo "$line" | grep -oE '"success_rate": [0-9.]+')"
