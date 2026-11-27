@@ -64,6 +64,17 @@ DIRECT_LOCALIZATION_STOCK = (
     "set autoware_profile: scensim, or start your autoware_launch without a pose estimator "
     "yourself and set direct_localization on a launch pilot")
 
+# the args only the scensim profile takes: what pilots/autoware.launch.xml passes to
+# autoware_sim_profile's include and not to the stock one (test_profile_args_on_stock keeps
+# the two equal). A stock pilot given one would ignore it, so it is refused by name (issue 180).
+SCENSIM_PROFILE_ARGS = ("traffic_light_fusion_only", "publish_ground_truth_objects", "gnss_enabled",
+                        "gnss_particle_variance", "gnss_particle_yaw_variance", "max_velocity",
+                        "lane_height_check", "compare_map_z_ratio")
+SCENSIM_PROFILE_ARG_STOCK = (
+    "is an autoware_sim_profile argument; the stock profile runs your autoware_launch as it is "
+    "and would ignore it",
+    "set autoware_profile: scensim, or remove it")
+
 
 def retired_arg_problems(args) -> list:
     """``(name, what, fix)`` for each retired truth argument among a pilot's ``args``."""
@@ -514,6 +525,12 @@ def _check_pilot(name, p, sim) -> list:
         out.append(Finding(pf, f"{where}: args: is not a mapping", "args: {name: value}"))
     for k, what, fix in retired_arg_problems(p.get("args")):
         out.append(Finding(pf, f"{where}.args.{k}: {what}", fix))
+    if (kind == "autoware" and p.get("autoware_profile", "stock") != "scensim"
+            and isinstance(p.get("args"), dict)):
+        for k in p["args"]:
+            if k in SCENSIM_PROFILE_ARGS:
+                out.append(Finding(pf, f"{where}.args.{k}: {SCENSIM_PROFILE_ARG_STOCK[0]}",
+                                   SCENSIM_PROFILE_ARG_STOCK[1]))
     dl = p.get("direct_localization")
     if dl is not None and not isinstance(dl, bool):
         out.append(Finding(pf, f"{where}: direct_localization {dl!r} is not true or false"))
