@@ -303,33 +303,34 @@ def slot_outcomes(batch_dir, threshold=0.0, margin_k=None) -> list:
     seats judge measures; a run fails when it is at most `threshold`. With `margin_k`, the score
     is sloped_score's (K11e), the failure still the gap at most `threshold`.
     `[{record, outcome}]`."""
+    return [slot_outcome(d, threshold, margin_k)
+            for d in sorted(Path(batch_dir).glob("slot_*_ep*"), key=_slot_key)]
+
+
+def slot_outcome(slot_dir, threshold=0.0, margin_k=None) -> dict:
+    """slot_outcomes' row of one slot episode's directory (092 K11f reads them one at a time)."""
     gt = _module("gap_trace")
-    rows = []
-    for d in sorted(Path(batch_dir).glob("slot_*_ep*"), key=_slot_key):
-        rec = json.loads((d / "sample.json").read_text())
-        rid = rec.get("id") if isinstance(rec, dict) else None
-        if not rid:
-            raise ValueError(f"{d}: sample.json has no record id")
-        try:
-            trace = gt.load_trace(d / "truth.jsonl", require_end=True)
-        except (OSError, ValueError) as e:
-            rows.append({"record": rid, "outcome": {"error": True, "message": str(e),
-                                                    "run": d.name}})
-            continue
-        c = closest([trace])
-        if c is None:
-            rows.append({"record": rid, "outcome": {
-                "error": True, "message": "no ego and other entity to measure", "run": d.name}})
-            continue
-        gap = float(c["gap"])
-        out = {"score": gap}
-        if margin_k is not None:
-            out = sloped_score(d, margin_k)
-        rows.append({"record": rid, "outcome": {
-            **out, "failed": gap <= threshold, "contact": bool(trace.contacts),
-            "error": False, "closest": {"entity": c["entity"], "frame": c["frame"],
-                                        "sim_time": c["sim_time"]}, "run": d.name}})
-    return rows
+    d = Path(slot_dir)
+    rec = json.loads((d / "sample.json").read_text())
+    rid = rec.get("id") if isinstance(rec, dict) else None
+    if not rid:
+        raise ValueError(f"{d}: sample.json has no record id")
+    try:
+        trace = gt.load_trace(d / "truth.jsonl", require_end=True)
+    except (OSError, ValueError) as e:
+        return {"record": rid, "outcome": {"error": True, "message": str(e), "run": d.name}}
+    c = closest([trace])
+    if c is None:
+        return {"record": rid, "outcome": {
+            "error": True, "message": "no ego and other entity to measure", "run": d.name}}
+    gap = float(c["gap"])
+    out = {"score": gap}
+    if margin_k is not None:
+        out = sloped_score(d, margin_k)
+    return {"record": rid, "outcome": {
+        **out, "failed": gap <= threshold, "contact": bool(trace.contacts),
+        "error": False, "closest": {"entity": c["entity"], "frame": c["frame"],
+                                    "sim_time": c["sim_time"]}, "run": d.name}}
 
 
 def sloped_score(slot_dir, k=1.0, draw="accept_u"):
@@ -345,9 +346,15 @@ def sloped_score(slot_dir, k=1.0, draw="accept_u"):
     c = closest([gt.load_trace(d / "truth.jsonl", require_end=True)])
     if c is None:
         raise ValueError(f"{d}: no ego and other entity to measure")
-    gap = float(c["gap"])
     rec = json.loads((d / "sample.json").read_text())
     dec = json.loads((d / "decision.json").read_text())
+    return slope(float(c["gap"]), rec, dec, k, draw, where=str(d))
+
+
+def slope(gap, rec, dec, k=1.0, draw="accept_u", where="slot"):
+    """sloped_score's formula on its inputs (092 K11e; K11f's batch passes them from memory):
+    the closest `gap`, the slot's sample record `rec` and the walker model's record `dec`
+    (`{entity, threshold_logit, decision}`, decision.json's content)."""
     m = None
     if dec.get("decision") is not None:
         from scensim.behaviour.walker import GapAcceptanceWalker as W
@@ -357,12 +364,12 @@ def sloped_score(slot_dir, k=1.0, draw="accept_u"):
         else:   # no draw searched: the walker's own, from the record's pilot seed
             seed = ((rec.get("seeds") or {}).get("pilots") or {}).get(dec.get("entity"))
             if seed is None:
-                raise ValueError(f"{d}: the record has neither {draw!r} nor a pilot seed for "
-                                 f"{dec.get('entity')!r}")
+                raise ValueError(f"{where}: the record has neither {draw!r} nor a pilot seed "
+                                 f"for {dec.get('entity')!r}")
             threshold = W.draw(int(seed))
         if abs(threshold - float(dec["threshold_logit"])) > 1e-9:
-            raise ValueError(f"{d}: the record's {draw} gives the threshold {threshold}, the "
-                             f"model used {dec['threshold_logit']}")
+            raise ValueError(f"{where}: the record's {draw} gives the threshold {threshold}, "
+                             f"the model used {dec['threshold_logit']}")
         m = threshold - float(dec["decision"]["u"])
     score = gap if gap <= 0 or m is None else gap + k * max(m, 0.0)
     return {"closest_gap": gap, "decision_margin": m, "score": score}

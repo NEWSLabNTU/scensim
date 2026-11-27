@@ -2,14 +2,16 @@
 batch, on CPU, its outcomes written for `scensim-sample search next`.
 
     python search_run.py --records <dir>/g<t>.jsonl --scenario <xosc> --world <map export .json>
-        --out <dir> [--steps 400] [--step-time 0.05] [--walker walker]
+        --out <dir> [--steps 400] [--step-time 0.05] [--walker walker] [--truth]
 
 Every record is a slot of one BatchRun: the scenario compiled for the records, the ego a point
 mass driven by `aeb_ttc` (scensim_batch.pointmass: neither engine A nor B, and an invented
-pilot), each slot run to its end or `--steps` steps. The batch's truth is exported to
-`<out>/truth/` (scensim_batch.truth) and scored by `scensim.truth.slot_outcomes`, the closest
-gap the seats judge measures, into `<out>/outcomes.jsonl`. A summary goes to `<out>/run.json`
-and stdout.
+pilot), each slot run to its end or `--steps` steps. Each slot is scored while the batch
+runs (scensim_batch.score, 092 K11f): the closest gap the seats judge measures, into
+`<out>/outcomes.jsonl`. With `--truth` the batch's truth is also exported to `<out>/truth/`
+(scensim_batch.truth) and scored from the files by `scensim.truth.slot_outcomes` (092 K11b), and
+the two must agree (`compare_outcomes`), or the run stops naming where. A summary goes to
+`<out>/run.json` and stdout.
 
 Run it from a pinned copy (a detached worktree or a copy at one commit) that nobody edits
 while the search runs: every generation is a new process and imports the tree as it is then
@@ -26,13 +28,57 @@ import time
 from pathlib import Path
 
 
+# 092 K11f: the most the batch's score may differ from the export's (m), every other field equal
+BAR = 1e-9
+
+
+def compare_outcomes(batch, export, bar=BAR):
+    """Stop (SystemExit) unless the batch's rows and the export's agree: the same records in the
+    same order, each score (and closest_gap, decision_margin) within `bar` m, failed, contact,
+    error and the closest entity and frame identical, its sim_time within `bar` s. The message
+    names the slot, the episode, both values and the bar."""
+    if [r.get("record") for r in batch] != [r.get("record") for r in export]:
+        raise SystemExit("092 K11f: the batch's rows and the export's name other records")
+    for a, b in zip(batch, export):
+        oa, ob = a["outcome"], b["outcome"]
+        run = ob.get("run", "")
+        try:
+            k, e = run[len("slot_"):].split("_ep")
+        except ValueError:
+            k, e = "?", "?"
+        where = f"092 K11f: the batch's score and the export's disagree at slot {k}, episode {e}"
+
+        def stop(what, x, y, unit=""):
+            raise SystemExit(f"{where} ({a.get('record')}): {what} {x!r} in the batch, {y!r} "
+                             f"from the export" + (f", bar {bar!r} {unit}" if unit else ""))
+        if set(oa) != set(ob):
+            stop("fields", sorted(oa), sorted(ob))
+        for key in ("score", "closest_gap", "decision_margin"):
+            if key not in ob:
+                continue
+            x, y = oa[key], ob[key]
+            if (x is None) != (y is None) or (x is not None and abs(x - y) > bar):
+                stop(key, x, y, "m")
+        for key in ("failed", "contact", "error", "run", "message"):
+            if oa.get(key) != ob.get(key):
+                stop(key, oa.get(key), ob.get(key))
+        if "closest" in ob:
+            ca, cb = oa["closest"], ob["closest"]
+            for key in ("entity", "frame"):
+                if ca[key] != cb[key]:
+                    stop(f"closest {key}", ca[key], cb[key])
+            if abs(ca["sim_time"] - cb["sim_time"]) > bar:
+                stop("closest sim_time", ca["sim_time"], cb["sim_time"], "s")
+
+
 def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker",
-        margin_k=None, anchors=None, ttc_length=None, corridor=None):
+        margin_k=None, anchors=None, ttc_length=None, corridor=None, truth=False):
     from sim_vehicle_ecu import batch as ecu_batch
     from scensim import truth as T
     from scensim_batch import core
     from scensim_batch.compile import compile_scenario
     from scensim_batch.pointmass import Accel, AebTtc, PointMass
+    from scensim_batch.score import ClosestGap
     from scensim_batch.truth import TruthRecorder
 
     t0 = time.time()
@@ -49,8 +95,12 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
     # run's files do not depend on where this checkout is
     paths = {(x.get("scenario") or {}).get("path") for x in records}
     label = paths.pop() if len(paths) == 1 and None not in paths else str(scenario)
-    truth = TruthRecorder(r, step_time=step_time, start_unix=0.0, scenario=label)
-    truth.begin(r.obs)
+    score = ClosestGap(r)
+    score.begin(r.obs)
+    rec = None
+    if truth:
+        rec = TruthRecorder(r, step_time=step_time, start_unix=0.0, scenario=label)
+        rec.begin(r.obs)
     lane = None
     if ttc_length and corridor is not None:   # the target's lane anchor: its centreline
         ent = c.entities[names.index(walker)]
@@ -65,22 +115,42 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
     k = 0
     for k in range(1, steps + 1):
         obs = r.step(pilot(r.obs), step_time)
-        truth.record(obs)
+        score.record(obs)
+        if rec is not None:
+            rec.record(obs)
         if ttc:
             ttc.add(obs)
         if all(o != "running" for o in r.outcome()):
             break
     out = Path(out)
-    truth.write(out / "truth")
+    out.mkdir(parents=True, exist_ok=True)
     # each slot's walker decision, the model's own record (092 K11e): what the sloped score
-    # reads beside the truth and the record, so it is recomputable from the saved files
-    recs = r.models.records().get(walker)
-    if recs is not None and all("threshold_logit" in m for m in recs):   # the walker's
-        for k_slot, mrec in enumerate(recs):
-            (out / "truth" / f"slot_{k_slot}_ep0" / "decision.json").write_text(json.dumps(
-                {"entity": walker, "threshold_logit": mrec["threshold_logit"],
-                 "decision": mrec["decision"]}, sort_keys=True) + "\n")
-    rows = T.slot_outcomes(out / "truth", margin_k=margin_k)
+    # reads, in memory here, and beside the truth and the record in an export, so it is
+    # recomputable from the saved files
+    mrecs = r.models.records().get(walker)
+    decisions = None
+    if mrecs is not None and all("threshold_logit" in m for m in mrecs):   # the walker's
+        decisions = [{"entity": walker, "threshold_logit": m["threshold_logit"],
+                      "decision": m["decision"]} for m in mrecs]
+    rows = score.rows()
+    if margin_k is not None:
+        if decisions is None:
+            raise SystemExit(f"margin_k: {walker!r} keeps no decision records (the sloped "
+                             "score is the gap-acceptance walker's)")
+        for x in rows:
+            o = x["outcome"]
+            if o.get("error"):
+                continue
+            k_slot = int(o["run"][len("slot_"):].split("_ep")[0])
+            sloped = T.slope(o["score"], c.records[k_slot], decisions[k_slot], margin_k,
+                             where=o["run"])
+            x["outcome"] = {**sloped, **{q: o[q] for q in o if q != "score"}}
+    if rec is not None:
+        rec.write(out / "truth")
+        for k_slot, d in enumerate(decisions or []):
+            (out / "truth" / f"slot_{k_slot}_ep0" / "decision.json").write_text(
+                json.dumps(d, sort_keys=True) + "\n")
+        compare_outcomes(rows, T.slot_outcomes(out / "truth", margin_k=margin_k))
     if ttc and corridor is not None:   # 092 K13 step v: off M's line is invalid, not judged
         for i, x in enumerate(rows):
             lat = ttc.max_lateral[i]
@@ -95,6 +165,7 @@ def run(records, scenario, world, out, steps=400, step_time=0.05, walker="walker
                "ego": "point mass (scensim_batch.pointmass), aeb_ttc", "runner": "interim",
                "score": ("closest gap" if margin_k is None else
                          f"sloped: closest gap + {margin_k} m per logit of decision margin"),
+               "scored": "in the batch" + (", the export agreeing" if truth else ""),
                "outcomes": {o: ends.count(o) for o in sorted(set(ends))},
                "failed": sum(1 for x in rows if x["outcome"].get("failed")),
                "errors": sum(1 for x in rows if x["outcome"].get("error")),
@@ -199,6 +270,9 @@ def main(argv=None):
     ap.add_argument("--corridor", type=float, default=None,
                     help="092 K13 step v (with --ttc-length): a slot whose ego leaves --walker's "
                          "line by more than this many m is invalid, an error row, not judged")
+    ap.add_argument("--truth", action="store_true",
+                    help="092 K11f: also export the batch's truth to <out>/truth/ (for K3's "
+                         "replays and audits) and stop unless its score agrees with the batch's")
     a = ap.parse_args(argv)
     from scensim_batch.world_lanelet import LaneletWorld
     out = Path(a.out)
@@ -209,7 +283,7 @@ def main(argv=None):
     world = LaneletWorld.load(a.world)
     anchors = json.loads(Path(a.anchors).read_text())["anchors"] if a.anchors else None
     print(json.dumps(run(recs, a.scenario, world, out, a.steps, a.step_time, a.walker,
-                         a.margin_k, anchors, a.ttc_length, a.corridor)))
+                         a.margin_k, anchors, a.ttc_length, a.corridor, a.truth)))
     return 0
 
 
