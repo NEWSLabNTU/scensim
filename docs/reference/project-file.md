@@ -77,6 +77,7 @@ match one.
 | `lifetime` | all | `stack` (default): started with the stack, serves every run; `run`: started afresh for each run |
 | `ready` | all | a command that exits 0 when the pilot is ready; default `autoware`: `ego_ready`, the others: started is ready |
 | `inputs` | all | what the pilot uses, recorded in results: `sensors`, `map`, `ground_truth` |
+| `direct_localization` | the ego | `true`: the vehicle side publishes the true pose as the pose estimator's output, and an `autoware` pilot (profile `scensim` only) runs without NDT. For debugging only: every run of such a stack is marked a debug run and never counts as an evaluation ([Localization](#localization)) |
 | `rviz` | all | `true`: open RViz for this pilot |
 | `component` | the ego, on Isaac | the car's own control component in place of its onboard computers: `{entry_point, params, truth, workspace}` ([Your car's control component](#your-cars-control-component)) |
 | `vehicle_interface` | the ego, on Isaac | the topics its stack speaks to the car: `autoware` (default), `ackermann` or `vesc`, or a mapping with `profile` ([The vehicle interface](#the-vehicle-interface)) |
@@ -85,6 +86,22 @@ match one.
 | `launch` | `launch` | the driver: `"<package> <file>"` or a path |
 | `agent` | `launch` | `own`: the launch registers the entity itself; default scensim's vehicle agent |
 | `run` | `command` | the program's words (not a shell), relative paths the testbench's |
+
+#### Localization
+
+No pose from the simulator or the scenario reaches an autopilot's localization: Autoware
+initializes from the car's GNSS and NDT's alignment at every reset, as a real car does. The one
+exception is `direct_localization`, a debugging aid whose runs are marked (`debug` in
+`result.json`, exit code 4) so that they cannot pass as an evaluation. The vehicle sides'
+own switches for the same thing (`truth_pose_estimate`, the retired
+`publish_direct_localization` and `seed_localization_on_attach`) are refused as `args`.
+
+The car's GNSS receiver has an error model, RTK-like by default: white noise of 0.02 m
+horizontally and 0.04 m vertically per fix, and no bias. A pilot's `args` set it with
+`gnss_noise_enabled` (`false`: the antenna's true position), `gnss_noise_horizontal_stddev_m`,
+`gnss_noise_vertical_stddev_m`, `gnss_noise_bias_stddev_m` (the spread of a bias drawn once per
+stack) and `gnss_noise_seed`. scensim gives seed 0 when none is set, so runs reproduce; `-1`
+draws a fresh seed, which the vehicle side logs.
 
 An `autoware` pilot's `args` (and a suite's `pilot_args` for it) are checked by the
 Autoware profile's own argument check when `testbench check` runs, and so before the stack

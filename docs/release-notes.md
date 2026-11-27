@@ -23,8 +23,24 @@
   drives differently from the raycast the mud classes were fitted with, so leave soil
   scenarios on the default (`raycast`).
 
+- **Autoware localizes as a real car does.** No pose from the simulator or the scenario
+  reaches its localization: at every reset scensim's agent asks Autoware to initialize from its
+  GNSS, and NDT aligns from there; the agent no longer compares the estimate with the
+  scenario's pose. A failed reset ends the run as an error, where it used to let the run go
+  on, and sometimes pass (issues 195, 197). Every reset after the first initializes again,
+  which needs the Autoware overlay built.
+- **The GNSS receiver has an error model**, RTK-like by default (0.02 m horizontal, 0.04 m
+  vertical), set per project with the pilot's `gnss_noise_*` arguments and seeded so runs
+  reproduce ([The testbench](reference/project-file.md#localization)).
+- **`direct_localization`**, a pilot key for debugging: the autopilot is given the true pose
+  as its pose estimate. Every run of such a stack is marked `debug` in `result.json` and
+  exits 4, so it never counts as an evaluation.
+
 ### Interface changes
 
+- **Removed: acb's `seed_localization_on_attach` and `publish_direct_localization`**, and the
+  agent's `position_tolerance` and `yaw_tolerance`; each is refused by name.
+  `pilots/autoware.launch.xml`'s `gnss_enabled` is now true with a relay too.
 - **`TruthFrame` gains `npc_logic_started`** (`scensim_interfaces`, the `/scensim/truth`
   topic): SSv2's flag for the frame, false before it starts its NPCs. A behaviour model on
   seats now waits for it, as SSv2's own NPCs do (issue 163). The message's type hash changes,

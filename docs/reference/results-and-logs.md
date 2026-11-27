@@ -136,6 +136,12 @@ class a report can count (`scensim runs coverage` lists the error runs by kind).
 | `command_lag` | under lockstep, a commanded entity's commands were not the previous frame's at every frame (`commands` below) |
 | `knob_profile` | a knob profile the world did not follow within its tolerance, or whose read-back the gap trace lacks |
 
+`debug` is present on a debug run only: the debug options its stack had, today
+`["direct_localization"]` (the autopilot was given the true pose). Its verdict is judged as any
+run's, but the run never counts as an evaluation: its line ends with `[debug:
+direct_localization; not an evaluation]`, `scensim runs` lists it as `passed (debug)` (or
+`failed (debug)`), and `scensim run` exits 4 whatever the verdict.
+
 `clock` is the run's clock ([`clock:`](project-file.md#the-clock)): its `mode`, the frames
 measured, and their lag behind wall time in seconds, `lag_s: {max, p50, p99, final}`, with
 `frames_over` (frames beyond `max_lag_s`) and `ok`, and the run's `global_real_time_factor`

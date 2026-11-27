@@ -72,6 +72,7 @@ person books.
 | 1 | a scenario failed |
 | 2 | a run could not be judged for the stack's fault (`error`): a world server or bridge error, a pilot that never became ready |
 | 3 | refused: no stack, a stack of another testbench state, a missing asset, bad input |
+| 4 | a debug run: a pilot with `direct_localization` gave the autopilot the true pose; never a pass, whatever its verdict |
 
 Each suite writes `summary.csv` and a merged `junit.xml` under
 `<logs>/<testbench>/suites/<suite>/`, printed on its last line (`summary: <path>`);

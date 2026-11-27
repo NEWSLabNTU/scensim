@@ -247,8 +247,8 @@ suite over the student's, and read the `testbench.yaml` diff: the judges a run u
 `judges` column; each judge's full output is `<logs>/assignment1/runs/<id>/judges/grade.json`. The run's own
 verdict stays SSv2's: a judge adds to it, never replaces it
 ([Verdicts](explanation/verdicts.md)), so a grading rule can change and be applied again to
-old runs. The exit code of `scensim run` (0, 1, 2, 3) tells a script whether every run passed,
-one failed, the setup broke, or the run was refused; grade a run that ended `error` again,
+old runs. The exit code of `scensim run` (0, 1, 2, 3, 4) tells a script whether every run passed,
+one failed, the setup broke, the run was refused, or it was a debug run given the true pose; grade a run that ended `error` again,
 not as a fail.
 
 **Time.** A grading run costs the stack's start (Autoware's start, about a minute once its

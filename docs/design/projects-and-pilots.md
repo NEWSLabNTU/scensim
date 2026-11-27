@@ -45,7 +45,8 @@ All in the ament_python package `scensim`; the stack is a launch file in `scensi
 
 Exit codes (`run`, `project check`, `assets check`): 0 success, 1 a scenario failed or a
 check found a problem, 2 an infrastructure error, 3 refused (wrong stack, missing asset,
-bad input).
+bad input), 4 (`run` only) a debug run, whatever its verdict: a pilot with
+`direct_localization` gave the autopilot the true pose, so the run is never an evaluation.
 
 Every command finds its project as `project:=`/`--project`, else the working directory or the
 nearest parent with `swb.yaml` (`scensim.config.find_project`). `pkg://<package>` names a ROS

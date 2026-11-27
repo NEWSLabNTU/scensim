@@ -217,9 +217,13 @@ Any class can get a ROS node the same way: mix in `scensim_agent.ros.RosNode` an
 The stack's default ego runs `scensim_agent.adapters.autoware.AutowareAgent` (through
 `vehicle_agent.launch.xml`):
 Autoware's ADAPI as an agent. At a reset it stops, drops the route, waits for Autoware's
-services, then re-localizes at the scenario's pose (two fresh LiDAR scans, initialize
-localization, wait until the estimate agrees within 1 m / 0.2 rad); on a goal it sets the
-route and engages once Autoware offers autonomous mode. On its own, beside an Autoware you
+services, then re-localizes as a real car does: after two fresh LiDAR scans it asks Autoware
+to initialize its localization with no pose, so Autoware takes its GNSS position and aligns
+NDT from it. No truth or scenario pose reaches Autoware. The agent accepts the result on
+Autoware's own evidence (localization INITIALIZED with a fresh estimate, then the scan
+matcher's score over a short window) and logs the estimate's distance from the scenario's pose
+for the record, without acting on it. On a goal it sets the route and engages once Autoware
+offers autonomous mode. On its own, beside an Autoware you
 started yourself in its domain:
 
 ```bash
@@ -232,15 +236,20 @@ ros2 run scensim_agent autoware_agent \
 `agent.yaml` takes `use_sim_time` (true for a simulator) and the bounds: `ready_timeout`
 (60 s), `scan_wait` (10), `scans_required` (2), `converge_timeout` (30),
 `initialize_attempts` (5), `initialize_timeout` (120, one `/api/localization/initialize`
-call), `align_wait` (60), `engage_retry` (3), `settle` (2). An initialize
+call), `align_wait` (60), `engage_retry` (3), `settle` (2). `position_tolerance` and
+`yaw_tolerance` are refused: the agent no longer compares Autoware's estimate with the
+scenario's pose. An initialize
 found unavailable (Autoware's services restarting mid-reset, e.g. a healer restarting a hung
 ADAPI container) is not an attempt: the agent waits for the services, up to
 `ready_timeout`. An initialize call that times out is not cancelled in Autoware, so the agent
-does not call again while localization reports INITIALIZING (up to `align_wait`); if that
-align ends at the reset pose, the reset goes on from there (issue 046). The relay's
-`reset_timeout` bounds the whole reset: raise both together on a loaded host. An `autoware`
-pilot with a relay starts Autoware without its GNSS initializer (`gnss_enabled:=false`), as
-the agent always initializes at the scenario's pose. `scensim_launch vehicle_agent.launch.xml` takes the same file as
+does not call again while localization reports INITIALIZING (up to `align_wait`); when that
+align ends with localization INITIALIZED, the reset goes on from there. An initialization the
+agent did not start (Autoware's automatic GNSS initializer, which runs once when the stack
+starts) is waited out the same way before the agent's own call. The relay's `reset_timeout`
+bounds the whole reset: raise both together on a loaded host. A reset that fails leaves the
+agent refusing goals until the next reset, and ends the run as an error. Every reset after the
+first initializes localization again, which stock Autoware 1.5.0 survives only with the
+Autoware overlay built (`ros2 run scensim autoware overlay`). `scensim_launch vehicle_agent.launch.xml` takes the same file as
 `agent_config:=agent.yaml`, and an `autoware` pilot as `args: {agent_config: ...}`. Each step is a method to override in a subclass:
 
 ```python

@@ -21,6 +21,7 @@ copies it; the copy holds its lock, assets, state and runs.
 | 1 | a scenario failed, or a check found a problem |
 | 2 | an infrastructure error: a run the stack could not judge, Hugging Face unreachable |
 | 3 | refused: no stack or the wrong one, a missing asset, bad input |
+| 4 | `run` only: a debug run (a pilot with `direct_localization`), whatever its verdict; never an evaluation |
 
 `project check` and `assets check` give 3 only for what leaves the project unusable on this
 host as it stands: an asset or map not fetched, a project file or asset entry that cannot be

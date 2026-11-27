@@ -132,8 +132,9 @@ Autoware 1.9.0 and `~/autoware_data/ml_models` from 2.0.0).
   stock Autoware uses CenterPoint, which needs its models and a GPU;
 - localization, control (no steering-offset learning) and planning parameters for a
   simulated car, and a speed limit, `max_velocity`;
-- no GNSS initialization of a managed car: scensim's agent initializes it at the
-  scenario's pose, and a second initialization would queue a second NDT alignment;
+- localization initialized as on a real car, from the car's GNSS and NDT's alignment: no
+  pose from the simulator or the scenario reaches it. scensim's agent asks for that
+  initialization at every reset and waits for one already running to end;
 - a clock guard that ends the pilot when the simulator's clock goes back.
 
 ### How stock drives against the profile
