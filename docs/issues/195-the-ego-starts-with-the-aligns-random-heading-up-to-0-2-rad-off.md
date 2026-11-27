@@ -698,3 +698,65 @@ one sign.
 
 The topic list is staged for 118 as a testbench `logging.topics` block on the NAS
 (`home/2026-11-27 issue 195 NDT trace (243)`); the runs wait for 133's go.
+
+## The NDT trace, baseline: results (118's runs, 2026-11-27; tables by 243)
+
+**main's agent: the scenario's position seeded (pre-L1, kept only as the measured baseline).**
+118's GPU0, scensim main's code 53b76a47, every submodule at its pin, the Autoware overlay's
+ndt_scan_matcher (each run's `/proc` maps), `ros2 launch`; maps as fetched (fixture_c6b pcd
+32bab6cc, fixture_c170 pcd 9cc1a29f: course.maps builds, suspect under issue 198). Runs:
+N1 `2026-11-27T11-34-27_fixture_c6b_r181_r0`, N2 `2026-11-27T11-38-20_fixture_c170_down_hold_r0`,
+N3 `2026-11-27T11-41-30_fixture_c6b_r181_r0`, N4 `2026-11-27T11-45-15_fixture_c170_down_hold_r0`
+(the c6b runs end at the scenario's 150 s timeout, as before; their judges passed). Logs: NAS
+`autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 195 NDT trace baseline (118)`; the reader
+`ndt195.py`, its JSON and tables: NAS `home/2026-11-27 issue 195 NDT trace (243)/reading/`.
+Errors are NDT's (or the EKF's) less the truth (base_link) at the message's stamp, in the
+truth's heading frame. Segments: `stand0` before the car first moves, `drive`, `stand1` after.
+
+*The score read from the markers' colours* matches `/diagnostics`' best_particle_score for the
+winner in every run, to 1e-5 or better (5.6e-7, 9.1e-6, 2.9e-7, 1.3e-7): the decoding holds.
+
+*The align* (200 particles; the winner is always the top score):
+
+| run | winner dyaw (rad) | along (m) | across (m) | dz (m) | score | yaw-nearest particle: rank (its dyaw) | particles within 0.01 rad | second best | rho(score, abs dyaw), particles within 2 m and 0.3 rad |
+|---|---|---|---|---|---|---|---|---|---|
+| N1 c6b | +0.0391 | -0.018 | +0.093 | -0.024 | 3.3148 | 3 (-0.0107) | 0 | 3.2981, dyaw -3.106, across -1.43 | -0.59 (14) |
+| N2 c170 | -0.0003 | -0.006 | +0.003 | -0.013 | 3.3736 | 1 | 9 | 3.3732, dyaw +0.006 | -0.88 (79) |
+| N3 c6b | +0.0407 | -0.003 | +0.087 | -0.023 | 3.3111 | 3 (-0.0023) | 1 | 3.3053, dyaw +0.016 | -0.76 (16) |
+| N4 c170 | +0.0160 | +0.004 | +0.010 | -0.012 | 3.3568 | 23 (+0.0005) | 11 | 3.3568, dyaw +0.012 | -0.86 (107) |
+
+*Per scan*, NDT's result less the truth, median [p5, p95] (first scan, last scan):
+
+| run | segment | scans | dyaw | across | along | dz |
+|---|---|---|---|---|---|---|
+| N1 | stand0 | 57 | +0.0371 [+0.0350, +0.0386] | +0.082 | -0.056 | -0.024 |
+| N1 | drive | 403 | +0.0145 [+0.0085, +0.0362] (+0.036 to +0.009) | +0.139 [-0.144, +0.372] | -0.157 | -0.024 |
+| N1 | stand1 | 2585 | +0.0067 | -0.218 | -0.051 | -0.024 |
+| N2 | stand0 | 60 | +0.0001 | +0.085 | -0.025 | -0.012 |
+| N2 | drive | 1215 | -0.0048 | +0.219 [+0.087, +0.424] | -0.471 | -0.011 |
+| N2 | stand1 | 845 | -0.0026 | +0.124 | -0.135 | -0.014 |
+| N3 | stand0 | 50 | +0.0388 [+0.0356, +0.0403] | +0.094 | -0.002 | -0.024 |
+| N3 | drive | 413 | +0.0141 [+0.0066, +0.0378] (+0.038 to +0.010) | +0.142 [-0.248, +0.393] | -0.129 | -0.024 |
+| N3 | stand1 | 2561 | +0.0030 | -0.259 | +0.068 | -0.024 |
+| N4 | stand0 | 55 | +0.0150 | +0.042 | -0.009 | -0.012 |
+| N4 | drive | 1215 | +0.0032 (+0.014 to +0.002) | +0.147 [-0.045, +0.376] | -0.368 | -0.011 |
+| N4 | stand1 | 846 | +0.0021 | +0.062 | -0.057 | -0.014 |
+
+The pulls (result less guess) have medians within 0.0005 rad and 0.008 m of zero in every
+segment. The EKF's pose follows NDT's within a few mm in position; its yaw does not after a
+drive on fixture_c6b: `estimated_yaw_bias` is -0.0171 / -0.0181 rad (N1 drive / stand1) and
+-0.0180 / -0.0182 (N3), against +0.005 and -0.003 on fixture_c170, so standing after the drive
+the EKF's yaw error is -0.011 (N1) and -0.015 (N3) where NDT's is +0.007 and +0.003.
+
+*The drive's along against speed* (median along; -along / v at the bin's middle, ms):
+N1 -0.108, -0.153, -0.163 at 0-2, 2-4, 4-6 m/s (32.5 ms at 4-6); N3 -0.049, -0.106, -0.136
+(27.1 ms); N4 -0.078 to -0.393 over 0-12 m/s, 32.7 to 35.9 ms from 4 m/s up; N2 -0.190 to
+-0.520, 46.8 to 57.9 ms from 4 m/s up.
+
+*Standing, from 10 s after the stop* (the truth moves 0 to 2.6 mm): NDT's along slope -0.0007
+(N1), +0.219 (N2), +0.059 (N3), -0.478 (N4) m/min, the EKF's the same within 0.02; NDT's along
+range -0.30 to +0.16 m (N1), -0.30 to +0.08 (N2), -0.22 to +0.57 (N3), -0.44 to +0.15 (N4);
+the per-scan along pull p5 to p95 -0.031 to +0.031 (N1), -0.016 to +0.052 (N2), -0.039 to
++0.052 (N3), -0.103 to +0.066 m (N4), medians 0.0002 or less. The EKF's Mahalanobis gate
+rejects 48 of 2533 (N1), 23 of 847 (N2), 99 of 2521 (N3) and 10 of 844 (N4) NDT poses after
+the stop (none before the first motion); the distance's median 1.9, 0.9, 5.0 and 3.2.
