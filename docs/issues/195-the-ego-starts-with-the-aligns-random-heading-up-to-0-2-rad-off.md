@@ -493,3 +493,72 @@ scensim run reproduces.
    - pins: sim_vehicle_spec, aib, acb by `land_pin`, with the components' deps.
 4. The measurement: eight fresh-stack starts per map (fixture_c6b, fixture_c170 on Isaac;
    Town01 on CARLA), predictions committed here first, as (4) above.
+
+## A9: the GNSS noise model (118, 2026-11-27)
+
+The user's answer 2: GNSS noise, RTK-like, 2 cm by default, configurable per project. Agreed
+with 243 before any code; with it, A6 (133 assigned it to 118 in the same acb gate).
+
+### The model, one in both bridges
+
+The antenna's true position is moved east, north and up in the map before it is projected to
+latitude and longitude:
+- a bias drawn once per receiver from N(0, `bias_stddev_m`) on each axis;
+- plus white noise per fix, from N(0, `horizontal_stddev_m`) east and north and
+  N(0, `vertical_stddev_m`) up.
+
+The defaults are an RTK fix's: 0.02, 0.04 and 0 m. NavSatFix carries the diagonal of those
+variances (the bias's added), with `COVARIANCE_TYPE_DIAGONAL_KNOWN`; the status stays GBAS_FIX.
+`enabled: false` publishes the true position with no covariance, as before. A seed makes the
+fixes reproducible; without one the bridge draws a seed and logs it, and that seed replays the
+run. On CARLA the noise is added by acb, not by `sensor.other.gnss`'s `noise_*` attributes:
+those are in degrees and draw from CARLA's own generator, so they would neither match aib nor
+replay from our seed.
+
+| | aib (Isaac): the ego config | acb (CARLA): acb_bridge parameters |
+|---|---|---|
+| on or off | `gnss.enabled` (true) | `gnss_noise_enabled` (true) |
+| white noise, east and north | `gnss.horizontal_stddev_m` (0.02) | `gnss_noise_horizontal_stddev_m` (0.02) |
+| white noise, up | `gnss.vertical_stddev_m` (0.04) | `gnss_noise_vertical_stddev_m` (0.04) |
+| the per-run bias's spread | `gnss.bias_stddev_m` (0.0) | `gnss_noise_bias_stddev_m` (0.0) |
+| seed | `gnss.seed` (null: fresh, logged) | `gnss_noise_seed` (-1: fresh, logged) |
+
+scensim routes the pilot's `gnss_noise_*` args to these (243's landing). acb's launches
+(`acb_bridge.launch.xml`, `carla_simulator.launch.xml`) take the same names as arguments.
+
+*Not in the vehicle spec.* The plan put the default in sim_vehicle_spec's gnss entry. That
+changes the Model 3's spec_hash, which 11 autoware_sim_vehicle files, 7 spec outputs and aib's
+rig carry, so a receiver default would have cost a regeneration and two more landings. Agreed
+with 243: the defaults live in the bridges, under the same names. "One car, one source" readers
+should look for the GNSS model in aib (`aib.sensing.GnssNoise`) and acb (`gnss_noise.rs`), not
+in the spec. If a car ever needs its own receiver, the block can move into the spec then.
+
+### A6: `seed_localization_on_attach` retired
+
+acb no longer publishes the true pose on `/initialpose` when it attaches. The `/initialpose`
+publisher, `request_localization_seed` and `service_localization_seed` are gone. What stays is
+the seating watch (the `seated` frame the scenario runner waits on), now `watch_seating`, reset
+at every attach. Passing `seed_localization_on_attach` (any value) stops acb_bridge at start,
+naming it and the reason. acb's launches no longer declare the argument; scensim's
+`vehicle_side_carla.launch.xml` drops it in 243's landing.
+
+133's condition: acb's stand-alone bring-up (no relay, `just sim`) used to get the seed, so show
+that it still localizes through Autoware's automatic GNSS initializer (`gnss_enabled` true in
+the profile), with one live stand-alone start.
+
+### Predictions for the stand-alone start (written before the run)
+
+The run: 118's own CARLA on 2010 (GPU0, Epic, Town01), acb's demo (`acb_demo_launch
+single_vehicle_autoware.launch.xml`, as `just sim` starts it, without the web UI) from the A9
+acb worktree, built from a clean env; ROS domain 11. Nothing else changes.
+- S1: acb logs `GNSS gnss_link: error east/north 0.02 m, up 0.04 m, bias 0 m (...), seed N`.
+- S2: no `/initialpose` comes from acb (it has no such publisher now); acb logs no seed lines.
+- S3: Autoware's automatic initializer takes the GNSS pose: the localization initialization
+  state reaches INITIALIZED, and acb logs `Localization is on the vehicle: the estimate is X m
+  from it` with X below 0.5 m, within 180 s of acb attaching.
+- S4: `/sensing/gnss/gnss_link/nav_sat_fix` has `position_covariance_type` 2 and the diagonal
+  (0.0004, 0.0004, 0.0016).
+- S5: `acb_bridge` run with `-p seed_localization_on_attach:=true` exits non-zero at start,
+  naming the parameter as retired.
+
+If S3 fails, A6 does not land until 133 decides.
