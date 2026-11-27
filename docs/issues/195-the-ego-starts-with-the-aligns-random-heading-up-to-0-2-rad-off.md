@@ -168,3 +168,24 @@ all miss about 0.82^8 = 20 % of the time, and on fixture_c6b alone (no hit in 8)
 be far worse. So on a featureless straight option 1 as planned may fail a reset often. Raised
 with 133 before landing; the code (58da5a69) is not changed for it. The live starts (Isaac
 fixture_c170 here, CARLA Town01 on 241's GPU1) are the next numbers.
+
+## The live starts: design and predictions (243, 2026-11-27, before any run)
+
+58da5a69 (not to be pushed whatever its gate, 133), built from a git bundle. Two agent settings,
+each a YAML passed as the pilot's `agent_config` (merged over DEFAULTS):
+- *draws:* `yaw_tolerance: 1.0e-6`: no align can be accepted, so each start logs eight tries'
+  yaw error, position error and NVTL, then fails its reset by design (the suite's one retry on
+  error gives a second eight). This is the per-try rate 133 asked for, not a guess.
+- *live:* the defaults (0.01 rad, 8 tries): the change as it would land; the tries it takes.
+
+Where: fixture_c6b (x 320, the 182 2c start; 118's GPU0) and fixture_c170 (R1's start, x 20;
+118's GPU0 from the staged package), each with both settings; CARLA Town01 (241's GPU1, with the
+defaults; a draws run too if 241 has the time).
+
+*Predictions* (a try's |yaw error| within 0.01 rad, from the eleven starts so far):
+- D1, fixture_c6b: under 15 % of tries (none of 8 starts so far); its live start fails after 8.
+- D2, fixture_c170: 40 to 80 % of tries (2 of 3 starts); its live start lands within 3 tries.
+- D3, CARLA Town01: over 80 % (a town's buildings and poles pin the yaw); its live start lands
+  on the first or second try.
+- D4: the tries are independent: no trend in |yaw error| from try 1 to 8, and NVTL does not
+  order them (as the 2c scores did not).
