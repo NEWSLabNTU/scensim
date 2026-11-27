@@ -562,3 +562,24 @@ acb worktree, built from a clean env; ROS domain 11. Nothing else changes.
   naming the parameter as retired.
 
 If S3 fails, A6 does not land until 133 decides.
+
+### The stand-alone start: results (118, 2026-11-27, after the run)
+
+One start, 11:09 to 11:24 on GPU0 (codec told). The A9 acb worktree (main e85424d plus the
+A9/A6 diff), built from a clean env, with `just check` and `just test` passing (268 tests).
+CARLA ran on 2010 with Town01. Two departures from the plan, neither touching what was
+measured:
+- play_launch is no longer installed on 118 (scensim's own runs fell back to `ros2 launch`
+  too), so the demo ran under `ros2 launch`.
+- rviz2 crash-looped for want of a display.
+
+| | prediction | result |
+|---|---|---|
+| S1 | the GNSS log line with a seed | held: `GNSS gnss_link: error east/north 0.02 m, up 0.04 m, bias 0 m (this run's: -0.0000, 0.0000, -0.0000), seed 7416089968757948162` |
+| S2 | no `/initialpose` from acb | held: no seed lines in acb's log, and `/initialpose` did not exist on the graph (`ros2 topic info`: unknown topic) |
+| S3 | INITIALIZED, seated below 0.5 m within 180 s | held: the automatic initializer's first align failed (`align server failed`, 5 s after acb attached); its retry 12 s later succeeded; acb logged `Localization is on the vehicle: the estimate is 0.01 m from it` 23 s after attaching |
+| S4 | covariance type 2, diagonal (0.0004, 0.0004, 0.0016) | held, exactly. 110 fixes at standstill over 11 s spread 0.0175 m east, 0.0201 m north, 0.0387 m up |
+| S5 | `seed_localization_on_attach` stops acb_bridge, named | held for `true` and for `false`: exit 1, `seed_localization_on_attach is retired (scensim issue 195 A6) ...` |
+
+So acb's stand-alone bring-up localizes without the seed, through Autoware's GNSS initializer
+(133's condition). The logs are on the NAS (`2026-11-27 issue 195 A9 stand-alone start (118)`).
