@@ -450,8 +450,8 @@ def test_the_pilots_defaults_are_the_profiles():
     import re
     prof = os.path.join(os.path.dirname(PILOTS), "..", "..", "autoware_sim_vehicle",
                         "autoware_sim_profile", "launch", "autoware.launch.xml")
-    if not os.path.isfile(prof):
-        pytest.skip(f"no autoware_sim_profile at {prof}")
+    # a missing file is a wrong path, not a reason to skip (a skip once hid one; 243)
+    assert os.path.isfile(prof), f"no autoware_sim_profile at {prof}"
     theirs = dict(re.findall(r'<arg name="([^"]+)"\s+default="([^"]*)"', open(prof).read()))
     args, _ = xml_args("autoware.launch.xml")
     for name in ("compare_map_z_ratio", "lane_height_check", "gnss_particle_yaw_variance",
