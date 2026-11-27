@@ -47,6 +47,7 @@
   <arg name="traffic_light_map_path" default="$(eval &quot;'$(var map_path)/carla/traffic_lights.yaml' if '$(var map_path)' != '' else ''&quot;)" description="the map's CARLA signal table; empty disables V2X signals"/>
   <arg name="traffic_light_state_path" default="" description="the project's state-dir signal table, written by the world server on first load; read first when it exists"/>
   <arg name="map_origin_path" default="$(eval &quot;'$(var map_path)/carla/map_origin.yaml' if '$(var map_path)' != '' else ''&quot;)" description="CARLA's world origin in the map frame; no file = zero"/>
+  <arg name="map_projector_path" default="$(eval &quot;'$(var map_path)/map_projector_info.yaml' if '$(var map_path)' != '' else ''&quot;)" description="issue 195: the map's projector, which acb's GNSS fix is made through; empty = TransverseMercator at (0, 0), scale 1.0"/>
   <arg name="carla_physics" default="none" description="the spec's carla_physics.yaml; none = the blueprint's own physics"/>
   <arg name="carla_physics_mode" default="verify" description="verify (the world server applied it; scensim's case) | apply"/>
   <!-- The pedal maps belong to the physics: the blueprint's (acb_bridge's measured ones) with
@@ -86,6 +87,7 @@
     <arg name="traffic_light_map_path" value="$(var traffic_light_map_path)"/>
     <arg name="traffic_light_state_path" value="$(var traffic_light_state_path)"/>
     <arg name="map_origin_path" value="$(var map_origin_path)"/>
+    <arg name="map_projector_path" value="$(var map_projector_path)"/>
     <arg name="control_trace_path" value="$(var control_trace_path)"/>
     <arg name="apply_trace_path" value="$(var apply_trace_path)"/>
     <arg name="accel_map_path" value="$(var accel_map_path)"/>
