@@ -59,3 +59,31 @@ revolution over the frame (its per-point `timestamp`, which aib reads only for t
 
 Issue 170's across error (c = +0.19 m, car-fixed) is not this: a lag gives no across error on a
 straight. That stays in 170.
+
+## Step 1: the annotator's times against aib's stamp (243, 2026-11-27, before the run)
+
+Approved by 133 as a measurement only, no fix. aib's runner (`python -m aib.runner`), no
+Autoware, the car standing on fixture_c170 (timing does not need motion), headless, about 20 s
+of sim time, 20 Hz frames, the install the runs used (wt-170, fcc01e50). The Tesla rig unchanged
+but for one override in the ego config: `sensors: {top: {isaac: {point_format: xyzircaedt,
+motion_distortion: false}}}`, so each cloud carries the annotator's per-point times
+(`time_stamp`, ns after the header) and its header is the annotator's first point (`point_times`,
+`ros.stamp(t0 + to_sim)`), and nothing is distorted. A subscriber logs per scan the header, the
+offsets' min / median / max, and the last `/clock` before it.
+
+The frame the scan was rendered in, by aib's code: a cloud built at frame j's `publish` is sent at
+frame j+1's, after `/clock` = E(j+1) (the frame's end); it holds the render of frame j - 2
+(`latency_frames` 2). So the render frame's end is E_r = clock at receipt - 3 x 0.05 s, and in the
+runs' format (`xyzirc`) that is the stamp the scan would have had.
+
+*Predictions:*
+- P1: the offsets span one revolution: max 45 to 50 ms (OS1 at 20 Hz), median about 25 ms.
+- P2: the revolution is fired over the render frame: its first point t0 = E_r - 50 ms (within
+  5 ms), its median E_r - 25 ms. Then the runs' stamp (E_r) is 25 ms after the points' median
+  time, the size of L1/2.
+- P3, the comparison with the runs' tau (30 to 37 ms): if E_r less the points' median is 30 to
+  37 ms, the points' times are the lag, and stamping a scan at its points' median time would
+  remove it. If it is 25 ms (P2) the points' times explain most of it and the rest (5 to 12 ms)
+  is elsewhere (the pose the render takes). If the offsets are all 0 (P1 fails), RTX renders the
+  revolution at one instant and the annotator's times say nothing of the lag; step 2 (the
+  geometry) then has to.
