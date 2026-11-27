@@ -1293,6 +1293,19 @@ best particle's yaw is noise: C3 +0.061 rad.
   host's; pre-commit pins v19. Reformat with v19 (pip `clang-format==19` in a venv, not the
   system's) first.
 
+**A coupling of the pins.** The fork declares `yaw_prior_variance_threshold` without a default,
+as ndt_scan_matcher declares every parameter, so its parameter file must carry the key: the
+overlay at 61f9c96e with an asv whose ndt_scan_matcher.param.yaml lacks it (any asv before
+9d4bc316) makes ndt_scan_matcher throw at start. The overlay pin and asv's pin therefore land in
+one scensim commit, and nobody runs `just build-autoware-overlay` from the branch on a shared
+host before it lands (133). Stock Autoware (`autoware_overlay:=false`) declares no such
+parameter and ignores the key.
+
+**Not covered: `ndt:=cuda`.** The profile's GPU NDT (third_party/cuda_ndt_matcher) is a
+separate implementation and gets no yaw prior from this change; its align still draws yaw over
+the circle. The profile's default is `ndt:=autoware`, so L3 and this change's live check are
+covered.
+
 **Predictions** (fixed before any run; the live check runs on 118 after L2r's check run):
 fixture_c170 and fixture_c6b, 4 runs each, C3 yaw (the align's result against truth at the
 start): **|C3 yaw| <= 0.03 rad in every run, and <= 0.01 rad in at least half, on each
