@@ -945,7 +945,7 @@ run *args:
             carla) scensim_with_defaults ego_tokens vehicle_name:=hero carla_physics_mode:=verify \
                        release_notify_endpoint:="tcp://127.0.0.1:$(({{ssv2_port}} + 1))" \
                        release_ack_endpoint:="tcp://127.0.0.1:$(({{ssv2_port}} + 2))" \
-                       rviz:=false seed_localization_on_attach:=false -- "${ego_tokens[@]}" ;;
+                       rviz:=false -- "${ego_tokens[@]}" ;;
             isaac) scensim_with_defaults ego_tokens rviz:=false -- "${ego_tokens[@]}" ;;
         esac
     fi
@@ -1483,7 +1483,7 @@ ego-av *args: _require-carla
         carla_physics_mode:=verify \
         release_notify_endpoint:="tcp://127.0.0.1:$(({{ssv2_port}} + 1))" \
         release_ack_endpoint:="tcp://127.0.0.1:$(({{ssv2_port}} + 2))" \
-        relay:="tcp://localhost:{{agent_port}}" rviz:=false seed_localization_on_attach:=false \
+        relay:="tcp://localhost:{{agent_port}}" rviz:=false \
         extra_launch:="$(ros2 pkg prefix scensim_launch)/share/scensim_launch/launch/vehicle_agent.launch.xml" \
         -- "${given[@]}"
     log_dir=$(scensim_log_dir "{{project}}" ego)

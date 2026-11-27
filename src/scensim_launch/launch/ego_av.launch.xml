@@ -82,7 +82,6 @@
   <!-- Report CARLA's actors as perception output instead of running the LiDAR pipeline.
        For debugging planning or control without perception in the loop. Set `perception`
        false as well, or Autoware's own prediction node publishes the same topic. -->
-  <arg name="seed_localization_on_attach" default="true" />
   <arg name="publish_ground_truth_objects" default="false" />
   <arg name="ground_truth_range_m" default="100.0" />
   <!-- acb publishes signal state from CARLA's lights (roadmap 015) using the table scensim
@@ -135,7 +134,6 @@
     <arg name="steering_multiplier" value="$(var steering_multiplier)" />
     <arg name="steer_rate_limit_deg_s" value="$(var steer_rate_limit_deg_s)" />
     <arg name="steer_time_constant_s" value="$(var steer_time_constant_s)" />
-    <arg name="seed_localization_on_attach" value="$(var seed_localization_on_attach)" />
     <arg name="publish_ground_truth_objects" value="$(var publish_ground_truth_objects)" />
     <arg name="ground_truth_range_m" value="$(var ground_truth_range_m)" />
     <arg name="traffic_light_map_path" value="$(var traffic_light_map_path)" />

@@ -35,7 +35,7 @@ SCENSIM_RETIRED_ENV=(
     "STEER_RATE_LIMIT_DEG_S|steer_rate_limit_deg_s:=<deg/s> (ego-av)"
     "STEER_TIME_CONSTANT_S|steer_time_constant_s:=<s> (ego-av)"
     "GROUND_TRUTH_OBJECTS|publish_ground_truth_objects:=true (ego-av)"
-    "SEED_LOCALIZATION|seed_localization_on_attach:=true (ego-av)"
+    "SEED_LOCALIZATION|nothing: acb no longer seeds the true pose; Autoware initializes from its GNSS (issue 195)"
     "GROUND_TRUTH_RANGE_M|ground_truth_range_m:=<m> (ego-av)"
     "LIDAR_DETECTION_MODEL|lidar_detection_model:=<model> (ego-av)"
     "EGO_LAUNCH_ARGS|the name:=value arguments themselves (ego-av, ego-isaac)"
@@ -109,9 +109,25 @@ scensim_check_domains() {
 # (carla_control:= -> sim_control:=, vehicle_model:=acb_vehicle -> tesla_model3, ...), which
 # ROS launch would otherwise drop without a word. The list is the profile's
 # (autoware_sim_profile's check_launch_args).
+# Launch arguments retired here (not renamed): ROS launch would drop them without a word.
+SCENSIM_RETIRED_ARGS=(
+    "seed_localization_on_attach|acb no longer seeds the true pose; Autoware initializes from its GNSS (issue 195)"
+    "publish_direct_localization|direct_localization:=true, a debug option (issue 195)"
+)
+
 scensim_reject_args() {
     local check="$1/install/autoware_sim_profile/lib/autoware_sim_profile/check_launch_args"
     shift
+    local a e bad=0
+    for a in "$@"; do
+        for e in "${SCENSIM_RETIRED_ARGS[@]}"; do
+            if [ "${a%%:=*}" = "${e%%|*}" ]; then
+                echo "[just] ${a%%:=*}:= is retired: ${e#*|}" >&2
+                bad=1
+            fi
+        done
+    done
+    [ "$bad" = 0 ] || exit 2
     [ -x "$check" ] || return 0   # not built yet: the launch itself will say so
     "$check" "$@" || exit 2
 }

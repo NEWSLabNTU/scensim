@@ -56,11 +56,15 @@
   <!-- stock: the user's own autoware_launch, with only what a simulator needs (below); scensim:
        autoware_sim_profile, scensim's tuning for simulated cars (an optional import) -->
   <arg name="autoware_profile" default="stock" description="stock | scensim: how Autoware is configured (the pilot's autoware_profile:)"/>
-  <!-- issue 046: a managed ego (a relay) is initialized by its agent at the scenario's pose, so
-       Autoware's automatic_pose_initializer (a GNSS initialization at start) only competes with
-       it and queues a second NDT align; local mode keeps Autoware's default. Needs
-       autoware_sim_profile's gnss_enabled argument (an older profile ignores it). -->
-  <arg name="gnss_enabled" default="$(eval &quot;'true' if '$(var relay)' == 'none' else 'false'&quot;)" description="GNSS for the initial pose; default false with a relay (the agent initializes), true in local mode"/>
+  <!-- issue 195: Autoware runs as a real car would and is given no pose: it initializes from
+       its GNSS (automatic_pose_initializer at start; the agent's reset asks for a pose-free
+       initialize, which needs the GNSS module), with a relay or without. The agent waits out the
+       automatic initializer before its own call (issue 046's collision). -->
+  <arg name="gnss_enabled" default="true" description="GNSS for the initial pose (Autoware's pose initializer); true with a relay too (issue 195)"/>
+  <!-- issue 195: a debug option, never an evaluation (scensim marks the run): the vehicle side
+       publishes the truth on the pose estimator's topic, and the scensim profile starts no pose
+       estimator (ndt:=none), so the EKF fuses the truth. The stock profile has no such switch. -->
+  <arg name="direct_localization" default="false" description="debug only: the truth pose on the pose estimator's topic, Autoware's NDT off (scensim profile)"/>
 
 
   <include file="$(find-pkg-share scensim_launch)/launch/pilots/vehicle_side.launch.xml">
@@ -108,6 +112,7 @@
   </group>
 
   <group if="$(eval &quot;'$(var autoware_profile)' == 'scensim'&quot;)">
+  <let name="ndt" value="none" if="$(eval &quot;'$(var direct_localization)' == 'true' and '$(var autoware_profile)' == 'scensim'&quot;)"/>
   <include file="$(find-pkg-share autoware_sim_profile)/launch/autoware.launch.xml">
     <arg name="autoware_launch" value="$(var autoware_launch)"/>
     <arg name="map_path" value="$(var map_path)"/>

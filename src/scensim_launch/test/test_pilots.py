@@ -109,11 +109,11 @@ def test_xml_frontend_parses():
         assert parser.parse_description(entity).entities
 
 
-@pytest.mark.parametrize("relay,want", [("tcp://localhost:5560", "false"), ("none", "true")])
-def test_a_managed_autoware_ego_starts_no_gnss_initializer(relay, want):
-    """Issue 046: with a relay the agent initializes at the scenario's pose, so the profile's
-    gnss_enabled is false (no automatic_pose_initializer to queue a second align); local mode
-    keeps Autoware's default."""
+@pytest.mark.parametrize("relay", ["tcp://localhost:5560", "none"])
+def test_autoware_initializes_from_its_gnss_with_or_without_a_relay(relay):
+    """Issue 195: no truth or scenario pose reaches Autoware's localization; a managed ego is
+    initialized from its GNSS as a real car is (the agent's reset sends no pose), so the
+    profile's gnss_enabled is true with a relay too."""
     frontend = pytest.importorskip("launch.frontend")
     pytest.importorskip("launch_xml")
     from launch import LaunchContext
@@ -128,29 +128,40 @@ def test_a_managed_autoware_ego_starts_no_gnss_initializer(relay, want):
                   if isinstance(e, DeclareLaunchArgument) and e.name == "gnss_enabled"]
     context = LaunchContext()
     context.launch_configurations["relay"] = relay
-    assert perform_substitutions(context, declared.default_value) == want
+    assert perform_substitutions(context, declared.default_value) == "true"
 
 
-@pytest.mark.parametrize("relay,want", [("tcp://localhost:5560", "false"), ("none", "true")])
-def test_a_managed_ego_on_carla_is_not_reseeded_by_acb(relay, want):
-    """Issue 049: acb_bridge's /initialpose on attach became a second localization initialize
-    beside the agent's (two NDT aligns per reset); with a relay the agent initializes, so the
-    vehicle side does not seed. Without one acb seeds, as stand-alone."""
-    frontend = pytest.importorskip("launch.frontend")
-    pytest.importorskip("launch_xml")
-    from launch import LaunchContext
-    from launch.actions import DeclareLaunchArgument
-    from launch.utilities import perform_substitutions
+def test_acb_no_longer_seeds_the_true_pose():
+    """Issue 195: acb's /initialpose from CARLA's true pose (seed_localization_on_attach) is
+    retired; the vehicle side neither declares nor passes it."""
+    for name in ("vehicle_side_carla.launch.xml",):
+        args, root = xml_args(name)
+        assert "seed_localization_on_attach" not in args
+        passed = {a.get("name") for a in root.iter("arg")}
+        assert "seed_localization_on_attach" not in passed
+    ego_av = ET.parse(os.path.join(LAUNCH, "ego_av.launch.xml")).getroot()
+    assert "seed_localization_on_attach" not in {a.get("name") for a in ego_av.iter("arg")}
+
+
+def test_direct_localization_is_off_by_default_and_reaches_acb():
+    """Issue 195: the debug option's CARLA half: acb publishes the truth on the pose
+    estimator's topic (truth_pose_estimate) only when direct_localization is set."""
     args, root = xml_args("vehicle_side_carla.launch.xml")
+    assert args["direct_localization"].get("default") == "false"
     passed = {a.get("name"): a.get("value") for a in root.find("include").findall("arg")}
-    assert passed["seed_localization_on_attach"] == "$(var seed_localization_on_attach)"
-    entity, parser = frontend.Parser.load(os.path.join(PILOTS, "vehicle_side_carla.launch.xml"))
-    [declared] = [e for e in parser.parse_description(entity).entities
-                  if isinstance(e, DeclareLaunchArgument)
-                  and e.name == "seed_localization_on_attach"]
-    context = LaunchContext()
-    context.launch_configurations["relay"] = relay
-    assert perform_substitutions(context, declared.default_value) == want
+    assert passed["truth_pose_estimate"] == "$(var direct_localization)"
+    assert "publish_direct_localization" not in passed
+
+
+def test_direct_localization_turns_the_profiles_ndt_off():
+    """Issue 195: with direct_localization the scensim profile starts no pose estimator
+    (ndt:=none); the EKF fuses the vehicle side's truth on the estimator's topic."""
+    args, root = xml_args("autoware.launch.xml")
+    assert args["direct_localization"].get("default") == "false"
+    lets = [e for e in root.iter("let") if e.get("name") == "ndt"]
+    assert len(lets) == 1 and lets[0].get("value") == "none"
+    cond = lets[0].get("if")
+    assert "direct_localization" in cond and "scensim" in cond
 
 
 # --- the kinds' own logic -----------------------------------------------------------------
