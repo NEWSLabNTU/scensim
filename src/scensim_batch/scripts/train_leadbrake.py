@@ -29,6 +29,9 @@ if THREADS:
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 __import__("scensim_batch.tasks")      # registers Scensim-LeadBrake-v0
+if os.environ.get("PPO_LOG"):          # per-update KL, clip fraction, learning rate (094 P4)
+    from scensim_batch import ppo_log  # noqa: E402 (stdlib only until a PPO is built)
+    ppo_log.install(os.environ["PPO_LOG"])
 
 script, sys.argv = sys.argv[1], sys.argv[1:]
 runpy.run_path(script, run_name="__main__")
