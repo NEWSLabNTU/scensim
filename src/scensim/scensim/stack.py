@@ -116,6 +116,17 @@ GNSS_SEED = 0
 # receiver's heading on /autoware_orientation (gnss_poser's use_gnss_ins_orientation). Before
 # L1b it was the bearing between two fixes, random while the car stood still.
 GNSS_YAW_SOURCE = "ins"
+# Issue 195 L1d: the pose initializer's GNSS particles spread as the receiver errs: x and y
+# variance (3 horizontal stddev)^2, floored at an RTK receiver's 0.01 m^2 (the profile's
+# default); a project's own `gnss_particle_variance` is kept.
+GNSS_PARTICLE_VARIANCE_FLOOR = 0.01
+
+
+def gnss_particle_variance(args: dict) -> float:
+    """The autoware pilot's ``gnss_particle_variance`` for its ``gnss_noise_*`` arguments."""
+    g = gnss_block(args)
+    sigma = g.get("horizontal_stddev_m", 0.02) if g.get("enabled", True) else 0.0
+    return max(GNSS_PARTICLE_VARIANCE_FLOOR, round((3.0 * sigma) ** 2, 6))
 
 
 def gnss_block(args: dict) -> dict:
@@ -887,6 +898,10 @@ def plan(project_arg=None, seat_arg=None, simulator=None, map_name=None, logs=No
     entries = []
     for b in stack_pilots:
         entries.append(pilot_entry(b, project, ctx))
+        if b.sided() and entries[-1].get("kind") == "autoware":
+            # issue 195 L1d: the pose initializer's particles spread as this receiver errs
+            entries[-1].setdefault("args", {}).setdefault(
+                "gnss_particle_variance", gnss_particle_variance(b.spec.get("args") or {}))
         if sim == "carla" and b.sided():
             # issue 195 A9: acb's GNSS seed, given, so the run reproduces
             entries[-1].setdefault("args", {}).setdefault("gnss_noise_seed", GNSS_SEED)

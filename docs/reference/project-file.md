@@ -111,6 +111,13 @@ degrees in roll and pitch per reading, set with `gnss_noise_heading_stddev_deg` 
 the position. Each run's `resolved.yaml` names the yaw's source (`stack.gnss_yaw_source`,
 `ins`).
 
+Autoware's pose initializer spreads its alignment's starting guesses around the GNSS pose as
+widely as the receiver errs: a variance in x and y of three times `gnss_noise_horizontal_stddev_m`,
+squared, and at least 0.01 m^2 (the default receiver's). Autoware's own setting, 1 m^2, suits an
+ordinary receiver; with it a guess 1.6 m along a straight road can win the alignment, since the
+map does not fix the position along the road. A pilot's `gnss_particle_variance` sets the
+variance directly. Only the scensim Autoware profile reads it.
+
 An `autoware` pilot's `args` (and a suite's `pilot_args` for it) are checked by the
 Autoware profile's own argument check when `testbench check` runs, and so before the stack
 starts: a renamed argument (`carla_control`, now `sim_control`), a value outside its

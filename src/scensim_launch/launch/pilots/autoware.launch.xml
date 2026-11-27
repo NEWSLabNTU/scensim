@@ -61,6 +61,7 @@
        initialize, which needs the GNSS module), with a relay or without. The agent waits out the
        automatic initializer before its own call (issue 046's collision). -->
   <arg name="gnss_enabled" default="true" description="GNSS for the initial pose (Autoware's pose initializer); true with a relay too (issue 195)"/>
+  <arg name="gnss_particle_variance" default="0.01" description="scensim profile: the pose initializer's GNSS particle variance in x and y, m^2; scensim gives (3 x the receiver's horizontal stddev)^2, at least 0.01 (issue 195 L1d)"/>
   <!-- issue 195: a debug option, never an evaluation (scensim marks the run): the vehicle side
        publishes the truth on the pose estimator's topic, and the scensim profile starts no pose
        estimator (ndt:=none), so the EKF fuses the truth. The stock profile has no such switch. -->
@@ -126,6 +127,7 @@
     <arg name="traffic_light_fusion_only" value="$(var traffic_light_fusion_only)"/>
     <arg name="publish_ground_truth_objects" value="$(var publish_ground_truth_objects)"/>
     <arg name="gnss_enabled" value="$(var gnss_enabled)"/>
+    <arg name="gnss_particle_variance" value="$(var gnss_particle_variance)"/>
   </include>
   </group>
 </launch>

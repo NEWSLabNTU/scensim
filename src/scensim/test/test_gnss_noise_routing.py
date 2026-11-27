@@ -112,3 +112,45 @@ def test_an_isaac_stack_records_the_gnss_yaw_source(where, maps_hub, aib_ego):
 
 def test_a_carla_stack_records_the_gnss_yaw_source(where, maps_hub):
     assert stack.plan(project_arg=str(make(where))).record["gnss_yaw_source"] == "ins"
+
+
+# Issue 195 L1d: the pose initializer's GNSS particles spread as the receiver errs, (3 sigma)^2
+# floored at 0.01 m^2, the autoware pilot's gnss_particle_variance.
+
+def _autoware_args(p):
+    return [e["args"] for e in p.record["pilot_entries"] if e["kind"] == "autoware"]
+
+
+def test_the_particle_variance_defaults_to_the_rtk_floor(where, maps_hub):
+    args = _autoware_args(stack.plan(project_arg=str(make(where))))
+    assert args and all(a["gnss_particle_variance"] == 0.01 for a in args)
+
+
+def test_the_particle_variance_follows_a_noisier_receiver(where, maps_hub):
+    d = make(where)
+    _with_args(d, "gnss_noise_horizontal_stddev_m: 0.5")
+    [a] = _autoware_args(stack.plan(project_arg=str(d)))[:1]
+    assert a["gnss_particle_variance"] == pytest.approx(2.25)
+
+
+def test_the_particle_variance_reaches_an_isaac_pilot_too(where, maps_hub, aib_ego):
+    d = make(where, template="isaac")
+    _with_args(d, "gnss_noise_horizontal_stddev_m: 0.1")
+    [a] = _autoware_args(stack.plan(project_arg=str(d)))[:1]
+    assert a["gnss_particle_variance"] == pytest.approx(0.09)
+
+
+def test_a_projects_own_particle_variance_is_kept(where, maps_hub):
+    d = make(where)
+    _with_args(d, "gnss_particle_variance: 0.5")
+    [a] = _autoware_args(stack.plan(project_arg=str(d)))[:1]
+    assert a["gnss_particle_variance"] == 0.5
+
+
+def test_particle_variance_rule():
+    assert stack.gnss_particle_variance({}) == 0.01
+    assert stack.gnss_particle_variance({"gnss_noise_horizontal_stddev_m": 0.02}) == 0.01
+    assert stack.gnss_particle_variance({"gnss_noise_horizontal_stddev_m": "0.2"}) == \
+        pytest.approx(0.36)
+    assert stack.gnss_particle_variance({"gnss_noise_enabled": False,
+                                         "gnss_noise_horizontal_stddev_m": 0.5}) == 0.01
