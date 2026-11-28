@@ -1448,3 +1448,64 @@ without "ms" and counts "held"):
   - (b) a factor sooner: publish on 2 frames, or a lower min_on_duration;
   - (c) cap the speed where the check sees low obstacles late;
   - (d) a longer reach, though a 15 cm rock gives few points at range.
+
+## A reach relative to the route (plan, 241, 2026-11-28; before any code, for 133)
+
+The reach today is base_link's: 1 to 30 m in x, at most 6 m in y, and within 3 m of the car's
+height. On a bend of radius R the car's own road leaves it about sqrt(12 R) m ahead, 19 m at R
+30 m. The plan measures the reach along the route instead.
+
+*Which trajectory.* The motion velocity planner's own input,
+`/planning/scenario_planning/lane_driving/motion_planning/path_optimizer/trajectory`. It is the
+path the planner checks obstacles against, upstream of it, so the check's output cannot change
+the path that gates it (no loop): a stop changes the velocities after the planner, not this
+geometry. The final `/planning/scenario_planning/trajectory` is downstream of the planner, and
+so not used live. It is the only one the clean laps recorded, so the replay uses it as the
+stand-in (the same geometry, other velocities). The profile adds the planner's input topic to
+the recorded set, so later runs can replay exactly.
+
+*The rule.* A point is in reach when:
+- its nearest point on the trajectory, from the segment nearest base_link onward, lies 1 to 30
+  m of arc ahead of base_link's own projection;
+- it is at most 6 m from the trajectory in xy (the next lane either side, as today);
+- it is within 3 m in height of that nearest trajectory point (the trajectory's z, not the
+  car's: on a grade the road 30 m along stays in the band).
+
+The ego mask, the height threshold h, the detections, the persistence and the hold are
+unchanged.
+
+*Latency and fallback.* The trajectory comes at about 10 Hz, so it is up to 0.1 to 0.2 s older
+than the cloud. At 4 m/s the car moves under 1 m along a path whose geometry does not change in
+that time, so the newest one is used as it is. The check falls back to base_link's reach, and
+says so in its status (`"reach": "route" | "base_link"`, with the trajectory's age), when:
+- no trajectory has come yet;
+- the newest is older than 1.0 s against the cloud's stamp;
+- base_link is more than 2 m from it (off the route, or replanning).
+
+*Tests, before code* (synthetic maps, as the band's):
+- R1: on a hairpin of radius 10 m, a 15 cm rock on the car's own road 20 m of arc ahead (about
+  13 m to base_link's side) counts with the route reach. With base_link's reach it is missed;
+  that half fails today.
+- R2: a switchback's other leg, 12 m aside at the car's height and away from the trajectory, is
+  ignored.
+- R3: a rock in the next lane, 3.5 m from the trajectory, counts.
+- R4: a grade whose road 30 m along is more than 3 m from the car's height but within 3 m of
+  the trajectory's: the rock there counts.
+- R5: the fallbacks: no trajectory, one 1.5 s old, base_link 3 m off it. Each gives base_link's
+  reach and the status that says so.
+- R6: points beside the trajectory behind base_link, and beyond 30 m of arc, are ignored.
+
+*Replay, predicted before any:* `band180.py` extended to take the recorded trajectory, on NpH1
+and NpH2 (the laps' map, lanelet2 4b29ba87):
+- P1: frames with obstacle points at most the band and reach's 0.52 %, and published frames at
+  most 15 and 12. Whether the one spot (108.6, 442.3, next leg) stays depends on its distance to
+  the trajectory, which I have not measured: it is reported, not predicted.
+- P2 (the hairpin case): on frames where the trajectory's radius within 30 m is under 30 m, the
+  arc of the car's own road in reach (the farthest own-road return, within 1.5 m of the
+  trajectory, that each rule keeps):
+  - base_link's: median under 20 m;
+  - the route's: median at least 28 m, limited by the lidar's returns.
+- P3: no own-road obstacle point with either rule (clean laps).
+
+*Not in this item:* a reach that follows a lane change before the planner does; that is the
+next lane, already in reach.
