@@ -36,7 +36,7 @@ RENAMES = {"gitignore": ".gitignore"}
 NOT_COPIED = ("assets", "state", "runs", ".scensim", ".swb", "play_log")
 
 TOP_KEYS = ("simulator", "assets", "maps", "pilots", "vehicles", "ground", "logging", "judges",
-            "attachments", "world", "isaac", "carla", "ssv2", "clock", "default")
+            "attachments", "world", "isaac", "carla", "ssv2", "clock", "default", "session")
 REQUIRED = ("simulator", "pilots", "assets")
 SIMULATORS = ("carla", "isaac")
 KINDS = ("autoware", "carla_basic", "simple", "launch", "command", "none")
@@ -1340,6 +1340,8 @@ def check_project(path, scenarios: bool = True) -> list:
     except config.ConfigError:
         host = {}
     out += on_host(overlaysmod.problems(project, settings, host))
+    from scensim import session as sessionmod   # 091 W12: the testbench's session record
+    out += sessionmod.problems(project, settings)
     if sim == "isaac":
         out += on_host(isaacmod.findings(config.host_settings(project)))
         comp = componentmod.problems(project, settings, host)

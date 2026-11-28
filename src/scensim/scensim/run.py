@@ -2067,6 +2067,12 @@ def run_spec(ctx: Context, spec: RunSpec, attempt: int = 0) -> results.RunResult
         prov["world_server"] = world_server
     if ctx.testbench:
         prov["testbench"] = dict(ctx.testbench)   # its name and workspace (081 step 3)
+    from scensim import session as sessionmod
+    try:   # 091 W12: the session's record beside the run, its hash here; null: none named
+        prov["session"] = sessionmod.write_record(run_dir, sessionmod.resolve(
+            project, config.project_settings(project)))
+    except sessionmod.SessionError as e:
+        prov["session"] = {"error": str(e)}
     sample_block = replay_block = None
     if spec.sample is not None:
         # the record bound to what ran it: world and car, a new id (roadmap 092 K3)

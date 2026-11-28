@@ -244,10 +244,16 @@ def fingerprint(project: Path, settings: dict = None, build: dict = None) -> dic
     """What a run must agree with: the project file, the lock, the pilots, the build."""
     project = Path(project)
     settings = settings if settings is not None else config.project_settings(project)
+    from scensim import session as sessionmod
+    try:   # 091 W12: the session's record, inline or a file (a file's edit changes no yaml)
+        session = sessionmod.sha256(sessionmod.resolve(project, settings))
+    except sessionmod.SessionError:
+        session = "invalid"
     return {
         "testbench_yaml": _sha(project / config.PROJECT_FILE),
         "scensim_lock": _sha(project / config.LOCK_FILE),
         "pilots": _canon(settings.get("pilots") or {}),
+        "session": session,
         "build": build if build is not None else build_commits(),
     }
 
@@ -256,7 +262,7 @@ def fingerprint_diff(stack_fp: dict, project_fp: dict, notes: list = None) -> li
     """One phrase per part that differs, naming both sides. The build's submodules unknown on
     either side (their probe failed) are not compared; ``notes`` gets a phrase saying so."""
     names = {"testbench_yaml": config.PROJECT_FILE, "scensim_lock": config.LOCK_FILE,
-             "pilots": "pilots:", "build": "the build"}
+             "pilots": "pilots:", "session": "session:", "build": "the build"}
     out = []
     for k, name in names.items():
         a, b = (stack_fp or {}).get(k), (project_fp or {}).get(k)
@@ -1034,7 +1040,12 @@ def plan(project_arg=None, seat_arg=None, simulator=None, map_name=None, logs=No
                                "name a control component")
         rec = componentmod.resolved(project, b.spec, host)
         doc = _ego_doc(isaac_ego, sim_side.get("ego"))
-        doc["component"] = componentmod.ego_entry(rec)
+        from scensim import session as sessionmod
+        try:   # the testbench's session record, for the inputs the component declares (091 W12)
+            session = sessionmod.resolve(project, psettings)
+        except sessionmod.SessionError as e:
+            raise StackRefused(str(e)) from None
+        doc["component"] = componentmod.ego_entry(rec, session)
         isaac_ego = {"path": str(stack_dir / ISAAC_EGO), "config": doc}
         sim_side["ego"] = isaac_ego["path"]
     with_interface = [b for b in bound if componentmod.interface_of(b.spec) is not None]

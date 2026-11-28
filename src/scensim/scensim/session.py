@@ -228,6 +228,56 @@ def migrate_dir(root):
     return done
 
 
+# --- a testbench's session and a run's record (E2) ----------------------------------------
+
+def resolve(project, settings):
+    """The testbench's session record: `session:` inline (a record) or a file in the project
+    (a path relative to it); None when the testbench names none. SessionError otherwise."""
+    v = (settings or {}).get("session")
+    if v is None:
+        return None
+    if isinstance(v, dict):
+        return check(v, "testbench.yaml session")
+    if isinstance(v, str):
+        p = Path(project) / v
+        if not p.is_file():
+            raise SessionError(f"testbench.yaml session: {v}: no such file in the project")
+        return load(p)
+    raise SessionError(f"testbench.yaml session: {v!r}: a record or a file in the project "
+                       f"(`scensim session new > sessions/<name>.yaml`)")
+
+
+def problems(project, settings):
+    """`testbench check`'s findings for the testbench's session: a bad one is refused."""
+    from scensim.findings import Finding
+    try:
+        resolve(project, settings)
+    except SessionError as e:
+        return [Finding("testbench.yaml", str(e), "scensim session keys; scensim session new",
+                        refused=True)]
+    return []
+
+
+def text_of(record):
+    """The record as written: the text its hash is of."""
+    return yaml.safe_dump(record, sort_keys=False)
+
+
+def sha256(record):
+    import hashlib
+    return None if record is None else hashlib.sha256(text_of(record).encode()).hexdigest()
+
+
+def write_record(run_dir, record):
+    """A run's record: `record` as ``session_record.yaml`` in `run_dir`, and the provenance's
+    ``session`` block {file, sha256}; None (and no file) when the testbench named none."""
+    if record is None:
+        return None
+    text = text_of(record)
+    (Path(run_dir) / RECORD_FILE).write_text(text)
+    return {"file": RECORD_FILE, "sha256": sha256(record)}
+
+
 def main(argv=None):
     """``scensim session keys | new | check <file> | migrate <dir>``."""
     import argparse

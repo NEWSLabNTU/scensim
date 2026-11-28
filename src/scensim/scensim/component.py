@@ -235,13 +235,17 @@ def resolved(project, pilot: dict, host: dict):
             "truth": dict(c.get("truth") or {}), "paths": dirs, "found": found}
 
 
-def ego_entry(recorded: dict) -> dict:
-    """The ego config's ``component`` (aib's EgoConfig) from a stack's record of it."""
+def ego_entry(recorded: dict, session: dict = None) -> dict:
+    """The ego config's ``component`` (aib's EgoConfig) from a stack's record of it, with the
+    testbench's session record (091 W12), whose values the component's declared session inputs
+    take."""
     out = {"entry_point": recorded["entry_point"], "paths": list(recorded.get("paths") or [])}
     if recorded.get("params"):
         out["params"] = dict(recorded["params"])
     if recorded.get("truth"):
         out["truth"] = dict(recorded["truth"])
+    if session is not None:
+        out["session"] = dict(session)
     return out
 
 
@@ -282,6 +286,11 @@ except ValueError as e:
     sys.exit(0)
 rig = ego.load_rig()
 c = rig.make_component()
+try:   # a declared session input the testbench's session lacks (091 W12)
+    rig.session_values(c)
+except components.ComponentError as e:
+    print(json.dumps({"config_error": str(e)}))
+    sys.exit(0)
 from sim_vehicle_ecu.signals import AckermannCommand, VescCommand
 canned = {"autoware": Request(1.0, 5.0), "ackermann": AckermannCommand(5.0, age=0.0),
           "vesc": VescCommand("speed", 20000.0, 0.5, 0.0)}[c.commands]
@@ -363,7 +372,12 @@ def isaac_findings(project, settings: dict, host: dict) -> list:
         except stackmod.StackRefused:
             continue
         doc.pop("ground_truth", None)
-        doc["component"] = ego_entry(rec)
+        from scensim import session as sessionmod
+        try:
+            session = sessionmod.resolve(project, settings)
+        except sessionmod.SessionError:
+            continue   # sessionmod.problems refuses it
+        doc["component"] = ego_entry(rec, session)
         if interface_of(pilot) is not None:
             doc["vehicle_interface"] = interface_of(pilot)
         hz = float(((settings.get("isaac") or {}).get("physics_hz")) or 60.0)
