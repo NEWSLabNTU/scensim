@@ -1123,8 +1123,9 @@ issue 180 step B v2 reading (241)/`).
 
 *Why the stop released.* At 0.06 m the rock is about 3.8 m ahead of base_link and 0.74 m to
 the left. That is inside the node's ego mask (the box to the front + 0.2 m and the half width
-+ 0.2 m), so its points stop counting, the detection ends, obstacle_stop's 1.0 s keep runs
-out, and the car moves. This is issue 182's blind zone: the stop must hold at range, and here
++ 0.2 m), so its points stop counting and the detection ends. obstacle_stop's pointcloud path
+then holds the stop for its 1.0 s (keyed by position, not by track; 139's Q6 read above), and
+the car moves. This is issue 182's blind zone: the stop must hold at range, and here
 it came too late to.
 
 *What the rock's height and h imply for the range.* The rock stands about 0.135 m above the
@@ -1188,7 +1189,7 @@ record list and live D check ("z ratio 0.2 (band 0.10 m)"). Judged with
 
 *The failure* (R180_B1): the lane check drops every point inside the ego box grown by 0.2 m
 (its own body), so an obstacle the car stops within 0.2 m of disappears. With nothing to stop
-for, obstacle_stop releases after its 1.0 s keep, and the car drives on.
+for, obstacle_stop's pointcloud path releases after its 1.0 s hold, and the car drives on.
 
 *The rule.* Keep a published detection while its points sit in the mask ahead of the car:
 - What is held: a detection that the node has published (that is, it persisted 3 frames)
