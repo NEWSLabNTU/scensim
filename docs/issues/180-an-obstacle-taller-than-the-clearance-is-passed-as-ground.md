@@ -906,3 +906,89 @@ For the HF re-upload: the rebuilt maps hold the stop with N. Before the upload, 
 false-side lap per rebuilt map with no obstacle, N on: count the lane check's published
 detections and any stop factor over the whole course. Zero is the bar. The same lap with D
 would decide D. Neither lap needs a new remedy; both are runs of the arms above on clean roads.
+
+## P8's missing statuses: start-up only (241, 2026-11-28; CPU, from the records)
+
+The node returns from `on_cloud` without a status while it has no pose yet (`if self.pose is
+None: return`). Every other callback publishes its output cloud, with the input's stamp, and a
+status. So a raw cloud with no output of the same stamp got no callback. `p8gaps.py` (NAS `home/2026-11-28 issue 180
+step B v2 reading (241)/`) reads that, per N run:
+
+| run | raw clouds | statuses | raw clouds with no output | before the first output | after it | first output |
+|---|---|---|---|---|---|---|
+| N1 | 3094 | 3059 | 35 | 35 | 0 | sim 1001.85 |
+| N2 | 3124 | 3062 | 62 | 62 | 0 | sim 1003.20 |
+| N3 | 3102 | 3067 | 35 | 35 | 0 | sim 1001.85 |
+| N4 | 3093 | 3054 | 39 | 39 | 0 | sim 1002.05 |
+
+- The raw clouds start at sim 1000.10, and the EKF's first message is at 1002.0 to 1003.35.
+- Every missing status is a cloud before the node's first pose (1.75 to 3.1 s of 20 Hz clouds),
+  while the car stood (truth speed under 2e-6 m/s until 1004).
+- After the first output, no cloud is missed in any run: the largest gap between outputs is
+  0.05 s, one lidar period.
+- The slowest callback took 10.6 to 24.8 ms.
+
+So P8 holds once P8 is counted from the node's first pose, as the node can do nothing before
+it: 100 % in all four runs. To make the count honest without a reader knowing this, the node
+could publish a status with no pose too; that is a one-line change, left for the fix of issue
+201.
+
+## The clean-lap false-side test: plan and predictions (241, 2026-11-28, before any run; for 133)
+
+*Why.* Step B v2's Q4 saw no false stop, but over 100 m of one flat, straight lane. Before the
+rebuilt maps are uploaded, a full course with no obstacle on the sparse rebuilt Haruna and on
+c6b, with each remedy on. 133's bar: zero lane-check detections and zero obstacle_stop or
+obstacle_slow_down factors. Writing this brief found issue 201, which decides N's predictions
+on Haruna; the plan runs N with its fix.
+
+*What I measured first (CPU, the node's own code; `refholes180.py`, NAS as above).* The
+likeliest false stop named before, N's -inf reference where no map point lies within 0.5 m,
+does not occur on either rebuilt map:
+
+| map | road lanelets | road cells (0.1 m, the node's raster) | cells with a -inf reference |
+|---|---|---|---|
+| Haruna, rebuilt (tile set 280e8b91) | 32 | 1026214 | 0 |
+| fixture_c6b, rebuilt (aea7dc9d) | 12 | 343530 | 0 |
+
+The ribbon is sampled every 0.25 m into 0.2 m voxels, so "46.5 % of 0.2 m cells with a point
+within 0.05 m" still leaves a point within 0.5 m of every road cell. -inf can still arise where
+a road lanelet runs past the map's points (the map's edge), which neither course has.
+
+The EKF's pitch error on Haruna (118's H runs, rb1, rb2 and pub1; `ekfpitch180.py`) is at most
+0.09 deg (p99), about 0.045 m at 30 m; roll at most 0.19 deg. On c6b (D1) the pitch error is at
+most 0.18 deg, 0.09 m at 30 m. Compare-map (D) places the cloud through TF with the full pose,
+so this is what D's 0.1 m band must absorb.
+
+*The runs.* 2 runs per arm per map, interleaved, a fresh stack each, no NPC, no obstacle on
+the carriageway:
+- Haruna: haruna_down on tb-l3h's rebuilt map (tile set 280e8b91; the course, isaac and scenario
+  files the published ones), the plain course mesh (no road_detail, as H ran it), 1468 m.
+- c6b: fixture_c6b_down on the rebuilt map (aea7dc9d), with road_detail's placed rocks removed
+  (`rocks.at: []`; the s 100, 200, 300 and 400 rocks). The scattered shoulder, run-off and ditch
+  rocks stay: real rocks beside the road the car must not stop for.
+- Arms: **N'** (`lane_height_check:=true` with issue 201's fix, pinned) and **D**
+  (`compare_map_z_ratio:=0.2`). Optional, one run, for issue 201's live confirmation: **N** as
+  landed on Haruna. 8 runs, or 9.
+- Recorded as step B v2's N and D arms, plus the truth's pitch and roll, and the world's rock
+  list (prims under /World/RoadRocks with their poses), so a detection can be checked against a
+  real rock.
+- Judged by `judge_cleanlap180.py`, to be written and put on the NAS before any run.
+
+*Predictions.*
+- C1, D on both maps: zero obstacle_stop and obstacle_slow_down factors; the course completed.
+  Compare-map keeps a point in the car's path (0 to 30 m ahead, 1.5 m either side) in at most
+  1 % of frames, and no tracked object is in the path. The band's margins: 0.1 m against an
+  EKF height error at range of at most 0.05 m (Haruna) and 0.09 m (c6b, at 30 m).
+- C2, N' on both maps: zero published lane-check detections and zero factors; the course
+  completed. The node's obstacle points in at most 1 % of frames, none persisting 3 frames.
+- C3, N (as landed) on Haruna, if run: it publishes the road as an obstacle from its first
+  pose on the slope. obstacle_stop stops the car before it moves 30 m from the start. The run
+  ends by its timeout.
+- C4: a detection on c6b at a scattered rock inside a road lanelet is a real one, named with
+  the rock; it does not count against the bar, and the rock list says whether it is there.
+- C5, P8 from the first pose: a status for every raw cloud, in every N' run.
+
+*What it decides.* If D passes C1 on Haruna and c6b, D is safe on these two maps. If N' passes
+C2, N with issue 201's fix is the remedy, as step B v2 found for c6b. If both pass, my
+recommendation stays N' (it reaches obstacle_stop apart from the tracker), with D possible as a
+second. A fail on Haruna names the map and the place.
