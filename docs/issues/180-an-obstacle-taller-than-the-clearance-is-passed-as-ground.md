@@ -806,3 +806,103 @@ run, labelled; 133 accepted):
 - Q5: localization as in T6b: start within 0.25 m, z within +-0.03 m, NVTL above 3.2.
 - Q6: in C, every creep step after the first stop follows more than 1.0 s with no tracked object
   within 1.5 m of the boulder.
+
+## Step B v2's result: D holds outright, N holds but misses three clauses, C strikes (241, 2026-11-28)
+
+118 ran the 12 runs at scensim 4343e3bd on the rebuilt map (pcd sha256 aea7dc9d..., checked in
+each run's provenance), interleaved C1 N1 D1 C2 N2 D2 ... D4. The runs, each with SHA256SUMS
+and 118's judge JSON: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-28 issue 180 step B v2
+(118)/runs/`. N1 has no judge JSON: its precheck failed on the recorder's subscription to the
+lane check's cloud (the amendment 133 accepted), so 241 judged it with the same
+`judge_stepB180_v2.py` (sha256 91ebc6ed..., `--rock-x 400.0` as 118's). 241 also re-judged N4
+and got 118's JSON field for field. 241's judge JSONs, a false-side reader and its output: NAS
+`home/2026-11-28 issue 180 step B v2 reading (241)/` (SHA256SUMS). r180's original step B run
+is not in the folder.
+
+| run | contact | first stop, bumper gap | max v after stop | boulder pts at compare-map (p50) | start xy error |
+|---|---|---|---|---|---|
+| C1 | struck, impulse 3719 | 2.71 m | 2.071 | 14 | 0.466 m |
+| C2 | struck | 4.26 m | 1.805 | 8 | 0.402 m |
+| C3 | struck | 4.72 m | 2.082 | 8 | 0.281 m |
+| C4 | struck | 4.72 m | 1.783 | 9 | 0.190 m |
+| N1 | none | 5.65 m | 0.001 | 8 | 0.409 m |
+| N2 | none | 5.76 m | 0.000 | 7 | 0.334 m |
+| N3 | none | 5.65 m | 0.001 | 6 | 0.364 m |
+| N4 | none | 5.73 m | 0.052 | 8 | 0.311 m |
+| D1 | none | 4.36 m | 0.001 | 25 | 0.212 m |
+| D2 | none | 4.32 m | 0.001 | 33 | 0.319 m |
+| D3 | none | 3.55 m | 0.001 | 29 | 0.244 m |
+| D4 | none | 5.10 m | 0.000 | 25 | 0.404 m |
+
+Every run's z error at the start is -0.006 to -0.010 m and its NVTL minimum 3.237 to 3.287.
+
+**Q1 passes, Q1b fails.** C struck the boulder in 4 of 4. Compare-map removed a median of 61.5,
+70.6, 63.0 and 64.0 % of the boulder's downsampled points from 12 m in: far above the old map's
+3 to 21 %, as the band predicts, but at least 70 % holds only in C2. The threshold was too high;
+the direction is confirmed.
+
+**Q2 passes in substance and fails as written on three clauses.**
+- Contact 0 of 4. Each run stood 5.65 to 5.76 m before the boulder for the rest of the run
+  (about 125 s).
+- N4 moved after its stop: at 1.0 to 1.2 s after it, the truth reads 0.018 to 0.052 m/s and
+  base_link moves 8 mm (x 390.555 to 390.563), then stands. 0.052 is over the 0.05 limit.
+- The lane check first published the boulder at 25.3 to 25.9 m from the bumper and in 100 % of
+  its frames up to the stand in N1, N3 and N4, 97.67 % in N2 (under 99 %).
+- P8: processing p95 6.5 to 12.2 ms (under 30). A status for 98.0 to 98.9 % of the raw clouds
+  (3059/3094, 3062/3124, 3067/3102, 3054/3093): under 99 % in every run.
+
+**Q3 passes.** Contact 0 of 4, no motion above 0.001 m/s after the first stop, and compare-map
+kept at least 18 boulder points in every frame after the stop (the minimum 18 to 25 by run;
+100 % of frames at 5 or more, against the old map's 99.8 %).
+
+**Q4 passes, on little road.** No obstacle_stop or obstacle_slow_down factor away from the
+boulder in any N or D run. The factors only see what the route offers, so 241 also read every
+frame before the first stop for anything off the boulder (more than 1.5 m from it) inside the
+car's path (0 to 30 m ahead, 1.5 m either side): compare-map points, the lane check's points and
+tracked objects. Zero frames with any, in N1 to N4, D1 to D4 and C1 (422 to 477 cloud frames a
+run). The same reader with the boulder not excluded finds it in 89 % of D1's frames, so it
+sees what is there. The route is short, though: the car starts at x 320 and stops near 391, so
+each run checks about 100 m of one straight lane of one map. The sparse-map risk raised above
+(Haruna: 46.5 % of the road's 0.2 m cells with a point within 0.05 m) is not tested by this run,
+for D or for N. N has a sparse-map risk of its own: where no map point lies within 0.5 m, its
+reference height is -inf (`Reference.at`), so any lidar return there counts as an obstacle
+point. That fails toward a stop, and the 3-point, 3-frame rule must then pass it.
+
+**Q5 fails on position, as issue 195 expects.** Start within 0.25 m in 3 of 12 (C4, D1, D3); z
+and NVTL pass in all 12. This is the start-position regression issue 195's yaw A/B is testing;
+it does not differ by arm (C 0.19 to 0.47, N 0.31 to 0.41, D 0.21 to 0.40 m) and does not
+explain any arm's outcome.
+
+**Q6 fails: C creeps while the boulder is still tracked.** The prediction was that every creep
+follows more than 1.0 s without a tracked object at the boulder (obstacle_stop's keep, issue
+182). In C1, C3 and C4 most creeps start 0.1 to 0.9 s after the last sighting (C1: 0.65 s four
+times; C4: 0.1 s three times); only C2's creeps follow 1.15 s or more. So the release is not
+the 1.0 s keep running out after a lost object. Something in obstacle_stop lets the car move
+with the object present or flickering. This is the separate question 133 put aside above; N and
+D do not depend on it here, because neither loses the boulder, but a flicker in N or D would
+meet the same release.
+
+### What to fix the rebuilt map with (241's recommendation, for 133 and the user)
+
+Both remedies hold the stop on the rebuilt map; C does not. The choice is about the false side,
+which this run barely tests.
+
+- **N (`lane_height_check:=true`) as the fix the rebuilt maps ship with.** It held 4 of 4 with
+  no contact. It sees the boulder 25 m out. It reaches obstacle_stop on its own path, a
+  pointcloud stop, apart from clustering, the validator and the tracker, so the flicker that
+  releases C's stop does not reach it. Its effect is bounded to road lanelets 1 to 30 m ahead.
+  Its misses are small and about the node, not the stop: an 8 mm move in N4, a 97.7 %
+  detection share in N2, and a status for 98 to 99 % of raw clouds where 99 % was set. Before
+  calling P8 passed, find which clouds get no status (dropped by the subscription's depth,
+  or skipped).
+- **D (`compare_map_z_ratio:=0.2`) not yet.** It held best here (no motion, 18 or more points
+  every frame). But it narrows the band for the whole object pipeline on every map, and is
+  only right where the map's road lies within 0.1 m of the simulated road everywhere. The old
+  map's 0.13 m offset would have made D stop for the road itself. One straight 100 m of c6b does
+  not show that for the other rebuilt maps.
+- **Not both, for now.** N held without D; adding D adds D's risk and no hold this run needed.
+
+For the HF re-upload: the rebuilt maps hold the stop with N. Before the upload, one
+false-side lap per rebuilt map with no obstacle, N on: count the lane check's published
+detections and any stop factor over the whole course. Zero is the bar. The same lap with D
+would decide D. Neither lap needs a new remedy; both are runs of the arms above on clean roads.
