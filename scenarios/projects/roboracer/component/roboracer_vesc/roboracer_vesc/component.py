@@ -59,7 +59,6 @@ DEFAULTS = {
     "speed_kp": 0.0045,             # A per ERPM of error
     "speed_ki": 0.012,              # A per ERPM s
     "resistance": 0.03,             # ohm, for duty commands
-    "battery": 7.9,                 # V, a 2S pack mid-charge
     "servo_gain": -1.2135,          # servo position per rad of tire angle
     "servo_offset": 0.5304,         # servo position at a straight tire
     "servo_rate": 5.0,              # rad/s at the wheels
@@ -84,10 +83,21 @@ class RoboRacerVescBatch:
     commands = "vesc"
     driven = (True,) * 4  # the Slash 4x4's; an instance's from its spec's drive_axle
     truth = ()
+    # the battery's voltage, measured before the run: the session's, not a param (scensim 091
+    # W12), given at construction as session={"battery_v": [N]}
+    session = ("battery_v",)
     array_api, dtype = ("numpy", "torch"), np.float64
     per_slot_params = True   # every param an array [N]: a fit's candidates, a varied car
 
-    def __init__(self, vehicle: dict, params: dict, seeds, xp=None):
+    def __init__(self, vehicle: dict, params: dict, seeds, xp=None, session=None):
+        if "battery" in params:
+            raise ValueError("roboracer_vesc: param battery is retired: the battery's voltage is "
+                             "the session's (scensim 091 W12), session.battery.voltage_v in the "
+                             "run's session record")
+        if not session or "battery_v" not in session:
+            raise ValueError("roboracer_vesc: no battery_v: construct it with "
+                             "session={'battery_v': V} (sim_vehicle_ecu load and load_batch do, "
+                             "from the run's session record)")
         unknown = set(params) - set(DEFAULTS)
         if unknown:
             raise ValueError(f"unknown params {sorted(unknown)}; known: {sorted(DEFAULTS)}")
@@ -96,6 +106,8 @@ class RoboRacerVescBatch:
         # each param per car, [N]: a number (one car's, or every car's) or an array [N]
         host = {k: np.broadcast_to(np.asarray(params.get(k, d), dtype=np.float64), (n,)).copy()
                 for k, d in DEFAULTS.items()}
+        host["battery"] = np.broadcast_to(np.asarray(session["battery_v"], dtype=np.float64),
+                                          (n,)).copy()   # V, per car: its run's session's
         self.p = {k: xp.asarray(v, xp.float64) for k, v in host.items()}
         self.jitter = host["latency_jitter"] > 0          # host: which cars draw
         g = vehicle["geometry"]

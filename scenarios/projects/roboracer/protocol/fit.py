@@ -37,11 +37,13 @@ def _runs(runs, manoeuvres):
 
 # --- 1. the component, by replay --------------------------------------------------------------
 
-def replay(component_cls, car, params, streams, motor_modes, dt=REPLAY_DT, erpm_sign=1.0):
+def replay(component_cls, car, params, streams, motor_modes, dt=REPLAY_DT, erpm_sign=1.0, *,
+           session):
     """The component's motor current at each `core_t`, driven by the logged commands and the
-    logged ERPM (the car's speed as the VESC measured it, reported with `erpm_sign`)."""
+    logged ERPM (the car's speed as the VESC measured it, reported with `erpm_sign`), under the
+    run's `session` record (the drive unit's session inputs: its battery, 091 W12)."""
     return replay_batch(component_cls, car, [params], [streams], motor_modes, dt,
-                        erpm_sign)[0][0]
+                        erpm_sign, sessions=[session])[0][0]
 
 
 def _run_inputs(streams, motor_modes, dt):
@@ -70,21 +72,24 @@ def _run_inputs(streams, motor_modes, dt):
 
 
 def replay_batch(component_cls, car, params_list, streams_list, motor_modes, dt=REPLAY_DT,
-                 erpm_sign=1.0):
+                 erpm_sign=1.0, *, sessions):
     """`replay` for every (params, run) pair at once, one slot each in the component's batched
     form (sim_vehicle_ecu.batch; per-slot params): [[current per core_t] per run] per params.
     Slot by slot it is the scalar replay, bit for bit. The logged ERPM is turned into the
-    commands' sign by `erpm_sign` (the protocol's conversion: the car's wiring, issue 098)."""
+    commands' sign by `erpm_sign` (the protocol's conversion: the car's wiring, issue 098).
+    `sessions`: each run's session record (the battery its drive unit ran on, 091 W12)."""
     from sim_vehicle_ecu import batch as ecu_batch
     runs = [_run_inputs(st, motor_modes, dt) for st in streams_list]
     P, R = len(params_list), len(runs)
+    if len(sessions) != R:
+        raise ValueError(f"{len(sessions)} session records for {R} runs")
     slots = [(p, r) for p in range(P) for r in range(R)]
     # every slot names the same keys (per-slot params): a key one set leaves out is the default
     defaults = getattr(sys.modules[component_cls.__module__], "DEFAULTS", {})
     keys = set().union(*params_list)
     full = [{k: pr.get(k, defaults[k]) for k in keys} for pr in params_list]
     b = ecu_batch.load_batch(component_cls, car, [full[p] for p, _ in slots],
-                             seeds=[0] * len(slots))
+                             seeds=[0] * len(slots), session=[sessions[r] for _, r in slots])
     epw = np.asarray(b.gear * b.p["erpm_per_motor_rad_s"], float) * np.ones(len(slots))
     T = max(len(x[0]) for x in runs)
 
@@ -126,7 +131,7 @@ def fit_current_max(runs, protocol_doc):
 
 def _replay_cost(component_cls, car, params, sel, motor_modes, erpm_sign=1.0):
     preds = replay_batch(component_cls, car, [params], [st for _, st in sel], motor_modes,
-                         erpm_sign=erpm_sign)[0]
+                         erpm_sign=erpm_sign, sessions=[s.get("session") for s, _ in sel])[0]
     err = [pred - st["core_current_motor"] for pred, (_, st) in zip(preds, sel)]
     return float(np.mean(np.concatenate(err) ** 2))
 
