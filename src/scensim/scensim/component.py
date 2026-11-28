@@ -285,9 +285,8 @@ except ValueError as e:
     print(json.dumps({"config_error": str(e).split(": ", 1)[-1]}))
     sys.exit(0)
 rig = ego.load_rig()
-c = rig.make_component()
-try:   # a declared session input the testbench's session lacks (091 W12)
-    rig.session_values(c)
+try:   # a declared session input the testbench's session lacks is refused here (091 W12)
+    c = rig.make_component()
 except components.ComponentError as e:
     print(json.dumps({"config_error": str(e)}))
     sys.exit(0)
