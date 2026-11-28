@@ -30,9 +30,12 @@ to 709 and 836 in 14 to 15 detections, and one frame published 836 points to obs
 beyond about 11 m. The car was already stopping for the boulder, so nothing changed here.
 
 **On Haruna** (118's issue 195 H runs on the rebuilt map, rb1 and rb2): haruna_down falls 87 m
-in 1468 m, and the truth's pitch while moving is 2.50 to 4.54 deg nose-down (p1 to p99), median
-3.59. The EKF agrees within 0.09 deg (p99). So with the check on, every road return from about
-1.6 m ahead to 30 m is an obstacle point for the whole course.
+in 1468 m, and the truth's pitch while moving is 0.46 to 4.82 deg nose-down (p1 to p99), median
+3.54, beyond 1.12 deg 98.3 % of the time. The EKF agrees within 0.094 deg (p99). So with the
+check on, nearly every road return from about 1.6 m ahead to 30 m is an obstacle point, for
+nearly the whole course. (Corrected 2026-11-28: the first figures, 2.50 to 4.54, median 3.59 and
+0.09, took the trace's vx for the speed. vx is the map frame's component, so they counted only
+the frames heading +x.)
 
 **Why the test missed it.** `test_a_grade_and_a_crown_are_not_obstacles` feeds a cloud that
 already follows the 10 % grade, with the pose level: a car standing level on a sloped road,

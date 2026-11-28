@@ -1223,3 +1223,72 @@ for, obstacle_stop's pointcloud path releases after its 1.0 s hold, and the car 
 
 *Live, after the code*: R180_B1 with N and the hold. Prediction: no contact, the stop held to
 the scenario's timeout. Then the clean laps with N and the hold on, for the false side.
+
+## The D clean laps: C1 fails as written on Haruna, by stops 150 m ahead; c6b is clean (241, 2026-11-28)
+
+118 ran DH1r and DH2 (haruna_down, rebuilt Haruna 280e8b91, `compare_map_z_ratio: "0.2"`) and
+DC1 (fixture_c6b_down, the rock-free c6b) at scensim b8f6f92f (NAS `autoveh/logs/2026 SSv2 on
+CARLA/2026-11-28 issue 180 clean laps (118)/runs/`). All three completed the course.
+
+*The judge changed before any N' data (judge v2, NAS `home/2026-11-28 issue 180 clean laps brief
+(241)/`; v1 kept as judge_cleanlap180_v1.py).* It now:
+- takes the speed as hypot(vx, vy). The ego trace's vx and vy are the map frame's, so v1 counted
+  as moving only the frames heading +x, about half of haruna_down;
+- counts an object in the path by its footprint, rotated by its pose, not by its centre alone;
+- reports each factor's distance ahead (its control point's).
+
+| run | factors | nearest factor ahead | within 30 m | objects in the path (moving frames) | compare-map points in the path |
+|---|---|---|---|---|---|
+| DH1r | 39 (sim 1088 to 1092) | 152.1 m | 0 | 0 of 3575 | 0 of 7172 |
+| DH2 | 33 (sim 1093 to 1097) | 153.8 m | 0 | 0 of 3578 | 0 of 7143 |
+| DC1 | 0 | | | 0 of 1121 | 0 of 2267 |
+
+- **C1 fails on Haruna as written**: its bar was zero factors. Both laps raise obstacle_stop
+  factors for about 4 s, 10 s into the course, at the same place, every one 152 to 165 m ahead
+  along the route. That is probably the next leg of a switchback, seen across the bend; what
+  they stop for is not read.
+- They have no effect on the drive. The planned trajectory's speed never dips (3.5 to 4.17
+  m/s), nothing is in the path within the planning horizon, and the car drives at 4.15 to 4.17
+  m/s through the place.
+- C1 holds on c6b.
+- Two first readings of DH1r were wrong and are withdrawn:
+  - that the car slowed to 0.12 m/s: that was vx, the map frame's component, as the car
+    turned to head -y;
+  - that a roadside prop 0.83 m from the path stopped it: that came from an unrotated
+    footprint. Rotated, the nearest object stays about 3.0 m from the path.
+- The N' laps run with compare-map's ordinary band, so they show whether the far factors are
+  D's.
+- DC2 holds too (118: 0 factors, nothing in the path).
+- **C3 holds** (NH1: N as landed on Haruna, b8f6f92f, 118's judge). The car never moved (path
+  0.0 m) and ran to the scenario's 600 s timeout. The lane check found obstacle points in every
+  one of its 12110 statuses and published 12108 clouds, the first at sim 1004.15 with 9024
+  points. obstacle_stop raised 6005 factors from sim 1009.2. That is issue 201 live: on the
+  slope at the start, the lane check takes the road for an obstacle.
+
+## The ego-mask hold: done (241, 2026-11-28; asv 9938c2d, the tests f6c8689 first)
+
+*A correction to the plan.* As first written, the tests H1 to H7 passed with a hold that held
+nothing. The tests' lidar kept seeing the rock's far half beyond the 0.2 m mask. What R180_B1
+hit is the mask and the roof lidar's bonnet shadow together. Issue 182 measured that blind zone
+to 4.9 m from base_link, about 1.2 m past the Model 3's bumper. The tests now hide low points in
+that shadow (`lidar_sees`). Without the code all 7 fail. With a hold that holds nothing, H1, H2,
+H5 and H7 fail, and H3, H4 and H6 (the "not held" cases) pass, as they should.
+
+*The rule, as coded* (`MaskHold`, through `step()`, which the node calls each frame):
+- A detection published in the last frame and not this one is held when its centre lies from
+  the front bumper to HOLD_REACH (1.5 m, past the shadow) beyond it, and a point of it lies
+  within the car's half width.
+- It is published again each frame from its map points, placed into base_link by the current
+  pose.
+- It is released when a published detection lies within 1 m of it (seen again), when its
+  centre falls behind the bumper, or after 3 frames out of the zone unseen.
+- The status reports `"held"`.
+
+*R180_B1 replayed* (`replayhold180.py`, NAS `home/2026-11-28 issue 180 step B v2 reading
+(241)/`), its raw clouds through the check without and with the hold:
+- Without: the rock's published points go from 21 to 0 at a 0.66 m bumper gap (sim 1017.25,
+  still braking). The shadow takes it before the mask does.
+- With: 5 of its points stay published from then through the whole 2.5 s stand. They are
+  released only at a -0.55 m gap, once the recorded car had driven over the rock.
+- Live, the stop would have held and the car would not have moved. That is the prediction for
+  R180_B1 with N and the hold: no contact, held to the timeout.
