@@ -618,3 +618,24 @@ has no explanation here.
 - every run's moving along median is within 0.03 m of 0, and none is near -0.1 m.
 - If the runs still split, the split is not this issue's lag. That is recorded in issue 195,
   and L2b's landing rests on B1 to B5 alone.
+
+## L2b's checks: B7, Tsukuba's constant along offset (243, 2026-11-28, before any L2b run; 133 approved)
+
+*Why.* Tsukuba (a) (scensim profile, drift_mustang, cap 8 m/s, the pose-free start) on the
+unpublished rebuild of the tsukuba map (issue 198's fix plus the roadside props, tile set
+2812386e) passed its pose_error bound (p95 0.286 m). It still sits behind the truth along track:
+the moving median is -0.155 m. The published map's run sat at -0.159 m. The offset depends only
+weakly on speed: -0.139 m at 3 to 5 m/s and -0.166 m at 7 to 9 m/s. Both runs were at builds
+before L2b (4343e3bd and b8f6f92f). The lidar's mount is ruled out: the Isaac rig and Autoware's
+calibration are identical (0.9, 0, 1.8 m, yaw 1.575), and the live log confirms it. So is the
+truth's reference point: the gap trace's origin_offset is 0, so it is base_link. This issue's lag
+is the candidate left. Records and analysis: NAS
+`home/2026-11-28 Tsukuba a on the 198 rebuild (243)/` (RESULT.md, MOUNT_CHECK.md).
+
+*B7.* After L2b is pinned, one run of Tsukuba (a) on the same rebuild (tile set 2812386e), with
+the same project and recording, beside B1 to B6:
+- the moving along median (the truth's heading, samples above 1 m/s, the first 10 s left out,
+  as in RESULT.md) is within 0.05 m of 0. It was -0.155 m.
+- pose_error still passes (p95 at most 0.5 m).
+- If the offset stays, it is not this issue's lag. That is recorded in issue 195, and L2b's
+  landing rests on B1 to B5 alone.
