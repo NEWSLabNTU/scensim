@@ -81,7 +81,7 @@ def test_the_replay_recovers_the_components_latency_and_gains():
     # the current limit at its default: without M1c the fit keeps the default, and says so
     truth = {"speed_kp": 0.006, "speed_ki": 0.012, "current_max": 40.0, "latency": 0.04}
     run = protomod.runs(DOC, only=["M1"], repetitions=1)[1]  # 2 m/s
-    c = RoboRacerVesc(CAR, truth, 0)
+    c = RoboRacerVesc(CAR, truth, 0, session={"battery_v": 7.9})
     dt = fit.REPLAY_DT
     erpm_per_wheel = c.gear * c.p["erpm_per_motor_rad_s"]
     v, t, cmd_t = 0.0, 0.0, 0.0
@@ -99,7 +99,8 @@ def test_the_replay_recovers_the_components_latency_and_gains():
     cm, rw = np.array(cmds), np.array(rows)
     st = {"cmd_t": cm[:, 0], "cmd_mode": cm[:, 1], "cmd_value": cm[:, 2], "cmd_servo": cm[:, 3],
           "core_t": rw[:, 0], "core_erpm": rw[:, 1], "core_current_motor": rw[:, 2]}
-    sess = {"manoeuvre": "M1", "condition": run.condition, "repetition": 0}
+    sess = {"manoeuvre": "M1", "condition": run.condition, "repetition": 0,
+            "session": {"schema": "scensim.session/1", "battery": {"voltage_v": 7.9, "source": "synthetic"}}}
     got, rms, notes = fit.fit_component([(sess, st)], RoboRacerVesc, CAR, protomod.MOTORS, DOC,
                                     latencies=np.arange(0.024, 0.0561, 0.008))
     assert got["latency"] == pytest.approx(0.04, abs=0.002)
@@ -123,7 +124,7 @@ def test_the_erpm_sign_is_the_cars_and_the_tools_read_the_logs_with_it():
     # the replay: the same run logged with either sign gives the same currents
     from sim_vehicle_ecu.signals import Sensors, VescCommand
     run = protomod.runs(DOC, only=["M1"], repetitions=1)[0]
-    c = RoboRacerVesc(CAR, {}, 0)
+    c = RoboRacerVesc(CAR, {}, 0, session={"battery_v": 7.9})
     rows, cmds, v, dt = [], [], 0.0, fit.REPLAY_DT
     for i in range(int(2.0 / dt)):
         t = i * dt
@@ -138,11 +139,13 @@ def test_the_erpm_sign_is_the_cars_and_the_tools_read_the_logs_with_it():
     cm, rw = np.array(cmds), np.array(rows)
     logs = {"cmd_t": cm[:, 0], "cmd_mode": cm[:, 1], "cmd_value": cm[:, 2],
             "cmd_servo": cm[:, 3], "core_t": rw[:, 0], "core_erpm": rw[:, 1]}
-    pos = fit.replay(RoboRacerVesc, CAR, {}, logs, protomod.MOTORS)
+    rec = {"schema": "scensim.session/1", "battery": {"voltage_v": 7.9, "source": "synthetic"}}
+    pos = fit.replay(RoboRacerVesc, CAR, {}, logs, protomod.MOTORS, session=rec)
     neg_logs = {**logs, "core_erpm": -logs["core_erpm"]}
     assert np.array_equal(fit.replay(RoboRacerVesc, CAR, {}, neg_logs, protomod.MOTORS,
-                                     erpm_sign=-1.0), pos)
-    assert not np.array_equal(fit.replay(RoboRacerVesc, CAR, {}, neg_logs, protomod.MOTORS), pos)
+                                     erpm_sign=-1.0, session=rec), pos)
+    assert not np.array_equal(fit.replay(RoboRacerVesc, CAR, {}, neg_logs, protomod.MOTORS,
+                                         session=rec), pos)
 
 
 def test_the_mass_from_steady_holds():

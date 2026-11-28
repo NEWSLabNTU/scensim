@@ -18,6 +18,8 @@ from sim_vehicle_ecu import batch as B  # noqa: E402
 from sim_vehicle_ecu.signals import Sensors, VescCommand  # noqa: E402
 
 from _car import CAR  # noqa: E402,F401 - re-exported: test_torch imports it from here
+# the run's session record: the battery's voltage, a session input (scensim 091 W12)
+SESSION = {"schema": "scensim.session/1", "battery": {"voltage_v": 7.9, "source": "nominal"}}
 DT = 1 / 240
 
 
@@ -76,7 +78,7 @@ def sequence(n, steps, seed):
 def test_n_cars_equal_n_reference_cars_bit_for_bit(n, jitter):
     params = {"latency_jitter": jitter} if jitter else {}
     seeds = [11 + i for i in range(n)]
-    b = B.load_batch(RoboRacerVesc, CAR, params, seeds)
+    b = B.load_batch(RoboRacerVesc, CAR, params, seeds, session=SESSION)
     assert b.vectorised
     refs = [ReferenceVesc(CAR, params, s) for s in seeds]
     for cmds, sens, resets in sequence(n, 1500, seed=n):
@@ -93,18 +95,18 @@ def test_n_cars_equal_n_reference_cars_bit_for_bit(n, jitter):
 
 
 def test_the_single_car_keeps_its_interface():
-    c = RoboRacerVesc(CAR, {"latency": 0.01}, 3)
+    c = RoboRacerVesc(CAR, {"latency": 0.01}, 3, session={"battery_v": 7.9})
     assert c.p["latency"] == 0.01 and c.gear == ReferenceVesc(CAR, {}, 0).gear
     a = c.step(VescCommand("current", 10.0, 0.6, 0.0), Sensors((100.0,) * 4), DT)
     assert c.debug == {"erpm": c.debug["erpm"], "current": 0.0, "brake_current": 0.0,
                        "mode": None}     # still within its latency
     assert isinstance(a.telemetry["tachometer"], int)
     with pytest.raises(ValueError, match="unknown params"):
-        RoboRacerVesc(CAR, {"nope": 1}, 0)
+        RoboRacerVesc(CAR, {"nope": 1}, 0, session={"battery_v": 7.9})
 
 
 def test_the_batch_is_its_own_class_and_refuses_nothing_a_single_car_takes():
-    b = RoboRacerVescBatch(CAR, {}, [1, 2])
+    b = RoboRacerVescBatch(CAR, {}, [1, 2], session={"battery_v": 7.9})
     assert B.check_batch(b) is b
 
 
@@ -118,14 +120,14 @@ def test_per_car_params_equal_reference_cars_each_with_its_own():
             "latency_jitter": rng.choice([0.0, 0.005]), "servo_rate": rng.uniform(2, 8),
             "erpm_per_mps": rng.uniform(4000, 5000)} for _ in range(n)]
     seeds = [3 * i for i in range(n)]
-    b = B.load_batch(RoboRacerVesc, CAR, per, seeds)
+    b = B.load_batch(RoboRacerVesc, CAR, per, seeds, session=SESSION)
     refs = [ReferenceVesc(CAR, p, s) for p, s in zip(per, seeds)]
     for cmds, sens, resets in sequence(n, 1200, seed=77):
         act = b.step_batch(B.commands_to_batch("vesc", cmds), B.sensors_to_batch(sens), DT)
         for i, g in enumerate(B.batch_to_actuations(B.checked_batch(act, n))):
             w = refs[i].step(cmds[i], sens[i], DT)
             assert same(g, w), (i, g, w)
-    one = RoboRacerVesc(CAR, per[0], 0)
+    one = RoboRacerVesc(CAR, per[0], 0, session={"battery_v": 7.9})
     assert one.p["speed_kp"] == per[0]["speed_kp"] and isinstance(one.gear, float)
 
 
@@ -135,7 +137,7 @@ def test_a_rear_driven_car_drives_and_reads_its_rear_wheels_only():
     on all four wheels gives the same total torque."""
     def one(axle, wheels):
         car = dict(CAR, powertrain={"drive_axle": axle})
-        b = RoboRacerVescBatch(car, {"latency": 0.0}, [0])
+        b = RoboRacerVescBatch(car, {"latency": 0.0}, [0], session={"battery_v": 7.9})
         c = {"motor": np.array([0]), "value": np.array([3000.0]), "servo": np.array([0.5]),
              "age": np.array([0.0]), "valid": np.array([True])}
         s = {"valid": np.array([True]), "wheel_speeds": np.array([wheels])}
@@ -145,7 +147,8 @@ def test_a_rear_driven_car_drives_and_reads_its_rear_wheels_only():
     full = one("all", [1.0, 1.0, 1.0, 1.0])
     assert math.isclose(rear.sum(), full.sum(), rel_tol=1e-12)
     with pytest.raises(ValueError, match="drive_axle"):
-        RoboRacerVescBatch(dict(CAR, powertrain={"drive_axle": "middle"}), {}, [0])
+        RoboRacerVescBatch(dict(CAR, powertrain={"drive_axle": "middle"}), {}, [0],
+                           session={"battery_v": 7.9})
 
 
 def test_car_is_the_plain_modules():

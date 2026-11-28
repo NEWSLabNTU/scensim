@@ -78,10 +78,13 @@ def test_the_batched_replay_is_each_slots_own_replay():
                         "core_t": kt, "core_erpm": 4614.0 * np.clip(kt - 1.0, 0, 2)
                         + rng.normal(0, 30, len(kt))})
     params = [{"latency": 0.03}, {"latency": 0.05, "speed_kp": 0.006, "latency_jitter": 0.01}]
-    got = fit.replay_batch(RoboRacerVesc, car, params, streams, protomod.MOTORS)
+    rec = {"schema": "scensim.session/1", "battery": {"voltage_v": 7.9, "source": "synthetic"}}
+    got = fit.replay_batch(RoboRacerVesc, car, params, streams, protomod.MOTORS,
+                           sessions=[rec] * len(streams))
     for p, row in zip(params, got):
         for st, pred in zip(streams, row):
-            alone = fit.replay_batch(RoboRacerVesc, car, [p], [st], protomod.MOTORS)[0][0]
+            alone = fit.replay_batch(RoboRacerVesc, car, [p], [st], protomod.MOTORS,
+                                     sessions=[rec])[0][0]
             assert np.array_equal(pred, alone) and len(pred) == len(st["core_t"])
 
 
@@ -146,3 +149,27 @@ def test_a_parameter_is_constrained_only_if_the_cost_rises_on_both_sides():
     assert refine_twin.is_constrained(0.20, [0.30, 0.26])
     assert not refine_twin.is_constrained(0.20, [0.30, 0.205])  # flat on one side
     assert not refine_twin.is_constrained(0.001, [0.004, 0.005])  # below the search's resolution
+
+
+def test_the_replay_gives_each_run_its_own_battery():
+    """091 W12: the fit replays each run with its own session's battery (a session input of the
+    drive unit), so two runs of the same duty command under 7.4 and 8.4 V give currents in that
+    ratio; the session records are one per run."""
+    pytest.importorskip("sim_vehicle_ecu")
+    import numpy as np
+    sys.path.insert(0, str(ROOT / "component" / "roboracer_vesc"))
+    from roboracer_vesc.component import RoboRacerVesc
+    import yaml
+    car = yaml.safe_load((ROOT / "vehicles" / "roboracer.yaml").read_text())
+    ct = np.arange(0.0, 1.0, 0.02)
+    st = {"cmd_t": ct, "cmd_mode": np.full(len(ct), 3.0), "cmd_value": np.full(len(ct), 0.02),
+          "cmd_servo": np.full(len(ct), 0.5), "core_t": np.arange(0.02, 1.0, 0.02),
+          "core_erpm": np.zeros(49)}
+    rec = lambda v: {"schema": "scensim.session/1",
+                     "battery": {"voltage_v": v, "source": "synthetic"}}
+    modes = ("speed", "current", "brake", "duty")
+    got = fit.replay_batch(RoboRacerVesc, car, [{"latency": 0.0}], [st, st], modes,
+                           sessions=[rec(7.4), rec(8.4)])[0]
+    assert np.median(got[1][10:] / got[0][10:]) == pytest.approx(8.4 / 7.4, rel=0.01)
+    with pytest.raises(ValueError, match="1 session records for 2 runs"):
+        fit.replay_batch(RoboRacerVesc, car, [{}], [st, st], modes, sessions=[rec(7.4)])

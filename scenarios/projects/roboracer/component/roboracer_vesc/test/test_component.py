@@ -16,7 +16,7 @@ DT = 1 / 240
 
 
 def make(**params):
-    return RoboRacerVesc(CAR, params, 0)
+    return RoboRacerVesc(CAR, params, 0, session={"battery_v": 7.9})
 
 
 def at(speed_mps):
@@ -92,7 +92,7 @@ def test_the_servo_maps_and_rate_limits_the_tire_angle():
 
 def test_jitter_is_the_seeds():
     def trace(seed):
-        c = RoboRacerVesc(CAR, {"latency_jitter": 0.01}, seed)
+        c = RoboRacerVesc(CAR, {"latency_jitter": 0.01}, seed, session={"battery_v": 7.9})
         out = []
         for k in range(20):
             cmd = VescCommand("current", float(k))
@@ -105,3 +105,29 @@ def test_jitter_is_the_seeds():
     c.reset()
     assert c.step(VescCommand(), None, DT).drive == (0.0,) * 4
     assert not math.isnan(c.step(VescCommand("duty", 0.1), at(1.0), DT).telemetry["duty"])
+
+
+# --- the battery's voltage, a session input (scensim roadmap 091 W12) ------------------------
+
+def test_the_battery_is_the_sessions_not_a_param():
+    from sim_vehicle_ecu import component as comp
+    assert comp.declared_session(RoboRacerVesc) == ("battery_v",)
+    assert "battery" not in DEFAULTS
+    with pytest.raises(ValueError, match=r"battery.*retired.*session\.battery\.voltage_v"):
+        RoboRacerVesc(CAR, {"battery": 7.9}, 0, session={"battery_v": 7.9})
+    with pytest.raises(ValueError, match="battery_v"):
+        RoboRacerVesc(CAR, {}, 0)          # constructed without its session input
+
+
+def test_a_duty_command_s_current_follows_the_battery():
+    """E4: the same duty at standstill (no back-EMF) gives a motor current in the ratio of the two
+    batteries, and the telemetry reports the session's voltage."""
+    cmd = VescCommand("duty", 0.02, 0.5, 0.0)
+    out = {}
+    for v in (7.4, 8.4):
+        c = RoboRacerVesc(CAR, {"latency": 0.0}, 0, session={"battery_v": v})
+        c.reset()
+        act = run(c, cmd, 0.0, 0.1)
+        out[v] = (c.debug["current"], act.telemetry["voltage_input"])
+    assert out[8.4][0] / out[7.4][0] == pytest.approx(8.4 / 7.4, rel=0.01)
+    assert out[7.4][1] == pytest.approx(7.4) and out[8.4][1] == pytest.approx(8.4)

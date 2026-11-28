@@ -16,6 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from roboracer_vesc.component import RoboRacerVesc  # noqa: E402
 from sim_vehicle_ecu import batch as B  # noqa: E402
 from test_batch import CAR, DT, sequence  # noqa: E402
+# the run's session record: the battery's voltage, a session input (scensim 091 W12)
+SESSION = {"schema": "scensim.session/1", "battery": {"voltage_v": 7.9, "source": "nominal"}}
 
 DEVICES = ["cpu", "cuda"]
 
@@ -67,8 +69,9 @@ def test_torch_equals_numpy_bit_for_bit(device, n, jitter):
         pytest.skip(why)
     params ={"latency_jitter": jitter} if jitter else {}
     seeds = [11 + i for i in range(n)]
-    ref = B.load_batch(RoboRacerVesc, CAR, params, seeds)
-    tb = B.load_batch(RoboRacerVesc, CAR, params, seeds, array_api="torch", device=device)
+    ref = B.load_batch(RoboRacerVesc, CAR, params, seeds, session=SESSION)
+    tb = B.load_batch(RoboRacerVesc, CAR, params, seeds, array_api="torch", device=device,
+                      session=SESSION)
     assert tb.array_api_in_use == "torch" and tb.xp.device.type == device
     for cmds, sens, resets in sequence(n, 1500, seed=n):
         if resets.any():
@@ -86,4 +89,4 @@ def test_torch_equals_numpy_bit_for_bit(device, n, jitter):
 
 def test_a_namespace_it_lacks_is_refused():
     with pytest.raises(B.BatchError, match="no batched form on array_api 'warp'"):
-        B.load_batch(RoboRacerVesc, CAR, {}, [1], array_api="warp")
+        B.load_batch(RoboRacerVesc, CAR, {}, [1], array_api="warp", session=SESSION)
