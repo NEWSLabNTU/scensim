@@ -1509,3 +1509,35 @@ and NpH2 (the laps' map, lanelet2 4b29ba87):
 
 *Not in this item:* a reach that follows a lane change before the planner does; that is the
 next lane, already in reach.
+
+## The reach along the route: built, and replayed with the final trajectory as a stand-in (241, 2026-11-28)
+
+asv 847dbc1 (tests R1 to R7, 9 failing before) and 931a7c5 (the reach), landed with the cascade
+below. Two test geometries differ from the plan, as noted in the test commit:
+- R1's rock sits 26 m of arc along the 10 m hairpin, not 20 m. At 20 m it is only 6.4 m aside,
+  too near the old 6 m cap to tell the rules apart.
+- R4's rock is 0.30 m tall. On a 15 % grade the reference, the highest map point within 0.5 m,
+  stands 0.075 m over a 0.15 m rock's foot.
+
+R7 (133): a rock 2 m off a path shifted 2.5 m around it counts. Once the shifted path passes more
+than 6 m from the rock, it is out of reach: the car is then farther from it than its own width
+plus the next lane.
+
+*The replay* (`route180.py`, through the check's own `step`, on the laps' map), with the
+**final trajectory as a stand-in** for the planner's input: the laps recorded only
+`/planning/scenario_planning/trajectory`, whose geometry is the same.
+
+| lap | reach used: route / base_link | obstacle frames | published frames | own-road obstacle points | hairpin frames | own road kept, p5/p50/p95 m of arc: base_link; route |
+|---|---|---|---|---|---|---|
+| NpH1 | 7406 / 104 | 0 % | 0 | 0 | 368 | 13.2/16.0/25.2; 29.8/30.0/30.0 |
+| NpH2 | 7370 / 71 | 0 % | 0 | 0 | 356 | 13.2/16.1/25.2; 29.8/30.0/30.0 |
+
+- P1, P2 and P3 are met. The base_link frames are each lap's start, before the first trajectory.
+- *The spot* (108.6, 442.3) lies 4.4 to 4.6 m from the trajectory, inside the reach. It stands
+  3.08 m above the trajectory's height there, so the 3 m band drops it: **by 0.08 m, not on
+  principle** (under base_link's band it was 2.8 m above the car, and kept). A spot a little
+  lower would stay. It remains an object in the world that the map's pcd lacks.
+- *Open:* the first live lap (118, after its queue) confirms this on the real input topic, with
+  the status's `"reach": "route"`. That lap's testbench records
+  `.../motion_planning/path_optimizer/trajectory` beside the final one; the clean laps'
+  recorded topic list is their testbench's own `logging.topics`, so no scensim change.
