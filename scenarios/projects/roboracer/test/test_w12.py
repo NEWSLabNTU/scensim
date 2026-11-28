@@ -75,3 +75,24 @@ def test_twin_runs_hands_kit_its_settings_from_the_environment():
     script = (ROOT / "tools" / "w23_regression.sh").read_text()
     for line in [ln for ln in script.splitlines() if "env -i" in ln]:
         assert "CUDA_VISIBLE_DEVICES=" in line and "ISAAC_KIT_ARGS=" in line, line
+
+
+def test_the_regression_checks_free_space_on_root_and_out_before_each_isaac_run(tmp_path):
+    """118, 2026-11-28 (133): Kit's caches and /tmp live on /, so the 6 h regression checks the
+    free space on / and on OUT's disk before it starts and before every Isaac run, and stops,
+    naming the disk, when either is under MIN_FREE_GB (default 25)."""
+    import subprocess
+    script = ROOT / "tools" / "w23_regression.sh"
+    text = script.read_text()
+    body = text[text.index("isaac() {"):]
+    body = body[:body.index("\n}") + 2]
+    assert "room" in body, body                  # every Isaac run checks first
+    # the check itself: refuses when a disk is under the limit, naming it
+    fn = text[text.index("room() {"):]
+    fn = fn[:fn.index("\n}") + 2]
+    ok = subprocess.run(["bash", "-c", fn + f"\nMIN_FREE_GB=0 OUT={tmp_path} room"],
+                        capture_output=True, text=True)
+    assert ok.returncode == 0, ok.stderr
+    low = subprocess.run(["bash", "-c", fn + f"\nMIN_FREE_GB=999999 OUT={tmp_path} room"],
+                         capture_output=True, text=True)
+    assert low.returncode != 0 and "free" in low.stderr and "/" in low.stderr
