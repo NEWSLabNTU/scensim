@@ -1550,7 +1550,7 @@ plus the next lane.
   positives come from the four N' clean laps through today's check (route reach), at
   persistence 3 and 2 (`route180.py`).
 - *Distances* are bumper to the rock's near face at x about 100.37, where the check sees it
-  (issue 207: about 0.4 m past its recorded station).
+  (issue 207: about 0.5 m past its recorded station).
 - *The stopping model*, fitted to NH1's truth: the stop decision, braking 0.20 s later at a mean
   2.60 m/s^2. The stop distance after the first publication is v (T + 0.20) + v^2 / 5.2, with T
   the time from publication to decision (0.70 s today: min_on_duration 0.3 s and 0.4 s of
