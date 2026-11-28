@@ -1476,3 +1476,66 @@ the startup draws' xy sd, the winner's xy against the guess's, the winner's rank
 A mechanism, if the prior is the cause (a guess, to check in B's markers): with yaw pinned near
 the guess, the TPE spends its 100 trials after the startup on xy around nearly right yaws, and
 NVTL's best among them may sit at an xy the uniform search would not keep.
+
+## The yaw A/B's result: B beats A in every run, but reaches 0.15 m in only 1 of 4 (241, 2026-11-28; 118's runs)
+
+118 ran A1 B1 ... A4 B4 at scensim 4343e3bd on fixture_c170 B (the rebuilt map, 2658430d),
+09:35 to 10:09; all 8 passed. The first-run checks held: entry 35 of the live
+gnss_particle_covariance read 1.1e-4 in every A run and 10.0 in every B run, the threshold 0.01
+in all 8; A's startup yaw sd 0.0113 rad, B's 1.6985 rad over its 100 startup draws (uniform:
+1.81, within 14 %). B's align publishes its particles in batches of 10, so 118's readers now
+split the marker stream on a repeated id, as mcyaw195 does (an earlier "sd 2.02" was 10 draws).
+Tables and readers: NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 195 L3
+(118)/scripts/` (abtable.txt, mcs_YAB_*.txt).
+
+| run | C3 pos m | C3 yaw rad | prior offset | startup yaw sd | guess less truth (dx, dy) | winner less guess (dx, dy) | rank | NVTL |
+|---|---|---|---|---|---|---|---|---|
+| A1 | 0.290 | -0.0172 | -0.0051 | 0.0113 | +0.024, -0.004 | -0.314, -0.006 | 3 | 3.375 |
+| B1 | 0.243 | -0.0029 | +0.1305 | 1.6985 | -0.005, +0.033 | -0.152, +0.152 | 1 | 3.372 |
+| A2 | 0.301 | +0.0073 | -0.0051 | 0.0113 | +0.024, -0.004 | +0.267, -0.076 | 1 | 3.375 |
+| B2 | 0.270 | -0.0030 | +0.1305 | 1.6985 | -0.049, +0.021 | -0.152, +0.159 | 1 | 3.363 |
+| A3 | 0.362 | +0.0038 | -0.0034 | 0.0113 | -0.021, -0.003 | -0.161, -0.309 | 6 | 3.375 |
+| B3 | 0.264 | -0.0057 | +0.1305 | 1.6985 | -0.049, +0.021 | -0.137, +0.166 | 1 | 3.373 |
+| A4 | 0.426 | +0.0001 | -0.0034 | 0.0113 | -0.021, -0.003 | -0.375, -0.154 | 1 | 3.368 |
+| B4 | 0.072 | -0.0326 | +0.1305 | 1.6985 | -0.029, +0.033 | -0.004, +0.031 | 1 | 3.365 |
+
+Rank is the winner's rank by NVTL among the align's particles.
+
+*Against the predictions*:
+- A replicates YSEQ's c170 arm, at most 1 of 4 within 0.15 m: **holds** (0 of 4; 0.290 to 0.426).
+- B's |C3 yaw| <= 0.03 rad in all 4: **fails**, 3 of 4. B4 reads 0.0326. Over the circle the
+  align can end 0.03 rad off, which the prior's arm never did (A at most 0.0172 here, YSEQ's
+  c170 at most 0.0270).
+- The reading, as committed: B within 0.15 m in 1 of 4 (B4) is the "0 or 1" case, so **the prior
+  is not the cause** of C3 missing 0.15 m. The rest is.
+
+*What the committed reading does not say.* Every B run beat every A run: 0.072 to 0.270 against
+0.290 to 0.426, means 0.212 and 0.345. A rank test on 4 + 4 gives p about 0.03. But each arm's
+draws repeat (engine(0)), and the guess took only two or three values, so B1 to B3 ended at
+nearly the same winner (-0.15, +0.16 from the guess). The runs are closer to 2 or 3 outcomes
+per arm than to 4 samples. Pooled with the earlier runs on the same map:
+
+| rule | runs | C3 pos m | within 0.15 m |
+|---|---|---|---|
+| the prior | YSEQ Y_170_1 to 4 (f482b53a), A1 to A4 | 0.041, 0.203, 0.259, 0.279, 0.290, 0.301, 0.362, 0.426 | 1 of 8 |
+| uniform | L3's T2_170_B1 and B2 (23b65448, before the pin), B1 to B4 | 0.079, 0.098, 0.243, 0.264, 0.270, 0.072 | 3 of 6 |
+
+Rank test on 8 + 6: p about 0.1. So, read with care:
+- The prior likely costs some position on this map (about 0.1 m on the median), not all of it.
+- Uniform also misses 0.15 m half the time, so the rest of the gap is somewhere else. It is
+  not cf931f5c's other parts: acb f4c9758, aib cde40f0 and siw 6a59ebd only carried asv
+  9d4bc31, and asv 9d4bc31 only set the threshold and the yaw variance.
+- In every run, prior or not, the guess's xy lies within 0.05 m of the truth. The error comes
+  from the align moving 0.15 to 0.4 m away from it.
+
+*For 133's decision on the pin*:
+- Keeping it holds the start yaw within 0.03 rad (B4 shows the uniform rule does not) and
+  costs about 0.1 m of start position.
+- Reverting it buys that 0.1 m back. C3 still misses 0.15 m in half the runs.
+- 241's recommendation: keep the pin.
+- The next question is the align's xy, not its yaw: why does NDT's best particle sit 0.15 to
+  0.4 m from a guess within 0.05 m of the truth, on a map whose road is now at its true height?
+  It reads without a run: the guess is better than the winner. Measure NVTL at the guess and at
+  the winner from the records, and the landscape between them (mcscore's grid).
+- A's winner is not its best-NVTL particle in A1 (rank 3) and A3 (rank 6). Which score picks
+  the winner should be read in the overlay's code before anything else.

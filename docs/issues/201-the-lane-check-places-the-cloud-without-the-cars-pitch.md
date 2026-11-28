@@ -48,3 +48,20 @@ ahead about level.
    rotation (a 3 x 3 matrix from the quaternion; numpy only, as the node is).
 3. Step B v2's N arm on fixture_c6b is unaffected in its outcome (flat road; the stop was
    already decided), so it stands. Issue 180's clean-lap brief runs N with the fix.
+
+## The fix (241, 2026-11-28; asv dd389bc7, the test 8fdbe7c first)
+
+The node keeps the EKF's quaternion and places the cloud by the whole rotation, both into the
+map and back to base_link (`to_map`, `to_base_link`; numpy only). Before its first pose it
+publishes `{"pose": false, "points": n}` (issue 180's P8). asv `just check` passes (94 tests).
+
+**Replayed on step B v2's N1** (`replay201.py`, NAS `home/2026-11-28 issue 180 step B v2 reading
+(241)/`): N1's raw clouds at its stop (sim 1026 to 1029), with the 3-frame persistence.
+- Placed by yaw only, the replay matches the live node: 709, 1031 and 836 obstacle points, and
+  757 published off the boulder (the 836 less the boulder's 79).
+- Placed by the whole rotation: 0 published off the boulder.
+
+**A residual, for C2's clean lap (133).** Two frames still hold 337 and 356 points. The EKF's
+pitch lags the truth's quick settle: 0.15 deg against 0.52 deg at sim 1027.40. The 3-frame
+rule drops them today, because they are 2 frames. Haruna's bumps could pitch the car faster
+and more often than a flat stop does. Issue 180's clean lap (C2) is the test.
