@@ -58,6 +58,13 @@ G = 9.81
 NOISE_KEYS = ("ref_pos", "ref_yaw", "imu_accel", "imu_gyro", "erpm", "current")
 
 
+def kit_args(env):
+    """Kit's command-line settings: the crash reporter off, then ISAAC_KIT_ARGS's (one GPU on a
+    host whose others are busy: Kit sees every card through Vulkan, CUDA_VISIBLE_DEVICES or not)."""
+    import shlex
+    return ["--/crashreporter/url="] + shlex.split(env.get("ISAAC_KIT_ARGS") or "")
+
+
 def session_record(path):
     """The runs' session record: `path`'s (a scensim.session/1 file, checked), else W23's
     synthetic conditions as a record."""
@@ -160,7 +167,7 @@ def main():
     os.environ.pop("DISPLAY", None)
     from isaacsim import SimulationApp
 
-    app = SimulationApp({"headless": True, "extra_args": ["--/crashreporter/url="]})
+    app = SimulationApp({"headless": True, "extra_args": kit_args(os.environ)})
     import omni.physx
     import omni.usd
     from isaacsim.core.api import World

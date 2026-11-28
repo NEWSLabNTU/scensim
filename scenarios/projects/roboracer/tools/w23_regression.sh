@@ -17,7 +17,11 @@
 # Environment (host settings): ISAAC_ROOT, AIB (an autoware_isaac_bridge checkout, default this
 # workspace's), VESC_MSGS_SETUP (a setup.bash with f1tenth's vesc_msgs), ROS_SETUP (default
 # Humble's), WS_SETUP (this workspace's install/setup.bash). The ego config and rig are made in OUT
-# from vehicles/roboracer.yaml. About 6 hours on one GPU host (118: 2026-11-21).
+# from vehicles/roboracer.yaml. About 6 hours on one GPU host (118: 2026-11-21). The GPU, on a
+# host whose others are busy: CUDA_VISIBLE_DEVICES, and ISAAC_KIT_ARGS for Kit (it sees every
+# card through Vulkan, so pin it: "--/renderer/multiGpu/enabled=false --/renderer/activeGpu=0");
+# both are carried into each clean environment below, CUDA_VISIBLE_DEVICES only when set (an
+# empty one hides every GPU) (118, 2026-11-28: without them Kit took GPU1).
 set -euo pipefail
 OUT=${1:?usage: w23_regression.sh OUT}
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -30,10 +34,10 @@ WS_SETUP=${WS_SETUP:-$WS/install/setup.bash}
 mkdir -p "$OUT/logs" "$OUT/sealed"
 OUT=$(cd "$OUT" && pwd)
 sys() {  # the system Python with ROS, this workspace and vesc_msgs
-    env -i HOME="$HOME" PATH=/usr/bin:/bin bash -c "source $ROS_SETUP; source $WS_SETUP; source $VESC_MSGS_SETUP; $*"
+    env -i HOME="$HOME" PATH=/usr/bin:/bin ${CUDA_VISIBLE_DEVICES+"CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"} ISAAC_KIT_ARGS="${ISAAC_KIT_ARGS:-}" bash -c "source $ROS_SETUP; source $WS_SETUP; source $VESC_MSGS_SETUP; $*"
 }
 isaac() {  # Isaac's Python with aib
-    env -i HOME="$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" bash -c \
+    env -i HOME="$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" ${CUDA_VISIBLE_DEVICES+"CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"} ISAAC_KIT_ARGS="${ISAAC_KIT_ARGS:-}" bash -c \
         "source $AIB/src/aib/scripts/isaac_env.sh >/dev/null 2>&1; export PYTHONPATH=$AIB/src/aib:\$PYTHONPATH; cd $OUT; $*"
 }
 cp "$ROOT/vehicles/roboracer.yaml" "$OUT/roboracer.yaml"
@@ -42,7 +46,7 @@ sys "export PYTHONPATH=$AIB/src/aib:\$PYTHONPATH; cd $OUT; python3 -m aib.gen --
 for pass in M5 M6,M6b; do  # refine_twin.py's --twin-cmd per pass: twin_eval_<pass>.sh FITTED RUNS
 cat > "$OUT/twin_eval_${pass/,/_}.sh" <<EOF
 #!/usr/bin/env bash
-env -i HOME="\$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" bash -c "source $AIB/src/aib/scripts/isaac_env.sh >/dev/null 2>&1; export PYTHONPATH=$AIB/src/aib:\\\$PYTHONPATH; cd $OUT; timeout -k 30 1800 python $HERE/twin_runs.py --ego ego.yaml --out \$2 --fitted \$1 --repetitions 1 --only $pass" > "\$2.log" 2>&1
+env -i HOME="\$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" ${CUDA_VISIBLE_DEVICES+"CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"} ISAAC_KIT_ARGS="${ISAAC_KIT_ARGS:-}" bash -c "source $AIB/src/aib/scripts/isaac_env.sh >/dev/null 2>&1; export PYTHONPATH=$AIB/src/aib:\\\$PYTHONPATH; cd $OUT; timeout -k 30 1800 python $HERE/twin_runs.py --ego ego.yaml --out \$2 --fitted \$1 --repetitions 1 --only $pass" > "\$2.log" 2>&1
 EOF
 chmod +x "$OUT/twin_eval_${pass/,/_}.sh"
 done
