@@ -14,9 +14,11 @@ Each run writes, under LOGS/<run>/:
     tachometer, from the drive unit's telemetry;
   - `imu_*`: `sensors/imu/raw`, at 50 Hz: the body's specific force and angular rate;
   - `ref_*`: the external reference, at 100 Hz: x, y, z and yaw in the start's frame.
-- `session.yaml`: the manoeuvre, its condition and repetition, and the session conditions (the
-  battery's voltage, the floor, the tyres' age), the reference's kind and noise, and the streams'
-  rates. With a perturbation it also holds the sealed truth's sha256, never the truth itself.
+- `session.yaml`: the run file (scensim 091 W12: format "scensim 091 run, version 2"): the
+  manoeuvre, its condition and repetition, the session conditions as a `scensim.session/1`
+  record (`--session`, a record file; none: a synthetic one at 7.9 V), the reference's kind
+  and noise, and the streams' rates. With a perturbation it also holds the sealed truth's
+  sha256, never the truth itself. The drive unit takes its battery from the record.
 
 `--perturb` (yaml) is the deliberate perturbation:
 - `vehicle`: aib VehicleParams fields (`mass`, `axle_tires`, ...);
@@ -56,6 +58,33 @@ G = 9.81
 NOISE_KEYS = ("ref_pos", "ref_yaw", "imu_accel", "imu_gyro", "erpm", "current")
 
 
+def session_record(path):
+    """The runs' session record: `path`'s (a scensim.session/1 file, checked), else W23's
+    synthetic conditions as a record."""
+    import runfile
+    if path:
+        return runfile.S.load(path)
+    return runfile.S.check({"schema": runfile.S.SCHEMA,
+                            "battery": {"voltage_v": 7.9, "source": "synthetic"},
+                            "floor": {"note": "synthetic: the twin's floor"},
+                            "tyres": {"note": "synthetic"}})
+
+
+def run_file(fields, record, reference, **extra):
+    """A run's run file (version 2): `fields` (manoeuvre, condition, repetition), the session
+    `record`, the `reference`, and the rest (`extra`), checked."""
+    import runfile
+    doc = {"format": runfile.FORMAT, **fields, "session": record, "reference": reference,
+           **extra}
+    return runfile.check(doc)
+
+
+def component_session(record):
+    """The drive unit's session inputs from the record ({"battery_v": V})."""
+    import runfile
+    return runfile.component_session(record)
+
+
 def run_seed(master, name):
     """A run's own seed: the master seed and the run's name, so a repetition's noise does not
     depend on which other runs were made."""
@@ -75,7 +104,8 @@ def main():
     ap.add_argument("--repetitions", type=int, default=None)
     ap.add_argument("--hz", type=float, default=240.0)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--session", default="", help="session conditions (yaml) for every run")
+    ap.add_argument("--session", default="", help="the session record (scensim.session/1) for "
+                    "every run; none: a synthetic one at 7.9 V")
     args = ap.parse_args()
     if bool(args.perturb) != bool(args.sealed):
         sys.exit("--perturb and --sealed go together: the truth is sealed apart from the logs")
@@ -99,8 +129,7 @@ def main():
         text = yaml.safe_dump({"perturbation": perturb, "seed": args.seed}, sort_keys=True)
         (sealed / "truth.yaml").write_text(text)
         truth_sha = hashlib.sha256(text.encode()).hexdigest()
-    session = yaml.safe_load(Path(args.session).read_text()) if args.session else {
-        "battery_v": 7.9, "floor": "synthetic: the twin's floor", "tyre_age": "synthetic"}
+    session = session_record(args.session)
 
     from dataclasses import fields
 
@@ -150,7 +179,8 @@ def main():
     world.play()
     physx = omni.physx.get_physx_interface()
     pose = ((0.0, 0.0, 0.02), (1.0, 0.0, 0.0, 0.0))
-    component = RoboRacerVesc(rig.spec, comp_params, args.seed)
+    component = RoboRacerVesc(rig.spec, comp_params, args.seed,
+                              session=component_session(session))
     veh = Vehicle(stage, "/World/ego", p, component, rig.box_center, rig.box_dims, pose,
                   interface="vesc")
     wall0 = time.monotonic()
@@ -233,20 +263,17 @@ def main():
                 for j, col in enumerate(cols):
                     arrays[f"{k}_{col}"] = a[:, j]
             np.savez_compressed(d / "streams.npz", **arrays)
-            sess = {
-                "format": "scensim 091 W23 run, version 1",
-                "manoeuvre": run.manoeuvre, "condition": run.condition,
-                "repetition": run.repetition, "session": session,
-                "reference": {"kind": "synthetic motion capture" if perturb else "twin truth",
-                              "noise_m": noise["ref_pos"], "noise_rad": noise["ref_yaw"]},
-                "rates_hz": {"cmd": 1.0 / cmd_period, "core": CORE_HZ, "imu": IMU_HZ,
-                             "ref": REF_HZ},
-                "source": ("synthetic: a perturbed twin" if perturb else
-                           f"the twin, fitted ({args.fitted})" if fitted else "the twin"),
-                "physics_hz": args.hz, "protocol_version": doc.get("version"),
-            }
+            extra = {"rates_hz": {"cmd": 1.0 / cmd_period, "core": CORE_HZ, "imu": IMU_HZ,
+                                  "ref": REF_HZ},
+                     "source": ("synthetic: a perturbed twin" if perturb else
+                                f"the twin, fitted ({args.fitted})" if fitted else "the twin"),
+                     "physics_hz": args.hz, "protocol_version": doc.get("version")}
             if truth_sha:
-                sess["truth_sha256"] = truth_sha
+                extra["truth_sha256"] = truth_sha
+            sess = run_file({"manoeuvre": run.manoeuvre, "condition": run.condition,
+                             "repetition": run.repetition}, session,
+                            {"kind": "synthetic motion capture" if perturb else "twin truth",
+                             "noise_m": noise["ref_pos"], "noise_rad": noise["ref_yaw"]}, **extra)
             (d / "session.yaml").write_text(yaml.safe_dump(sess, sort_keys=False))
             print(f"run {run.name} {run.length:.1f} s", flush=True)
     finally:

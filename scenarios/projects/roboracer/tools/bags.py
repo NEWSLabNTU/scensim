@@ -59,8 +59,10 @@ def write(run_dir, motor_modes):
     run_dir = Path(run_dir)
     with np.load(run_dir / "streams.npz") as z:
         st = {k: z[k] for k in z.files}
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "protocol"))
+    import runfile
     sess_path = run_dir / "session.yaml"
-    sess = yaml.safe_load(sess_path.read_text())
+    sess = runfile.load(sess_path)   # the run file v2 (091 W12)
     ref_topic = (sess.get("reference") or {}).get("topic") or REF_TOPIC
     out = run_dir / "bag"
     if out.exists():
@@ -121,8 +123,10 @@ def read(run_dir, motor_modes):
     from rclpy.serialization import deserialize_message
     from rosidl_runtime_py.utilities import get_message
 
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "protocol"))
+    import runfile
     run_dir = Path(run_dir)
-    sess = yaml.safe_load((run_dir / "session.yaml").read_text())
+    sess = runfile.load(run_dir / "session.yaml")   # the run file v2 (091 W12)
     t0 = int(sess["t0_ns"])
     ref_topic = (sess.get("reference") or {}).get("topic") or REF_TOPIC
     r = rosbag2_py.SequentialReader()

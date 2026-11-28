@@ -81,7 +81,9 @@ def main(argv=None):
     fitted = yaml.safe_load(Path(args.fitted).read_text())
     if args.logs:
         sha = hashlib.sha256(text.encode()).hexdigest()
-        names = {yaml.safe_load(p.read_text()).get("truth_sha256")
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "protocol"))
+        import runfile
+        names = {runfile.load(p).get("truth_sha256")
                  for p in Path(args.logs).glob("*/session.yaml")}
         if names != {sha}:
             print(f"the logs name truth {sorted(map(str, names))}, this truth is {sha}")

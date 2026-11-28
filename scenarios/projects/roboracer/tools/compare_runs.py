@@ -13,12 +13,12 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import yaml
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "protocol"))
 import protocol as protomod  # noqa: E402
 import quantities as qmod  # noqa: E402
+import runfile  # noqa: E402
 
 
 def load_runs(logs, only=None):
@@ -28,7 +28,7 @@ def load_runs(logs, only=None):
         s = d / "session.yaml"
         if not s.is_file():
             continue
-        sess = yaml.safe_load(s.read_text())
+        sess = runfile.load(s)   # the run file v2 (091 W12); W23's v1 refused, naming migrate
         if only and sess["manoeuvre"] not in only:
             continue
         if (d / "bag").is_dir():  # the real car's format (bags.py); W22's logs come so
