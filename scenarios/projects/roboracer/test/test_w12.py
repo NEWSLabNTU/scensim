@@ -61,3 +61,17 @@ def test_twin_runs_records_the_given_session_or_a_synthetic_one(tmp_path):
                              rec, {"kind": "twin truth", "noise_m": 0.0, "noise_rad": 0.0})
     assert runfile.check(doc)["format"] == "scensim 091 run, version 2"
     assert twin_runs.component_session(rec) == {"battery_v": 7.9}
+
+
+def test_twin_runs_hands_kit_its_settings_from_the_environment():
+    """118, 2026-11-28: the regression's env -i dropped CUDA_VISIBLE_DEVICES and ISAAC_KIT_ARGS, so
+    Kit took every GPU (its multi-GPU renderer sees all cards through Vulkan). twin_runs passes
+    ISAAC_KIT_ARGS to SimulationApp; the regression script carries both variables through."""
+    import twin_runs
+    base = ["--/crashreporter/url="]
+    assert twin_runs.kit_args({}) == base
+    pin = "--/renderer/multiGpu/enabled=false --/renderer/activeGpu=0"
+    assert twin_runs.kit_args({"ISAAC_KIT_ARGS": pin}) == base + pin.split()
+    script = (ROOT / "tools" / "w23_regression.sh").read_text()
+    for line in [ln for ln in script.splitlines() if "env -i" in ln]:
+        assert "CUDA_VISIBLE_DEVICES=" in line and "ISAAC_KIT_ARGS=" in line, line
