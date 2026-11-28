@@ -1397,8 +1397,15 @@ was refused because it would hide them.
 - *Open:*
   - a reach relative to the route (the lateral distance to the planned path, not to base_link)
     would remove that cost;
-  - the 12 to 15 frames at the one roadside spot are to be matched to the map and the props (low
-    priority).
+  - the 12 to 15 frames at the one roadside spot are to be matched to the course's props_points
+    (low priority; 243 or 118, when convenient).
+- *The spot* (241, `spot180.py`): an object present in the world but not in the map's pcd.
+  - 74 points in NpH1 and 92 in NpH2, at the same map point (108.6, 442.3) within 3 to 4 cm, and
+    0.29 to 0.33 m above the map's road.
+  - It lies on lanelet 2000008, while the car was on 2000007. The two share no bound, so it is
+    the next leg after the hairpin, not the lane beside.
+  - It is about 2.8 m above the car and 4.8 m to its side, inside both gates.
+  - It is the only thing left between the laps and C2's "zero published".
 
 ## R180_NH1: the hold engaged, but the car overran the rock (118, 2026-11-28, b4c77328)
 
