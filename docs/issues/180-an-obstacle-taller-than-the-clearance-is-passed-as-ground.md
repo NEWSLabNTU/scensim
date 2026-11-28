@@ -1159,3 +1159,66 @@ range, each to plan and test before any choice:
 - holding a detection that enters the ego mask instead of dropping it;
 - a slower cruise where the lane check is the only guard.
 D held the r181 boulder (35 cm) at range. A 15 cm rock is the case D was not run on.
+
+## D on the 15 cm rock: plan and predictions (241, 2026-11-28, before the run; 133 asked)
+
+*Why.* D held the r181 boulder (35 cm), but a 15 cm rock is untested with D. Step 1 above
+predicts the answer: the ground filter (0.20 m) is the first stage to call this rock ground
+(1 point in 203 frames), and D only narrows compare-map's band, which sits behind it.
+
+*The run* (118, 1 run, after its current queue): R180_B1's project (isaac_i180_c6b, the rebuilt
+c6b map aea7dc9d, fixture_c6b_r180, the s 100 rock at x 100, y 2.425), at scensim b8f6f92f or
+later. Pilot args: `compare_map_z_ratio: "0.2"`, lane check off (its default). Step B v2's
+record list and live D check ("z ratio 0.2 (band 0.10 m)"). Judged with
+`judge_stepB180_v2.py --arm D --rock-x 100.0 --rock-y 2.425`.
+
+*Predictions*:
+- E1: D does not stop for the rock. There is no obstacle_stop factor on its line within 15 m
+  before it, and the car's left wheels strike it (a static contact with a /World/RoadRocks
+  prim, the car's centre at x 96 to 101 at first contact).
+- E2: the ground filter's output has a point within 1 m of the rock in at most 5 % of the
+  frames from 30 m to the contact. Compare-map's output has one in at most 5 %.
+- E3: the car passes at y 1.6 to 1.75, rebuilt c6b's line (R180_B1: 1.67 to 1.72), so its left
+  wheels (y about 2.48) cross the rock (y 2.24 to 2.61).
+- E4: no factor away from the rock (as Q4).
+- If E1 fails, and D stops for the rock, step 1's ground-filter reading is wrong on the
+  rebuilt map, and that is read first.
+
+## Holding a detection as it enters the ego mask: plan and test design (241, 2026-11-28; no code)
+
+*The failure* (R180_B1): the lane check drops every point inside the ego box grown by 0.2 m
+(its own body), so an obstacle the car stops within 0.2 m of disappears. With nothing to stop
+for, obstacle_stop releases after its 1.0 s keep, and the car drives on.
+
+*The rule.* Keep a published detection while its points sit in the mask ahead of the car:
+- What is held: a detection that the node has published (that is, it persisted 3 frames)
+  outside the mask, and whose points, in the map frame, now fall in the mask's front zone:
+  ahead of the front bumper and within the car's width plus the margin. The obstacle is
+  static, so its map points stay where they were last seen.
+- While held, the node publishes those map points again each frame, placed into base_link by
+  the current pose, as if seen.
+- It is released when the points leave the front zone. Either they come back into view, and
+  the ordinary check takes them up again, or they fall behind the front bumper line, because
+  the car has passed or struck the obstacle. Nothing else releases it, so a stop held for a
+  real rock holds until the car backs off.
+- The side and rear of the mask hold nothing: an obstacle beside the car is not in
+  obstacle_stop's way.
+- The risk is a false detection held in front of the car for good. Only a detection that
+  already persisted 3 frames can be held, and the clean laps measure how often those occur.
+
+*Tests* (numpy, no ROS, as test_lane_height_check.py does; each fails before the code):
+- H1: a 15 cm rock seen 8 m ahead and published, then frames with the car closing to 0.06 m:
+  the rock's points stay published, at its map position, while the car stands for 100 frames.
+- H2: the car then backs off 2 m. The rock comes back into view and stays published by the
+  ordinary check, with no double count.
+- H3: a detection seen in only 1 or 2 frames before it enters the mask is not held.
+- H4: the car's own body (points always inside the mask, never seen outside it) is never
+  published.
+- H5: a held rock that falls behind the front bumper line (the car drove over it) is dropped
+  in that frame.
+- H6: a rock that enters the side of the mask, beside the car, is not held.
+- H7: the pose's whole rotation (issue 201) holds for held points: with the car pitched, a held
+  point placed back into base_link lands where it was seen.
+
+*Live, after the code*: R180_B1 with N and the hold. Prediction: no contact, the stop held to
+the scenario's timeout. Then the clean laps with N and the hold on, for the false side.
