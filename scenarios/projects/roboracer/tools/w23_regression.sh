@@ -21,7 +21,10 @@
 # host whose others are busy: CUDA_VISIBLE_DEVICES, and ISAAC_KIT_ARGS for Kit (it sees every
 # card through Vulkan, so pin it: "--/renderer/multiGpu/enabled=false --/renderer/activeGpu=0");
 # both are carried into each clean environment below, CUDA_VISIBLE_DEVICES only when set (an
-# empty one hides every GPU) (118, 2026-11-28: without them Kit took GPU1).
+# empty one hides every GPU) (118, 2026-11-28: without them Kit took GPU1). MIN_FREE_GB (default
+# 25): the free space needed on / (Kit's caches and /tmp) and on OUT's disk, checked at the start
+# and before every Isaac run (the refinement's too); under it the run stops, naming the disk
+# (118, 2026-11-28).
 set -euo pipefail
 OUT=${1:?usage: w23_regression.sh OUT}
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -33,10 +36,22 @@ WS_SETUP=${WS_SETUP:-$WS/install/setup.bash}
 : "${ISAAC_ROOT:?ISAAC_ROOT: where Isaac Sim is installed}" "${VESC_MSGS_SETUP:?VESC_MSGS_SETUP: a setup.bash with vesc_msgs}"
 mkdir -p "$OUT/logs" "$OUT/sealed"
 OUT=$(cd "$OUT" && pwd)
+room() {  # free space on / and on OUT's disk, at least MIN_FREE_GB each, else stop naming it
+    local d free
+    for d in / "$OUT"; do
+        free=$(df -Pk "$d" | awk 'NR == 2 {print int($4 / 1048576)}')
+        if [ "$free" -lt "${MIN_FREE_GB:-25}" ]; then
+            echo "w23_regression: ${free} GB free on $(df -P "$d" | awk 'NR == 2 {print $6}') (for $d), under MIN_FREE_GB ${MIN_FREE_GB:-25}: stopped" >&2
+            return 1
+        fi
+    done
+}
+room
 sys() {  # the system Python with ROS, this workspace and vesc_msgs
     env -i HOME="$HOME" PATH=/usr/bin:/bin ${CUDA_VISIBLE_DEVICES+"CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"} ISAAC_KIT_ARGS="${ISAAC_KIT_ARGS:-}" bash -c "source $ROS_SETUP; source $WS_SETUP; source $VESC_MSGS_SETUP; $*"
 }
-isaac() {  # Isaac's Python with aib
+isaac() {  # Isaac's Python with aib (after the free space's check)
+    room
     env -i HOME="$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" ${CUDA_VISIBLE_DEVICES+"CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"} ISAAC_KIT_ARGS="${ISAAC_KIT_ARGS:-}" bash -c \
         "source $AIB/src/aib/scripts/isaac_env.sh >/dev/null 2>&1; export PYTHONPATH=$AIB/src/aib:\$PYTHONPATH; cd $OUT; $*"
 }
@@ -46,6 +61,9 @@ sys "export PYTHONPATH=$AIB/src/aib:\$PYTHONPATH; cd $OUT; python3 -m aib.gen --
 for pass in M5 M6,M6b; do  # refine_twin.py's --twin-cmd per pass: twin_eval_<pass>.sh FITTED RUNS
 cat > "$OUT/twin_eval_${pass/,/_}.sh" <<EOF
 #!/usr/bin/env bash
+OUT=$OUT MIN_FREE_GB=${MIN_FREE_GB:-25}
+$(declare -f room)
+room || exit 1
 env -i HOME="\$HOME" PATH=/usr/bin:/bin ISAAC_ROOT="$ISAAC_ROOT" ${CUDA_VISIBLE_DEVICES+"CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"} ISAAC_KIT_ARGS="${ISAAC_KIT_ARGS:-}" bash -c "source $AIB/src/aib/scripts/isaac_env.sh >/dev/null 2>&1; export PYTHONPATH=$AIB/src/aib:\\\$PYTHONPATH; cd $OUT; timeout -k 30 1800 python $HERE/twin_runs.py --ego ego.yaml --out \$2 --fitted \$1 --repetitions 1 --only $pass" > "\$2.log" 2>&1
 EOF
 chmod +x "$OUT/twin_eval_${pass/,/_}.sh"
