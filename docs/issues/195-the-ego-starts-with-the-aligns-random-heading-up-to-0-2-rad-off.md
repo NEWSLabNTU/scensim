@@ -1539,3 +1539,50 @@ Rank test on 8 + 6: p about 0.1. So, read with care:
   the winner from the records, and the landscape between them (mcscore's grid).
 - A's winner is not its best-NVTL particle in A1 (rank 3) and A3 (rank 6). Which score picks
   the winner should be read in the overlay's code before anything else.
+
+## The align's xy: NVTL picks the winner, and it is flat within 0.4 m (241, 2026-11-28; code and records, no runs)
+
+*Which score picks the winner.* In the overlay's `align_pose` (autoware_core 61f9c96e) each
+particle's score is its `nearest_voxel_transformation_likelihood`, and the result is the
+`max_element` by that score. The TPE is steered by `transform_probability` (its trials' values).
+So the align returns its best-NVTL particle, by construction.
+
+*The "ranks 3 and 6" were a decode artifact.* mcscore.py read each particle's NVTL from its
+marker colour, `exchange_color_crc(score / 4.5)`. In that map's last branch (x > 0.75) r is 1.0
+and g is -sin(2 pi x), which stays above 0.999 up to x of about 0.757. mcscore's test for the
+third branch (`g > 0.999 and b < 1e-6`) came first, so every NVTL from 3.375 to 3.407 read as
+3.3750, and A1's and A3's winners tied with others. Decoded by the channel that is exactly 1.0
+(`alignxy195.py`, NAS `home/2026-11-28 issue 180 step B v2 reading (241)/`; 118's fixed mcscore
+agrees, mcs2_YAB_*), the winner is rank 1 of 200 in all 8 A/B runs. 118 is re-reading the
+11-27 tables that went through the old decode.
+
+*NVTL at the guess against the winner.* No particle sits exactly at the guess, so the table
+compares the winner with the best of the particles whose result lies within 0.1 m of the truth
+(31 to 49 a run). The noise scale is the per-scan NVTL while the car stands after the align
+(`nvtlnoise195.py`, 108 to 160 scans a run).
+
+| run | winner to truth m | winner NVTL | rank | best within 0.1 m of truth | difference | such results | per-scan NVTL sd |
+|---|---|---|---|---|---|---|---|
+| A1 | 0.290 | 3.3756 | 1 | 3.3750 | 0.0006 | 33 | 0.0100 |
+| A2 | 0.301 | 3.3785 | 1 | 3.3721 | 0.0064 | 31 | 0.0107 |
+| A3 | 0.362 | 3.3851 | 1 | 3.3772 | 0.0079 | 38 | 0.0106 |
+| A4 | 0.426 | 3.3677 | 1 | 3.3659 | 0.0018 | 40 | 0.0100 |
+| B1 | 0.243 | 3.3723 | 1 | 3.3621 | 0.0102 | 45 | 0.0096 |
+| B2 | 0.270 | 3.3630 | 1 | 3.3536 | 0.0094 | 43 | 0.0096 |
+| B3 | 0.264 | 3.3727 | 1 | 3.3705 | 0.0022 | 39 | 0.0096 |
+| B4 | 0.072 | 3.3645 | 1 | 3.3645 | 0.0000 | 49 | 0.0108 |
+
+- In every run a result within 0.1 m of the truth scores within 0.0102 of the winner, about
+  one scan's sd. The best result in each ring around the truth (0 to 0.1, 0.1 to 0.2, 0.2 to
+  0.3, 0.3 to 0.5 m) differs by less than 0.01 (alignxy_out.jsonl).
+- So on fixture_c170 NVTL does not tell positions apart within about 0.4 m, and the winner's xy
+  is close to arbitrary inside that flat top. That explains C3's 0.15 to 0.4 m while the guess
+  is within 0.05 m.
+- It plausibly explains the prior's cost too. With the prior, about 100 trials land at nearly
+  the right yaw, so the maximum is taken over more draws from the flat top. That is a reading,
+  not a test.
+
+*A remedy, for the user (133 asks; not coded).* Among the particles within about 0.01 of the
+best NVTL (one scan's sd), take the one nearest the guess. In all 8 runs that picks a result
+within 0.1 m of the truth. Keeping the guess's xy outright is the other choice; it trusts GNSS
+alone.
