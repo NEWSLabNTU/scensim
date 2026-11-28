@@ -1322,3 +1322,122 @@ contact.
 
 So D cannot help with a 15 cm rock: the rock never reaches compare-map. D's narrower band
 matters only for obstacles that pass the ground filter's 0.20 m, as the 35 cm boulder did.
+
+## The N' clean laps (118, 2026-11-28, scensim b4c77328): C2 fails as written
+
+Four laps with N' (the lane check with issue 201's fix and the mask hold, at asv 9938c2d), two
+on Haruna and two on the rock-free c6b. NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-28
+issue 180 clean laps (118)/runs/CL_Np*`. 118 judged them with judge_cleanlap180 v2, `--arm Np`.
+
+| lap | factors | obstacle points (share of statuses) | published frames | published in the path |
+|---|---|---|---|---|
+| NpH1, Haruna | 0 | 31.65 % | 765 | 0 |
+| NpH2, Haruna | 0 | 32.05 % | 741 | 0 |
+| NpC1, c6b | 0 | 2.21 % | 18 | 0 |
+| NpC2, c6b | 0 | 3.45 % | 30 | 0 |
+
+- C2 **fails as written** on all four. Its bar was zero published detections and obstacle points
+  in at most 1 % of frames.
+- C5 holds on all four: a status for every raw cloud after the first pose (NpH1 7510 of 7510).
+  Every status carries "pose"; "held" is there after the first pose and never above 0.
+- Every lap completed with no factor and nothing published in the path.
+- *Safe in effect* (241's reading, beside the failed bar, not in place of it): N' never acted on
+  what it published. Nothing it published lay in the car's path on any lap, as D's clean laps
+  were safe in effect on Haruna while failing C1.
+
+*Why Haruna fails: other legs of the same road* (241's replay, `replay_np180.py` and
+`band180.py`, NAS `home/2026-11-28 issue 180 step B v2 reading (241)/`). The node's own
+classes, run on NpH1's recorded raw clouds and EKF poses, reproduce its obstacle-point count in
+7503 of 7510 frames (NpH2: 7441 of 7441), against the map the laps loaded (lanelet2 sha256
+4b29ba87, the issue 195 H rb map; 118 confirmed it).
+- On that map **no** obstacle point lies on the car's own road. All of them lie on other legs of
+  Haruna's switchbacks, 14 m below to 45 m above the car and up to 196 m to the side, yet 1 to
+  30 m ahead in base_link x: the check's only reach gate.
+- A first replay against the published Haruna copy (lanelet2 3ba8e2b4, not the laps') found
+  1268 points "on the car's own road", 0.098 to 0.112 m over the reference. That was the wrong
+  map; 241 retracted it.
+- 133's question, whether a lower leg under an upper leg's lanelet sets the reference: no. The
+  reference is the highest map point within 0.5 m, so a leg under another raises it and hides
+  points rather than making them; within 0.5 m it is the point's own leg's surface.
+
+## The height band and the lateral reach (133's decision; asv, 2026-11-28)
+
+133 chose, and reported to the user: count only points within 3 m of the car's height in the map
+(`height_band`, default 3.0), and within 6 m of base_link's side (`lateral_reach`, default 6.0).
+The band drops the legs above and below; the reach drops those beside at the car's height near a
+hairpin. The next lane either side stays in, for cut-ins and oncoming cars; a route-lanelet gate
+was refused because it would hide them.
+
+*Tests first* (asv 8a7021d and c53e540, each failing before its change):
+- a rock on a leg 10 m above or below is ignored, and so is those legs' road;
+- a rock on a leg 12 m aside at the car's height is ignored;
+- the band and the reach are settings;
+- guards, passing before and after: a rock in the lane beside, 3.5 m either side, counts; a car
+  pitched on Haruna's steepest grade (4.82 deg, an 8.4 % grade) sees a rock 28 m ahead on its
+  own road, up- and downhill.
+
+*Replayed* through both (asv 5b4496b), on the laps' map:
+
+| lap | frames with obstacle points | published frames | published within 2 m aside |
+|---|---|---|---|
+| NpH1, as run | 31.8 % | 770 | 546 |
+| NpH1, band | 9.2 % | 201 | 0 |
+| NpH1, band and reach | 0.52 % | 15 | 0 |
+| NpH2, as run | 32.2 % | 741 | 524 |
+| NpH2, band | 9.5 % | 193 | 0 |
+| NpH2, band and reach | 0.52 % | 12 | 0 |
+
+- What is left in both laps is one spot, 4.7 to 4.9 m to the right and 1 to 3 m ahead, for under
+  a second (the same place on the course). Not identified yet.
+- So with both gates C2's "at most 1 % of frames" holds by replay; "zero published" still does
+  not.
+- The cost: on a bend of radius R the car's own road leaves the reach about sqrt(12 R) m ahead
+  (30 m at R 75 m, 19 m at R 30 m), so on a hairpin the check sees its own road less far.
+  133: fine for the boulder at today's speeds, which the check sees inside 25 m anyway.
+- *Open:*
+  - a reach relative to the route (the lateral distance to the planned path, not to base_link)
+    would remove that cost;
+  - the 12 to 15 frames at the one roadside spot are to be matched to the map and the props (low
+    priority).
+
+## R180_NH1: the hold engaged, but the car overran the rock (118, 2026-11-28, b4c77328)
+
+N with the hold on r180's 15 cm rock at s 100 (x 100.0, y 2.425). NAS `autoveh/logs/2026 SSv2
+on CARLA/2026-11-28 issue 180 N with the mask hold on the s 100 rock (118)/runs/`. SSv2 failed
+it (UndeclaredContact): static contact with `/World/RoadRocks/s_6_0_1573`, 320.5 N s, first at
+t 1021.6. R180_B1, without the hold, had 141.3 N s.
+- The prim is tile (6, 0)'s merged static rock mesh, and the placed s 100 rock is one of its
+  rocks: the contact is that rock. 118 first called it a scattered rock before it, and corrected
+  that.
+- The prediction (no contact, the rock held to the timeout) **fails**.
+
+*The timeline* (241, `timeline180.py`; judge v2.1 `judge_stepB180_v2_1.py`, which skips statuses
+without "ms" and counts "held"):
+
+| t | what | truth bumper x, speed |
+|---|---|---|
+| 1014.85 to 1015.40 | detections flicker frame to frame, so persistence's 3 frames come late | 90.8 to 93.1, 4.17 m/s |
+| 1015.50 | first published, the rock 6.4 m past the bumper | 93.5 |
+| 1016.20 | obstacle_stop's first factor (min_on_duration 0.3 s), its stop point already 1.57 m behind base_link; braking, about 2.3 m/s^2 | 96.4 |
+| 1016.90 to 1017.30 | the hold engages ("held" 1 in 9 statuses) as the rock enters the bonnet's shadow; it releases by its own rule, the rock's centre behind the bumper | 99.1 to 100.1 |
+| 1017.70 | stopped, the rock under the front overhang (front axle 99.6) | 100.48 |
+| about 1018.4 | the factor ends (obstacle_stop's 1 s pointcloud hold) | |
+| 1020.35 | moves again | |
+| 1021.6 | contact, at 0.75 m/s; front axle x 100.1 | |
+
+- *Wheel or body:* the record is a body contact; a tire on a rock never makes one (issue 203).
+  The left front tire is in line with the rock as well (car y 1.72, tire centre about y 2.51;
+  the rock 2.24 to 2.61). As the axle crosses, pitch goes about 0.3 deg nose up and roll about
+  0.4 deg left side up. So the left front wheel climbing the rock, with the underbody meeting
+  it.
+- *So the hold works as built*: it engaged and covered the shadow. But it could not save this
+  run: the car stopped past the rock, the hold let it go as passed, and nothing knew it was
+  under the car.
+- *The cause* is late detection plus latency at 4.17 m/s: the rock was published only 6.4 m past
+  the bumper, after a second of flicker, then took 0.7 s to become a factor.
+- *Remedies, for the user* (133 asks; none done):
+  - (a) release a held rock only once it is behind an axle, not the bumper; the car then stays
+    stopped over it;
+  - (b) a factor sooner: publish on 2 frames, or a lower min_on_duration;
+  - (c) cap the speed where the check sees low obstacles late;
+  - (d) a longer reach, though a 15 cm rock gives few points at range.
