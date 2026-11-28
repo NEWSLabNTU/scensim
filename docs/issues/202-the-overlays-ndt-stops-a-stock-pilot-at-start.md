@@ -42,3 +42,12 @@ file lacks the key, so the overlay's node refuses to start.
 Stock param files stay stock. Until the pin lands, a stock-profile pilot runs with
 `autoware_overlay:=false`, labelled as such (133); that also drops the overlay's other fixes
 (issues 002 and 027).
+
+## Live: Tsukuba lap b on the stock profile starts and completes (118, 2026-11-28)
+
+TSK_b202, at scensim 5a7218ca, ran on the stock profile with the overlay on (its default). NAS
+`autoveh/logs/2026 SSv2 on CARLA/2026-11-28 Tsukuba lap a and b (118)/runs/TSK_b202-*`.
+ndt_scan_matcher started and stayed up. The log has no "NDT triggering service is not
+available" line, and "align server succeeded" twice. The lap completed: 2111 m, at up to 4.25
+m/s, pose error p95 0.591 m, NVTL p05 3.169. Before the fix, the same pilot's NDT exited -6
+at start.

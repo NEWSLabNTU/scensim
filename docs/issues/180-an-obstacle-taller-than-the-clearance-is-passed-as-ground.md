@@ -1292,3 +1292,33 @@ H5 and H7 fail, and H3, H4 and H6 (the "not held" cases) pass, as they should.
   released only at a -0.55 m gap, once the recorded car had driven over the rock.
 - Live, the stop would have held and the car would not have moved. That is the prediction for
   R180_B1 with N and the hold: no contact, held to the timeout.
+
+## D on the 15 cm rock: the result, D is no remedy for a low rock (241, 2026-11-28; 118's R180_D1)
+
+118 ran R180_D1 at scensim 5a7218ca: R180_B1's project with `compare_map_z_ratio: "0.2"`, the
+lane check off. The launch line read "z ratio 0.2 (band 0.10 m)", and so did the loaded param
+file. NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-28 issue 180 D on the s 100 rock
+(118)/runs/`. SSv2 passed: the car reached the goal at x 110 at up to 4.25 m/s, with no recorded
+contact.
+
+*Against the predictions*:
+- E1 holds in substance, not in its wording. D did not stop: there was no factor at the rock,
+  and the judge's first_stop is null. The left front wheel rolled over the rock, but there is no
+  contact record of it.
+  - As the front axle crossed the rock (base_link x 97.2, front axle x 100.1), the truth's roll
+    swung from -1.2 to +0.29 deg (left side up by about 1.5 deg), and z rose about 0.035 m.
+    That is the only such excursion from x 90 to 106.
+  - The left tyre's track (y 2.22 to 2.46) overlapped the rock's plan footprint (2.24 to 2.61)
+    by about 0.2 m.
+  - The tyre's contact goes through the road layer's wheel model, not a rigid-body contact, so
+    `contacts/` stayed empty. That is issue 203.
+- E2 holds. No ground-filter or compare-map point lay at the rock in any frame, and compare-map
+  had no frame within 12 m. The ground filter drops the rock before compare-map, as step 1
+  found.
+- E3 fails narrowly. The car passed at y 1.50 to 1.56, against 1.6 to 1.75. R180_B1 ran at
+  1.69, so the line moves by about 0.15 m between runs. That decided whether the wheel caught
+  the rock's flank (here) or its crown (R180_B1).
+- E4 holds: no factor away from the rock.
+
+So D cannot help with a 15 cm rock: the rock never reaches compare-map. D's narrower band
+matters only for obstacles that pass the ground filter's 0.20 m, as the 35 cm boulder did.
