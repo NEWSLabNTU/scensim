@@ -1597,3 +1597,25 @@ in every align of every run, 60 of 60 (`redecode_diff.txt` and `mcs2_*.txt`, NAS
 - the A/B table's ranks 3 (A1) and 6 (A3) read 1.
 243's `ndt195.py` table (step 5's N runs) used its own reader, checked against
 `/diagnostics`' best_particle_score, and stands.
+
+## Tsukuba's along offset is issue 196's lidar lag, and the profile A/B is closed (243, 2026-11-28)
+
+On the rebuilt Tsukuba map (tile set 2812386e), at 4.17 m/s, the scensim profile's runs sat
+-0.085 to -0.090 m behind along track in 7 of 8. The other one, A3_r2, was level. Stock's one
+run was level too. The profile A/B is answered as follows:
+- neither the EKF's rate (A1) nor NDT's input voxel (A2) moves the offset;
+- neither do all localization params at stock's (A3);
+- one run of each mode came from the same settings (A3_r1, A3_r2).
+
+The start does not set it. The records are on the NAS, `home/2026-11-28 Tsukuba a on the 198
+rebuild (243)/` (AB_RESULT.md, A3_RESULT.md).
+
+Issue 196's diagnosis then measured the lidar's own lag on Tsukuba, from the scans against
+the map (read196m2, validated by injection). In both of its Tsukuba runs:
+- the scans' own along shift equals NDT's along offset within 5 mm (-0.0896 against -0.085 m,
+  and -0.0895 against -0.087 m);
+- the lag is +21.5 and +21.9 ms, and depends on azimuth.
+
+So the offset is the lidar lag, which NDT follows, and nothing of the profile or of NDT. It
+belongs to issue 196 from here. The level mode (1 in 8 here, 1 in 4 on Haruna H) is unexplained
+and is followed there.

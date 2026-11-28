@@ -1,6 +1,6 @@
 # 196: a lidar scan on Isaac is stamped about 30 ms after the pose it was rendered from
 
-**Status:** open again (2026-11-27): L2 (aib dda18ad, the stamp back-dated (n - 1) substeps) made NDT drift +1.7 % of the distance and was reverted (L2r, aib 757fb53); L2b is the candidate. **Severity:** medium. Localization sits behind the car by
+**Status:** open, in diagnosis (2026-11-28): the stamp and the reported sensor pose are right and the lag is in the points; it is (n - 1) substeps at c170's targets and depends on azimuth on full scans (the diagnosis section, last). L2 (aib dda18ad, the stamp back-dated (n - 1) substeps) made NDT drift +1.7 % of the distance and was reverted (L2r, aib 757fb53); L2b failed B1 and stays off main. **Severity:** medium. Localization sits behind the car by
 the lag times the speed: -0.29 to -0.35 m at 11 m/s on fixture_c170, -0.05 to -0.15 m at
 Haruna's 1 to 5 m/s, in NDT and the EKF alike. **Found:** issue 170 step 4's speed split
 (fixture_c170 R1 to R3), and pooled on Haruna's 18 runs, 2026-11-27.
@@ -685,3 +685,139 @@ B2 to B7 did not run.
   Then name the pose the render took, at 40, 60 and 120 Hz, under L2b. Its plan and predictions
   go to 133 before any run. Until then the lag is measured, not fixed. Issue 195's along offset
   (B7's question) stays open with it.
+
+## The diagnosis: the lag is in the points (243, 2026-11-28; 118's runs, read by 243)
+
+All runs were made on local, never-landed debug branches:
+- scensim l2b-pin 6852ca7b;
+- siw 5079d43, or 69a908f9 for OPT1;
+- aib l2b-diag: 4640a20, f63af344, 2545a729 or d2cc872.
+
+Each test's plan and predictions went to the NAS before its runs: `home/2026-11-28 issue 196
+diagnosis plan (243)/`. Those files are PLAN, RUN, MODES, H_PHASE, HZ20, SLEEP, OPT1, KNOBS,
+POINTS, POINTS_RUN, H_TICK and FIRE. The runs themselves are under `autoveh/logs/2026 SSv2 on
+CARLA/`: `2026-11-28 issue 196 diagnosis (118)/` and `2026-11-28 issue 196 POINTS (118)/`.
+
+### What the stamp and the reported pose say
+
+An env-gated debug record writes, per scan:
+- the annotator's `info.transform` and its per-point `timestamp` range;
+- aib's stamp terms;
+- the prim's writes.
+
+read196d2.py set those against the truth. The runs cover 20, 40, 60 and 120 Hz physics:
+D196_F20, F40, F60, F120 and the X runs.
+- The header stamp is the render frame's end F, exactly: S_clock - F = 0 in every scan.
+- The sensor transform the annotator reports is the truth at F. The median of tau_direct is
+  -0.15 to -0.01 ms, within about +-5 ms.
+- The annotator's own clock trails aib's by 9 physics steps at every rate: t0 - F is 225, 150
+  and 75 ms at 40, 60 and 120 Hz. This is the warm-up's steps, a constant, and not the lag.
+
+So neither the stamp nor the reported pose carries the lag.
+
+### The lag at fixed targets is (n - 1) substeps, and it is in the points
+
+| physics | n | face196 tau, target_a / target_b (ms) | (n - 1) x dt |
+|---|---|---|---|
+| 20 Hz | 1 | +1.8 / +0.4 | 0 |
+| 40 Hz | 2 | +26.3 / +25.5 | 25.0 |
+| 60 Hz | 3 | +34.7 / +33.6 | 33.3 |
+| 120 Hz | 6 | +42.7 to +43.1 (11 runs); +34.7 once | 41.7 |
+
+- The target face points themselves carry it: read196p's per-point medians are within 1.2 ms
+  of face196 (PTS_F40, F60 and F120).
+- The face points all fire 13 to 17 ms into the scan, since the targets sit at one azimuth.
+  Within that window the error is flat in every 1 ms bin, at 20 m and beyond (bin196.py).
+  - A first bin model ("H-tick", each ray cast from its firing tick's pose) predicted 33 ms
+    at 120 Hz, where the window lies in tick 2 of 6. It read 43, so H-tick fails at the
+    targets.
+  - The apparent jumps at 17 to 18 ms are the face cut failing within 20 m of a target. They
+    show at 40 Hz too, where no tick edge is near.
+
+### Ruled out (each with its predictions on the NAS, each failed as written)
+
+- **Whole render frames of pipeline latency.** The lags are substep multiples, not 50 ms
+  multiples, and they vanish at 20 Hz (HZ20).
+- **The scan's sweep phase (H-phase).** At 60 Hz (t0 - F) mod 50 is 0, yet tau is 34 ms.
+- **Wall time.** A 5 ms sleep per scan and no debug write both read 42.8 to 42.9 at 120 Hz
+  (SLEEP). An RTF of 0.75 to 0.999 does not move tau (KNOBS, PTS).
+- **The render's place in the step.** Option 1 moved the render out of the last substep's
+  `world.step` into one `world.render()` after the loop. Tau was unchanged at 40, 60 and
+  120 Hz, and the RTF was within 0.02 (OPT1).
+- **The prim write (L2b).** Writing the prim once a frame at the frame-end pose leaves 25, 34
+  and 43 ms (B1, X runs).
+- **The RTX knobs.** D1 reads Kit's live settings: useHydraTimeAlways true,
+  raytracingMotion.enabled **false**, supportMultiTickRate true, frame history 3.
+  - `useHydraTimeAlways=false` applied (D1 showed it) and tau read 42.7 at 120 Hz. A valid
+    null.
+  - `raytracingMotion/enabled=false` is the default here, so that run tested nothing.
+- **aib's own `motion_distortion`.** It is on only with `point_format: xyzircaedt`, which no
+  rig sets (the default is `xyzirc`), so it was off in every run.
+
+### On full scans the lag depends on azimuth, and survives on straights
+
+Tsukuba (a) has no fixed targets. Every 10th scan's world points (D3, through the annotator's
+transform) are fitted to the rebuilt map along the truth heading.
+- **The first reader (read196m) failed validation.** An injected 34 ms shift read as about
+  19 ms (gain about 0.55), so its "lag about 0" on PTS_T1 is void.
+- **The second (read196m2) is a point-to-plane least-squares fit** on map normals facing
+  along the road, with 15 Gauss-Newton passes and scans with 300 or more such points.
+  - It passed: gain -0.96 over injections of 0, +-0.07, +-0.14 and +0.28 m, with a
+    nonlinearity of 0.0024 m.
+  - Per-sector gains are 0.94 to 1.02.
+  - The sign is a lag: a forward injection raises it.
+  - 118's read of PTS_T1 equals 243's exactly.
+
+PTS_T1 and PTS_T2 are both 60 Hz, at 4.17 m/s:
+
+| run | whole | ahead | left | behind | right | scans' shift | NDT along |
+|---|---|---|---|---|---|---|---|
+| PTS_T1 | +21.5 | +23.7 | +18.2 | +7.9 | +24.2 | -0.0896 m | -0.085 m |
+| PTS_T2 | +21.9 | +23.1 | +21.3 | +10.0 | +25.6 | -0.0895 m | -0.087 m |
+
+On straights only (|yaw rate| < 0.02 rad/s, 133's check against a stale yaw faking the
+pattern), with each subset's own injection gain:
+- PTS_T1: ahead +22.7, left +13.0, right +27.4. Behind is not read, since its gain was 0.82.
+- PTS_T2: ahead +20.6, left +11.5, behind +13.2, right +22.1. All gains are 0.96 to 1.01.
+
+So:
+- **The cloud is not cast from one pose.** The lag differs by azimuth by 10 to 14 ms on
+  straights, and the c170 targets' single azimuth hid that.
+- **Tsukuba's "behind" localization mode is this lag.** The scans' own shift equals NDT's along
+  offset within 5 mm in both runs. NDT adds nothing.
+- Neither run was level. The series stopped after two of the planned sixteen, because 118's
+  root disk fell under the 25 GB rule. So the level mode (Tsukuba A3_r2, Haruna H pair 3) is
+  still unexplained.
+
+### Still open: how the lag follows firing time
+
+The full-scan reader with firing-time bins (read196m3; FIRE.md) is validated. On a synthetic
+step built on PTS_T1's real scans, it read +31.1 ms in the first half against 33.6 expected,
+and at most 1.2 ms in the second. Its runs are FT1 (Tsukuba) and FC60 (c170 at 60 Hz), with
+per-point times (aib d2cc872, D3t). They wait for disk on 118. They decide between:
+- steps of a substep (a pose per tick, with an offset not yet modelled);
+- a line of slope -1 ms per ms (a pose per firing time on a stale clock);
+- the lag set by azimuth for another reason.
+
+### The fix options, as plans (no code before FT1 and FC60)
+
+- **A (in aib, the stamp stays F).** Re-express each point from the sensor pose its cast
+  actually used to the sensor's pose at F. This is a full SE(3) correction, since yaw rate
+  matters on Haruna's hairpins, taken from the sim's own per-substep body states. It corrects
+  a render artefact, so the cloud is what a real sensor at F would see. No pose reaches the
+  autopilot.
+  - Which pose a point was cast from is the open question above.
+  - A must not assume it. A level run cast from F would be mis-shifted. So A measures it per
+    run, or the level mode is shown gone first.
+- **B (realism, a separate item).** Per-point times, Autoware's distortion corrector on, and
+  the stack stock. It cannot remove a lag that every point shares, so it is not 196's fix.
+  Taken up later, it needs:
+  - `motion_distortion` off under multi-tick, which would otherwise double the distortion;
+  - the earliest point first, by a stable sort, with a test;
+  - a stamp at that point's time.
+
+  These follow the corrector's 0.48.0 contract: uint32 `time_stamp` relative to the header,
+  undistorting to `points[0]`'s time, with the header kept. B must also pass B3 to B7.
+
+**L2b's drift.** Under L2b, NDT on c170 drifts again: its along slope is -0.09 to -0.12 % of x
+in all eight X runs, against B3's bar of 0.1 %. L2b stays off main.
