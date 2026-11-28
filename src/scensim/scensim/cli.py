@@ -18,6 +18,7 @@ COMMANDS = {
     "drive": ("scensim.drive", "main", "drive a car by hand"),
     "isaac": ("scensim.isaac", "main", "Isaac Sim on this host"),
     "autoware": ("scensim.autoware", "main", "Autoware's carried fixes and runtime"),
+    "session": ("scensim.session", "main", "session records: keys, new, check, migrate"),
 }
 
 
