@@ -639,3 +639,49 @@ the same project and recording, beside B1 to B6:
 - pose_error still passes (p95 at most 0.5 m).
 - If the offset stays, it is not this issue's lag. That is recorded in issue 195, and L2b's
   landing rests on B1 to B5 alone.
+
+## L2b's B1: results (118's runs at 243's local l2b-pin 6852ca7b, 2026-11-28; tables by 243)
+
+The build was aib 6e769a5 and siw 5079d43 (local, unpushed), pinned in scensim's local l2b-pin
+6852ca7b. 118 read the running world server's PYTHONPATH: it imports aib from that tree, and
+`FrameWrite` is in what it imports. The runs were proj196_hz40, hz60 and hz120 (step 3's
+projects), read with `face196.py`, unedited. B1 failed on the first run, so the sequence stopped
+there. The 60 and 120 Hz runs were then made as a diagnosis, one each. The records are on the NAS:
+`autoveh/logs/2026 SSv2 on CARLA/2026-11-28 issue 196 L2b pre-landing (118)/runs/`.
+
+tau, median in ms (p10 to p90):
+
+| physics | n substeps | L2r, step 3 (target_a / target_b) | L2b (target_a / target_b) |
+|---|---|---|---|
+| 40 Hz | 2 | 26.1 / 25.6 | 26.3 (25.5 to 29.9) / 25.5 (25.1 to 26.4) |
+| 60 Hz | 3 | 34.4 / 33.6 | 34.7 (33.5 to 37.5) / 33.7 (33.2 to 34.5) |
+| 120 Hz | 6 | 42.7 / 42.2 | 34.7 (33.2 to 37.2) / 33.8 (33.3 to 34.8) |
+
+Each is flat with speed, as in step 3, and face d is -0.917 m, the same as before.
+
+*Against the predictions:* B1 fails at every rate: tau is 25 to 35 ms, not within 2 ms of 0.
+B2 to B7 did not run.
+
+## L2b's B1: the reading (243, 2026-11-28)
+
+- L2b is not landed. Its branches stay local.
+- Step 3's H does not survive. H said the render takes the prim's pose as written before the
+  frame's first substep. L2b writes the frame's end pose there, and the lag did not go:
+  - 40 and 60 Hz are unchanged.
+  - 120 Hz fell from 42 ms to 34 ms, the 60 Hz value.
+
+  So the pose the render uses is not the prim's last write before the render, nor its first
+  write in the frame. Under L2b it is about 34 ms before the frame's end at 60 and 120 Hz, and
+  25 ms at 40 Hz.
+- L2b removed one part, the extra substeps at 120 Hz, and left a part tied to the frame, not to
+  the substep.
+- The annotator hands each scan's own `transform` and per-point `timestamp` (its info fields).
+  Neither is read today.
+- The next step is a diagnosis, not a fix. Record, per scan:
+  - the annotator's transform;
+  - the prim's pose at each write;
+  - the truth's pose at each substep.
+
+  Then name the pose the render took, at 40, 60 and 120 Hz, under L2b. Its plan and predictions
+  go to 133 before any run. Until then the lag is measured, not fixed. Issue 195's along offset
+  (B7's question) stays open with it.
