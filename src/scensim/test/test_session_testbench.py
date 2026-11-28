@@ -59,7 +59,13 @@ def test_the_ego_config_carries_the_record_to_the_component():
     rec = {"entry_point": "my_racer.sample", "paths": []}
     assert comp.ego_entry(rec, REC)["session"] == REC
     assert "session" not in comp.ego_entry(rec)
-    assert "session_values" in comp.CHECK_SCRIPT     # refused at testbench check, in Isaac's Python
+    # refused at testbench check, in Isaac's Python: making the component raises sim_vehicle_ecu's
+    # ComponentError for a declared session input the record lacks, reported as a config error
+    script = comp.CHECK_SCRIPT
+    made = script.index("c = rig.make_component()")
+    guard = script.rfind("try:", 0, made)
+    assert guard != -1 and "except components.ComponentError" in script[made:made + 200]
+    assert "session_values" not in script
 
 
 def test_a_run_writes_the_record_and_its_hash(tmp_path):
