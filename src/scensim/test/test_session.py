@@ -118,3 +118,13 @@ def test_migrate_a_directory_rewrites_each_run_file(tmp_path):
 
 def test_a_scensim_run_names_its_bare_record_apart():
     assert S.RUN_FILE == "session.yaml" and S.RECORD_FILE == "session_record.yaml"
+
+
+def test_the_cli_lists_keys_and_checks_a_file(tmp_path, capsys):
+    from scensim import cli
+    assert cli.main(["session", "keys"]) == 0
+    assert "battery.voltage_v" in capsys.readouterr().out
+    f = tmp_path / "r.yaml"
+    f.write_text(yaml.safe_dump(W23))
+    assert cli.main(["session", "check", str(f)]) == 2
+    assert "scensim session migrate" in capsys.readouterr().err
