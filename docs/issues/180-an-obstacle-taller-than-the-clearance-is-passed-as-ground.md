@@ -992,3 +992,103 @@ the carriageway:
 C2, N with issue 201's fix is the remedy, as step B v2 found for c6b. If both pass, my
 recommendation stays N' (it reaches obstacle_stop apart from the tracker), with D possible as a
 second. A fail on Haruna names the map and the place.
+
+## Q6 read: what releases obstacle_stop's stop for the boulder (139, 2026-11-28; CPU, from the source and the records, no runs)
+
+*Read.* Autoware 1.5.0's `autoware_motion_velocity_obstacle_stop_module`, at package version
+1.5.0 (the installed one), and the parameters the stack loads. Step B v2's control runs C1 to
+C4, from their ego bags: the objects, the `obstacle_stop` and `obstacle_slow_down` planning
+factors, the scenario trajectory and the EKF.
+
+**The answer: the stop has no time hold for this boulder.** It is released one planning cycle
+after the boulder's track leaves `/perception/object_recognition/objects`. The car moves about
+0.5 s later. Issue 182's "1.0 s keep" does not apply to it, for five reasons:
+
+1. **The buffer is skipped.** `min_off_duration` (1.0 s) and `min_on_duration` (0.3 s) belong
+   to `PathLengthBuffer`, which `plan_stop` never reaches here. `plan_stop` returns the stop
+   point directly when `determined_stop_obstacle->velocity >= max_negative_velocity`. Only an
+   obstacle receding faster than that goes through the buffer. The boulder tracks at vx 0.0.
+2. **The 1 s hold is per UUID.** `stop_obstacle_hold_time_threshold` (1.0 s) acts for objects
+   only in `check_consistency`. It keeps a previous closest stop obstacle while its UUID is
+   still in the objects message and its vx is under 3.0 m/s. Otherwise, in the source's words:
+   "If previous closest obstacle disappear from the perception result, do nothing anymore."
+   The tracker gives the boulder a new UUID every few seconds: 9 UUIDs between the first stop
+   and the last track in C1, and 9 in C4. Each one ends without a hold.
+3. **The pointcloud path is off.** It has its own 1 s hold, on candidates keyed by position,
+   not UUID. In C, `check_inside.pointcloud: false` makes `filter_stop_obstacle_for_point_cloud`
+   return nothing.
+4. **The hold thresholds keep a stop, they don't make one.** `hold_stop_velocity_threshold` and
+   `hold_stop_distance_threshold` only keep an existing stop's distance.
+5. **The velocity threshold is never crossed.** Every track at the boulder has vx 0.0, under
+   `obstacle_velocity_threshold_enter_fixed_stop` (3.0).
+
+*The records agree.*
+- The stop factor's control point lies 0.6 to 3.5 m behind base_link: the car stopped past its
+  stop pose.
+- While a stop exists, the trajectory's zero-velocity point is at the ego (x 393.6 to 394.2).
+  When it goes, the zero point moves to the path's end, about 30 m on, at the same stamp.
+- The factor drops 0.10 to 0.15 s after the last track at the boulder, and up to 0.35 s in C4.
+  This holds in every creep step that has a track within 3 s before it.
+- The car then moves 0.5 to 0.75 s later in C1, C3 and C4, and 1.05 to 1.1 s later in C2.
+
+C1:
+
+| creep | last track at the boulder | stop factor last, first empty | trajectory released | moves after the factor's end |
+|---|---|---|---|---|
+| 1033.85 | 1033.20 | 1033.20, 1033.30 | 1033.3 | 0.55 s |
+| 1038.15 | 1037.50 | 1037.50, 1037.60 | 1037.6 | 0.55 s |
+| 1042.85 | 1042.20 | 1042.20, 1042.30 | 1042.3 | 0.55 s |
+| 1044.30 | 1043.65 | 1043.70, 1043.80 | 1043.8 | 0.50 s |
+| 1046.65 | 1044.90 | 1044.90, 1045.00 | 1046.3 | 1.65 s |
+
+So step B v2's "0.1 to 0.9 s after the last sighting" is this chain, not a keep running out.
+
+**What the profile sets, and whether -1.0 would hold it.**
+
+*The values.*
+- C runs on autoware_launch's `obstacle_stop.param.yaml`, which sets
+  `max_negative_velocity: -100.0`. This is the profile's default `obstacle_stop_param_path`,
+  under `up_planning_config_dir` on Autoware 1.5.
+- N runs on the profile's copy, `obstacle_stop.lane_height_check.param.yaml`, also -100.0.
+- The module's own default is -1.0.
+
+*Setting -1.0 would change nothing for the boulder:* vx 0.0 >= -1.0, so `plan_stop` still
+returns before the buffer. To route the boulder through the buffer the value would have to be
+positive. That would also turn on the opposing-traffic stop margin: `calc_desired_stop_margin`
+takes `v_obs < max_negative_velocity` as opposing traffic and aims at
+`stop_margin_opposing_traffic` (10 m). That would move the stop pose.
+
+*Even routed, the buffer could not bridge a lost track.*
+- With no stop obstacle, `plan_stop` returns at its top (`stop_obstacles.empty()`) before the
+  buffer.
+- `update_buffer` also returns at once when there is no stop point.
+- The buffer holds a stop only against another, current stop point.
+- Each new stop point would also wait the 0.3 s `min_on_duration` before it acts.
+
+*What a time hold across tracks would have met.* These are the gaps with no track at the
+boulder, from the first stop to the last track (objects at 10 Hz):
+
+| run | UUIDs | gaps | gaps of 1.0 s or more | the longest |
+|---|---|---|---|---|
+| C1 | 9 | 15 | 0 | 0.95 s |
+| C2 | 2 | 1 | 1 | 3.9 s |
+| C3 | 4 | 5 | 1 | 2.75 s |
+| C4 | 9 | 13 | 4 | 2.3 s |
+
+- A 1 s hold keyed on position rather than UUID, as the pointcloud path's is, would have held
+  C1 across every gap up to its last track at 1044.9.
+- It would not have held C2, C3 or C4: each has a gap of 1.0 s or more.
+- No parameter of the 1.5.0 module gives the object path such a hold. This is evidence only,
+  and a profile or code change is the user's.
+
+**Open: another holder.** In two places a stop holds the car that neither recorded factor names:
+- C1's fifth step: the factor is empty from 1045.0, but the trajectory keeps its zero at the ego
+  until 1046.1 to 1046.3, with no `obstacle_stop` or `obstacle_slow_down` factor.
+- C2 at 1033.9 and 1149.75, and C4 at 1041.75: these steps come 3 to 120 s after the last track
+  at the boulder.
+
+The bags record only those two factor topics, so the module cannot be named. Later runs should
+record `/planning/planning_factors/*` to name it.
+
+The readers (`q6_release.py`, `q6_traj.py`, `q6_gaps.py`) and their outputs are kept beside
+this reading on the team share, "2026-11-28 issue 180 Q6 stop release (139)".
