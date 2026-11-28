@@ -80,6 +80,14 @@ if [ -n "${THREADS:-}" ]; then
 fi
 hooks=(--sample-hook scensim_batch.start_pool:StartPool.refill --sample-hook scensim_batch.start_pool:StartPool.take)
 prov=(--task-package scensim_batch); [ "${ALLOW_DIRTY:-0}" = 1 ] && prov+=(--allow-dirty)
+# the code the task imports from other checkouts, each with its own commit and dirty flag in
+# meta.json (094 P4: the plant was inferred from a pin, not recorded); WheeledLab ab495c31 on
+if grep -q -- "--dep-package" "$FORK/bench/wheeledlab_bench/launch.py"; then
+    for p in aib sim_vehicle_ecu sim_vehicle_spec scensim_sampler; do prov+=(--dep-package "$p"); done
+else
+    echo "run_p4: FORK $FORK's harness has no --dep-package (WheeledLab isaaclab-3.0 ab495c31" \
+         "or later records the task's dependencies): the run records the task alone" >&2
+fi
 mkdir -p "$out/$stage" "$out/seeds"
 
 # <name> <timers> <seed> <n_envs> <iters> <warmup>; in its own directory (Isaac Lab writes logs/)

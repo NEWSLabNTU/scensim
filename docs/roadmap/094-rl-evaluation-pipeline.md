@@ -65,7 +65,10 @@ compare on one plant (133, 2026-11-23): P1, P4 ours seeds 3 to 5, 139's ECU-B an
 118's row (a) seed 5, and 139's engine A reruns after issue 113. Engine A is aib's PhysX vehicle,
 so its numbers carry the 1.154. Engine B (an articulation car) and stock do not use PhysX's
 vehicle tyre. A 094 number cited next to a post-108 Isaac result names its aib pin and the
-factor.
+factor. Measured (139, 2026-11-28, a bisect of aib 3cd2b7dd..86903fa0 with scensim at e178f268):
+engine A's seed 1 model_1499 on the same 256 conditions scores 239 (no collision) on the pre-fix
+aib 3cd2b7dd, and 228 (6 collisions) from the fix, aib ff5e72b3, on. Its policy trained with the
+1.154 loses the grip.
 
 ### An exclusive GPU (found 2026-11-21, 241)
 
