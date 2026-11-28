@@ -184,6 +184,42 @@ def export(checkpoint, out, fmt="torchscript", activation="elu", clip_actions=No
     return meta
 
 
+class ObsDump:
+    """The observations an evaluation's policy saw, for `check_policy_export.py --obs`.
+
+    `add` takes each step's policy input ([N, obs_dim], a tensor or an array) and keeps all of it.
+    `write` saves `n` rows evenly spaced over everything seen, the first and last included
+    (np.linspace's indices, rounded), as float32 .npy. Beside it goes a record
+    (`<path>.json`, schema `scensim.obs_dump/1`): the rows seen and kept, the width, the file's
+    sha256 and the caller's `source`. Fewer rows than `n` are all kept."""
+
+    def __init__(self, path, n=1000, source=None):
+        self.path, self.n, self.source = Path(path), n, source
+        self.rows, self.width = [], None
+
+    def add(self, obs):
+        import numpy as np
+        x = obs.detach().cpu().numpy() if hasattr(obs, "detach") else np.asarray(obs)
+        if x.ndim != 2 or (self.width is not None and x.shape[1] != self.width):
+            raise ExportError(f"obs of shape {tuple(x.shape)}: [N, {self.width or 'obs_dim'}] "
+                              f"expected")
+        self.width = x.shape[1]
+        self.rows.append(np.array(x, dtype=np.float32))
+
+    def write(self):
+        import numpy as np
+        every = np.concatenate(self.rows) if self.rows else np.zeros((0, self.width or 0))
+        if len(every) > self.n:
+            every = every[np.round(np.linspace(0, len(every) - 1, self.n)).astype(int)]
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        np.save(str(self.path), every.astype(np.float32), allow_pickle=False)
+        meta = {"schema": "scensim.obs_dump/1", "rows_seen": sum(len(r) for r in self.rows),
+                "rows_kept": len(every), "obs_dim": self.width, "dtype": "float32",
+                "sha256": _sha(self.path), "source": self.source}
+        Path(f"{self.path}.json").write_text(json.dumps(meta, indent=1) + "\n")
+        return meta
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("checkpoint")

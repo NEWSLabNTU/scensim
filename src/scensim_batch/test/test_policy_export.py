@@ -165,5 +165,52 @@ class Refusals(unittest.TestCase):
         self.assertIn("swish", str(e.exception))
 
 
+class Dump(unittest.TestCase):
+    """ObsDump: the observations an evaluation's policy saw, kept for the export check.
+
+    It is given each step's policy input ([N, obs_dim]), keeps all of it, and writes `n` rows
+    evenly spaced over the steps and slots (the first and last included), float32, with a
+    record beside it. No torch needed beyond what the env gives it."""
+
+    def dump(self, steps=40, slots=256, n=1000, **kw):
+        from scensim_batch import policy_export as PE
+        d = Path(tempfile.mkdtemp())
+        dump = PE.ObsDump(d / "obs.npy", n=n, **kw)
+        rows = [np.arange(slots * OBS, dtype=np.float64).reshape(slots, OBS) + 1e4 * t
+                for t in range(steps)]
+        for r in rows:
+            dump.add(torch.from_numpy(r) if torch is not None else r)
+        meta = dump.write()
+        return d, meta, np.concatenate(rows)
+
+    def test_n_rows_evenly_spaced_with_the_ends(self):
+        d, meta, every = self.dump()
+        x = np.load(d / "obs.npy")
+        self.assertEqual((x.shape, x.dtype), ((1000, OBS), np.float32))
+        idx = np.round(np.linspace(0, len(every) - 1, 1000)).astype(int)
+        np.testing.assert_array_equal(x, every[idx].astype(np.float32))
+        self.assertEqual((meta["rows_seen"], meta["rows_kept"]), (40 * 256, 1000))
+
+    def test_fewer_rows_than_n_keeps_them_all(self):
+        d, meta, every = self.dump(steps=2, slots=4)
+        np.testing.assert_array_equal(np.load(d / "obs.npy"), every.astype(np.float32))
+        self.assertEqual(meta["rows_kept"], 8)
+
+    def test_the_record_names_the_run(self):
+        d, meta, _ = self.dump(source={"checkpoint": "model_1499.pt", "seed": 20261122})
+        on_disk = json.loads((d / "obs.npy.json").read_text())
+        self.assertEqual(meta, on_disk)
+        self.assertEqual(on_disk["schema"], "scensim.obs_dump/1")
+        self.assertEqual(on_disk["source"], {"checkpoint": "model_1499.pt", "seed": 20261122})
+        self.assertEqual(on_disk["sha256"], hashlib.sha256((d / "obs.npy").read_bytes()).hexdigest())
+
+    def test_a_row_of_another_width_is_refused(self):
+        from scensim_batch import policy_export as PE
+        dump = PE.ObsDump(Path(tempfile.mkdtemp()) / "o.npy")
+        dump.add(np.zeros((3, OBS)))
+        with self.assertRaises(PE.ExportError):
+            dump.add(np.zeros((3, OBS + 1)))
+
+
 if __name__ == "__main__":
     unittest.main()

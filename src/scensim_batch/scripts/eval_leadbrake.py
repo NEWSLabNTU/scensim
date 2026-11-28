@@ -8,7 +8,7 @@ at >= 95 % successes. The end reason is the first of collided, off_road, route_d
 that holds, in stock's order.
 
     python eval_leadbrake.py --checkpoint <model_N.pt> [--conditions 256] [--seed 20261122] \\
-        [--out <json>]
+        [--out <json>] [--obs-out <npy> [--obs-max 1000]]
 
 Run it as stock's: Isaac Lab's Python, with scensim_batch and its dependencies, and stock's
 bench/p4_leadbrake (its PPO settings, which Scensim-LeadBrake-v0 names) on the path.
@@ -30,6 +30,11 @@ ap.add_argument("--engine", choices=("B", "A"), default="B")
 ap.add_argument("--conditions-from", default="",
                 help="stock's evaluator's --samples-out file: its episodes, replayed in env order "
                      "(their count is the conditions'), and each paired with stock's outcome")
+ap.add_argument("--obs-out", default="",
+                help="an .npy of the observations the policy saw (092 E1b: the input to "
+                     "check_policy_export.py --obs), --obs-max rows evenly over the run, with "
+                     "its record beside it")
+ap.add_argument("--obs-max", type=int, default=1000)
 AppLauncher.add_app_launcher_args(ap)
 args = ap.parse_args()
 app = AppLauncher(args).app
@@ -47,6 +52,7 @@ from isaaclab_tasks.utils.parse_cfg import load_cfg_from_registry  # noqa: E402
 __import__("scensim_batch.tasks")                    # registers Scensim-LeadBrake-v0
 from scensim_batch.tasks import leadbrake as LB  # noqa: E402
 from scensim_batch.tasks.leadbrake_env import LeadBrakeEnvCfg  # noqa: E402
+from scensim_batch.policy_export import ObsDump  # noqa: E402
 
 TASK = "Scensim-LeadBrake-v0"
 BAR = 0.95                                                           # stock's
@@ -87,8 +93,14 @@ def main():
     end_gap = torch.zeros(n, device=u.device)
     end_y = torch.zeros(n, device=u.device)
     obs = env.get_observations()
+    dump = ObsDump(args.obs_out, n=args.obs_max,
+                   source={"checkpoint": os.path.abspath(args.checkpoint), "seed": args.seed,
+                           "conditions": n, "row": args.row, "engine": args.engine,
+                           "group": "policy"}) if args.obs_out else None
     with torch.inference_mode():
         while not bool(done.all()):
+            if dump is not None:
+                dump.add(obs["policy"])          # the actor's input, before its normalizer
             obs, _, dones, _ = env.step(policy(obs))
             new = dones.bool() & ~done
             if bool(new.any()):
@@ -138,6 +150,10 @@ def main():
         os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
         with open(args.out, "w") as f:
             json.dump(res, f, indent=1)
+    if dump is not None:
+        meta = dump.write()
+        print(json.dumps({"obs_out": os.path.abspath(args.obs_out), "rows_kept": meta["rows_kept"],
+                          "rows_seen": meta["rows_seen"]}), flush=True)
     env.close()
 
 
