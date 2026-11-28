@@ -1,6 +1,6 @@
 # 202: the overlay's NDT stops a stock-profile pilot at start
 
-**Status:** open; plan only (241, 2026-11-28, for 133). **Severity:** high: every
+**Status:** fixed in code: autoware_core d722f24c (the test afce0cd0 first) on `csb/ndt-step-reversal-1.5.0`, pinned here in the overlay (2026-11-28, with issue 201's pins). Before that: open; plan only (241, 2026-11-28, for 133). **Severity:** high: every
 `autoware_profile: stock` pilot with the Autoware overlay on (the default) has had no NDT since
 scensim cf931f5c; its pose initializer waits for ever. **Found:** 2026-11-28, 118, in L3's
 Tsukuba lap b (`scensim-logs/tsukuba_b/stacks/2026-11-28T10-16-06_seat0/proc/pilot-ego/console.log`

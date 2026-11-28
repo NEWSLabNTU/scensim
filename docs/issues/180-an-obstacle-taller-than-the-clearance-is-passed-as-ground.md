@@ -1092,3 +1092,70 @@ record `/planning/planning_factors/*` to name it.
 
 The readers (`q6_release.py`, `q6_traj.py`, `q6_gaps.py`) and their outputs are kept beside
 this reading on the team share, "2026-11-28 issue 180 Q6 stop release (139)".
+
+## r180's original step B (R180_B1): N detects the s 100 rock at 8 m, stops 0.06 m short, and drives over it (241, 2026-11-28)
+
+118 ran it once after step B v2 (R180_B1, isaac_i180_c6b at scensim 4343e3bd, the rebuilt c6b
+map, `lane_height_check:=true` as landed; NAS `autoveh/logs/2026 SSv2 on CARLA/2026-11-28 issue
+180 step B (118)/runs/`). Every live check held. The run failed on an undeclared static contact
+(141 N s) at sim 1021.6. Judged with `judge_stepB180.py` (`judge_R180_B1_241.json`, NAS `home/2026-11-28
+issue 180 step B v2 reading (241)/`).
+
+*What happened* (the truth trace):
+- The car cruised at 4.17 m/s and braked at sim 1016 to 1018, at up to 4.12 m/s^2 over 0.5 s.
+- It stood at x 96.04: its bumper 0.06 m from the rock's near side (the rock at x 100, y 2.425,
+  0.15 m, 10 % embedded).
+- From sim 1020 it moved again, and at 1021.6 its front axle was at x 100.4 with its left wheels
+  at y 2.48, over the rock. The contact is that rock: its prim is named by the station chunk
+  (`s_6_0_1573`), not by s.
+
+*Against the predictions*:
+- P3, no detection but the rock's: **fails**. 26 published frames at x 116 to 121 (23 to 28 m
+  ahead) during the brake, with the truth's pitch +0.38 deg nose-down. That is issue 201:
+  0.098 / sin(0.38 deg) is about 15 m, so the road from there on rose over h.
+- P5: **fails** on all three counts. First published detection 8.0 m from the bumper
+  (predicted 8.3 to 9.3); the stop 0.06 m short of the rock (1.5 to 5); peak deceleration
+  4.12 m/s^2 (at most 2.5).
+- P6: **holds**. obstacle_stop's factors are at x 90.9 to 91.9 on the rock's line, about 8 m
+  before it.
+- P8: p95 6.7 ms. 470 statuses for 506 raw clouds, all missing at start-up (the P8 section
+  above).
+
+*Why the stop released.* At 0.06 m the rock is about 3.8 m ahead of base_link and 0.74 m to
+the left. That is inside the node's ego mask (the box to the front + 0.2 m and the half width
++ 0.2 m), so its points stop counting, the detection ends, obstacle_stop's 1.0 s keep runs
+out, and the car moves. This is issue 182's blind zone: the stop must hold at range, and here
+it came too late to.
+
+*What the rock's height and h imply for the range.* The rock stands about 0.135 m above the
+road (0.15 m, 10 % embedded), and h is 0.098 m. Only its top 0.037 m makes obstacle points.
+A detection needs 3 points in a 0.3 m cell for 3 frames in a row. Each ring adds about one
+point per azimuth step across the rock, so it takes one lidar ring through that 3.7 cm band in
+3 consecutive frames. The rings' spacing on the rock grows with range (range times the
+vertical step), so past some range a ring crosses the band only in some frames, and the 3-frame
+rule waits. Issue 198's replay of r180's record measured exactly this trade:
+
+| h | first detection (bumper) |
+|---|---|
+| 0.05 | 14.7 m |
+| 0.08 | 12.2 m |
+| 0.10 | 9.3 m |
+| 0.12 | 9.1 m |
+
+R180_B1's 8.0 m at h 0.098 fits the 0.10 row.
+
+*Does issue 201's fix change the 8 m?* No. While the car cruised its pitch was -0.01 to -0.03
+deg, which moves a point 8 m ahead by at most 0.004 m. The fix removes P3's false points, and
+the brief nose-down lift that came after the detection. It does not move the first detection.
+
+*So, for the ship decision*: N as landed does not hold a stop at range for a 15 cm rock at
+4.17 m/s. A factor's control point is base_link's stop pose (step B v2's cars stood at it), so
+the pose at x 90.9 to 91.9 put the bumper about 4.7 m before the rock. From a detection 8.0 m
+out that left about 3.3 m to stop from 4.17 m/s: 2.6 m/s^2 with no latency at all. The car
+braked at up to 4.12 m/s^2 and still ran about 4.6 m past the pose, to 0.06 m. Ways to get
+range, each to plan and test before any choice:
+- a lower h (198's table: 12 to 15 m at 0.05 to 0.08, no false objects on the rebuilt c6b in
+  that replay; the clean lap measures the false side);
+- holding a detection that enters the ego mask instead of dropping it;
+- a slower cruise where the lane check is the only guard.
+D held the r181 boulder (35 cm) at range. A 15 cm rock is the case D was not run on.

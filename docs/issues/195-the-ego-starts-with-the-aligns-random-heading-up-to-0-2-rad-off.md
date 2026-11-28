@@ -1586,3 +1586,14 @@ compares the winner with the best of the particles whose result lies within 0.1 
 best NVTL (one scan's sd), take the one nearest the guess. In all 8 runs that picks a result
 within 0.1 m of the truth. Keeping the guess's xy outright is the other choice; it trusts GNSS
 alone.
+
+*Withdrawn, after 118's re-read (2026-11-28).* 118 re-read 30 runs from their NAS copies (T170,
+T2_170, T3_6b, H, H2, Y) with both reader fixes: the colour decode above, and aligns grouped by
+a repeated particle id instead of a 0.5 s gap. The gap split had cut aligns into partial sets
+and paired bursts with the wrong /initialpose3d. With both fixes the winner is rank 1 by NVTL
+in every align of every run, 60 of 60 (`redecode_diff.txt` and `mcs2_*.txt`, NAS
+`autoveh/logs/2026 SSv2 on CARLA/2026-11-27 issue 195 L3 (118)/scripts/`). So in this issue:
+- every winner ranked above 1 and every winner NVTL near 1 that came from mcscore is withdrawn;
+- the A/B table's ranks 3 (A1) and 6 (A3) read 1.
+243's `ndt195.py` table (step 5's N runs) used its own reader, checked against
+`/diagnostics`' best_particle_score, and stands.
