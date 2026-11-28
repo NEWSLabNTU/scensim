@@ -287,6 +287,100 @@ The exit (133, 2026-11-20):
 The bags need f1tenth's `vesc_msgs` in the ROS environment that writes and reads them, as the
 user's own stack has it.
 
+### W12: the plan (241, 2026-11-28; before any code, for 133)
+
+What exists: W23's `session.yaml` (`tools/twin_runs.py` writes it, `tools/bags.py` and
+`protocol/quantities.py` read it) carries a free-form `session` mapping (`battery_v`, `floor`,
+`tyre_age`) with no schema and no check. The VESC stand-in has the battery as a fixed parameter
+(`battery: 7.9`). A component can declare ground truth (`truth = (...)`, `TRUTH_INPUTS`,
+delivered by a `TruthFeed`), but nothing about the session. A sim run's record (`result.json`,
+`provenance`) has no session conditions.
+
+*1. The schema* (`scensim.session`, pure: stdlib and yaml). One file per run or per real log,
+`session.yaml`, version 1:
+
+    schema: scensim.session/1
+    recorded: {by: "<who>", at: "<ISO time>"}
+    battery:  {voltage_v: 7.92, measured: "at rest, before the run"}   # or nominal / synthetic
+    floor:    {surface: "<the stage's scensim:surface or material>", state: clean,
+               note: "swept 10:20"}                    # state: clean | dusty | damp | wet | other
+    tyres:    {set: "front-A rear-A", age: {runs: 14, distance_m: 2300}, since: 2026-11-20}
+    ambient:  {temperature_c: 21.5}                    # optional
+    notes: ""
+
+- Each field has its unit in its name and a stated source (`measured`, `nominal` or
+  `synthetic`). Every key is listed with its meaning by `scensim session keys`; an unknown one
+  is refused by name, as `road_detail`'s are.
+- The run's own fields (manoeuvre, condition, repetition, reference, rates, truth sha256) stay
+  in the run file beside it. They are the protocol's, not the session's.
+- W23's files (`format: "scensim 091 W23 run, version 1"`) are refused by name, with the fix:
+  `scensim session migrate <dir>` rewrites them, keeping every value (the project's no-shims
+  rule: no silent reading of the old form).
+
+*2. Recorded with every run and every real log.*
+- A sim run: `session:` in `testbench.yaml`, per testbench with a per-run override, checked by
+  `testbench check`. The run writes it to `<run>/session.yaml` and its hash to `result.json`.
+  With none given, the record says so: `session: null`, never a default made up.
+- A real log: the `session.yaml` beside the bag, written by the user (a template from
+  `scensim session new`). `bags.py` and the fitting tool read it through the schema.
+- The run tables (`compare_runs.py`, W11's verdicts) carry the session's battery, floor state
+  and tyre age beside each run.
+
+*3. Battery voltage as a component input* (sim_vehicle_ecu, aib).
+- Next to `TRUTH_INPUTS`, `SESSION_INPUTS = {"battery_v": "V: the pack's voltage at the
+  session's start"}`. A component declares `session = ("battery_v",)` and gets
+  `sensors.session`, a mapping of the declared names only. It is a constant for the run.
+  `Sensors` gains the field, None for a component that declares nothing, so existing components
+  run unchanged.
+- aib hands the run's session values to the component (through the ego config's `component`,
+  as `truth` settings are). A component that declares `battery_v` on a run whose session has no
+  battery voltage is refused at `testbench check`, with the key to add; an unknown name is
+  refused, as an unknown truth input is.
+- The VESC stand-in (`roboracer_vesc`) declares `battery_v`. Its `battery` parameter retires
+  and is refused by name, naming `session.battery.voltage_v` (no shims). The fitting tool then
+  fits each run with that run's voltage, not one constant.
+
+*Exit checks:*
+- E1, the schema (unit tests):
+  - a valid file loads;
+  - `keys` lists every field;
+  - an unknown key, a missing unit and a bad state are each refused by name;
+  - a W23 file is refused, naming `migrate`, and `migrate` on the W23 regression's sessions
+    keeps every value (a round trip).
+- E2, a sim run (scensim tests, no Isaac): a testbench with `session:` writes `session.yaml`
+  and the hash; without it, `session: null`; `testbench check` refuses a malformed one.
+- E3, the input (sim_vehicle_ecu and aib tests):
+  - a test component declaring `battery_v` gets the session's value at every step;
+  - one declaring nothing gets None;
+  - an unknown name, and a declared input with no value in the session, are refused, naming
+    the fix.
+- E4, the VESC stand-in: with the same duty command, 7.4 V against 8.4 V gives motor current
+  and steady ERPM in the ratio the model says (within 1 %); its tests pass.
+- E5, the regression on Isaac (118, GPU; `tools/w23_regression.sh`):
+  - with the sessions migrated, p1 is still recovered 15 of 15 and the fitted twin passes the
+    same 108 of 110 bands;
+  - a new perturbation, p3, whose repetitions differ in battery voltage (7.4 to 8.4 V, each
+    recorded in its session): fitted with each run's voltage, the component's parameters are
+    recovered within tolerance; fitted with one fixed 7.9 V, they are not (or the drift rule
+    flags them). That shows the input matters.
+- E6, the guide: `docs/how-to/build-an-indoor-twin.md`'s session record changes from "by hand"
+  to the template and the check.
+
+*Repositories:* sim_vehicle_ecu and aib (the input), then the cascade; scensim (the schema, the
+testbench key, the record, the CLI, the project's tools, the docs). One gate at the end, with
+E5's runs on 118 before landing.
+
+*Open, for 133:*
+1. A constant per run, or the voltage as a time series (the real VESC's `voltage_input` sags
+   under load)? The plan is a constant: the sag is the component's to model, from the start
+   voltage.
+2. Retire `roboracer_vesc`'s `battery` parameter (refused by name), as planned, or keep it as
+   the value when no session input is declared?
+3. The floor states (clean, dusty, damp, wet, other) and the tyre age's unit (runs and distance;
+   hours?): the user's to confirm, as the guide's measurements.
+4. E5's p3 costs Isaac runs on 118 (about the W23 regression's length, twice). In this item, or
+   after it?
+
 ## Not in scope
 
 - Shipping a RoboRacer control model: the user owns it.
