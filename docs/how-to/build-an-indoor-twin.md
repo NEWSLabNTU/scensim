@@ -245,8 +245,32 @@ With f1tenth_system, check three settings before the laps:
 When the twin passes, commit the testbench as a release. It names the spec (each run records
 its `spec_hash`), the component (its entry point, version and file hash), the stage (its hash
 in `provenance.stage`), and the session conditions in which the fit was made. Randomisation,
-if you use it, stays within the real runs' spread. A record of the session conditions for
-each run is planned; until then, keep them in the testbench beside the release.
+if you use it, stays within the real runs' spread.
+
+### The session record
+
+Every run, on the twin or on the real car, records its session conditions: the battery's
+voltage, the floor's state and the tyres' age. A record is a small YAML file:
+
+```bash
+scensim session new > sessions/2026-11-28.yaml   # a record to fill in
+scensim session keys                             # every key, with its unit and meaning
+scensim session check sessions/2026-11-28.yaml
+```
+
+- **On the twin**, name it in the testbench (`session: sessions/2026-11-28.yaml`, or the record
+  inline). `testbench check` checks it, and every run writes it beside the run as
+  `session_record.yaml`, its hash in the run's provenance. Changing the session means a new
+  stack: the stack's fingerprint includes it.
+- **On the real car**, each log's `session.yaml` is the protocol's run file, with the record
+  under `session`. W23's older files are refused; `scensim session migrate <dir>` rewrites them,
+  keeping every value.
+- **The battery as an input.** A control component may declare the battery's voltage as a
+  session input (`session = ("battery_v",)`). It then gets the record's `battery.voltage_v`
+  when it is made, and a run whose record has none is refused at `testbench check`. Measure it
+  at rest before the run, and say so (`source: measured`, `how: "at rest, before the run"`).
+- Each part says where its values came from: `measured`, `nominal` or `synthetic`. The floor
+  states and the tyre-age units are drafts, pending confirmation.
 
 ### Upkeep
 

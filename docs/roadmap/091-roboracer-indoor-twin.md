@@ -340,6 +340,18 @@ delivered by a `TruthFeed`), but nothing about the session. A sim run's record (
   and is refused by name, naming `session.battery.voltage_v` (no shims). The fitting tool then
   fits each run with that run's voltage, not one constant.
 
+*Changes while building (241, 2026-11-28; 133 agreed each):*
+- The layout: a protocol run's `session.yaml` stays the run file, its format "scensim 091 run,
+  version 2", the record under `session`. A scensim run writes the bare record as
+  `session_record.yaml`, so one filename never holds two shapes.
+- Session inputs come at construction (`session={name: value}`), not in each step's sensors:
+  those are None on the first step after a reset.
+- No per-run override: the session is the testbench's and part of the stack's fingerprint, so a
+  new session is a new stack. E5's p3, whose repetitions differ in battery, therefore runs
+  through `twin_runs.py`, not scensim stacks: one invocation per battery, each with its own
+  `--session` record (today `twin_runs.py` takes one record for all its runs). The fit then
+  replays each run under its own record, as batch slots.
+
 *Exit checks:*
 - E1, the schema (unit tests):
   - a valid file loads;

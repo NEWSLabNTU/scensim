@@ -1574,6 +1574,10 @@ decisions' sequencing, with the lockstep channel's lag included. Not covered, as
 engine in the loop (both sides driving the same ego), and the engines giving the map-frame
 velocity (a follow-up). With this, K10's row is done but for that.
 
+*Issue 205 (241, 2026-11-28):* the agreement's runs, and its recheck's, were seeded runs
+(`--seeds`, no sample record), so the seats walker's seed was the run's, as the batch's: they
+stand, and they never exercised the sampled-replay path issue 205 broke.
+
 ### K10's close-out (133, 2026-11-24): the engines' map-frame velocity, D3 out of draft, the row closed
 
 **(1) The engines give the map-frame velocity (plan, before any code).** A behaviour model reads

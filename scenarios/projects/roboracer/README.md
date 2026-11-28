@@ -281,7 +281,10 @@ against 0.408). The runs are on the NAS under `2026 SSv2 on CARLA/2026-11-20 091
 No real RoboRacer has been logged yet (W22). Until then, a deliberately perturbed copy of the
 twin stands in for the real car. Its logs have the real car's format, so W22 will change the
 data and not the code: each run is a rosbag2 (sqlite3) with the real car's topics (`bags.py`'s
-table) and a `session.yaml`.
+table) and a `session.yaml`: the run file (091 W12, format "scensim 091 run, version 2"), the
+protocol's fields with the session conditions as a `scensim.session/1` record. The drive unit
+takes the record's battery (a session input). W23's older run files are refused; `scensim
+session migrate <dir>` rewrites them, keeping every value.
 
 **The protocol** (`protocol/protocol.yaml`) is design note 5.2's M1 to M6 as VESC commands, five
 repetitions each. W23 adds M1c, a current command beyond any limit. Without it the drive unit's
