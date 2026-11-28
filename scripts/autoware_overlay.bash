@@ -26,9 +26,11 @@ SCENSIM_AUTOWARE_OVERLAY_SOURCES=(
     # reverses, so a two-point cycle no longer runs to max_iterations and its WARN (an emergency
     # stop in Autoware 1.5's graph, docs/issues/002), and the align's yaw drawn around a guess
     # whose yaw variance is below initial_pose_estimation.yaw_prior_variance_threshold instead
-    # of over the circle (docs/issues/195, the start yaw).
+    # of over the circle (docs/issues/195, the start yaw); the threshold defaults to 0.0 (the
+    # prior off), so autoware_launch's stock param file, which lacks it, still starts
+    # (docs/issues/202).
     "autoware_core https://github.com/NEWSLabNTU/autoware_core.git
-        61f9c96e5a15c73a5497a582d8d5084cf3e8755f
+        d722f24cd0180f3756ba968d5fd98851771a03f0
         localization/autoware_ndt_scan_matcher
         localization/autoware_localization_util"
 )
