@@ -1541,3 +1541,57 @@ plus the next lane.
   the status's `"reach": "route"`. That lap's testbench records
   `.../motion_planning/path_optimizer/trajectory` beside the final one; the clean laps'
   recorded topic list is their testbench's own `logging.topics`, so no scensim change.
+
+## The low-rock remedies: an estimate from replay (241, 2026-11-28; for the user, through 133)
+
+**An estimate from replay, not runs.**
+- *The source.* R180_NH1's recording (the 15 cm rock, 4.17 m/s), replayed through the lane check
+  as it ran (`lowrock180.py`; the replay matches the node in 271 of 271 frames). The false
+  positives come from the four N' clean laps through today's check (route reach), at
+  persistence 3 and 2 (`route180.py`).
+- *Distances* are bumper to the rock's near face at x about 100.37, where the check sees it
+  (issue 207: about 0.4 m past its recorded station).
+- *The stopping model*, fitted to NH1's truth: the stop decision, braking 0.20 s later at a mean
+  2.60 m/s^2. The stop distance after the first publication is v (T + 0.20) + v^2 / 5.2, with T
+  the time from publication to decision (0.70 s today: min_on_duration 0.3 s and 0.4 s of
+  pipeline). On NH1 it gives 0.21 m over, against 0.11 m observed.
+
+| remedy | first published (m to face, 4.17 m/s) | stop against the near face | speed cap for a 0.3 m margin | false positives on the 4 clean laps |
+|---|---|---|---|---|
+| today (persistence 3, min_on 0.3 s) | 6.88 | 0.11 m over (observed), the rock under the overhang | 3.96 m/s | c6b 18 and 30 frames published, none in the path; Haruna 0 |
+| (b1) persistence 2 | 7.09 | about 0 (touching, within 0.1 m) | about 4.0 m/s | c6b 20 and 32 published, none in the path; Haruna 0 |
+| (b2) min_on_duration 0.1 s | 6.88 | 0.62 m short | 4.31 m/s | nothing published in the path on any lap: no false factor at any min_on |
+| (b1) and (b2) | 7.09 | 0.83 m short | 4.39 m/s | as (b1) |
+| (c) a speed cap alone | | | 3.96 m/s today, 4.39 with (b1) and (b2) | none: no detection changes |
+| (a) release behind the rear axle | | the car stays stopped over the rock and never moves again on that run | | none |
+| (d) a longer reach | | nothing gained (below) | | |
+
+- *(a)* comes from reading obstacle_stop's source (autoware_core 1.5.0,
+  `filter_stop_obstacle_for_point_cloud`). A point inside a trajectory footprint polygon is a
+  collision, and the first polygon is the ego's own footprint, so a held rock under the bonnet
+  keeps the stop. This is not confirmed by a run. Whether the planner's pointcloud preprocessing
+  crops points behind the bumper is not checked; if it does, (a) does nothing.
+- *(d)* The points on the rock, by bumper distance to its centre: the raw returns at least 3 cm
+  above the road (p50), then the check's points at least h above it (p50, and the frames with 3
+  or more).
+
+  | m to the centre | raw returns | check points | frames with 3 or more check points |
+  |---|---|---|---|
+  | 25 to 30 | 1 (13 of 25 frames have any) | 0 | 0 |
+  | 15 to 20 | 2 | 0 | 0 |
+  | 12 to 15 | 2 | 1 | 0 |
+  | 10 to 12 | 4 | 2 | 0 |
+  | 8 to 10 | 6 | 2 | 3 of 10 |
+  | 6 to 8 | 8 | 4 | 8 of 9 |
+  | 4 to 6 | 14.5 | 6.5 | 10 of 10 |
+
+  The lidar puts 1 or 2 returns on the rock out to 20 to 30 m, but the check's 3-point cell holds
+  only from about 7 m: MIN_POINTS is the limit, not FAR. A new option (e) would accumulate
+  returns across frames in the map, or take 2 points; its false-positive cost is not measured.
+- *Localization:* the EKF's along-track error at the first publication was -0.020 m. Issue 196's
+  lidar lag, at most about 0.14 m, is not separable here, so its fix (243's option A) buys at
+  most 0.14 m.
+- *241's reading:* (b2) is the cheapest change that stops short at today's speed, about 0.6 m,
+  with no false factor on the four clean laps. (b1) adds about 0.2 m and two more off-path
+  publications per c6b lap. (c) alone caps the car at about 4 m/s where low rocks lie. (a)
+  trades the strike for a stuck car.
